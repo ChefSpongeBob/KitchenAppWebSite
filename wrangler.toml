@@ -3,9 +3,13 @@ type = "javascript"
 
 [build]
 command = "npm run build"
+cwd = "."  # Optional: Make sure the working directory is set correctly if needed
 
-# Specify the main entry point to your Worker script
-main = "src/index.js"  # Or the correct path to your Worker script
+# Specify the output file or folder from the build process if necessary
+# This might be 'dist/index.js' or another path depending on your build setup
+main = "dist/index.js"  # Ensure this is where your build output is
+
+workers_dev = true  # Optional: Enable if running locally for development
 
 [[d1_databases]]
 binding = "DB"
