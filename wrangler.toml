@@ -1,8 +1,11 @@
-name = "kitchen-software"
+name = "kitchensoftware"
 type = "javascript"
 
 [build]
 command = "npm run build"
+
+# Specify the main entry point to your Worker script
+main = "src/index.js"  # Or the correct path to your Worker script
 
 [[d1_databases]]
 binding = "DB"
