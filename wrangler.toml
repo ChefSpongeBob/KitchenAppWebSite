@@ -1,0 +1,10 @@
+name = "kitchen-software"
+type = "javascript"
+
+[build]
+command = "npm run build"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kitchen-db"
+database_id = "068dbf37-8e1d-4ca9-8617-199fb26450b7"

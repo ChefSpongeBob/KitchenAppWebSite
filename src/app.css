@@ -1,0 +1,157 @@
+/* =========================================================
+   ROOT TOKENS
+   ========================================================= */
+:root {
+  /* ---------- Typography ---------- */
+  --font-sans: "Inter", Arial, sans-serif;
+  --font-body: var(--font-sans);
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---------- Safe Area ---------- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* ---------- Colors ---------- */
+  --color-primary: #4f46e5;
+  --color-primary-contrast: #ffffff;
+
+  /* SIMPLE DARK GREY BACKGROUND */
+  --color-bg: #202327;
+
+  --color-surface: #2a2f36;
+  --color-surface-alt: #323841;
+
+  --color-text: #e5e7eb;
+  --color-text-muted: #9ca3af;
+
+  --color-border: #3a3f47;
+  --color-divider: #3a3f47;
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+
+  /* ---------- Spacing ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ---------- Radius & Shadow ---------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-sm: 0 2px 6px rgba(0,0,0,0.25);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.35);
+
+  /* ---------- Motion ---------- */
+  --duration-fast: 120ms;
+  --duration-medium: 240ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* =========================================================
+   GLOBAL RESET
+   ========================================================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+* {
+  font-family: inherit;
+}
+
+html {
+  font-family: var(--font-body);
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* =========================================================
+   BODY BASE
+   ========================================================= */
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  overscroll-behavior: none;
+
+  transition:
+    background var(--duration-medium) var(--ease-out),
+    color var(--duration-medium) var(--ease-out);
+}
+
+/* =========================================================
+   PAGE FADE-IN
+   ========================================================= */
+main {
+  animation: pageFade 240ms ease-out;
+}
+
+@keyframes pageFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}.page {
+  padding-left: 1rem; /* space for hamburger */
+}
+
+
+/* =========================================================
+   FORM + TEXT INHERIT
+   ========================================================= */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+h1, h2, h3, h4, h5, h6, p {
+  font-family: inherit;
+}
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+.tap {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.tap:active {
+  transform: scale(0.97);
+}
+
