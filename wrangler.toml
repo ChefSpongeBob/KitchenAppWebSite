@@ -7,9 +7,6 @@ cwd = "."  # Optional: Make sure the working directory is set correctly if neede
 
 # Specify the output file or folder from the build process if necessary
 # This might be 'dist/index.js' or another path depending on your build setup
-main = "dist/index.js"  # Ensure this is where your build output is
-
-workers_dev = true  # Optional: Enable if running locally for development
 
 [[d1_databases]]
 binding = "DB"

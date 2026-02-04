@@ -9,7 +9,7 @@
 let series = {};
 
 async function loadTemps(){
-  const res = await fetchconst URL = "/api/temps";
+  const res = await fetch("/api/temps");
 
   const batches = await res.json();
 
