@@ -4,9 +4,11 @@
   let docs = [];
   let loading = true;
 
+  const URL = "/api/temps"; // ✅ correct place
+
   onMount(async () => {
     try {
-      const res = await fetch("https://ktchwork.chefspongebobsrecepiebook.workers.dev/docs");
+      const res = await fetch(URL);
       docs = await res.json();
     } catch (e) {
       console.error(e);
@@ -15,6 +17,7 @@
     }
   });
 </script>
+
 
 <h1>Documents</h1>
 

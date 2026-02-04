@@ -9,7 +9,8 @@
 let series = {};
 
 async function loadTemps(){
-  const res = await fetch("https://ktchwork.chefspongebobsrecepiebook.workers.dev/");
+  const res = await fetchconst URL = "/api/temps";
+
   const batches = await res.json();
 
   const grouped = {};

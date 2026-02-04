@@ -8,7 +8,7 @@
   let series: Record<number, number[]> = {};
   let lastSeen: Record<number, number> = {};
 
-  const URL = "https://ktchwork.chefspongebobsrecepiebook.workers.dev/";
+  const URL = "/api/temps";
 
   async function load(){
     const res = await fetch(URL);
