@@ -90,10 +90,6 @@ onMount(()=>{
   on:touchmove={handleMove}
   in:fade={{ duration: 500 }}
 >
-console.log("fresh rebuild");
-
-
-
 
   <!-- Greeting Tile -->
   <div
