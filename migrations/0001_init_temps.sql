@@ -1,0 +1,10 @@
+-- Migration number: 0001 	 2026-02-06T03:42:41.123Z
+CREATE TABLE IF NOT EXISTS temps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sensor_id INTEGER,
+  temperature REAL NOT NULL,
+  ts INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_temps_ts
+  ON temps(ts);

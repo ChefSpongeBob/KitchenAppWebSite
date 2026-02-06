@@ -4,95 +4,85 @@
   import TempGraph from "$lib/components/ui/TempGraph.svelte";
   import PageHeader from "$lib/components/ui/PageHeader.svelte";
 
-  let temps = [];
+  // ---- STATE ----
+  let temps: Array<{ sensor_id: number; temperature: number; ts: number }> = [];
   let latest: Record<number, number> = {};
   let series: Record<number, number[]> = {};
   let lastSeen: Record<number, number> = {};
 
   const URL = "/api/temps";
 
-  async function load(){
-    const res = await fetch(URL);
-    const batches = await res.json();
+  // ---- LOAD FUNCTION ----
+  async function load() {
+    try {
+      const res = await fetch(URL);
+      const data = await res.json();
 
-    const latestMap: Record<number, number> = {};
-    const grouped: Record<number, number[]> = {};
+      const latestMap: Record<number, number> = {};
+      const grouped: Record<number, number[]> = {};
+      const seen: Record<number, number> = {};
 
-    const now = Date.now();
+      for (const row of data) {
+        const sensor = row.sensor_id;
+        const temp = Number(row.temperature);
 
-    ///RELOAD INTERVAL FOR TEMP SENSOR PAGE,,DELETE IF NEEDED//
-   
-      async function refresh() {
-        const r = await fetch("/temper/data");
-        data = await r.json();
+        // convert ts to milliseconds for JS Date
+        const tsMs = row.ts > 1e10 ? row.ts : row.ts * 1000;
+
+        latestMap[sensor] = temp;
+
+        if (!grouped[sensor]) grouped[sensor] = [];
+        grouped[sensor].push(temp);
+
+        seen[sensor] = tsMs;
       }
 
-      onMount(() => {
-        const i = setInterval(refresh, 10000);
-        return () => clearInterval(i);
-      });
-
-
-    onMount(async () => {
-      const res = await fetch("api/temps");
-      temps = await res.json();
-    });
-
-    for (const b of batches){
-      if (!b.readings) continue;
-
-      for (const r of b.readings){
-        const t = Number(r.temperature);
-
-        latestMap[r.node] = t;
-
-        if (!grouped[r.node]) grouped[r.node] = [];
-        grouped[r.node].push(t);
-
-        // 👇 use real time when loaded
-        lastSeen[r.node] = now;
-      }
+      // update reactive variables
+      latest = latestMap;
+      series = grouped;
+      lastSeen = seen;
+      temps = data;
+    } catch (err) {
+      console.error("Failed to load temps:", err);
     }
-
-    latest = latestMap;
-    series = grouped;
   }
 
-  // live refresh
+  // ---- SINGLE ONMOUNT FOR INITIAL LOAD + LIVE REFRESH ----
   onMount(() => {
     load();
-    const interval = setInterval(load, 30000);
+    const interval = setInterval(load, 30000); // refresh every 30s
     return () => clearInterval(interval);
   });
 
-  // temp highlight
-  function tempClass(temp?: number){
+  // ---- HELPER FUNCTIONS ----
+  function tempClass(temp?: number) {
     if (temp === undefined) return "";
     if (temp > 75) return "hot";
     if (temp < 38) return "cold";
     return "normal";
   }
 
-  // format clock time
-  function formatTime(ts?: number){
+  function formatTime(ts?: number) {
     if (!ts) return "—";
-
-    return new Date(ts).toLocaleTimeString([],{
-      hour:'2-digit',
-      minute:'2-digit'
+    return new Date(ts).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
     });
   }
 </script>
 
+<!-- ---- PAGE HEADER ---- -->
 <PageHeader
   title="Kitchen Temps"
   subtitle="12h history"
 />
 
+<!-- ---- TEMP GRAPH ---- -->
 <div class="graph-wrap" in:fade={{ duration: 400 }}>
   <TempGraph {series} height={160}/>
 </div>
 
+<!-- ---- LATEST TEMPS ---- -->
 <h2>Latest Temps</h2>
 
 {#if temps.length === 0}
@@ -101,12 +91,12 @@
   {#each temps as t}
     <div>
       Sensor {t.sensor_id}: {t.temperature}° — 
-      {new Date(t.ts).toLocaleString()}
+      {new Date(t.ts * 1000).toLocaleString()}
     </div>
   {/each}
 {/if}
 
-
+<!-- ---- SENSOR CARDS ---- -->
 <div class="grid">
   {#each Array.from({ length: 15 }, (_, i) => i + 1) as node}
     <div class="tile {tempClass(latest[node])}">
@@ -114,7 +104,6 @@
 
       {#if latest[node] !== undefined}
         <div class="temp">{latest[node]}°F</div>
-
         <small class="seen">
           Last update: {formatTime(lastSeen[node])}
         </small>
@@ -177,4 +166,3 @@
   .cold{ border:2px solid #4da6ff; }
   .normal{ border:2px solid #2ecc71; }
 </style>
-

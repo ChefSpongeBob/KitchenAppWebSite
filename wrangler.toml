@@ -1,5 +1,6 @@
 name = "kitchensoftware"
-type = "javascript"
+
+migrations_dir = "migrations"
 
 [build]
 command = "npm run build"
