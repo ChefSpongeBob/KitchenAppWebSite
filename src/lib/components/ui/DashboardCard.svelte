@@ -18,7 +18,18 @@
   </div>
 </div>
 
-<style>
+  <style>
+  .link-card a {
+    color: var(--color-text) !important;
+    text-decoration: none;
+  }
+
+  .link-card a:hover,
+  .link-card a:focus {
+    color: var(--color-primary) !important;
+  }
+
+
   .card {
     background: var(--color-surface, #1e1e1e);
     border: 1px solid rgba(255,255,255,0.06);

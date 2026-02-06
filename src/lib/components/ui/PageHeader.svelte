@@ -11,7 +11,18 @@
   {/if}
 </header>
 
-<style>
+
+  <style>
+  .link-card a {
+    color: var(--color-text) !important;
+    text-decoration: none;
+  }
+
+  .link-card a:hover,
+  .link-card a:focus {
+    color: var(--color-primary) !important;
+  }
+
   .page-header {
     margin-bottom: var(--space-6);
   }

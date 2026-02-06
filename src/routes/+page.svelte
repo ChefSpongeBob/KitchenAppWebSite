@@ -134,6 +134,7 @@ onMount(()=>{
 
 </section>
 
+
 <DashboardCard
   title="Today"
   description="No critical alerts. Kitchen running normally."

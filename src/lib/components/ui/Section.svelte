@@ -8,6 +8,15 @@
 </div>
 
 <style>
+  .link-card a {
+    color: var(--color-text) !important;
+    text-decoration: none;
+  }
+
+  .link-card a:hover,
+  .link-card a:focus {
+    color: var(--color-primary) !important;
+  }
   .section {
     margin-bottom: var(--space-6);
   }
