@@ -78,6 +78,10 @@ onMount(()=>{
 </script>
 
 <Layout>
+<section role="region" aria-labelledby="some-id" on:mousemove={yourHandler}>
+  <!-- Your content here -->
+</section>
+
 
 <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
   <h1>{greeting}, {userName}</h1>
