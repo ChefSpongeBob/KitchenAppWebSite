@@ -36,4 +36,8 @@
     display: block;
     text-decoration: none;
   }
+.w-nav-link.w--current{
+color: #e5e7eb;
+}
+
 </style>
