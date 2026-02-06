@@ -5,9 +5,6 @@ type = "javascript"
 command = "npm run build"
 cwd = "."  # Optional: Make sure the working directory is set correctly if needed
 
-# Specify the output file or folder from the build process if necessary
-# This might be 'dist/index.js' or another path depending on your build setup
-
 [[d1_databases]]
 binding = "DB"
 database_name = "kitchen-db"

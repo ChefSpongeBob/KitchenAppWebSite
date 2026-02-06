@@ -5,10 +5,17 @@ export const GET: RequestHandler = async ({ platform }) => {
     return new Response("DB not bound", { status: 500 });
   }
 
-  const db = platform.env.DB;
-
-  const { results } = await db
-    .prepare("SELECT * FROM temps ORDER BY ts DESC LIMIT 20")
+  const { results } = await platform.env.DB
+    .prepare(`
+      SELECT
+        id,
+        sensor_id,
+        temperature,
+        ts
+      FROM temps
+      ORDER BY ts DESC
+      LIMIT 20
+    `)
     .all();
 
   return new Response(JSON.stringify(results), {

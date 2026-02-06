@@ -20,6 +20,19 @@
 
     const now = Date.now();
 
+    ///RELOAD INTERVAL FOR TEMP SENSOR PAGE,,DELETE IF NEEDED//
+   
+      async function refresh() {
+        const r = await fetch("/temper/data");
+        data = await r.json();
+      }
+
+      onMount(() => {
+        const i = setInterval(refresh, 10000);
+        return () => clearInterval(i);
+      });
+
+
     onMount(async () => {
       const res = await fetch("api/temps");
       temps = await res.json();
