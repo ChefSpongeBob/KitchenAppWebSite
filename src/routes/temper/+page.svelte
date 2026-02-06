@@ -4,6 +4,7 @@
   import TempGraph from "$lib/components/ui/TempGraph.svelte";
   import PageHeader from "$lib/components/ui/PageHeader.svelte";
 
+  let temps = [];
   let latest: Record<number, number> = {};
   let series: Record<number, number[]> = {};
   let lastSeen: Record<number, number> = {};
@@ -18,6 +19,11 @@
     const grouped: Record<number, number[]> = {};
 
     const now = Date.now();
+
+    onMount(async () => {
+      const res = await fetch("api/temps");
+      temps = await res.json();
+    });
 
     for (const b of batches){
       if (!b.readings) continue;
@@ -73,6 +79,20 @@
 <div class="graph-wrap" in:fade={{ duration: 400 }}>
   <TempGraph {series} height={160}/>
 </div>
+
+<h2>Latest Temps</h2>
+
+{#if temps.length === 0}
+  <p>No data yet</p>
+{:else}
+  {#each temps as t}
+    <div>
+      Sensor {t.sensor_id}: {t.temperature}° — 
+      {new Date(t.ts).toLocaleString()}
+    </div>
+  {/each}
+{/if}
+
 
 <div class="grid">
   {#each Array.from({ length: 15 }, (_, i) => i + 1) as node}
