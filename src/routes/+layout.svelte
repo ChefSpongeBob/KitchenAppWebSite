@@ -27,10 +27,12 @@
 <!-- ===== Hamburger ===== -->
 <button
   class="hamburger tap"
+  style="color: #9ca3af;"
   on:click={toggleSidebar}
   aria-label="Toggle sidebar"
 >
   <span class="material-icons">menu</span>
+
 </button>
 
 <!-- ===== Overlay ===== -->

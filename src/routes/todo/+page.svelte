@@ -55,23 +55,25 @@
   {#if activeTab === 'active'}
     <div class="card-list" role="region" aria-label="Active Tasks">
       {#each activeTodos as todo (todo.id)}
-        <DashboardCard
-          title={todo.title}
-          description={expandedId === todo.id ? todo.description : ''}
-          role="button"
-          tabindex="0"
-          ariaExpanded={expandedId === todo.id}
-          on:click={() => toggleExpand(todo.id)}
-          on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
-        >
+        <div class="card-wrapper">
+          <DashboardCard
+            title={todo.title}
+            description={expandedId === todo.id ? todo.description : ''}
+            role="button"
+            tabindex="0"
+            aria-expanded={expandedId === todo.id}
+            on:click={() => toggleExpand(todo.id)}
+            on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
+          />
+
+          <!-- Complete button under the card -->
           <button
-            slot="actions"
             class="complete-button"
-            on:click|stopPropagation={() => completeTask(todo.id)}
+            on:click={() => completeTask(todo.id)}
           >
             ✓ Complete
           </button>
-        </DashboardCard>
+        </div>
       {/each}
     </div>
   {/if}
@@ -85,7 +87,7 @@
           description={expandedId === todo.id ? todo.description : ''}
           role="button"
           tabindex="0"
-          ariaExpanded={expandedId === todo.id}
+          aria-expanded={expandedId === todo.id}
           on:click={() => toggleExpand(todo.id)}
           on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
         />
@@ -120,19 +122,37 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding-bottom: 6rem; /* prevents bottom nav overlap */
+    padding-bottom: 6rem;
   }
 
-  .complete-button {
-    background: rgba(13, 168, 39, 0.329);
-    border: 1px solid rgba(7, 201, 33, 0.959);
-    color: var(--accent-purple);
-    font-size: 0.75rem;
-    padding: 0.3rem 0.6rem;
-    border-radius: 999px;
-
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
+  .card-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px; /* space between card and button */
   }
+
+.complete-button {
+  background: rgba(13, 168, 39, 0.33);
+  border: 1px solid rgba(7, 201, 33, 0.95);
+  color: var(--accent-purple);
+  font-size: 0.65rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  cursor: pointer;
+
+  width: auto;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.complete-button:hover {
+  background: rgba(13, 168, 39, 0.5); /* slightly darker / more visible */
+  transform: scale(1.05);             /* subtle pop */
+}
+
+
 </style>
+

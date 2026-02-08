@@ -82,19 +82,6 @@
   <TempGraph {series} height={160}/>
 </div>
 
-<!-- ---- LATEST TEMPS ---- -->
-<h2>Latest Temps</h2>
-
-{#if temps.length === 0}
-  <p>No data yet</p>
-{:else}
-  {#each temps as t}
-    <div>
-      Sensor {t.sensor_id}: {t.temperature}° — 
-      {new Date(t.ts * 1000).toLocaleString()}
-    </div>
-  {/each}
-{/if}
 
 <!-- ---- SENSOR CARDS ---- -->
 <div class="grid">

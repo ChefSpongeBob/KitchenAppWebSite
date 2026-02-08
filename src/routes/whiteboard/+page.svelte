@@ -139,37 +139,40 @@
     display:inline-block;
   }
 
-  .bubble {
-    border-radius:50%;
-    padding:16px;
-    cursor:pointer;
+.bubble {
+  border-radius:50%;
+  padding:16px;
+  cursor:pointer;
 
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    align-items:center;
-    text-align:center;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
 
-    /* WHITE/NEUTRAL TONES */
-    background:
-      radial-gradient(
-        circle at 30% 30%,
-        rgba(255,255,255,0.25),
-        rgba(200,200,200,0.6)
-      );
+  /* REALISTIC BUBBLE LOOK */
+  background:
+    radial-gradient(
+      circle at 30% 30%,
+      rgba(255, 255, 255, 0.4),   /* highlight */
+      rgba(173, 216, 230, 0.15)   /* subtle blue tint */
+    );
 
-    backdrop-filter:blur(10px);
-    border:1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3); /* thin transparent border */
 
-    animation:
-      float var(--floatDur) ease-in-out infinite,
-      glowPulse var(--pulseDur) ease-in-out infinite;
+  backdrop-filter: blur(10px);
 
-    animation-delay:var(--delay);
+  animation:
+    float var(--floatDur) ease-in-out infinite,
+    glowPulse var(--pulseDur) ease-in-out infinite;
 
-    box-shadow:
-      0 0 calc(var(--glow)*1px) rgba(255,255,255,0.15);
-  }
+  animation-delay: var(--delay);
+
+  box-shadow:
+    0 0 calc(var(--glow)*2px) rgba(173, 216, 230, 0.2),
+    inset -4px -4px 10px rgba(255, 255, 255, 0.3); /* inner shine */
+}
+
 
   @keyframes float {
     0%{transform:translateY(0)}
