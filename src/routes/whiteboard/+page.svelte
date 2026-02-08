@@ -80,8 +80,10 @@
           rotate({offsets[idea.id]?.r||0}deg);
       "
     >
-      <div
+      <!-- Changed from div to button for accessibility -->
+      <button
         class="bubble"
+        type="button"
         style="
           width:{size(idea.votes)}px;
           height:{size(idea.votes)}px;
@@ -94,7 +96,7 @@
       >
         <span>{idea.text}</span>
         <small>▲ {idea.votes}</small>
-      </div>
+      </button>
     </div>
   {/each}
 </section>
@@ -121,8 +123,8 @@
     border-radius:12px;
     border:none;
     cursor:pointer;
-    background:rgba(120,255,220,0.25);
-    color:white;
+    background:rgba(255,255,255,0.25);
+    color:black;
   }
 
   .board {
@@ -148,11 +150,12 @@
     align-items:center;
     text-align:center;
 
+    /* WHITE/NEUTRAL TONES */
     background:
       radial-gradient(
         circle at 30% 30%,
-        rgba(120,255,220,0.25),
-        rgba(0,40,60,0.6)
+        rgba(255,255,255,0.25),
+        rgba(200,200,200,0.6)
       );
 
     backdrop-filter:blur(10px);
@@ -165,7 +168,7 @@
     animation-delay:var(--delay);
 
     box-shadow:
-      0 0 calc(var(--glow)*1px) rgba(120,255,220,0.15);
+      0 0 calc(var(--glow)*1px) rgba(255,255,255,0.15);
   }
 
   @keyframes float {
@@ -175,9 +178,9 @@
   }
 
   @keyframes glowPulse {
-    0%{box-shadow:0 0 calc(var(--glow)*1px) rgba(120,255,220,0.12);}
-    50%{box-shadow:0 0 calc(var(--glow)*2px) rgba(120,255,220,0.25);}
-    100%{box-shadow:0 0 calc(var(--glow)*1px) rgba(120,255,220,0.12);}
+    0%{box-shadow:0 0 calc(var(--glow)*1px) rgba(255,255,255,0.12);}
+    50%{box-shadow:0 0 calc(var(--glow)*2px) rgba(255,255,255,0.25);}
+    100%{box-shadow:0 0 calc(var(--glow)*1px) rgba(255,255,255,0.12);}
   }
 
   span {

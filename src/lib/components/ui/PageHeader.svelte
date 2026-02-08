@@ -3,7 +3,7 @@
   export let subtitle: string | null = null;
 </script>
 
-<header class="page-header">
+<header class="page-header" aria-label={subtitle ? `${title} - ${subtitle}` : title}>
   <h1>{title}</h1>
 
   {#if subtitle}
@@ -11,17 +11,7 @@
   {/if}
 </header>
 
-
-  <style>
-  .link-card a {
-    color: var(--color-text) !important;
-    text-decoration: none;
-  }
-
-  .link-card a:hover,
-  .link-card a:focus {
-    color: var(--color-primary) !important;
-  }
+<style>
 
   .page-header {
     margin-bottom: var(--space-6);
@@ -35,9 +25,8 @@
   }
 
   header {
-  padding-top: 3.5rem;
-}
-
+    padding-top: 3.5rem;
+  }
 
   .subtitle {
     margin: var(--space-2) 0 0;

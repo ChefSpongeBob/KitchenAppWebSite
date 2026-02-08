@@ -60,7 +60,7 @@
           description={expandedId === todo.id ? todo.description : ''}
           role="button"
           tabindex="0"
-          aria-expanded={expandedId === todo.id}
+          ariaExpanded={expandedId === todo.id}
           on:click={() => toggleExpand(todo.id)}
           on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
         >
@@ -85,7 +85,7 @@
           description={expandedId === todo.id ? todo.description : ''}
           role="button"
           tabindex="0"
-          aria-expanded={expandedId === todo.id}
+          ariaExpanded={expandedId === todo.id}
           on:click={() => toggleExpand(todo.id)}
           on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
         />
@@ -120,7 +120,7 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding-bottom: 6rem;
+    padding-bottom: 6rem; /* prevents bottom nav overlap */
   }
 
   .complete-button {

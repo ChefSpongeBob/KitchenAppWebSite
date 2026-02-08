@@ -182,12 +182,4 @@
     opacity: 1;
   }
 
-  h1 {
-    font-family: "Inter", sans-serif;
-    font-size: 2.6rem;
-    font-weight: 700;
-
-    text-align: center;
-    margin: 2rem 0 1.25rem 0;
-  }
 </style>

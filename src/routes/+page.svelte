@@ -86,7 +86,6 @@
     class="mosaic"
     on:mousemove={handleMove}
     on:touchmove={handleMove}
-    role="region"
     aria-label="Dashboard Tiles"
     in:fade={{ duration: 500 }}
   >
