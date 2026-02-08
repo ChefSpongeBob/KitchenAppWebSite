@@ -79,7 +79,7 @@ onMount(()=>{
 
 <Layout>
 
- -- <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
+ <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
   <h1>{greeting}, {userName}</h1>
   <div class="divider"></div>
 </section> 
