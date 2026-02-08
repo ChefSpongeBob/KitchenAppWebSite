@@ -1,9 +1,17 @@
 <script>
   export let title = "";
   export let description = "";
+  export let role = null;        // optional role (like "button") from parent
+  export let tabindex = null;    // optional tabindex
+  export let ariaExpanded = null; // optional aria-expanded
 </script>
 
-<div class="card">
+<div
+  class="card"
+  {role}
+  {tabindex}
+  aria-expanded={ariaExpanded}
+>
   {#if title}
     <div class="header">
       <h2>{title}</h2>
@@ -18,23 +26,29 @@
   </div>
 </div>
 
-  <style>
+<style>
   .link-card a {
     color: var(--color-text) !important;
     text-decoration: none;
   }
-
-  .link-card a:hover,
-  .link-card a:focus {
-    color: var(--color-primary) !important;
-  }
-
 
   .card {
     background: var(--color-surface, #1e1e1e);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 14px;
     padding: 16px;
+    cursor: pointer; /* indicates interactivity if clickable */
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .card:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
   }
 
   .header h2 {

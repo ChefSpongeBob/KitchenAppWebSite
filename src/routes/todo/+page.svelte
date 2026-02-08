@@ -7,24 +7,9 @@
   let expandedId = null;
 
   let todos = [
-    {
-      id: 1,
-      title: 'Prep Veg Station',
-      description: 'Wash, cut, and portion all veg for dinner service.',
-      completed: false
-    },
-    {
-      id: 2,
-      title: 'Check Walk-in Temps',
-      description: 'Log temps before 4pm.',
-      completed: false
-    },
-    {
-      id: 3,
-      title: 'Deep Clean Flat Top',
-      description: 'Scrape, degrease, polish.',
-      completed: true
-    }
+    { id: 1, title: 'Prep Veg Station', description: 'Wash, cut, and portion all veg for dinner service.', completed: false },
+    { id: 2, title: 'Check Walk-in Temps', description: 'Log temps before 4pm.', completed: false },
+    { id: 3, title: 'Deep Clean Flat Top', description: 'Scrape, degrease, polish.', completed: true }
   ];
 
   function toggleExpand(id) {
@@ -46,8 +31,10 @@
   <PageHeader title="To Do" />
 
   <!-- Tabs -->
-  <div class="tabs">
+  <div class="tabs" role="tablist">
     <button
+      role="tab"
+      aria-selected={activeTab === 'active'}
       class:active={activeTab === 'active'}
       on:click={() => (activeTab = 'active')}
     >
@@ -55,6 +42,8 @@
     </button>
 
     <button
+      role="tab"
+      aria-selected={activeTab === 'completed'}
       class:active={activeTab === 'completed'}
       on:click={() => (activeTab = 'completed')}
     >
@@ -64,36 +53,42 @@
 
   <!-- Active Tasks -->
   {#if activeTab === 'active'}
-    <div class="card-list">
+    <div class="card-list" role="region" aria-label="Active Tasks">
       {#each activeTodos as todo (todo.id)}
-        <div on:click={() => toggleExpand(todo.id)}>
-          <DashboardCard
-            title={todo.title}
-            description={expandedId === todo.id ? todo.description : ''}
+        <DashboardCard
+          title={todo.title}
+          description={expandedId === todo.id ? todo.description : ''}
+          role="button"
+          tabindex="0"
+          aria-expanded={expandedId === todo.id}
+          on:click={() => toggleExpand(todo.id)}
+          on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
+        >
+          <button
+            slot="actions"
+            class="complete-button"
+            on:click|stopPropagation={() => completeTask(todo.id)}
           >
-            <button
-              slot="actions"
-              class="complete-button"
-              on:click|stopPropagation={() => completeTask(todo.id)}
-            >
-              ✓ Complete
-            </button>
-          </DashboardCard>
-        </div>
+            ✓ Complete
+          </button>
+        </DashboardCard>
       {/each}
     </div>
   {/if}
 
   <!-- Completed Tasks -->
   {#if activeTab === 'completed'}
-    <div class="card-list">
+    <div class="card-list" role="region" aria-label="Completed Tasks">
       {#each completedTodos as todo (todo.id)}
-        <div on:click={() => toggleExpand(todo.id)}>
-          <DashboardCard
-            title={todo.title}
-            description={expandedId === todo.id ? todo.description : ''}
-          />
-        </div>
+        <DashboardCard
+          title={todo.title}
+          description={expandedId === todo.id ? todo.description : ''}
+          role="button"
+          tabindex="0"
+          aria-expanded={expandedId === todo.id}
+          on:click={() => toggleExpand(todo.id)}
+          on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
+        />
       {/each}
     </div>
   {/if}
@@ -125,7 +120,7 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding-bottom: 6rem; /* prevents bottom nav overlap */
+    padding-bottom: 6rem;
   }
 
   .complete-button {

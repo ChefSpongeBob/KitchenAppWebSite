@@ -14,27 +14,39 @@
 </script>
 
 <svelte:head>
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" href="/favicon.ico" />
+
   <link
     href="https://fonts.googleapis.com/icon?family=Material+Icons"
     rel="stylesheet"
   />
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-
 </svelte:head>
 
 <!-- ===== Hamburger ===== -->
-<button class="hamburger tap" on:click={toggleSidebar}>
+<button
+  class="hamburger tap"
+  on:click={toggleSidebar}
+  aria-label="Toggle sidebar"
+>
   <span class="material-icons">menu</span>
 </button>
 
 <!-- ===== Overlay ===== -->
 {#if sidebarOpen}
-  <div class="overlay" on:click={() => (sidebarOpen = false)}></div>
+  <div
+    class="overlay"
+    on:click={() => (sidebarOpen = false)}
+    role="button"
+    tabindex="0"
+    aria-label="Close sidebar"
+    on:keydown={(e) => e.key === "Enter" && (sidebarOpen = false)}
+  ></div>
 {/if}
 
 <!-- ===== Sidebar ===== -->
-<aside class="sidebar" class:open={sidebarOpen}>
+<aside class="sidebar" class:open={sidebarOpen} aria-label="Sidebar navigation">
   <div class="sidebar-inner">
     {#each primaryNav as item}
       <a
@@ -44,7 +56,6 @@
         on:click={() => (sidebarOpen = false)}
       >
         <span class="active-indicator"></span>
-
         <span class="material-icons">{item.icon}</span>
         <span>{item.label}</span>
       </a>
@@ -60,7 +71,6 @@
 </div>
 
 <style>
-
   /* ===== Layout ===== */
   .app-shell {
     min-height: 100dvh;
@@ -73,19 +83,19 @@
     overflow-y: auto;
     padding: var(--space-4);
     padding-bottom: var(--space-6);
+    padding-top: 2.5rem;
   }
 
   /* ===== Hamburger ===== */
-.hamburger {
-  position: fixed;
-  top: 1rem;
-  left: 1rem;
-  z-index: 20;
+  .hamburger {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 20;
 
-  background: transparent;
-  border: none;
-}
-
+    background: transparent;
+    border: none;
+  }
 
   /* ===== Overlay ===== */
   .overlay {
@@ -172,18 +182,12 @@
     opacity: 1;
   }
 
-h1 {
-  font-family: "Inter", sans-serif;
-  font-size: 2.6rem;
-  font-weight: 700;
+  h1 {
+    font-family: "Inter", sans-serif;
+    font-size: 2.6rem;
+    font-weight: 700;
 
-  text-align: center;
-  margin: 2rem 0 1.25rem 0;
-}
-.app-content {
-  padding-top: 2.5rem;
-}
-
-
-
+    text-align: center;
+    margin: 2rem 0 1.25rem 0;
+  }
 </style>

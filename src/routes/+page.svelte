@@ -5,31 +5,27 @@
   import { fly, fade } from 'svelte/transition';
   import { onMount } from 'svelte';
 
+  let series = {};
 
-let series = {};
+  async function loadTemps() {
+    const res = await fetch("/api/temps");
+    const batches = await res.json();
 
-async function loadTemps(){
-  const res = await fetch("/api/temps");
-
-  const batches = await res.json();
-
-  const grouped = {};
-
-  for(const b of batches){
-    if(!b.readings) continue;
-
-    for(const r of b.readings){
-      if(!grouped[r.node]) grouped[r.node] = [];
-      grouped[r.node].push(r.temperature);
+    const grouped = {};
+    for (const b of batches) {
+      if (!b.readings) continue;
+      for (const r of b.readings) {
+        if (!grouped[r.node]) grouped[r.node] = [];
+        grouped[r.node].push(r.temperature);
+      }
     }
+
+    series = grouped;
   }
 
-  series = grouped;
-}
-
-onMount(()=>{
-  loadTemps();
-});
+  onMount(() => {
+    loadTemps();
+  });
 
   /* ===== Time + Greeting ===== */
   let time = '';
@@ -79,206 +75,203 @@ onMount(()=>{
 
 <Layout>
 
- <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
-  <h1>{greeting}, {userName}</h1>
-  <div class="divider"></div>
-</section> 
+  <!-- ===== Page Header ===== -->
+  <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
+    <h1>{greeting}, {userName}</h1>
+    <div class="divider"></div>
+  </section> 
 
-<section
-  class="mosaic"
-  on:mousemove={handleMove}
-  on:touchmove={handleMove}
-  in:fade={{ duration: 500 }}
->
-
-  <!-- Greeting Tile -->
-  <div
-    class="tile greeting"
-    style="transform: translate({px * -6}px, {py * -6}px);"
-    in:fly={{ y: 20, duration: 500 }}
+  <!-- ===== Mosaic Section ===== -->
+  <section
+    class="mosaic"
+    on:mousemove={handleMove}
+    on:touchmove={handleMove}
+    role="region"
+    aria-label="Dashboard Tiles"
+    in:fade={{ duration: 500 }}
   >
-    <h2>{greeting}</h2>
-    <span class="time">{time}</span>
-  </div>
-
-  <!-- Temps Tile -->
-  <div
-    class="tile temps"
-    style="transform: translate({px * 4}px, {py * 4}px);"
-    in:fly={{ y: 20, duration: 550 }}
-  >
-    <div class="tile-label">Kitchen Temps</div>
-
-    <!-- SAME SIZE CONTAINER -->
-    <div class="mini-graph">
-      <TempGraph {series} height={40} />
-
+    <!-- Greeting Tile -->
+    <div
+      class="tile greeting"
+      style="transform: translate({px * -6}px, {py * -6}px);"
+      in:fly={{ y: 20, duration: 500 }}
+    >
+      <h2>{greeting}</h2>
+      <span class="time">{time}</span>
     </div>
-  </div>
 
-  <!-- Ideas Tile -->
-  <div
-    class="tile ideas"
-    style="transform: translate({px * 8}px, {py * 8}px);"
-    in:fly={{ y: 20, duration: 600 }}
-  >
-    <div class="tile-label">Top Ideas</div>
+    <!-- Temps Tile -->
+    <div
+      class="tile temps"
+      style="transform: translate({px * 4}px, {py * 4}px);"
+      in:fly={{ y: 20, duration: 550 }}
+    >
+      <div class="tile-label">Kitchen Temps</div>
 
-    {#each topIdeas as idea}
-      <div class="idea">
-        <span>{idea.text}</span>
-        <small>▲ {idea.votes}</small>
+      <!-- SAME SIZE CONTAINER -->
+      <div class="mini-graph">
+        <TempGraph {series} height={40} />
       </div>
-    {/each}
-  </div>
+    </div>
 
-</section>
+    <!-- Ideas Tile -->
+    <div
+      class="tile ideas"
+      style="transform: translate({px * 8}px, {py * 8}px);"
+      in:fly={{ y: 20, duration: 600 }}
+    >
+      <div class="tile-label">Top Ideas</div>
 
+      {#each topIdeas as idea}
+        <div class="idea">
+          <span>{idea.text}</span>
+          <small>▲ {idea.votes}</small>
+        </div>
+      {/each}
+    </div>
+  </section>
 
-<DashboardCard
-  title="Today"
-  description="No critical alerts. Kitchen running normally."
-/>
+  <!-- ===== Dashboard Card ===== -->
+  <DashboardCard
+    title="Today"
+    description="No critical alerts. Kitchen running normally."
+  />
 
-<section class="dashboard">
-  <p class="section-label">Quick Access</p>
+  <!-- ===== Quick Access Section ===== -->
+  <section class="dashboard" aria-label="Quick Access">
+    <p class="section-label">Quick Access</p>
 
-  <a href="/lists" class="card-link">
-    <DashboardCard
-      title="Lists"
-      description="Prep lists, inventory, and orders"
-    />
-  </a>
+    <a href="/lists" class="card-link">
+      <DashboardCard
+        title="Lists"
+        description="Prep lists, inventory, and orders"
+      />
+    </a>
 
-  <a href="/todo" class="card-link">
-    <DashboardCard
-      title="ToDos"
-      description="Track your tasks"
-    />
-  </a>
+    <a href="/todo" class="card-link">
+      <DashboardCard
+        title="ToDos"
+        description="Track your tasks"
+      />
+    </a>
 
-  <a href="/whiteboard" class="card-link">
-    <DashboardCard
-      title="Whiteboard"
-      description="Notes and ideas"
-    />
-  </a>
+    <a href="/whiteboard" class="card-link">
+      <DashboardCard
+        title="Whiteboard"
+        description="Notes and ideas"
+      />
+    </a>
 
-  <a href="/temps" class="card-link">
-    <DashboardCard
-      title="Temps"
-      description="Temperature logs"
-    />
-  </a>
-
-</section>
+    <a href="/temps" class="card-link">
+      <DashboardCard
+        title="Temps"
+        description="Temperature logs"
+      />
+    </a>
+  </section>
 
 </Layout>
 
 <style>
+  .page-header{
+    padding: 3rem 1rem 0.5rem;
+  }
 
-.page-header{
-  padding: 3rem 1rem 0.5rem;
-}
+  .page-header h1{
+    margin:0;
+    font-size:2.2rem;
+    font-weight:var(--weight-semibold);
+    letter-spacing:-0.03em;
+  }
 
-.page-header h1{
-  margin:0;
-  font-size:2.2rem;
-  font-weight:var(--weight-semibold);
-  letter-spacing:-0.03em;
-}
+  .divider{
+    height:1px;
+    background:var(--color-border);
+    margin-top:12px;
+    opacity:.6;
+  }
 
-.divider{
-  height:1px;
-  background:var(--color-border);
-  margin-top:12px;
-  opacity:.6;
-}
+  .mosaic{
+    display:grid;
+    grid-template-columns:1.2fr 1fr;
+    grid-auto-rows:110px;
+    gap:12px;
+    padding:1rem;
+  }
 
-.mosaic{
-  display:grid;
-  grid-template-columns:1.2fr 1fr;
-  grid-auto-rows:110px;
-  gap:12px;
-  padding:1rem;
-}
+  .tile{
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:var(--radius-lg);
+    padding:14px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
 
-.tile{
-  background:var(--color-surface);
-  border:1px solid var(--color-border);
-  border-radius:var(--radius-lg);
-  padding:14px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  transition: transform .25s ease, box-shadow .25s ease;
-}
+  .tile:hover{
+    transform:translateY(-2px);
+    box-shadow:var(--shadow-sm);
+  }
 
-.tile:hover{
-  transform:translateY(-2px);
-  box-shadow:var(--shadow-sm);
-}
+  .greeting{
+    grid-row:span 2;
+  }
 
-.greeting{
-  grid-row:span 2;
-}
+  .greeting h2{
+    margin:0;
+    font-size:1.5rem;
+  }
 
-.greeting h2{
-  margin:0;
-  font-size:1.5rem;
-}
+  .time{
+    margin-top:6px;
+    color:var(--color-text-muted);
+  }
 
-.time{
-  margin-top:6px;
-  color:var(--color-text-muted);
-}
+  /* Removed unused .temps strong selector */
 
-.temps strong{
-  font-size:1.4rem;
-}
+  /* 👇 THIS KEEPS GRAPH SMALL */
+  .mini-graph{
+    width:100%;
+    height:40px;
+    margin-top:6px;
+    overflow:hidden;
+  }
 
-/* 👇 THIS KEEPS GRAPH SMALL */
-.mini-graph{
-  width:100%;
-  height:40px;
-  margin-top:6px;
-  overflow:hidden;
-}
+  .tile-label{
+    font-size:var(--text-xs);
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--color-text-muted);
+    margin-bottom:6px;
+  }
 
-.tile-label{
-  font-size:var(--text-xs);
-  text-transform:uppercase;
-  letter-spacing:.08em;
-  color:var(--color-text-muted);
-  margin-bottom:6px;
-}
+  .idea{
+    display:flex;
+    justify-content:space-between;
+    font-size:var(--text-sm);
+    color:var(--color-text-muted);
+  }
 
-.idea{
-  display:flex;
-  justify-content:space-between;
-  font-size:var(--text-sm);
-  color:var(--color-text-muted);
-}
+  .dashboard{
+    display:flex;
+    flex-direction:column;
+    gap:1.1rem;
+    padding-inline:1rem;
+    margin-top:2rem;
+    padding-bottom:8rem;
+  }
 
-.dashboard{
-  display:flex;
-  flex-direction:column;
-  gap:1.1rem;
-  padding-inline:1rem;
-  margin-top:2rem;
-  padding-bottom:8rem;
-}
+  .section-label{
+    font-size:var(--text-sm);
+    color:var(--color-text-muted);
+    letter-spacing:.08em;
+    text-transform:uppercase;
+  }
 
-.section-label{
-  font-size:var(--text-sm);
-  color:var(--color-text-muted);
-  letter-spacing:.08em;
-  text-transform:uppercase;
-}
-
-.card-link{
-  text-decoration:none;
-  display:block;
-}
-
+  .card-link{
+    text-decoration:none;
+    display:block;
+  }
 </style>
