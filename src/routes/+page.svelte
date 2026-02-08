@@ -72,21 +72,17 @@ onMount(()=>{
   /* ===== Top Ideas ===== */
   const topIdeas = [
     { text: "Late-night menu", votes: 12 },
-    { text: "Mango crab roll", votes: 8 },
-    { text: "Seasonal specials", votes: 5 }
+    { text: "Toast took my stapler", votes: 8 },
+    { text: "New Salad", votes: 5 }
   ];
 </script>
 
 <Layout>
-<section role="region" aria-labelledby="some-id" on:mousemove={yourHandler}>
-  <!-- Your content here -->
-</section>
 
-
-<section class="page-header" in:fly={{ y: 20, duration: 500 }}>
+ -- <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
   <h1>{greeting}, {userName}</h1>
   <div class="divider"></div>
-</section>
+</section> 
 
 <section
   class="mosaic"
