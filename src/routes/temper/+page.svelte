@@ -12,6 +12,15 @@
 
   const URL = "/api/temps";
 
+  // ---- NODE NAMING ----
+  const nodeNames: Record<number, string> = {
+    1: "Cook Bus",
+    2: "Bus 7",
+    3: "Bus 8",
+    4: "Bus 9"
+    // add more nodes here as needed
+  };
+
   // ---- LOAD FUNCTION ----
   async function load() {
     try {
@@ -82,12 +91,12 @@
   <TempGraph {series} height={160}/>
 </div>
 
-
 <!-- ---- SENSOR CARDS ---- -->
 <div class="grid">
   {#each Array.from({ length: 15 }, (_, i) => i + 1) as node}
     <div class="tile {tempClass(latest[node])}">
-      <h2>Node {node}</h2>
+      <!-- Display friendly name with sensor ID tooltip -->
+      <h2 title="Sensor ID: {node}">{nodeNames[node] ?? `Node ${node}`}</h2>
 
       {#if latest[node] !== undefined}
         <div class="temp">{latest[node]}°F</div>
