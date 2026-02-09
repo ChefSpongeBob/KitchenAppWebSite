@@ -4,8 +4,9 @@
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
 </script>
 
+
 <Layout>
-  <Section title="Lists">
+  <Section title="">
 
     <a href="/lists/preplists" class="card-link">
       <DashboardCard
