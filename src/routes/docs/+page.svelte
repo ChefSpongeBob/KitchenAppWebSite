@@ -4,7 +4,7 @@
   let docs = [];
   let loading = true;
 
-  const URL = "/api/temps"; // ✅ correct place
+  //const URL = "/api/temps"; // ✅ correct place
 
   onMount(async () => {
     try {
