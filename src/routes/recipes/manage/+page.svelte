@@ -1,78 +1,90 @@
-<script>
-  let category = 'kitchen';
-  let title = '';
-  let ingredients = '';
-  let instructions = '';
+<script lang="ts">
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import { fade } from 'svelte/transition';
+  import { enhance } from '$app/forms';
 
-  const categories = ['kitchen','sushi','sushiprep','sauces','specials'];
+  export let data;
 
-  const addRecipe = () => {
-    alert(`Would add recipe:
-Category: ${category}
-Title: ${title}
-Ingredients: ${ingredients}
-Instructions: ${instructions}`);
-  };
+  // Recipes from the database
+  let recipes = data.recipes;
+
+  // Reload recipes after any form action
+  function refreshRecipes() {
+    fetch('/recipes/manage')
+      .then((res) => res.json())
+      .then((json) => {
+        recipes = json.recipes;
+      });
+  }
+
+  // SvelteKit form enhancer
+  function handleForm(form: HTMLFormElement) {
+    enhance(form, {
+      onSuccess() {
+        refreshRecipes();
+      }
+    });
+  }
 </script>
 
-<h1>Manage Recipes</h1>
+<PageHeader title="Manage Recipes" subtitle="Edit, add, or delete recipes" />
 
-<div class="form">
-  <label>
-    Category:
-    <select bind:value={category}>
-      {#each categories as c}
-        <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-      {/each}
-    </select>
-  </label>
+<section class="create-recipe-grid">
+  {#each recipes as r, index}
+    <div in:fade={{ delay: index * 80, duration: 180 }}>
+      <DashboardCard
+        title={r.title}
+        description={r.category}
+      >
+        <form use:enhance on:submit|preventDefault={(e) => handleForm(e.target as HTMLFormElement)} method="POST" action="?/updateRecipe">
+          <input type="hidden" name="id" value={r.id} />
+          <input type="text" name="title" value={r.title} placeholder="Title" required />
+          <input type="text" name="ingredients" value={r.ingredients} placeholder="Ingredients" required />
+          <input type="text" name="instructions" value={r.instructions} placeholder="Instructions" required />
+          <button type="submit">Update</button>
+        </form>
 
-  <label>
-    Title:
-    <input type="text" placeholder="Recipe title" bind:value={title} />
-  </label>
+        <form use:enhance on:submit|preventDefault={(e) => handleForm(e.target as HTMLFormElement)} method="POST" action="?/deleteRecipe">
+          <input type="hidden" name="id" value={r.id} />
+          <button type="submit">Delete</button>
+        </form>
+      </DashboardCard>
+    </div>
+  {/each}
 
-  <label>
-    Ingredients:
-    <textarea placeholder="Ingredients" bind:value={ingredients}></textarea>
-  </label>
-
-  <label>
-    Instructions:
-    <textarea placeholder="Instructions" bind:value={instructions}></textarea>
-  </label>
-
-  <button on:click={addRecipe}>Add Recipe</button>
-</div>
+  <!-- Create new recipe card -->
+  <div in:fade={{ delay: recipes.length * 80, duration: 180 }}>
+    <DashboardCard title="Add Recipe">
+      <form use:enhance on:submit|preventDefault={(e) => handleForm(e.target as HTMLFormElement)} method="POST" action="?/createRecipe">
+        <input type="text" name="title" placeholder="Title" required />
+        <input type="text" name="category" placeholder="Category" required />
+        <input type="text" name="ingredients" placeholder="Ingredients" required />
+        <input type="text" name="instructions" placeholder="Instructions" required />
+        <button type="submit">Create</button>
+      </form>
+    </DashboardCard>
+  </div>
+</section>
 
 <style>
-  .form {
-    display: flex;
-    flex-direction: column;
+  .create-recipe-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 1rem;
-    max-width: 500px;
-    margin: 2rem auto;
+    margin-top: 1rem;
   }
 
-  label {
-    display: flex;
-    flex-direction: column;
-  }
-
-  input, textarea, select {
-    padding: 0.5rem;
-    font-size: 1rem;
+  input {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.5rem;
+    padding: 0.25rem;
   }
 
   button {
-    padding: 0.75rem;
-    background-color: var(--color-primary);
-    color: white;
-    border: none;
+    padding: 0.5rem 1rem;
+    margin-top: 0.25rem;
     cursor: pointer;
-  }
-
-  button:hover {
-    background-color: var(--color-primary-dark);
   }
 </style>

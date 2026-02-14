@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
   import { fade } from 'svelte/transition';
 
-  // PERMANENT CATEGORY CARDS — exactly like your old UI
+  // PERMANENT, HARD-CODED CATEGORY CARDS
   const categories = [
     { id: 'kitchen', title: 'Kitchen', description: 'Base recipes' },
     { id: 'sushi', title: 'Sushi', description: 'Rolls & builds' },
@@ -12,12 +12,21 @@
     { id: 'sauces', title: 'Sauces', description: 'House sauces' },
     { id: 'specials', title: 'Specials', description: 'Chef specials' }
   ];
+
+  function goToManage() {
+    goto('/recipes/manage');
+  }
 </script>
 
 <PageHeader
   title="Recipes"
   subtitle="Browse by category"
 />
+
+<!-- Manage Recipes button -->
+<div class="manage-button-wrapper">
+  <button type="button" on:click={goToManage}>Manage Recipes</button>
+</div>
 
 <section class="grid">
   {#each categories as c, index}
@@ -37,6 +46,25 @@
 </section>
 
 <style>
+  .manage-button-wrapper {
+    margin-bottom: var(--space-4);
+  }
+
+  .manage-button-wrapper button {
+    padding: 0.6rem 1.2rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--color-primary);
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .manage-button-wrapper button:hover {
+    background-color: var(--color-primary-dark);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
