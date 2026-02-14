@@ -1,15 +1,16 @@
 <script>
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
-  import Layout from '$lib/components/ui/Layout.svelte';
   import { goto } from '$app/navigation';
   import { fade } from 'svelte/transition';
 
+  // PERMANENT CATEGORY CARDS — exactly like your old UI
   const categories = [
-    { id: 'rice', title: 'Rice', description: 'Rice & base prep' },
+    { id: 'kitchen', title: 'Kitchen', description: 'Base recipes' },
+    { id: 'sushi', title: 'Sushi', description: 'Rolls & builds' },
+    { id: 'sushiprep', title: 'Sushi Prep', description: 'Prep ingredients' },
     { id: 'sauces', title: 'Sauces', description: 'House sauces' },
-    { id: 'prep', title: 'Prep', description: 'General prep recipes' },
-    { id: 'sushi', title: 'Sushi', description: 'Rolls & builds' }
+    { id: 'specials', title: 'Specials', description: 'Chef specials' }
   ];
 </script>
 
@@ -44,6 +45,7 @@
   }
 
   .category-wrapper {
+    cursor: pointer;
     transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
   }
 
