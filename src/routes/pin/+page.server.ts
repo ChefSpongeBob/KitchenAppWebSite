@@ -1,5 +1,13 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
-import { createHash } from 'crypto';
+
+async function sha256(input: string) {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(input);
+	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+	return Array.from(new Uint8Array(hashBuffer))
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+}
 
 export const actions: Actions = {
 	default: async ({ request, cookies, locals }) => {
@@ -26,11 +34,7 @@ export const actions: Actions = {
 		.bind(sessionId)
 		.first();
 
-		if (
-			!session ||
-			session.revoked_at !== null ||
-			session.expires_at < now
-		) {
+		if (!session || session.revoked_at !== null || session.expires_at < now) {
 			throw redirect(303, '/login');
 		}
 
@@ -50,9 +54,7 @@ export const actions: Actions = {
 			return fail(400, { error: 'Device not available.' });
 		}
 
-		const pinHash = createHash('sha256')
-			.update(pin)
-			.digest('hex');
+		const pinHash = await sha256(pin);
 
 		if (pinHash !== device.pin_hash) {
 			return fail(400, { error: 'Invalid PIN.' });
@@ -74,12 +76,12 @@ export const actions: Actions = {
 		.bind(now, now, session.device_id)
 		.run();
 
-		cookies.set('pin_unlocked_at', String(now), {
+		// PIN unlock is a session cookie (clears when browser closes)
+		cookies.set('pin_unlocked_at', '1', {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
-			secure: false,
-			maxAge: 60 * 60 * 24 * 30
+			secure: true
 		});
 
 		throw redirect(303, '/');
