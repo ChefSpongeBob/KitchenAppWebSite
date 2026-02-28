@@ -14,12 +14,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return resolve(event);
 	}
 
+	const db = event.locals.DB;
 	const sessionId = event.cookies.get('session_id');
+
 	if (!sessionId) {
 		throw redirect(303, '/login');
 	}
 
-	const db = event.locals.DB;
 	const now = Math.floor(Date.now() / 1000);
 
 	const session = await db.prepare(`
@@ -53,41 +54,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	// Enforce PIN freshness (1 hour)
-	const pinUnlockedAt = event.cookies.get('pin_unlocked_at');
-	const unlockedAt = pinUnlockedAt ? Number(pinUnlockedAt) : NaN;
-
-	if (!Number.isFinite(unlockedAt) || now - unlockedAt > 3600) {
+	// Require PIN every browser session (no timer)
+	const pinUnlocked = event.cookies.get('pin_unlocked_at');
+	if (!pinUnlocked) {
 		throw redirect(303, '/pin');
-	}
-
-	// Admin protection
-	if (
-		if (pathname.startsWith('/recipes/manage')) {
-	const user = await db.prepare(`
-		SELECT role
-		FROM users
-		WHERE id = ?
-	`)
-	.bind(session.user_id)
-	.first();
-
-	if (!user || user.role !== 'admin') {
-		throw redirect(303, '/');
-	}
-}
-	) {
-		const user = await db.prepare(`
-			SELECT role
-			FROM users
-			WHERE id = ?
-		`)
-		.bind(session.user_id)
-		.first();
-
-		if (!user || user.role !== 'admin') {
-			throw redirect(303, '/');
-		}
 	}
 
 	return resolve(event);

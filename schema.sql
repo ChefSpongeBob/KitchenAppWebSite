@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   is_active INTEGER NOT NULL DEFAULT 1,
   email_verified_at INTEGER,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  role TEXT DEFAULT 'user'
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized_unique
@@ -49,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_devices_user_revoked_at
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen_at
   ON devices(last_seen_at);
 
-  -- SESSIONS
+-- SESSIONS
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -73,3 +74,39 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
   ON sessions(expires_at);
+
+--------------------------------------------------
+-- TODOS (ACTIVE TASKS)
+--------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS todos (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  created_by TEXT NOT NULL,
+  completed_by TEXT,
+  completed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_todos_completed_at
+  ON todos(completed_at);
+
+--------------------------------------------------
+-- TODO COMPLETION LOG (PERSISTENT HISTORY)
+--------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS todo_completion_log (
+  id TEXT PRIMARY KEY,
+  todo_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  completed_by TEXT NOT NULL,
+  completed_at INTEGER NOT NULL,
+  FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_todo_log_completed_at
+  ON todo_completion_log(completed_at);

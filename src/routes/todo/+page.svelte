@@ -1,158 +1,172 @@
 <script>
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+	import Layout from '$lib/components/ui/Layout.svelte';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
 
-  let activeTab = 'active';
-  let expandedId = null;
+	export let data;
 
-  let todos = [
-    { id: 1, title: 'Prep Veg Station', description: 'Wash, cut, and portion all veg for dinner service.', completed: false },
-    { id: 2, title: 'Check Walk-in Temps', description: 'Log temps before 4pm.', completed: false },
-    { id: 3, title: 'Deep Clean Flat Top', description: 'Scrape, degrease, polish.', completed: true }
-  ];
+	let activeTab = 'active';
+	let expandedId = null;
 
-  function toggleExpand(id) {
-    expandedId = expandedId === id ? null : id;
-  }
+	const activeTodos = data.active ?? [];
+	const completedTodos = data.completed ?? [];
 
-  function completeTask(id) {
-    todos = todos.map(todo =>
-      todo.id === id ? { ...todo, completed: true } : todo
-    );
-    expandedId = null;
-  }
-
-  $: activeTodos = todos.filter(t => !t.completed);
-  $: completedTodos = todos.filter(t => t.completed);
+	function toggleExpand(id) {
+		expandedId = expandedId === id ? null : id;
+	}
 </script>
 
 <Layout>
-  <PageHeader title="To Do" />
+	<PageHeader title="To Do" />
 
-  <!-- Tabs -->
-  <div class="tabs" role="tablist">
-    <button
-      role="tab"
-      aria-selected={activeTab === 'active'}
-      class:active={activeTab === 'active'}
-      on:click={() => (activeTab = 'active')}
-    >
-      Active
-    </button>
+	{#if $page.data.user?.role === 'admin'}
+		<div class="admin-actions">
+			<a href="/todo/manage" class="manage-button">
+				Manage Tasks
+			</a>
+		</div>
+	{/if}
 
-    <button
-      role="tab"
-      aria-selected={activeTab === 'completed'}
-      class:active={activeTab === 'completed'}
-      on:click={() => (activeTab = 'completed')}
-    >
-      Completed
-    </button>
-  </div>
+	<!-- Tabs -->
+	<div class="tabs" role="tablist">
+		<button
+			role="tab"
+			aria-selected={activeTab === 'active'}
+			class:active={activeTab === 'active'}
+			on:click={() => (activeTab = 'active')}
+		>
+			Active
+		</button>
 
-  <!-- Active Tasks -->
-  {#if activeTab === 'active'}
-    <div class="card-list" role="region" aria-label="Active Tasks">
-      {#each activeTodos as todo (todo.id)}
-        <div class="card-wrapper">
-          <DashboardCard
-            title={todo.title}
-            description={expandedId === todo.id ? todo.description : ''}
-            role="button"
-            tabindex="0"
-            aria-expanded={expandedId === todo.id}
-            on:click={() => toggleExpand(todo.id)}
-            on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
-          />
+		<button
+			role="tab"
+			aria-selected={activeTab === 'completed'}
+			class:active={activeTab === 'completed'}
+			on:click={() => (activeTab = 'completed')}
+		>
+			Completed
+		</button>
+	</div>
 
-          <!-- Complete button under the card -->
-          <button
-            class="complete-button"
-            on:click={() => completeTask(todo.id)}
-          >
-            ✓ Complete
-          </button>
-        </div>
-      {/each}
-    </div>
-  {/if}
+	<!-- Active Tasks -->
+	{#if activeTab === 'active'}
+		<div class="card-list" role="region" aria-label="Active Tasks">
+			{#each activeTodos as todo (todo.id)}
+				<div class="card-wrapper">
+					<DashboardCard
+						title={todo.title}
+						description={expandedId === todo.id ? todo.description : ''}
+						role="button"
+						tabindex="0"
+						aria-expanded={expandedId === todo.id}
+						on:click={() => toggleExpand(todo.id)}
+						on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
+					/>
 
-  <!-- Completed Tasks -->
-  {#if activeTab === 'completed'}
-    <div class="card-list" role="region" aria-label="Completed Tasks">
-      {#each completedTodos as todo (todo.id)}
-        <DashboardCard
-          title={todo.title}
-          description={expandedId === todo.id ? todo.description : ''}
-          role="button"
-          tabindex="0"
-          aria-expanded={expandedId === todo.id}
-          on:click={() => toggleExpand(todo.id)}
-          on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
-        />
-      {/each}
-    </div>
-  {/if}
+					<form method="POST" action="?/complete">
+						<input type="hidden" name="id" value={todo.id} />
+						<button class="complete-button">
+							✓ Complete
+						</button>
+					</form>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
+	<!-- Completed Tasks -->
+	{#if activeTab === 'completed'}
+		<div class="card-list" role="region" aria-label="Completed Tasks">
+			{#each completedTodos as todo (todo.id)}
+				<DashboardCard
+					title={todo.title}
+					description={
+						expandedId === todo.id
+							? todo.description +
+							  '\n\nCompleted by: ' +
+							  (todo.display_name ?? 'Unknown')
+							: ''
+					}
+					role="button"
+					tabindex="0"
+					aria-expanded={expandedId === todo.id}
+					on:click={() => toggleExpand(todo.id)}
+					on:keydown={(e) => e.key === 'Enter' && toggleExpand(todo.id)}
+				/>
+			{/each}
+		</div>
+	{/if}
 </Layout>
 
 <style>
-  .tabs {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0 1rem 1rem;
-  }
+	.admin-actions {
+		padding: 0 1rem 1rem;
+	}
 
-  .tabs button {
-    flex: 1;
-    padding: 0.6rem;
-    border-radius: 10px;
-    border: 1px solid var(--border-subtle);
-    background: transparent;
-    color: var(--text-secondary);
-  }
+	.manage-button {
+		display: inline-block;
+		padding: 0.4rem 0.8rem;
+		border-radius: 999px;
+		border: 1px solid rgba(0, 0, 0, 0.4);
+		background: rgba(235, 24, 24, 0.15);
+		text-decoration: none;
+		color: var(--text-primary);
+		font-size: 0.75rem;
+	}
 
-  .tabs button.active {
-    background: rgba(235, 24, 24, 0.15);
-    color: var(--text-primary);
-    border-color: rgba(0, 0, 0, 0.35);
-  }
+	.tabs {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0 1rem 1rem;
+	}
 
-  .card-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    padding-bottom: 6rem;
-  }
+	.tabs button {
+		flex: 1;
+		padding: 0.6rem;
+		border-radius: 10px;
+		border: 1px solid var(--border-subtle);
+		background: transparent;
+		color: var(--text-secondary);
+	}
 
-  .card-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 4px; /* space between card and button */
-  }
+	.tabs button.active {
+		background: rgba(235, 24, 24, 0.15);
+		color: var(--text-primary);
+		border-color: rgba(0, 0, 0, 0.35);
+	}
 
-.complete-button {
-  background: rgba(13, 168, 39, 0.33);
-  border: 1px solid rgba(7, 201, 33, 0.95);
-  color: var(--accent-purple);
-  font-size: 0.65rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
+	.card-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding-bottom: 6rem;
+	}
 
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  cursor: pointer;
+	.card-wrapper {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
 
-  width: auto;
-  transition: background 0.2s, transform 0.15s;
-}
+	.complete-button {
+		background: rgba(13, 168, 39, 0.33);
+		border: 1px solid rgba(7, 201, 33, 0.95);
+		color: var(--accent-purple);
+		font-size: 0.65rem;
+		padding: 0.2rem 0.5rem;
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		cursor: pointer;
+		width: auto;
+		transition: background 0.2s, transform 0.15s;
+	}
 
-.complete-button:hover {
-  background: rgba(13, 168, 39, 0.5); /* slightly darker / more visible */
-  transform: scale(1.05);             /* subtle pop */
-}
-
-
+	.complete-button:hover {
+		background: rgba(13, 168, 39, 0.5);
+		transform: scale(1.05);
+	}
 </style>
-

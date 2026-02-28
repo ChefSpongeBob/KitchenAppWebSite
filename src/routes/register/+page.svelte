@@ -6,6 +6,8 @@
 
 <form method="POST">
 	<div>
+		<input name="display_name" placeholder="Display Name" required />
+
 		<label>Email</label>
 		<input name="email" type="email" required />
 	</div>
