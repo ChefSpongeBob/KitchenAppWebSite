@@ -5,7 +5,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	const { pathname } = event.url;
 
-	// Allow public routes
+	// Public routes
 	if (
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||
@@ -54,7 +54,23 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	// Require PIN every browser session (no timer)
+	// Fetch user + role (THIS WAS MISSING)
+	const user = await db.prepare(`
+		SELECT id, role
+		FROM users
+		WHERE id = ?
+	`)
+	.bind(session.user_id)
+	.first();
+
+	if (!user) {
+		throw redirect(303, '/login');
+	}
+
+	event.locals.userId = user.id;
+	event.locals.userRole = user.role;
+
+	// Require PIN each browser session
 	const pinUnlocked = event.cookies.get('pin_unlocked_at');
 	if (!pinUnlocked) {
 		throw redirect(303, '/pin');
