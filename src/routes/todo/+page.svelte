@@ -2,8 +2,6 @@
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
-	import { enhance } from '$app/forms';
-	import { page } from '$app/stores';
 
 	export let data;
 
@@ -21,7 +19,7 @@
 <Layout>
 	<PageHeader title="To Do" />
 
-	{#if $page.data.user?.role === 'admin'}
+	{#if data.user?.role === 'admin'}
 		<div class="admin-actions">
 			<a href="/todo/manage" class="manage-button">
 				Manage Tasks
@@ -67,7 +65,7 @@
 
 					<form method="POST" action="?/complete">
 						<input type="hidden" name="id" value={todo.id} />
-						<button class="complete-button">
+						<button class="complete-button" type="submit">
 							✓ Complete
 						</button>
 					</form>
