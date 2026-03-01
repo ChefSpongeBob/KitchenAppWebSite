@@ -1,6 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, fail } from '@sveltejs/kit';
-import { randomUUID } from 'crypto';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const db = locals.DB;
@@ -66,7 +65,7 @@ export const actions: Actions = {
 			VALUES (?, ?, ?, ?, ?, ?)
 		`)
 		.bind(
-			randomUUID(),
+			crypto.randomUUID(),
 			title,
 			description,
 			locals.userId,
@@ -112,7 +111,7 @@ export const actions: Actions = {
 			VALUES (?, ?, ?, ?, ?)
 		`)
 		.bind(
-			randomUUID(),
+			crypto.randomUUID(),
 			id,
 			todo.title,
 			locals.userId,

@@ -1,5 +1,13 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
-import { createHash } from 'crypto';
+
+async function sha256(input: string) {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(input);
+	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+	return Array.from(new Uint8Array(hashBuffer))
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+}
 
 export const actions: Actions = {
 	default: async ({ request, cookies, locals }) => {
@@ -15,22 +23,23 @@ export const actions: Actions = {
 		const db = locals.DB;
 
 		// Find active user
-		const user = await db.prepare(`
+		const user = await db
+			.prepare(
+				`
 			SELECT id, password_hash
 			FROM users
 			WHERE email_normalized = ?
 			AND is_active = 1
-		`)
-		.bind(email)
-		.first();
+		`
+			)
+			.bind(email)
+			.first();
 
 		if (!user || !user.password_hash) {
 			return fail(400, { error: 'Invalid credentials.' });
 		}
 
-		const passwordHash = createHash('sha256')
-			.update(password)
-			.digest('hex');
+		const passwordHash = await sha256(password);
 
 		if (passwordHash !== user.password_hash) {
 			return fail(400, { error: 'Invalid credentials.' });
@@ -42,15 +51,18 @@ export const actions: Actions = {
 		const sessionId = crypto.randomUUID();
 
 		// Try to reuse existing active device
-		let device = await db.prepare(`
+		let device = await db
+			.prepare(
+				`
 			SELECT id
 			FROM devices
 			WHERE user_id = ?
 			AND revoked_at IS NULL
 			LIMIT 1
-		`)
-		.bind(user.id)
-		.first();
+		`
+			)
+			.bind(user.id)
+			.first();
 
 		let deviceId = device?.id;
 
@@ -58,7 +70,9 @@ export const actions: Actions = {
 		if (!deviceId) {
 			deviceId = crypto.randomUUID();
 
-			await db.prepare(`
+			await db
+				.prepare(
+					`
 				INSERT INTO devices (
 					id,
 					user_id,
@@ -67,19 +81,16 @@ export const actions: Actions = {
 					updated_at
 				)
 				VALUES (?, ?, ?, ?, ?)
-			`)
-			.bind(
-				deviceId,
-				user.id,
-				'', // empty until PIN is set
-				now,
-				now
-			)
-			.run();
+			`
+				)
+				.bind(deviceId, user.id, '', now, now) // empty until PIN is set
+				.run();
 		}
 
 		// Create session attached to device
-		await db.prepare(`
+		await db
+			.prepare(
+				`
 			INSERT INTO sessions (
 				id,
 				user_id,
@@ -90,17 +101,10 @@ export const actions: Actions = {
 				expires_at
 			)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`)
-		.bind(
-			sessionId,
-			user.id,
-			deviceId,
-			sessionId,
-			now,
-			now,
-			expires
-		)
-		.run();
+		`
+			)
+			.bind(sessionId, user.id, deviceId, sessionId, now, now, expires)
+			.run();
 
 		cookies.set('session_id', sessionId, {
 			path: '/',

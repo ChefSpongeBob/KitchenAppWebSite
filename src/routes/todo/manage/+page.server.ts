@@ -1,6 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, fail } from '@sveltejs/kit';
-import { randomUUID } from 'crypto';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.userRole !== 'admin') {
@@ -27,8 +26,11 @@ export const actions: Actions = {
 		}
 
 		const now = Math.floor(Date.now() / 1000);
+		const id = crypto.randomUUID();
 
-		await db.prepare(`
+		await db
+			.prepare(
+				`
 			INSERT INTO todos (
 				id,
 				title,
@@ -38,16 +40,10 @@ export const actions: Actions = {
 				updated_at
 			)
 			VALUES (?, ?, ?, ?, ?, ?)
-		`)
-		.bind(
-			randomUUID(),
-			title,
-			description,
-			locals.userId,
-			now,
-			now
-		)
-		.run();
+		`
+			)
+			.bind(id, title, description, locals.userId, now, now)
+			.run();
 
 		return { success: true };
 	}
