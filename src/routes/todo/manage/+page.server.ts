@@ -2,13 +2,14 @@ import type { PageServerLoad, Actions } from './$types';
 import { redirect, fail } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals }) => {
+	console.log("ADMIN PAGE ROLE:", locals.userRole);
+
 	if (locals.userRole !== 'admin') {
 		throw redirect(303, '/');
 	}
 
 	return {};
 };
-
 export const actions: Actions = {
 	create: async ({ request, locals }) => {
 		if (locals.userRole !== 'admin') {
