@@ -1,14 +1,18 @@
-
- {
- "name": "kitchensoftware",
- "compatibility_date": "2026-02-07",
- "pages_build_output_dir": ".svelte-kit/cloudflare",
- 
-"d1_databases": [
-    {
-    "binding": "DB",
-    "database_name": "temps",
-    "database_id": "66b28cb6-b9c9-4ebe-bd02-dd414ff245c8"
-       }
-    ]
- }
+{
+	"name": "kitchensoftware",
+	"compatibility_date": "2026-02-07",
+	"pages_build_output_dir": ".svelte-kit/cloudflare",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "temps",
+			"database_id": "66b28cb6-b9c9-4ebe-bd02-dd414ff245c8"
+		},
+		{
+			"binding": "kitchen",
+			"database_name": "kitchen",
+			"database_id": "b15f561e-782d-4695-97cf-91787ae8d4b4",
+			"remote": true
+		}
+	]
+}
