@@ -90,6 +90,24 @@
     category,
     recipes: data.recipes.filter((recipe) => recipe.category === category)
   }));
+
+  let newDocSlug = 'about';
+  const preferredDocSlugOrder = ['about', 'sop', 'handbook'];
+  $: documentBuckets = Array.from(
+    data.documents.reduce((acc, doc) => {
+      const bucket = acc.get(doc.slug) ?? [];
+      bucket.push(doc);
+      acc.set(doc.slug, bucket);
+      return acc;
+    }, new Map<string, DocumentItem[]>())
+  ).sort((a, b) => {
+    const aIndex = preferredDocSlugOrder.indexOf(a[0]);
+    const bIndex = preferredDocSlugOrder.indexOf(b[0]);
+    if (aIndex === -1 && bIndex === -1) return a[0].localeCompare(b[0]);
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
 </script>
 
 <Layout>
@@ -444,68 +462,69 @@
 
   <section class="panel" id="documents">
     <h2>Documents</h2>
-    <form method="POST" action="?/create_document" use:enhance class="add-row">
-      <input name="slug" placeholder="slug (about, sop, handbook)" required />
-      <input name="title" placeholder="Title" required />
-      <input name="section" placeholder="Section" value="Docs" />
-      <input name="category" placeholder="Category" value="General" />
-      <input name="file_url" placeholder="File URL (optional)" />
-      <input name="content" placeholder="Summary/content" />
-      <button type="submit">+ Add</button>
-    </form>
+    <details class="section-block" open>
+      <summary>
+        <h3>Document Manager</h3>
+        <span>{data.documents.length} docs</span>
+      </summary>
 
-    <table class="sheet">
-      <thead>
-        <tr>
-          <th>Slug</th>
-          <th>Title</th>
-          <th>Section</th>
-          <th>Category</th>
-          <th>Active</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#if data.documents.length === 0}
-          <tr><td colspan="6">No documents found.</td></tr>
+      <form method="POST" action="?/create_document" use:enhance class="add-row docs-form">
+        <select name="slug" bind:value={newDocSlug} required>
+          <option value="about">About</option>
+          <option value="sop">SOP</option>
+          <option value="handbook">Handbook</option>
+          <option value="custom">Custom slug</option>
+        </select>
+        {#if newDocSlug === 'custom'}
+          <input name="slug_custom" placeholder="custom-slug" required />
+        {/if}
+        <input name="title" placeholder="Document title" required />
+        <input name="section" placeholder="Section" value="Docs" />
+        <input name="category" placeholder="Category" value="General" />
+        <input name="file_url" placeholder="File URL (optional)" />
+        <textarea name="content" rows="8" placeholder="Full document content / notes"></textarea>
+        <select name="is_active">
+          <option value="1" selected>Active</option>
+          <option value="0">Inactive</option>
+        </select>
+        <button type="submit">+ Add Document</button>
+      </form>
+
+      <div class="recipe-tabs">
+        {#if documentBuckets.length === 0}
+          <p class="muted">No documents found.</p>
         {:else}
-          {#each data.documents as doc}
-            <tr>
-              <td>{doc.slug}</td>
-              <td>{doc.title}</td>
-              <td>{doc.section}</td>
-              <td>{doc.category}</td>
-              <td>{doc.is_active ? 'Yes' : 'No'}</td>
-              <td>
-                <div class="inline">
-                  <details class="edit-doc">
-                    <summary>Edit</summary>
-                    <form method="POST" action="?/update_document" use:enhance class="add-row">
-                      <input type="hidden" name="id" value={doc.id} />
-                      <input name="slug" value={doc.slug} required />
-                      <input name="title" value={doc.title} required />
-                      <input name="section" value={doc.section} />
-                      <input name="category" value={doc.category} />
-                      <input name="file_url" value={doc.file_url ?? ''} />
-                      <input name="content" value={doc.content ?? ''} />
-                      <select name="is_active">
-                        <option value="1" selected={doc.is_active === 1}>Active</option>
-                        <option value="0" selected={doc.is_active === 0}>Inactive</option>
-                      </select>
-                      <button type="submit">Save</button>
-                    </form>
-                  </details>
+          {#each documentBuckets as [slug, docs]}
+            <details class="add-toggle recipe-cat">
+              <summary>{slug} ({docs.length})</summary>
+              {#each docs as doc}
+                <details class="edit-doc">
+                  <summary>{doc.title}</summary>
+                  <form method="POST" action="?/update_document" use:enhance class="add-row docs-form">
+                    <input type="hidden" name="id" value={doc.id} />
+                    <input name="slug" value={doc.slug} required />
+                    <input name="title" value={doc.title} required />
+                    <input name="section" value={doc.section} />
+                    <input name="category" value={doc.category} />
+                    <input name="file_url" value={doc.file_url ?? ''} />
+                    <textarea name="content" rows="8">{doc.content ?? ''}</textarea>
+                    <select name="is_active">
+                      <option value="1" selected={doc.is_active === 1}>Active</option>
+                      <option value="0" selected={doc.is_active === 0}>Inactive</option>
+                    </select>
+                    <button type="submit">Save</button>
+                  </form>
                   <form method="POST" action="?/delete_document" use:enhance class="inline">
                     <input type="hidden" name="id" value={doc.id} />
                     <button type="submit" class="icon-btn danger" aria-label="Delete document">X</button>
                   </form>
-                </div>
-              </td>
-            </tr>
+                </details>
+              {/each}
+            </details>
           {/each}
         {/if}
-      </tbody>
-    </table>
+      </div>
+    </details>
   </section>
 </Layout>
 
@@ -533,6 +552,7 @@
     border: 1px solid var(--color-border);
     border-radius: 12px;
     background: var(--color-surface);
+    overflow-x: auto;
   }
 
   h2 {
@@ -645,6 +665,7 @@
     background: var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.82rem;
+    width: 100%;
   }
 
   button {
@@ -715,5 +736,52 @@
     margin: 0.25rem 0 0.35rem;
     color: var(--color-text-muted);
     font-size: 0.8rem;
+  }
+
+  .docs-form {
+    align-items: flex-start;
+  }
+
+  .docs-form textarea {
+    width: 100%;
+    min-height: 180px;
+    resize: vertical;
+    flex: 1 1 100%;
+  }
+
+  @media (max-width: 900px) {
+    .jump-nav {
+      gap: 0.35rem;
+    }
+
+    .jump-nav a {
+      font-size: 0.72rem;
+      padding: 0.2rem 0.5rem;
+    }
+
+    .sheet {
+      min-width: 680px;
+    }
+
+    .add-row > *,
+    .inline > * {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+
+    .inline .icon-btn {
+      flex: 0 0 auto;
+    }
+
+    .icon-btn {
+      width: 1.9rem;
+      height: 1.9rem;
+    }
+
+    .recipe-add input,
+    .recipe-add textarea {
+      min-width: 0;
+      width: 100%;
+    }
   }
 </style>

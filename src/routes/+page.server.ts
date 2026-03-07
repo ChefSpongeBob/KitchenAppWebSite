@@ -4,6 +4,7 @@ type HomeTask = {
   id: string;
   title: string;
   description: string | null;
+  assigned_to: string | null;
   assigned_name: string | null;
   assigned_email: string | null;
 };
@@ -46,9 +47,12 @@ export const load: PageServerLoad = async ({ locals }) => {
     return {
       userName: 'Team',
       todayTasks: [],
+      todayMeta: { assignedCount: 0, unassignedCount: 0 },
       topIdeas: [],
       nodeTemps: [],
-      tempSeries: { avg: [] }
+      tempSeries: { avg: [] },
+      kpis: { openTasks: 0, completedToday: 0, avgTemp: null, pendingIdeas: 0 },
+      refreshedAt: Math.floor(Date.now() / 1000)
     };
   }
 
@@ -70,6 +74,7 @@ export const load: PageServerLoad = async ({ locals }) => {
           t.id,
           t.title,
           t.description,
+          ta.user_id AS assigned_to,
           au.display_name AS assigned_name,
           au.email AS assigned_email
         FROM todos t
@@ -77,14 +82,17 @@ export const load: PageServerLoad = async ({ locals }) => {
         LEFT JOIN users au ON au.id = ta.user_id
         WHERE t.completed_at IS NULL
           AND (ta.user_id = ? OR ta.user_id IS NULL)
-        ORDER BY t.created_at DESC
+        ORDER BY CASE WHEN ta.user_id = ? THEN 0 ELSE 1 END ASC, t.created_at DESC
         LIMIT 6
         `
       )
-      .bind(locals.userId)
+      .bind(locals.userId, locals.userId)
       .all<HomeTask>();
     todayTasks = taskResult.results ?? [];
   }
+
+  const assignedCount = todayTasks.filter((task) => task.assigned_to === locals.userId).length;
+  const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
 
   const reviewEnabled = await tableExists(db, 'whiteboard_review');
   const topIdeasResult = reviewEnabled
@@ -156,9 +164,40 @@ export const load: PageServerLoad = async ({ locals }) => {
     .slice(-24)
     .map(([, value]) => Number((value.sum / value.count).toFixed(2)));
 
+  const openTasksRow = await db
+    .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NULL`)
+    .first<{ count: number }>();
+
+  const dayStart = Math.floor(new Date(new Date().toDateString()).getTime() / 1000);
+  const completedTodayRow = locals.userId
+    ? await db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM todo_completion_log
+          WHERE completed_by = ? AND completed_at >= ?
+          `
+        )
+        .bind(locals.userId, dayStart)
+        .first<{ count: number }>()
+    : { count: 0 };
+
+  const pendingIdeasRow = reviewEnabled
+    ? await db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM whiteboard_review
+          WHERE status = 'pending'
+          `
+        )
+        .first<{ count: number }>()
+    : { count: 0 };
+
   return {
     userName,
     todayTasks,
+    todayMeta: { assignedCount, unassignedCount },
     topIdeas: (topIdeasResult.results ?? []).map((r) => ({ text: r.content, votes: r.votes })),
     nodeTemps: nodeTemps.map((r) => ({
       sensorId: r.sensor_id,
@@ -166,6 +205,13 @@ export const load: PageServerLoad = async ({ locals }) => {
       temperature: r.temperature,
       ts: r.ts
     })),
-    tempSeries: { avg }
+    tempSeries: { avg },
+    kpis: {
+      openTasks: openTasksRow?.count ?? 0,
+      completedToday: completedTodayRow?.count ?? 0,
+      avgTemp: avg.length ? Number((avg.reduce((sum, value) => sum + value, 0) / avg.length).toFixed(1)) : null,
+      pendingIdeas: pendingIdeasRow?.count ?? 0
+    },
+    refreshedAt: Math.floor(Date.now() / 1000)
   };
 };

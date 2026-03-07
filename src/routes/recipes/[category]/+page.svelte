@@ -137,4 +137,15 @@
     border-top: 1px solid var(--color-border);
     margin: 0.7rem 0;
   }
+
+  @media (max-width: 760px) {
+    .grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+
+    .recipe-details {
+      padding: 0.25rem 0.35rem;
+    }
+  }
 </style>

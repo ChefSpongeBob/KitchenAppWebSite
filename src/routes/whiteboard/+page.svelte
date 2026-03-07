@@ -137,4 +137,27 @@
   @keyframes glowPulse { 0% { box-shadow: 0 8px 18px rgba(28,82,91,0.12); } 50% { box-shadow: 0 14px 34px rgba(28,82,91,0.24); } 100% { box-shadow: 0 8px 18px rgba(28,82,91,0.12); } }
   span { position: relative; z-index: 1; font-size: 0.85rem; line-height: 1.2; color: #06202d; }
   small { position: relative; z-index: 1; opacity: 0.75; font-size: 0.75rem; margin-top: 6px; color: #0e3b4f; }
+
+  @media (max-width: 760px) {
+    .input-row {
+      flex-direction: column;
+      padding: var(--space-3) 0;
+    }
+
+    .input-row button {
+      width: 100%;
+    }
+
+    .board {
+      gap: 16px;
+      padding: var(--space-3);
+      border-radius: 14px;
+    }
+
+    .bubble {
+      min-width: 96px;
+      min-height: 96px;
+      animation-duration: 5s, 4s;
+    }
+  }
 </style>

@@ -84,11 +84,27 @@
 </Layout>
 
 <style>
-  .tabs { display: flex; gap: 0.5rem; padding: 0 1rem 1rem; }
-  .tabs button { flex: 1; padding: 0.6rem; border-radius: 10px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-secondary); }
-  .tabs button.active { background: rgba(235, 24, 24, 0.15); color: var(--text-primary); border-color: rgba(0, 0, 0, 0.35); }
+  .tabs { display: flex; gap: 0.5rem; padding: 0 0 0.9rem; }
+  .tabs button { flex: 1; padding: 0.6rem; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted); }
+  .tabs button.active { background: color-mix(in srgb, #16a34a 20%, var(--color-surface) 80%); color: var(--color-text); border-color: color-mix(in srgb, #16a34a 55%, var(--color-border) 45%); }
   .card-list { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 6rem; }
   .card-wrapper { display: flex; flex-direction: column; gap: 4px; }
   .card-hit { text-align: left; border: none; background: transparent; padding: 0; }
-  .complete-button { background: rgba(13, 168, 39, 0.33); border: 1px solid rgba(7, 201, 33, 0.95); color: var(--accent-purple); font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 999px; cursor: pointer; width: auto; }
+  .complete-button { background: rgba(13, 168, 39, 0.33); border: 1px solid rgba(7, 201, 33, 0.95); color: var(--color-text); font-size: 0.72rem; padding: 0.28rem 0.56rem; border-radius: 999px; cursor: pointer; width: auto; }
+
+  @media (max-width: 760px) {
+    .tabs {
+      padding-bottom: 0.75rem;
+    }
+
+    .tabs button {
+      padding: 0.54rem;
+      font-size: 0.86rem;
+    }
+
+    .card-list {
+      gap: 0.75rem;
+      padding-bottom: 5.25rem;
+    }
+  }
 </style>

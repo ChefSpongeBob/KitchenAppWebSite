@@ -36,6 +36,8 @@
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 14px;
     padding: 16px;
+    overflow-wrap: anywhere;
+    color: var(--color-text);
   }
 
   .header h2 {
@@ -45,11 +47,24 @@
 
   .header p {
     margin: 4px 0 12px;
-    opacity: 0.7;
+    color: var(--color-text-muted);
     font-size: 0.9rem;
   }
 
   .content {
     margin-top: 8px;
+    color: var(--color-text);
+  }
+
+  @media (max-width: 760px) {
+    .card {
+      padding: 12px;
+      border-radius: 12px;
+    }
+
+    .header h2 {
+      font-size: 1rem;
+      line-height: 1.2;
+    }
   }
 </style>

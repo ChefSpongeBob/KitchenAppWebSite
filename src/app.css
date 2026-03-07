@@ -103,6 +103,8 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 /* =========================================================
@@ -134,8 +136,11 @@ main {
     opacity: 1;
     transform: translateY(0);
   }
-}.page {
-  padding-left: 1rem; /* space for hamburger */
+}
+
+.page {
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 
@@ -147,6 +152,21 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+  height: auto;
 }
 
 h1, h2, h3, h4, h5, h6, p {
@@ -162,5 +182,12 @@ h1, h2, h3, h4, h5, h6, p {
 
 .tap:active {
   transform: scale(0.97);
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
 }
 

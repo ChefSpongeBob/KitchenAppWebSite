@@ -107,6 +107,7 @@
   input[type="text"],
   input[type="email"],
   select {
+    width: 100%;
     padding: var(--space-2);
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
@@ -167,6 +168,25 @@
   .logout-btn:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
+  }
+
+  @media (max-width: 760px) {
+    .settings-container {
+      grid-template-columns: 1fr;
+      gap: var(--space-3);
+      margin: 1rem auto 0.5rem;
+      padding: 0;
+    }
+
+    .setting-card {
+      padding: var(--space-4);
+    }
+
+    .save-btn {
+      width: 100%;
+      justify-self: stretch;
+      margin-top: var(--space-2);
+    }
   }
 </style>
 

@@ -1,6 +1,6 @@
 <script>
   import Layout from '$lib/components/ui/Layout.svelte';
-  import Section from '$lib/components/ui/Section.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
 
@@ -12,22 +12,21 @@
 </script>
 
 <Layout>
-  <Section title="">
-    <div class="grid">
-      {#each lists as list, index}
-        <a
-          href={list.href}
-          class="card-link"
-          in:fade={{ delay: index * 80, duration: 180 }}
-        >
-          <DashboardCard
-            title={list.title}
-            description={list.description}
-          />
-        </a>
-      {/each}
-    </div>
-  </Section>
+  <PageHeader title="Lists" subtitle="Prep lists, orders, and inventory" />
+  <div class="grid">
+    {#each lists as list, index}
+      <a
+        href={list.href}
+        class="card-link"
+        in:fade={{ delay: index * 80, duration: 180 }}
+      >
+        <DashboardCard
+          title={list.title}
+          description={list.description}
+        />
+      </a>
+    {/each}
+  </div>
 </Layout>
 
 <style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
-  import Section from '$lib/components/ui/Section.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
 
   type SectionItem = {
@@ -14,14 +14,12 @@
 </script>
 
 <Layout>
-  <Section title="Orders">
-    {#each sections as section}
-      <a href={section.href} class="card-link">
-        <DashboardCard title={section.title} description={section.description ?? ''} />
-      </a>
-    {/each}
-
-  </Section>
+  <PageHeader title="Orders" subtitle="Select an order workflow" />
+  {#each sections as section}
+    <a href={section.href} class="card-link">
+      <DashboardCard title={section.title} description={section.description ?? ''} />
+    </a>
+  {/each}
 </Layout>
 
 <style>

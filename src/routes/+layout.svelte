@@ -113,20 +113,26 @@
   .app-content {
     flex: 1;
     overflow-y: auto;
-    padding: var(--space-4);
+    padding: clamp(0.75rem, 2.6vw, var(--space-4));
     padding-bottom: var(--space-6);
-    padding-top: 2.5rem;
+    padding-top: calc(2.5rem + var(--safe-top));
   }
 
   /* ===== Hamburger ===== */
   .hamburger {
     position: fixed;
-    top: 1rem;
-    left: 1rem;
+    top: calc(0.75rem + var(--safe-top));
+    left: calc(0.75rem + var(--safe-left));
     z-index: 20;
 
     background: transparent;
     border: none;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* ===== Overlay ===== */
@@ -144,7 +150,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: 260px;
+    width: min(82vw, 300px);
 
     background: var(--color-surface);
     border-right: 1px solid var(--color-border);
@@ -212,6 +218,23 @@
 
   .side-item.active .active-indicator {
     opacity: 1;
+  }
+
+  @media (max-width: 760px) {
+    .app-content {
+      padding-bottom: calc(4.5rem + var(--safe-bottom));
+    }
+
+    .sidebar-inner {
+      padding-top: calc(72px + var(--safe-top));
+      padding-bottom: calc(16px + var(--safe-bottom));
+    }
+
+    .side-item {
+      padding: 11px 12px;
+      font-size: 0.95rem;
+      gap: 12px;
+    }
   }
 
 </style>

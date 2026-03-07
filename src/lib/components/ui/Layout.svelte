@@ -14,11 +14,17 @@
 <style>
   .page {
     width: 100%;
-    max-width: 720px;
+    max-width: 780px;
     margin: 0 auto;
   }
 
   .page.padded {
-    padding: var(--space-4);
+    padding: clamp(0.75rem, 2.6vw, var(--space-4));
+  }
+
+  @media (max-width: 760px) {
+    .page {
+      max-width: 100%;
+    }
   }
 </style>

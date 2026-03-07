@@ -17,6 +17,7 @@
 
     /* 👇 separation */
     margin-bottom: var(--space-4);
+    overflow-wrap: anywhere;
   }
 
   /* Prevent extra space at end of lists if needed */
@@ -34,6 +35,13 @@
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.06),
       0 4px 12px rgba(0, 0, 0, 0.45);
+  }
+
+  @media (max-width: 760px) {
+    .card {
+      padding: 0.85rem;
+      border-radius: 12px;
+    }
   }
 </style>
 

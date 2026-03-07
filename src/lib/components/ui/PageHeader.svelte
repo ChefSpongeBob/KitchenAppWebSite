@@ -33,4 +33,19 @@
     font-size: var(--text-sm);
     color: var(--color-text-muted);
   }
+
+  @media (max-width: 760px) {
+    .page-header {
+      margin-bottom: var(--space-4);
+    }
+
+    header {
+      padding-top: 2.8rem;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      line-height: 1.2;
+    }
+  }
 </style>

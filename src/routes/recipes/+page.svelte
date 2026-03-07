@@ -54,15 +54,14 @@
 <section class="grid">
   <!-- Static category cards -->
   {#each categories as c, index}
-    <div
-      role="button"
-      tabindex="0"
+    <button
+      type="button"
       class="category-wrapper"
       on:click={() => goto(`/recipes/${c}`)}
       in:fade={{ delay: index * 80, duration: 180 }}
     >
       <DashboardCard title={c} description={`View recipes in ${c}`} />
-    </div>
+    </button>
   {/each}
 </section>
 
@@ -120,6 +119,10 @@
   .category-wrapper {
     cursor: pointer;
     transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+    border: none;
+    padding: 0;
+    background: transparent;
+    text-align: inherit;
   }
 
   .category-wrapper:hover,
@@ -132,5 +135,16 @@
   .category-wrapper:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 4px;
+  }
+
+  @media (max-width: 760px) {
+    .grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+
+    .search {
+      margin-top: 0.2rem;
+    }
   }
 </style>

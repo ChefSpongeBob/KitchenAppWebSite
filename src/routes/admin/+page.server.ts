@@ -64,6 +64,10 @@ function requireAdmin(role: string | undefined | null) {
   }
 }
 
+function normalizeSlug(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
 async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
   const table = await db
     .prepare(
@@ -558,14 +562,18 @@ export const actions: Actions = {
     if (!db) return fail(503, { error: 'Database not configured.' });
 
     const formData = await request.formData();
-    const slug = String(formData.get('slug') ?? '').trim().toLowerCase();
+    const rawSlug = String(formData.get('slug') ?? '');
+    const customSlug = String(formData.get('slug_custom') ?? '');
+    const slug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
     const title = String(formData.get('title') ?? '').trim();
     const section = String(formData.get('section') ?? 'Docs').trim();
     const category = String(formData.get('category') ?? 'General').trim();
     const content = String(formData.get('content') ?? '').trim();
     const fileUrl = String(formData.get('file_url') ?? '').trim();
+    const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
     if (!slug || !title) return fail(400, { error: 'Slug and title are required.' });
+    if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
     const now = Math.floor(Date.now() / 1000);
 
     await db
@@ -574,10 +582,10 @@ export const actions: Actions = {
         INSERT INTO documents (
           id, slug, title, section, category, content, file_url, is_active, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, now, now)
+      .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, isActive, now, now)
       .run();
 
     return { success: true };
@@ -590,7 +598,9 @@ export const actions: Actions = {
 
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
-    const slug = String(formData.get('slug') ?? '').trim().toLowerCase();
+    const rawSlug = String(formData.get('slug') ?? '');
+    const customSlug = String(formData.get('slug_custom') ?? '');
+    const slug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
     const title = String(formData.get('title') ?? '').trim();
     const section = String(formData.get('section') ?? 'Docs').trim();
     const category = String(formData.get('category') ?? 'General').trim();
@@ -599,6 +609,7 @@ export const actions: Actions = {
     const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
     if (!id || !slug || !title) return fail(400, { error: 'Document id, slug, and title are required.' });
+    if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
 
     await db
       .prepare(
