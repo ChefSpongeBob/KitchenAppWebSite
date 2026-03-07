@@ -1,5 +1,6 @@
 <script>
 	export let form;
+	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	let showPassword = false;
 	let showConfirmPassword = false;
 </script>
@@ -55,3 +56,5 @@
 	Already have an account?
 	<a href="/login">Login</a>
 </p>
+
+<AppInstallCard compact />

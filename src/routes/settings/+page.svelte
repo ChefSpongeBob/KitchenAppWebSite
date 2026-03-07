@@ -3,6 +3,7 @@
   import { fade } from "svelte/transition";
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 
   type SettingsState = Record<string, string | boolean>;
   export let data: { display_name?: string; email?: string; email_updates?: boolean };
@@ -206,4 +207,5 @@
 
     <button class="save-btn tap" on:click={saveSettings}>Save Settings</button>
   </div>
+  <AppInstallCard />
 </Layout>

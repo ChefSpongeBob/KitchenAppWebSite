@@ -1,5 +1,7 @@
 <script lang="ts">
   import "../app.css";
+  import { onMount } from "svelte";
+  import { browser } from "$app/environment";
   import { page } from "$app/stores";
   import { primaryNav, type NavItem } from "$lib/assets/navigation";
 
@@ -26,6 +28,13 @@
     data.user?.role === "admin"
       ? [...primaryNav, adminNavItem]
       : primaryNav;
+
+  onMount(() => {
+    if (!browser || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      console.error("Service worker registration failed:", error);
+    });
+  });
 </script>
 
 <svelte:head>
@@ -37,6 +46,12 @@
     href="https://fonts.googleapis.com/icon?family=Material+Icons"
     rel="stylesheet"
   />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kitchen" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </svelte:head>
 
 <!-- ===== Hamburger ===== -->

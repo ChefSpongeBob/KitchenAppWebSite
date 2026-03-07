@@ -1,5 +1,6 @@
 <script>
 	export let form;
+	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 </script>
 
 <h1>Login</h1>
@@ -26,3 +27,5 @@
 	No account?
 	<a href="/register">Create one here</a>
 </p>
+
+<AppInstallCard compact />
