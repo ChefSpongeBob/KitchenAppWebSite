@@ -135,7 +135,7 @@ export const actions: Actions = {
 			if (message.includes('D1_ERROR: no such table')) {
 				return fail(503, { error: 'Database tables are not ready yet.' });
 			}
-			return fail(500, { error: `Login failed: ${message}` });
+			return fail(500, { error: 'Login failed. Please try again.' });
 		}
 	}
 };
