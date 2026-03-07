@@ -86,6 +86,10 @@
       ...data.recipes.map((recipe) => recipe.category).filter(Boolean)
     ])
   );
+  $: recipesByCategory = recipeCategoryOptions.map((category) => ({
+    category,
+    recipes: data.recipes.filter((recipe) => recipe.category === category)
+  }));
 </script>
 
 <Layout>
@@ -390,42 +394,51 @@
       </summary>
 
       <form method="POST" action="?/create_recipe" use:enhance class="add-row recipe-add">
-        <input name="title" placeholder="Title" required />
         <select name="category" required>
           <option value="">Select Category</option>
           {#each recipeCategoryOptions as category}
             <option value={category}>{category}</option>
           {/each}
         </select>
-        <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
+        <input name="title" placeholder="Title" required />
         <textarea name="materials_needed" placeholder="Materials needed" rows="3" required></textarea>
+        <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
         <textarea name="instruction" placeholder="Instruction" rows="3" required></textarea>
         <button type="submit">+ Add</button>
       </form>
 
-      <table class="sheet">
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Category</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each data.recipes as recipe}
-            <tr>
-              <td>{recipe.title}</td>
-              <td>{recipe.category}</td>
-              <td>
-                <form method="POST" action="?/delete_recipe" use:enhance class="inline">
-                  <input type="hidden" name="id" value={recipe.id} />
-                  <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
-                </form>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <div class="recipe-tabs">
+        {#each recipesByCategory as bucket}
+          <details class="add-toggle recipe-cat">
+            <summary>{bucket.category} ({bucket.recipes.length})</summary>
+            {#if bucket.recipes.length === 0}
+              <p class="muted">No recipes in this category yet.</p>
+            {:else}
+              <table class="sheet">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each bucket.recipes as recipe}
+                    <tr>
+                      <td>{recipe.title}</td>
+                      <td>
+                        <form method="POST" action="?/delete_recipe" use:enhance class="inline">
+                          <input type="hidden" name="id" value={recipe.id} />
+                          <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
+                        </form>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </details>
+        {/each}
+      </div>
     </details>
   </section>
 
@@ -689,5 +702,18 @@
   .recipe-add textarea {
     min-width: 220px;
     resize: vertical;
+  }
+
+  .recipe-tabs {
+    margin-top: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .recipe-cat .muted {
+    margin: 0.25rem 0 0.35rem;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
   }
 </style>
