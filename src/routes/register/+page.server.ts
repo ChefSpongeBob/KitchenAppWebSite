@@ -1,4 +1,4 @@
-import { fail, redirect, type Actions } from '@sveltejs/kit';
+import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { hashPassword, hashSessionToken } from '$lib/server/auth';
 
@@ -104,6 +104,9 @@ export const actions: Actions = {
 
 			throw redirect(303, '/');
 		} catch (err) {
+			if (isRedirect(err)) {
+				throw err;
+			}
 			const message = err instanceof Error ? err.message : String(err ?? '');
 			console.error('Register action failed:', message);
 			if (message.includes('UNIQUE constraint failed')) {
