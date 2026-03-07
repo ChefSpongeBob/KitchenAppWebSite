@@ -169,7 +169,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   const users = await db
     .prepare(
       `
-      SELECT id, display_name, email
+      SELECT id, display_name, email, COALESCE(role, 'user') AS role
       FROM users
       WHERE is_active = 1
       ORDER BY COALESCE(display_name, email) ASC
@@ -613,6 +613,31 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: 'Missing document id.' });
 
     await db.prepare(`DELETE FROM documents WHERE id = ?`).bind(id).run();
+
+    return { success: true };
+  },
+
+  make_user_admin: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+
+    const formData = await request.formData();
+    const userId = String(formData.get('user_id') ?? '').trim();
+    if (!userId) return fail(400, { error: 'Missing user id.' });
+
+    const target = await db
+      .prepare(`SELECT id, COALESCE(role, 'user') AS role FROM users WHERE id = ? LIMIT 1`)
+      .bind(userId)
+      .first<{ id: string; role: string }>();
+
+    if (!target) return fail(404, { error: 'User not found.' });
+    if (target.role === 'admin') return { success: true };
+
+    await db
+      .prepare(`UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?`)
+      .bind(Math.floor(Date.now() / 1000), userId)
+      .run();
 
     return { success: true };
   }

@@ -1,5 +1,7 @@
 <script>
 	export let form;
+	let showPassword = false;
+	let showConfirmPassword = false;
 </script>
 
 <h1>Create Account</h1>
@@ -10,11 +12,36 @@
 
 		<label>Email</label>
 		<input name="email" type="email" required />
+
+		<label>Confirm Email</label>
+		<input name="confirm_email" type="email" required />
 	</div>
 
 	<div>
 		<label>Password</label>
-		<input name="password" type="password" required />
+		<div>
+			<input name="password" type={showPassword ? 'text' : 'password'} required />
+			<button type="button" on:click={() => (showPassword = !showPassword)}>
+				{showPassword ? 'Hide' : 'Show'}
+			</button>
+		</div>
+	</div>
+
+	<div>
+		<label>Confirm Password</label>
+		<div>
+			<input name="confirm_password" type={showConfirmPassword ? 'text' : 'password'} required />
+			<button type="button" on:click={() => (showConfirmPassword = !showConfirmPassword)}>
+				{showConfirmPassword ? 'Hide' : 'Show'}
+			</button>
+		</div>
+	</div>
+
+	<div>
+		<label>
+			<input name="email_updates" type="checkbox" value="1" checked />
+			Receive email updates
+		</label>
 	</div>
 
 	<button type="submit">Register</button>

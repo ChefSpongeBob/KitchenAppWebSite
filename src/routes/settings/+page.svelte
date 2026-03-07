@@ -5,10 +5,11 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
 
   type SettingsState = Record<string, string | boolean>;
-  export let data: { display_name?: string };
+  export let data: { display_name?: string; email?: string; email_updates?: boolean };
 
   let settings: SettingsState = {
     username: "",
+    email: "",
     emailNotifications: true,
     darkMode: false,
     language: "en"
@@ -17,10 +18,11 @@
   // Cards: keep your style, add a Logout card
   const cards: Array<Record<string, any>> = [
     { id: 1, title: "Username", desc: "Your display name in the app.", type: "text", key: "username", placeholder: "Enter username" },
-    { id: 2, title: "Email Notifications", desc: "Receive emails for updates and alerts.", type: "checkbox", key: "emailNotifications" },
-    { id: 3, title: "Dark Mode", desc: "Toggle dark theme across the app.", type: "checkbox", key: "darkMode" },
-    { id: 4, title: "Language", desc: "Select your preferred language.", type: "select", key: "language", options: ["en", "es", "fr"] },
-    { id: 5, title: "Logout", desc: "Sign out of this device.", type: "logout" }
+    { id: 2, title: "Email", desc: "Sign-in and contact email.", type: "email", key: "email", placeholder: "Enter email" },
+    { id: 3, title: "Email Notifications", desc: "Receive emails for updates and alerts.", type: "checkbox", key: "emailNotifications" },
+    { id: 4, title: "Dark Mode", desc: "Toggle dark theme across the app.", type: "checkbox", key: "darkMode" },
+    { id: 5, title: "Language", desc: "Select your preferred language.", type: "select", key: "language", options: ["en", "es", "fr"] },
+    { id: 6, title: "Logout", desc: "Sign out of this device.", type: "logout" }
   ];
 
   onMount(() => {
@@ -32,23 +34,29 @@
     if (data?.display_name) {
       settings.username = data.display_name;
     }
+    if (data?.email) {
+      settings.email = data.email;
+    }
+    settings.emailNotifications = data?.email_updates ?? settings.emailNotifications;
   });
 
   async function saveSettings() {
     // Save local-only settings
     localStorage.setItem("app-settings", JSON.stringify(settings));
 
-    // Save username to real DB (users.display_name)
+    // Save profile fields to real DB
     const fd = new FormData();
     fd.set("display_name", String(settings.username));
+    fd.set("email", String(settings.email).trim().toLowerCase());
+    fd.set("email_updates", settings.emailNotifications ? "1" : "0");
 
-    const res = await fetch("/settings?/save_username", {
+    const res = await fetch("/settings?/save_profile", {
       method: "POST",
       body: fd
     });
 
     if (!res.ok) {
-      alert("Settings saved locally, but username failed to save to server.");
+      alert("Settings saved locally, but profile failed to save to server.");
       return;
     }
 
@@ -96,6 +104,7 @@
   }
 
   input[type="text"],
+  input[type="email"],
   select {
     padding: var(--space-2);
     border-radius: var(--radius-sm);
@@ -174,6 +183,8 @@
 
         {#if card.type === "text"}
           <input type="text" bind:value={settings[card.key] as string} placeholder={card.placeholder} />
+        {:else if card.type === "email"}
+          <input type="email" bind:value={settings[card.key] as string} placeholder={card.placeholder} />
         {:else if card.type === "checkbox"}
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={settings[card.key] as boolean} />

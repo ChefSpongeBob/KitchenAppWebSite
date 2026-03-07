@@ -39,6 +39,7 @@
     id: string;
     display_name: string | null;
     email: string;
+    role: string;
   };
 
   type NodeName = {
@@ -86,6 +87,7 @@
 
   <nav class="jump-nav" aria-label="Admin sections">
     <a href="#todos">Todo</a>
+    <a href="#access">User Access</a>
     <a href="#whiteboard">Whiteboard</a>
     <a href="#nodes">Node Names</a>
     <a href="#preplists">Preplists</a>
@@ -133,6 +135,43 @@
             </td>
           </tr>
         {/each}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="access">
+    <h2>User Access</h2>
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#if data.users.length === 0}
+          <tr><td colspan="4">No users found.</td></tr>
+        {:else}
+          {#each data.users as user}
+            <tr>
+              <td>{user.display_name ?? 'Unnamed User'}</td>
+              <td>{user.email}</td>
+              <td>{user.role}</td>
+              <td>
+                {#if user.role !== 'admin'}
+                  <form method="POST" action="?/make_user_admin" use:enhance class="inline">
+                    <input type="hidden" name="user_id" value={user.id} />
+                    <button type="submit" class="icon-btn" aria-label="Promote user to admin">A</button>
+                  </form>
+                {:else}
+                  <span class="status status-approved">Admin</span>
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        {/if}
       </tbody>
     </table>
   </section>
