@@ -25,7 +25,7 @@
   {:else}
     <section class="grid">
       {#each docs as d}
-        <a href={d.slug === 'about' ? '/about' : d.slug === 'sop' ? '/sops' : d.slug === 'handbook' ? '/handbook' : '/docs'} class="card-link">
+        <a href={d.slug === 'about' ? '/about' : d.slug === 'sop' ? '/docs/sop' : d.slug === 'handbook' ? '/docs/handbook' : '/docs'} class="card-link">
           <DashboardCard title={d.title} description={`${d.section} / ${d.category}`}>
             {#if d.content}
               <p>{d.content}</p>

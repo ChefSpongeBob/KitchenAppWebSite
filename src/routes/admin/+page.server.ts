@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
 
 type SectionRow = {
   section_id: string;
@@ -336,11 +337,21 @@ export const actions: Actions = {
 
     const f = await request.formData();
     const title = String(f.get('title') ?? '').trim();
-    const category = String(f.get('category') ?? '').trim();
+    const category = normalizeRecipeCategory(String(f.get('category') ?? ''));
     const ingredients = String(f.get('ingredients') ?? '').trim();
-    const instructions = String(f.get('instructions') ?? '').trim();
+    const procedure = String(f.get('procedure') ?? '').trim();
+    const instruction = String(f.get('instruction') ?? '').trim();
+    const fallbackInstructions = String(f.get('instructions') ?? '').trim();
+
+    const instructions = procedure && instruction
+      ? `Procedure:\n${procedure}\n\nInstruction:\n${instruction}`
+      : fallbackInstructions;
+
     if (!title || !category || !ingredients || !instructions) {
       return fail(400, { error: 'All recipe fields are required.' });
+    }
+    if (!isValidRecipeCategory(category)) {
+      return fail(400, { error: 'Invalid recipe category selected.' });
     }
 
     await db

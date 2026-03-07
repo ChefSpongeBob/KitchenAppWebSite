@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { enhance } from '$app/forms';
+  import { recipeCategories } from '$lib/assets/recipeCategories';
 
   type ListItem = {
     id: string;
@@ -77,6 +78,14 @@
     whiteboardIdeas: WhiteboardIdea[];
     documents: DocumentItem[];
   };
+
+  const defaultRecipeCategories = [...recipeCategories];
+  $: recipeCategoryOptions = Array.from(
+    new Set([
+      ...defaultRecipeCategories,
+      ...data.recipes.map((recipe) => recipe.category).filter(Boolean)
+    ])
+  );
 </script>
 
 <Layout>
@@ -374,37 +383,50 @@
 
   <section class="panel" id="recipes">
     <h2>Recipes</h2>
-    <form method="POST" action="?/create_recipe" use:enhance class="add-row recipe-add">
-      <input name="title" placeholder="Title" required />
-      <input name="category" placeholder="Category" required />
-      <input name="ingredients" placeholder="Ingredients" required />
-      <input name="instructions" placeholder="Instructions" required />
-      <button type="submit">+ Add</button>
-    </form>
+    <details class="section-block">
+      <summary>
+        <h3>Recipe Manager</h3>
+        <span>{data.recipes.length} recipes</span>
+      </summary>
 
-    <table class="sheet">
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Category</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each data.recipes as recipe}
+      <form method="POST" action="?/create_recipe" use:enhance class="add-row recipe-add">
+        <input name="title" placeholder="Title" required />
+        <select name="category" required>
+          <option value="">Select Category</option>
+          {#each recipeCategoryOptions as category}
+            <option value={category}>{category}</option>
+          {/each}
+        </select>
+        <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
+        <textarea name="procedure" placeholder="Procedure" rows="3" required></textarea>
+        <textarea name="instruction" placeholder="Instruction" rows="3" required></textarea>
+        <button type="submit">+ Add</button>
+      </form>
+
+      <table class="sheet">
+        <thead>
           <tr>
-            <td>{recipe.title}</td>
-            <td>{recipe.category}</td>
-            <td>
-              <form method="POST" action="?/delete_recipe" use:enhance class="inline">
-                <input type="hidden" name="id" value={recipe.id} />
-                <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
-              </form>
-            </td>
+            <th>Title</th>
+            <th>Category</th>
+            <th></th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each data.recipes as recipe}
+            <tr>
+              <td>{recipe.title}</td>
+              <td>{recipe.category}</td>
+              <td>
+                <form method="POST" action="?/delete_recipe" use:enhance class="inline">
+                  <input type="hidden" name="id" value={recipe.id} />
+                  <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
+                </form>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </details>
   </section>
 
   <section class="panel" id="documents">
@@ -602,6 +624,7 @@
   }
 
   input,
+  textarea,
   select {
     border: 1px solid var(--color-border);
     border-radius: 7px;
@@ -661,5 +684,10 @@
 
   .recipe-add input {
     min-width: 150px;
+  }
+
+  .recipe-add textarea {
+    min-width: 220px;
+    resize: vertical;
   }
 </style>

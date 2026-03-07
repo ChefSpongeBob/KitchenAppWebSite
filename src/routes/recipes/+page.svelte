@@ -3,15 +3,12 @@
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
   import { goto } from '$app/navigation';
+  import { recipeCategories } from '$lib/assets/recipeCategories';
 
-  // STATIC dashboard: all cards always visible
-  const categories = [
-    'kitchen',
-    'sushi',
-    'sushiprep',
-    'sauces',
-    'specials'
-  ];
+  export let data: { categories?: string[] };
+  const categories = (data.categories?.length ? data.categories : [...recipeCategories]).map((c) =>
+    c.trim().toLowerCase()
+  );
 </script>
 
 <PageHeader title="Recipes" subtitle="Browse by category" />
