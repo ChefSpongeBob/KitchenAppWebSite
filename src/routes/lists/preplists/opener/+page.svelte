@@ -1,10 +1,20 @@
-<script>
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+<script lang="ts">
+  import PreplistEditor from '$lib/components/ui/PreplistEditor.svelte';
+
+  type PreplistItem = {
+    id: string;
+    content: string;
+    amount: number;
+    par_count: number;
+    is_checked: number;
+  };
+
+  export let data: {
+    title: string;
+    items: PreplistItem[];
+    isAdmin: boolean;
+  };
 </script>
 
-<Layout>
-  <PageHeader title="Fish Opener Prep" />
+<PreplistEditor title={data.title} items={data.items} isAdmin={data.isAdmin} />
 
-  <p>Opener prep content goes here.</p>
-</Layout>

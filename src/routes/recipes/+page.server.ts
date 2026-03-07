@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ platform }) => {
-  const db = platform?.env.DB;
+export const load: PageServerLoad = async ({ locals }) => {
+  const db = locals.DB;
   if (!db) {
     console.log('DB not found');
     return { categories: [] };

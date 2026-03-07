@@ -1,0 +1,626 @@
+<script lang="ts">
+  import Layout from '$lib/components/ui/Layout.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import { enhance } from '$app/forms';
+
+  type ListItem = {
+    id: string;
+    content: string;
+    amount: number;
+    par_count: number;
+    is_checked: number;
+  };
+
+  type Section = {
+    id: string;
+    slug: string;
+    title: string;
+    items: ListItem[];
+  };
+
+  type Recipe = {
+    id: number;
+    title: string;
+    category: string;
+    ingredients: string;
+    instructions: string;
+  };
+
+  type Todo = {
+    id: string;
+    title: string;
+    description: string;
+    completed_at: number | null;
+    assigned_name?: string | null;
+    assigned_email?: string | null;
+  };
+
+  type UserOption = {
+    id: string;
+    display_name: string | null;
+    email: string;
+  };
+
+  type NodeName = {
+    sensor_id: number;
+    name: string;
+  };
+
+  type WhiteboardIdea = {
+    id: string;
+    content: string;
+    votes: number;
+    status: 'pending' | 'approved' | 'rejected';
+    submitted_name?: string | null;
+    submitted_email?: string | null;
+  };
+
+  type DocumentItem = {
+    id: string;
+    slug: string;
+    title: string;
+    section: string;
+    category: string;
+    content: string | null;
+    file_url: string | null;
+    is_active: number;
+  };
+
+  export let data: {
+    preplists: Section[];
+    inventory: Section[];
+    recipes: Recipe[];
+    todos: Todo[];
+    users: UserOption[];
+    nodeNames: NodeName[];
+    whiteboardIdeas: WhiteboardIdea[];
+    documents: DocumentItem[];
+  };
+</script>
+
+<Layout>
+  <PageHeader
+    title="Admin Dashboard"
+    subtitle="Manage high-traffic operations from one panel."
+  />
+
+  <nav class="jump-nav" aria-label="Admin sections">
+    <a href="#todos">Todo</a>
+    <a href="#whiteboard">Whiteboard</a>
+    <a href="#nodes">Node Names</a>
+    <a href="#preplists">Preplists</a>
+    <a href="#inventory">Inventory</a>
+    <a href="#recipes">Recipes</a>
+    <a href="#documents">Documents</a>
+  </nav>
+
+  <section class="panel" id="todos">
+    <h2>Todo</h2>
+    <form method="POST" action="?/create_todo" use:enhance class="add-row">
+      <input name="title" placeholder="Task title" required />
+      <input name="description" placeholder="Description" />
+      <select name="assigned_to">
+        <option value="">Assign: Anyone</option>
+        {#each data.users as user}
+          <option value={user.id}>{user.display_name ?? user.email}</option>
+        {/each}
+      </select>
+      <button type="submit">+ Add</button>
+    </form>
+
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Description</th>
+          <th>Assigned</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each data.todos as todo}
+          <tr>
+            <td>{todo.title}</td>
+            <td>{todo.description}</td>
+            <td>{todo.assigned_name ?? todo.assigned_email ?? 'Anyone'}</td>
+            <td>{todo.completed_at ? 'Completed' : 'Active'}</td>
+            <td>
+              <form method="POST" action="?/delete_todo" use:enhance class="inline">
+                <input type="hidden" name="id" value={todo.id} />
+                <button type="submit" class="icon-btn danger" aria-label="Remove task">X</button>
+              </form>
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="whiteboard">
+    <h2>Whiteboard Approval</h2>
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>Idea</th>
+          <th>Votes</th>
+          <th>Status</th>
+          <th>Submitted By</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#if data.whiteboardIdeas.length === 0}
+          <tr><td colspan="5">No whiteboard ideas yet.</td></tr>
+        {:else}
+          {#each data.whiteboardIdeas as idea}
+            <tr>
+              <td>{idea.content}</td>
+              <td>{idea.votes}</td>
+              <td>
+                <span class="status status-{idea.status}">{idea.status}</span>
+              </td>
+              <td>{idea.submitted_name ?? idea.submitted_email ?? 'Unknown'}</td>
+              <td>
+                <div class="inline">
+                  <form method="POST" action="?/approve_whiteboard" use:enhance class="inline">
+                    <input type="hidden" name="id" value={idea.id} />
+                    <button type="submit" class="icon-btn" aria-label="Approve idea">A</button>
+                  </form>
+                  <form method="POST" action="?/reject_whiteboard" use:enhance class="inline">
+                    <input type="hidden" name="id" value={idea.id} />
+                    <button type="submit" class="icon-btn" aria-label="Reject idea">R</button>
+                  </form>
+                  <form method="POST" action="?/delete_whiteboard" use:enhance class="inline">
+                    <input type="hidden" name="id" value={idea.id} />
+                    <button type="submit" class="icon-btn danger" aria-label="Delete idea">X</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        {/if}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="nodes">
+    <h2>Node Names</h2>
+    <form method="POST" action="?/add_node_name" use:enhance class="add-row">
+      <input name="sensor_id" type="number" min="1" placeholder="Node ID" required />
+      <input name="name" placeholder="Display name (Cook Bus, Fry Line, etc.)" required />
+      <button type="submit">+ Save</button>
+    </form>
+
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>Node ID</th>
+          <th>Name</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#if data.nodeNames.length === 0}
+          <tr>
+            <td colspan="3">No node names yet.</td>
+          </tr>
+        {:else}
+          {#each data.nodeNames as node}
+            <tr>
+              <td>{node.sensor_id}</td>
+              <td>{node.name}</td>
+              <td>
+                <form method="POST" action="?/delete_node_name" use:enhance class="inline">
+                  <input type="hidden" name="sensor_id" value={node.sensor_id} />
+                  <button type="submit" class="icon-btn danger" aria-label="Remove node name">X</button>
+                </form>
+              </td>
+            </tr>
+          {/each}
+        {/if}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="preplists">
+    <h2>Preplists</h2>
+    {#each data.preplists as section}
+      <details class="section-block">
+        <summary>
+          <h3>{section.title}</h3>
+          <span>{section.items.length} items</span>
+        </summary>
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Par</th>
+              <th>Current Prep</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each section.items as item}
+              <tr>
+                <td>
+                  <form method="POST" action="?/update_list_item" use:enhance class="inline">
+                    <input type="hidden" name="id" value={item.id} />
+                    <input name="content" value={item.content} required />
+                    <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
+                    <button type="submit" class="icon-btn" aria-label="Save item">S</button>
+                  </form>
+                </td>
+                <td>{item.par_count}</td>
+                <td>{item.amount}</td>
+                <td>{item.is_checked ? 'Done' : 'Open'}</td>
+                <td>
+                  <form method="POST" action="?/delete_list_item" use:enhance class="inline">
+                    <input type="hidden" name="id" value={item.id} />
+                    <button type="submit" class="icon-btn danger" aria-label="Remove item">X</button>
+                  </form>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+
+        <details class="add-toggle">
+          <summary>+ Add item</summary>
+          <form method="POST" action="?/add_list_item" use:enhance class="add-row">
+            <input type="hidden" name="section_id" value={section.id} />
+            <input name="content" placeholder={`Add item to ${section.title}`} required />
+            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
+            <button type="submit">Add</button>
+          </form>
+        </details>
+      </details>
+    {/each}
+  </section>
+
+  <section class="panel" id="inventory">
+    <h2>Inventory</h2>
+    {#each data.inventory as section}
+      <details class="section-block">
+        <summary>
+          <h3>{section.title}</h3>
+          <span>{section.items.length} items</span>
+        </summary>
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Par</th>
+              <th>Current</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each section.items as item}
+              <tr>
+                <td>
+                  <form method="POST" action="?/update_list_item" use:enhance class="inline">
+                    <input type="hidden" name="id" value={item.id} />
+                    <input name="content" value={item.content} required />
+                    <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
+                    <button type="submit" class="icon-btn" aria-label="Save item">S</button>
+                  </form>
+                </td>
+                <td>{item.par_count}</td>
+                <td>{item.amount}</td>
+                <td>
+                  <form method="POST" action="?/delete_list_item" use:enhance class="inline">
+                    <input type="hidden" name="id" value={item.id} />
+                    <button type="submit" class="icon-btn danger" aria-label="Remove item">X</button>
+                  </form>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+
+        <details class="add-toggle">
+          <summary>+ Add item</summary>
+          <form method="POST" action="?/add_list_item" use:enhance class="add-row">
+            <input type="hidden" name="section_id" value={section.id} />
+            <input name="content" placeholder={`Add item to ${section.title}`} required />
+            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
+            <button type="submit">Add</button>
+          </form>
+        </details>
+      </details>
+    {/each}
+  </section>
+
+  <section class="panel" id="recipes">
+    <h2>Recipes</h2>
+    <form method="POST" action="?/create_recipe" use:enhance class="add-row recipe-add">
+      <input name="title" placeholder="Title" required />
+      <input name="category" placeholder="Category" required />
+      <input name="ingredients" placeholder="Ingredients" required />
+      <input name="instructions" placeholder="Instructions" required />
+      <button type="submit">+ Add</button>
+    </form>
+
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Category</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each data.recipes as recipe}
+          <tr>
+            <td>{recipe.title}</td>
+            <td>{recipe.category}</td>
+            <td>
+              <form method="POST" action="?/delete_recipe" use:enhance class="inline">
+                <input type="hidden" name="id" value={recipe.id} />
+                <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
+              </form>
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="documents">
+    <h2>Documents</h2>
+    <form method="POST" action="?/create_document" use:enhance class="add-row">
+      <input name="slug" placeholder="slug (about, sop, handbook)" required />
+      <input name="title" placeholder="Title" required />
+      <input name="section" placeholder="Section" value="Docs" />
+      <input name="category" placeholder="Category" value="General" />
+      <input name="file_url" placeholder="File URL (optional)" />
+      <input name="content" placeholder="Summary/content" />
+      <button type="submit">+ Add</button>
+    </form>
+
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>Slug</th>
+          <th>Title</th>
+          <th>Section</th>
+          <th>Category</th>
+          <th>Active</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#if data.documents.length === 0}
+          <tr><td colspan="6">No documents found.</td></tr>
+        {:else}
+          {#each data.documents as doc}
+            <tr>
+              <td>{doc.slug}</td>
+              <td>{doc.title}</td>
+              <td>{doc.section}</td>
+              <td>{doc.category}</td>
+              <td>{doc.is_active ? 'Yes' : 'No'}</td>
+              <td>
+                <div class="inline">
+                  <details class="edit-doc">
+                    <summary>Edit</summary>
+                    <form method="POST" action="?/update_document" use:enhance class="add-row">
+                      <input type="hidden" name="id" value={doc.id} />
+                      <input name="slug" value={doc.slug} required />
+                      <input name="title" value={doc.title} required />
+                      <input name="section" value={doc.section} />
+                      <input name="category" value={doc.category} />
+                      <input name="file_url" value={doc.file_url ?? ''} />
+                      <input name="content" value={doc.content ?? ''} />
+                      <select name="is_active">
+                        <option value="1" selected={doc.is_active === 1}>Active</option>
+                        <option value="0" selected={doc.is_active === 0}>Inactive</option>
+                      </select>
+                      <button type="submit">Save</button>
+                    </form>
+                  </details>
+                  <form method="POST" action="?/delete_document" use:enhance class="inline">
+                    <input type="hidden" name="id" value={doc.id} />
+                    <button type="submit" class="icon-btn danger" aria-label="Delete document">X</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        {/if}
+      </tbody>
+    </table>
+  </section>
+</Layout>
+
+<style>
+  .jump-nav {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    margin: 0.5rem 0 0.8rem;
+  }
+
+  .jump-nav a {
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.22rem 0.55rem;
+    font-size: 0.78rem;
+    background: var(--color-surface);
+  }
+
+  .panel {
+    margin-top: 0.8rem;
+    padding: 0.8rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+  }
+
+  h2 {
+    margin: 0 0 0.75rem;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--color-text-muted);
+  }
+
+  .section-block + .section-block {
+    margin-top: 0.6rem;
+  }
+
+  summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    list-style: none;
+    padding: 0.35rem 0.1rem;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary span {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .section-block > summary::after {
+    content: '+';
+    font-size: 0.95rem;
+    line-height: 1;
+    color: var(--color-text-muted);
+    margin-left: 0.45rem;
+  }
+
+  .section-block[open] > summary::after {
+    content: '-';
+  }
+
+  .sheet {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .sheet th {
+    text-align: left;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    padding: 0.35rem 0.32rem;
+    text-transform: uppercase;
+  }
+
+  .sheet td {
+    padding: 0.28rem 0.32rem;
+    vertical-align: middle;
+  }
+
+  .add-row,
+  .inline {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .add-row {
+    margin-top: 0.6rem;
+  }
+
+  .add-toggle {
+    margin-top: 0.45rem;
+  }
+
+  .add-toggle > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    padding: 0.2rem 0.4rem;
+    border: 1px dashed var(--color-border);
+    border-radius: 7px;
+    width: fit-content;
+  }
+
+  .add-toggle[open] > summary {
+    color: var(--color-text);
+  }
+
+  .edit-doc summary {
+    border: 1px dashed var(--color-border);
+    border-radius: 7px;
+    padding: 0.18rem 0.45rem;
+    font-size: 0.75rem;
+  }
+
+  input,
+  select {
+    border: 1px solid var(--color-border);
+    border-radius: 7px;
+    padding: 0.3rem 0.42rem;
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-size: 0.82rem;
+  }
+
+  button {
+    border: 1px solid var(--color-border);
+    border-radius: 7px;
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    padding: 0.3rem 0.45rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+
+  .icon-btn {
+    width: 1.7rem;
+    height: 1.7rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+
+  .danger {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+
+  .status {
+    display: inline-flex;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    padding: 0.12rem 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .status-pending {
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+
+  .status-approved {
+    border-color: #16a34a;
+    color: #16a34a;
+  }
+
+  .status-rejected {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+
+  .recipe-add input {
+    min-width: 150px;
+  }
+</style>

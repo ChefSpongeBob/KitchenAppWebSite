@@ -4,6 +4,15 @@
   import TempGraph from "$lib/components/ui/TempGraph.svelte";
   import PageHeader from "$lib/components/ui/PageHeader.svelte";
 
+  type NodeName = {
+    sensor_id: number;
+    name: string;
+  };
+
+  export let data: {
+    nodeNames?: NodeName[];
+  };
+
   // ---- STATE ----
   let temps: Array<{ sensor_id: number; temperature: number; ts: number }> = [];
   let latest: Record<number, number> = {};
@@ -13,12 +22,20 @@
   const URL = "/api/temps";
 
   // ---- NODE NAMING ----
-  const nodeNames: Record<number, string> = {
+  const defaultNodeNames: Record<number, string> = {
     1: "Cook Bus",
     2: "Bus 7",
     3: "Bus 8",
     4: "Bus 9"
     // add more nodes here as needed
+  };
+
+  const nodeNames: Record<number, string> = {
+    ...defaultNodeNames,
+    ...(data.nodeNames ?? []).reduce<Record<number, string>>((acc, row) => {
+      acc[row.sensor_id] = row.name;
+      return acc;
+    }, {})
   };
 
   // ---- LOAD FUNCTION ----

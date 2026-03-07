@@ -1,12 +1,13 @@
-<script>
+<script lang="ts">
   import { onMount } from "svelte";
   import { fade } from "svelte/transition";
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
 
-  export let data;
+  type SettingsState = Record<string, string | boolean>;
+  export let data: { display_name?: string };
 
-  let settings = {
+  let settings: SettingsState = {
     username: "",
     emailNotifications: true,
     darkMode: false,
@@ -14,7 +15,7 @@
   };
 
   // Cards: keep your style, add a Logout card
-  const cards = [
+  const cards: Array<Record<string, any>> = [
     { id: 1, title: "Username", desc: "Your display name in the app.", type: "text", key: "username", placeholder: "Enter username" },
     { id: 2, title: "Email Notifications", desc: "Receive emails for updates and alerts.", type: "checkbox", key: "emailNotifications" },
     { id: 3, title: "Dark Mode", desc: "Toggle dark theme across the app.", type: "checkbox", key: "darkMode" },
@@ -39,7 +40,7 @@
 
     // Save username to real DB (users.display_name)
     const fd = new FormData();
-    fd.set("display_name", settings.username);
+    fd.set("display_name", String(settings.username));
 
     const res = await fetch("/settings?/save_username", {
       method: "POST",
@@ -172,14 +173,14 @@
         <p>{card.desc}</p>
 
         {#if card.type === "text"}
-          <input type="text" bind:value={settings[card.key]} placeholder={card.placeholder} />
+          <input type="text" bind:value={settings[card.key] as string} placeholder={card.placeholder} />
         {:else if card.type === "checkbox"}
           <label class="checkbox-label">
-            <input type="checkbox" bind:checked={settings[card.key]} />
+            <input type="checkbox" bind:checked={settings[card.key] as boolean} />
             Enabled
           </label>
         {:else if card.type === "select"}
-          <select bind:value={settings[card.key]}>
+          <select bind:value={settings[card.key] as string}>
             {#each card.options as opt}
               <option value={opt}>{opt.toUpperCase()}</option>
             {/each}

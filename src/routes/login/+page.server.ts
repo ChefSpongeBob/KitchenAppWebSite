@@ -1,13 +1,6 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
-
-async function sha256(input: string) {
-	const encoder = new TextEncoder();
-	const data = encoder.encode(input);
-	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-	return Array.from(new Uint8Array(hashBuffer))
-		.map((b) => b.toString(16).padStart(2, '0'))
-		.join('');
-}
+import { dev } from '$app/environment';
+import { hashSessionToken, verifyPassword } from '$lib/server/auth';
 
 export const actions: Actions = {
 	default: async ({ request, cookies, locals }) => {
@@ -21,6 +14,9 @@ export const actions: Actions = {
 		}
 
 		const db = locals.DB;
+		if (!db) {
+			return fail(503, { error: 'Database is not configured yet.' });
+		}
 
 		// Find active user
 		const user = await db
@@ -30,18 +26,17 @@ export const actions: Actions = {
 			FROM users
 			WHERE email_normalized = ?
 			AND is_active = 1
-		`
+			`
 			)
 			.bind(email)
-			.first();
+			.first<{ id: string; password_hash: string | null }>();
 
 		if (!user || !user.password_hash) {
 			return fail(400, { error: 'Invalid credentials.' });
 		}
 
-		const passwordHash = await sha256(password);
-
-		if (passwordHash !== user.password_hash) {
+		const passwordCheck = await verifyPassword(password, user.password_hash);
+		if (!passwordCheck.valid) {
 			return fail(400, { error: 'Invalid credentials.' });
 		}
 
@@ -49,6 +44,8 @@ export const actions: Actions = {
 		const expires = now + 60 * 60 * 24 * 30;
 
 		const sessionId = crypto.randomUUID();
+		const sessionToken = crypto.randomUUID();
+		const sessionTokenHash = await hashSessionToken(sessionToken);
 
 		// Try to reuse existing active device
 		let device = await db
@@ -66,7 +63,7 @@ export const actions: Actions = {
 
 		let deviceId = device?.id;
 
-		// If no device exists yet, create one (PIN must be set later)
+		// If no device exists yet, create one
 		if (!deviceId) {
 			deviceId = crypto.randomUUID();
 
@@ -83,7 +80,7 @@ export const actions: Actions = {
 				VALUES (?, ?, ?, ?, ?)
 			`
 				)
-				.bind(deviceId, user.id, '', now, now) // empty until PIN is set
+				.bind(deviceId, user.id, '', now, now)
 				.run();
 		}
 
@@ -103,19 +100,30 @@ export const actions: Actions = {
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`
 			)
-			.bind(sessionId, user.id, deviceId, sessionId, now, now, expires)
+			.bind(sessionId, user.id, deviceId, sessionTokenHash, now, now, expires)
 			.run();
 
-		cookies.set('session_id', sessionId, {
+		if (passwordCheck.needsRehash && passwordCheck.upgradedHash) {
+			await db
+				.prepare(
+					`
+				UPDATE users
+				SET password_hash = ?, updated_at = ?
+				WHERE id = ?
+			`
+				)
+				.bind(passwordCheck.upgradedHash, now, user.id)
+				.run();
+		}
+
+		cookies.set('session_id', sessionToken, {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
-			secure: true,
+			secure: !dev,
 			maxAge: 60 * 60 * 24 * 30
 		});
 
-		cookies.delete('pin_unlocked_at', { path: '/' });
-
-		throw redirect(303, '/pin');
+		throw redirect(303, '/');
 	}
 };

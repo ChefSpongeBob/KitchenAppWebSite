@@ -1,16 +1,31 @@
 <script lang="ts">
   import "../app.css";
   import { page } from "$app/stores";
-  import { primaryNav } from "$lib/assets/navigation";
-  import PageHeader from "$lib/components/ui/PageHeader.svelte";
+  import { primaryNav, type NavItem } from "$lib/assets/navigation";
+
+  export let data: { user: { id: string; role: string } | null };
 
   let sidebarOpen = false;
+  const adminNavItem: NavItem = {
+    label: "Admin",
+    route: "/admin",
+    icon: "admin_panel_settings"
+  };
 
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
   }
 
+  function isActive(route: string, path: string) {
+    if (route === "/") return path === "/";
+    return path === route || path.startsWith(`${route}/`);
+  }
+
   $: currentPath = $page.url.pathname;
+  $: navItems =
+    data.user?.role === "admin"
+      ? [...primaryNav, adminNavItem]
+      : primaryNav;
 </script>
 
 <svelte:head>
@@ -50,11 +65,11 @@
 <!-- ===== Sidebar ===== -->
 <aside class="sidebar" class:open={sidebarOpen} aria-label="Sidebar navigation">
   <div class="sidebar-inner">
-    {#each primaryNav as item}
+    {#each navItems as item}
       <a
         href={item.route}
         class="side-item tap"
-        class:active={currentPath.startsWith(item.route)}
+        class:active={isActive(item.route, currentPath)}
         on:click={() => (sidebarOpen = false)}
       >
         <span class="active-indicator"></span>

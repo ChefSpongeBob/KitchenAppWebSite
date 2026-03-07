@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ platform, params }) => {
-  const db = platform?.env.DB;
+export const load: PageServerLoad = async ({ locals, params }) => {
+  const db = locals.DB;
   if (!db) return { recipes: [], category: params.category };
 
   const { results } = await db.prepare(`

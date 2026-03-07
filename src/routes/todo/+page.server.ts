@@ -17,17 +17,36 @@ export const load: PageServerLoad = async ({ locals }) => {
 	.run();
 
 	const active = await db.prepare(`
-		SELECT t.id, t.title, t.description, t.created_at
+		SELECT
+			t.id,
+			t.title,
+			t.description,
+			t.created_at,
+			ta.user_id AS assigned_to,
+			au.display_name AS assigned_name,
+			au.email AS assigned_email
 		FROM todos t
+		LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
+		LEFT JOIN users au ON au.id = ta.user_id
 		WHERE t.completed_at IS NULL
 		ORDER BY t.created_at DESC
 	`)
 	.all();
 
 	const completed = await db.prepare(`
-		SELECT t.id, t.title, t.description, t.completed_at, u.display_name
+		SELECT
+			t.id,
+			t.title,
+			t.description,
+			t.completed_at,
+			u.display_name,
+			ta.user_id AS assigned_to,
+			au.display_name AS assigned_name,
+			au.email AS assigned_email
 		FROM todos t
 		LEFT JOIN users u ON u.id = t.completed_by
+		LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
+		LEFT JOIN users au ON au.id = ta.user_id
 		WHERE t.completed_at IS NOT NULL
 		ORDER BY t.completed_at DESC
 	`)
@@ -87,14 +106,21 @@ export const actions: Actions = {
 		const now = Math.floor(Date.now() / 1000);
 
 		const todo = await db.prepare(`
-			SELECT id, title
-			FROM todos
-			WHERE id = ?
+			SELECT
+				t.id,
+				t.title,
+				ta.user_id AS assigned_to
+			FROM todos t
+			LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
+			WHERE t.id = ?
 		`)
 		.bind(id)
 		.first();
 
 		if (!todo) return fail(404);
+		if (todo.assigned_to && todo.assigned_to !== locals.userId && locals.userRole !== 'admin') {
+			return fail(403, { error: 'This task is assigned to another user.' });
+		}
 
 		await db.prepare(`
 			UPDATE todos

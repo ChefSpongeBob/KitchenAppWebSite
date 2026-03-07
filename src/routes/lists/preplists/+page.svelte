@@ -1,39 +1,25 @@
-<script>
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import Section from '$lib/components/ui/Section.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+
+  type SectionItem = {
+    href: string;
+    title: string;
+    description: string | null;
+  };
+
+  export let data: { sections?: SectionItem[] };
+  const sections = data.sections ?? [];
 </script>
 
 <Layout>
   <Section title="Prep Lists">
-
-    <a href="/lists/preplists/kitchen" class="card-link">
-      <DashboardCard
-        title="Kitchen Prep"
-        description="Daily kitchen setup and prep tasks"
-      />
-    </a>
-
-    <a href="/lists/preplists/opener" class="card-link">
-      <DashboardCard
-        title="Fish Opener"
-        description="Fish cutting and opener duties"
-      />
-    </a>
-
-    <a href="/lists/preplists/sushi" class="card-link">
-      <DashboardCard
-        title="Veg Sushi Prep"
-        description="Vegetarian sushi station prep"
-      />
-    </a>
-
-    <a href="/lists/preplists/sushiprep" class="card-link">
-      <DashboardCard
-        title="Sushi Prep"
-        description="Full sushi prep checklist"
-      />
-    </a>
+    {#each sections as section}
+      <a href={section.href} class="card-link">
+        <DashboardCard title={section.title} description={section.description ?? ''} />
+      </a>
+    {/each}
 
   </Section>
 </Layout>

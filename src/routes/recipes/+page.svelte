@@ -12,25 +12,11 @@
     'sauces',
     'specials'
   ];
-  export let data;
 </script>
 
 <PageHeader title="Recipes" subtitle="Browse by category" />
 
 <section class="grid">
-  <!-- Manage Recipes card -->
-{#if data.user?.role === 'admin'}
-  <div
-    role="button"
-    tabindex="0"
-    class="category-wrapper"
-    on:click={() => goto('/recipes/manage')}
-    in:fade={{ delay: 0, duration: 180 }}
-  >
-    <DashboardCard title="Manage Recipes" description="Add, edit, or delete recipes" />
-  </div>
-{/if}
-
   <!-- Static category cards -->
   {#each categories as c, index}
     <div
@@ -38,7 +24,7 @@
       tabindex="0"
       class="category-wrapper"
       on:click={() => goto(`/recipes/${c}`)}
-      in:fade={{ delay: (index + 1) * 80, duration: 180 }}
+      in:fade={{ delay: index * 80, duration: 180 }}
     >
       <DashboardCard title={c} description={`View recipes in ${c}`} />
     </div>

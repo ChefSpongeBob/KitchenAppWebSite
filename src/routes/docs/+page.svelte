@@ -1,78 +1,70 @@
-<script>
-  import { onMount } from "svelte";
+<script lang="ts">
+  import Layout from '$lib/components/ui/Layout.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
 
-  let docs = [];
-  let loading = true;
+  type DocItem = {
+    id: string;
+    slug: string;
+    title: string;
+    section: string;
+    category: string;
+    content?: string | null;
+    file_url?: string | null;
+  };
 
-  //const URL = "/api/temps"; // ✅ correct place
-
-  onMount(async () => {
-    try {
-      const res = await fetch(URL);
-      docs = await res.json();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      loading = false;
-    }
-  });
+  export let data: { docs?: DocItem[] };
+  const docs: DocItem[] = data.docs ?? [];
 </script>
 
+<Layout>
+  <PageHeader title="Documents" subtitle="Handbook, SOPs, and general docs." />
 
-<h1>Documents</h1>
-
-{#if loading}
-  <p>Loading...</p>
-{:else if docs.length === 0}
-  <p>No documents yet.</p>
-{:else}
-  <div class="grid">
-    {#each docs as d}
-      <div class="card">
-        <h3>{d.title}</h3>
-        <small>{d.section} / {d.category}</small>
-
-        {#if d.file_url}
-          <a href={d.file_url} target="_blank">Open</a>
-        {/if}
-      </div>
-    {/each}
-  </div>
-{/if}
+  {#if docs.length === 0}
+    <p class="empty">No documents yet.</p>
+  {:else}
+    <section class="grid">
+      {#each docs as d}
+        <a href={d.slug === 'about' ? '/about' : d.slug === 'sop' ? '/sops' : d.slug === 'handbook' ? '/handbook' : '/docs'} class="card-link">
+          <DashboardCard title={d.title} description={`${d.section} / ${d.category}`}>
+            {#if d.content}
+              <p>{d.content}</p>
+            {/if}
+            {#if d.file_url}
+              <small>File: {d.file_url}</small>
+            {/if}
+          </DashboardCard>
+        </a>
+      {/each}
+    </section>
+  {/if}
+</Layout>
 
 <style>
-  h1 {
-    text-align: center;
-    margin: 1.5rem 0;
-  }
-
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px,1fr));
-    gap: 16px;
-    padding: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
   }
 
-  .card {
-    background: var(--color-surface, #1e1e1e);
-    padding: 16px;
-    border-radius: 14px;
-    border: 1px solid #2a2a2a;
+  .card-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
   }
 
-  h3 {
-    margin: 0 0 6px;
+  p {
+    margin: 0.5rem 0 0;
+    color: var(--color-text-muted);
   }
 
   small {
-    opacity: .7;
+    display: block;
+    margin-top: 0.4rem;
+    color: var(--color-text-muted);
   }
 
-  a {
-    display: inline-block;
-    margin-top: 10px;
-    text-decoration: none;
-    font-size: 0.9rem;
-    opacity: .9;
+  .empty {
+    color: var(--color-text-muted);
   }
 </style>

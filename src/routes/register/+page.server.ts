@@ -1,13 +1,6 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
-
-async function sha256(input: string) {
-	const encoder = new TextEncoder();
-	const data = encoder.encode(input);
-	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-	return Array.from(new Uint8Array(hashBuffer))
-		.map(b => b.toString(16).padStart(2, '0'))
-		.join('');
-}
+import { dev } from '$app/environment';
+import { hashPassword, hashSessionToken } from '$lib/server/auth';
 
 export const actions: Actions = {
 	default: async ({ request, cookies, locals }) => {
@@ -16,13 +9,18 @@ export const actions: Actions = {
 		const displayName = String(formData.get('display_name') || '').trim();
 		const email = String(formData.get('email') || '').trim().toLowerCase();
 		const password = String(formData.get('password') || '');
-		const pin = String(formData.get('pin') || '');
 
-		if (!displayName || !email || !password || !pin) {
+		if (!displayName || !email || !password) {
 			return fail(400, { error: 'All fields required.' });
+		}
+		if (password.length < 8) {
+			return fail(400, { error: 'Password must be at least 8 characters.' });
 		}
 
 		const db = locals.DB;
+		if (!db) {
+			return fail(503, { error: 'Database is not configured yet.' });
+		}
 
 		const existing = await db.prepare(`
 			SELECT id FROM users
@@ -40,9 +38,9 @@ export const actions: Actions = {
 		const userId = crypto.randomUUID();
 		const deviceId = crypto.randomUUID();
 		const sessionId = crypto.randomUUID();
-
-		const passwordHash = await sha256(password);
-		const pinHash = await sha256(pin);
+		const sessionToken = crypto.randomUUID();
+		const sessionTokenHash = await hashSessionToken(sessionToken);
+		const passwordHash = await hashPassword(password);
 
 		await db.prepare(`
 			INSERT INTO users (
@@ -69,7 +67,7 @@ export const actions: Actions = {
 			)
 			VALUES (?, ?, ?, ?, ?)
 		`)
-		.bind(deviceId, userId, pinHash, now, now)
+		.bind(deviceId, userId, '', now, now)
 		.run();
 
 		await db.prepare(`
@@ -88,26 +86,19 @@ export const actions: Actions = {
 			sessionId,
 			userId,
 			deviceId,
-			sessionId,
+			sessionTokenHash,
 			now,
 			now,
 			now + 60 * 60 * 24 * 30
 		)
 		.run();
 
-		cookies.set('session_id', sessionId, {
+		cookies.set('session_id', sessionToken, {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
-			secure: true,
+			secure: !dev,
 			maxAge: 60 * 60 * 24 * 30
-		});
-
-		cookies.set('pin_unlocked_at', '1', {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'lax',
-			secure: true
 		});
 
 		throw redirect(303, '/');

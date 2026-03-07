@@ -3,8 +3,15 @@
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
 
-  export let data;
-  let recipes = data.recipes ?? [];
+  type Recipe = {
+    id: string;
+    title: string;
+    ingredients: string;
+    instructions: string;
+  };
+
+  export let data: { recipes?: Recipe[]; category?: string };
+  let recipes: Recipe[] = data.recipes ?? [];
   let category = data.category ?? '';
 </script>
 

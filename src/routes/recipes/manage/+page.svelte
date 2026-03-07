@@ -4,10 +4,18 @@
   import { fade } from 'svelte/transition';
   import { enhance } from '$app/forms';
 
-  export let data;
+  type Recipe = {
+    id: string;
+    title: string;
+    category: string;
+    ingredients: string;
+    instructions: string;
+  };
 
-  let recipes = data.recipes ?? [];
-  let categories = data.categories ?? [];
+  export let data: { recipes?: Recipe[]; categories?: string[] };
+
+  let recipes: Recipe[] = data.recipes ?? [];
+  let categories: string[] = data.categories ?? [];
 </script>
 
 <PageHeader title="Manage Recipes" subtitle="Edit, add, or delete recipes" />
@@ -17,11 +25,7 @@
     <div in:fade={{ delay: index * 80, duration: 180 }}>
       <DashboardCard title={r.title} description={r.category}>
         <!-- Update Recipe -->
-        <form method="POST" action="?/updateRecipe" use:enhance={{
-          result({ data, form }) {
-            if (data?.success) form.reset();
-          }
-        }}>
+        <form method="POST" action="?/updateRecipe" use:enhance>
           <input type="hidden" name="id" value={r.id} />
           <input name="title" value={r.title} required />
           <select name="category" required>
@@ -46,11 +50,7 @@
   <!-- Add Recipe -->
   <div in:fade>
     <DashboardCard title="Add Recipe">
-      <form method="POST" action="?/createRecipe" use:enhance={{
-        result({ data, form }) {
-          if (data?.success) form.reset();
-        }
-      }}>
+      <form method="POST" action="?/createRecipe" use:enhance>
         <input name="title" placeholder="Title" required />
 
         <!-- Category dropdown -->

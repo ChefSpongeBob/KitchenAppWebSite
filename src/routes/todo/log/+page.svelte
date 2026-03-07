@@ -1,11 +1,17 @@
-<script>
+<script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
 
-	export let data;
+	type LogItem = {
+		id: string;
+		title: string;
+		display_name?: string | null;
+		completed_at: number;
+	};
 
-	const logs = data.logs ?? [];
+	export let data: { logs?: LogItem[] };
+	const logs: LogItem[] = data.logs ?? [];
 </script>
 
 <Layout>

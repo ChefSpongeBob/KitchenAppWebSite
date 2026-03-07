@@ -17,11 +17,6 @@
 		<input name="password" type="password" required />
 	</div>
 
-	<div>
-		<label>Choose PIN</label>
-		<input name="pin" type="password" inputmode="numeric" required />
-	</div>
-
 	<button type="submit">Register</button>
 </form>
 
