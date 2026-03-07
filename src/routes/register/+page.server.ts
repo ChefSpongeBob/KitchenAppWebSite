@@ -115,7 +115,7 @@ export const actions: Actions = {
 			if (message.includes('D1_ERROR: no such table')) {
 				return fail(503, { error: 'Database tables are not ready yet.' });
 			}
-			return fail(500, { error: 'Registration failed. Please try again.' });
+			return fail(500, { error: `Registration failed: ${message}` });
 		}
 	}
 };
