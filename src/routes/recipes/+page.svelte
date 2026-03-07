@@ -5,13 +5,51 @@
   import { goto } from '$app/navigation';
   import { recipeCategories } from '$lib/assets/recipeCategories';
 
-  export let data: { categories?: string[] };
+  type RecipeIndexItem = {
+    id: number;
+    title: string;
+    category: string;
+  };
+
+  export let data: { categories?: string[]; recipeIndex?: RecipeIndexItem[] };
   const categories = (data.categories?.length ? data.categories : [...recipeCategories]).map((c) =>
     c.trim().toLowerCase()
   );
+  const recipeIndex = data.recipeIndex ?? [];
+  let search = '';
+  $: normalizedSearch = search.trim().toLowerCase();
+  $: searchResults =
+    normalizedSearch.length < 2
+      ? []
+      : recipeIndex
+          .filter((r) => r.title.toLowerCase().includes(normalizedSearch))
+          .slice(0, 12);
 </script>
 
 <PageHeader title="Recipes" subtitle="Browse by category" />
+
+<section class="search">
+  <input
+    type="search"
+    placeholder="Search recipe by title..."
+    bind:value={search}
+    aria-label="Search recipe by title"
+  />
+  {#if normalizedSearch.length >= 2}
+    {#if searchResults.length > 0}
+      <div class="search-results">
+        {#each searchResults as recipe}
+          <a href={`/recipes/${recipe.category}`} class="result-link">
+            <strong>{recipe.title}</strong>
+            <small>{recipe.category}</small>
+          </a>
+        {/each}
+      </div>
+    {:else}
+      <p class="search-empty">No recipes found.</p>
+    {/if}
+  {/if}
+</section>
 
 <section class="grid">
   <!-- Static category cards -->
@@ -34,6 +72,49 @@
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 1rem;
     margin-top: 1rem;
+  }
+
+  .search {
+    margin: 0.35rem 0 0.8rem;
+  }
+
+  .search input {
+    width: 100%;
+    max-width: 560px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 0.5rem 0.65rem;
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+  }
+
+  .search-results {
+    margin-top: 0.45rem;
+    display: grid;
+    gap: 0.35rem;
+    max-width: 560px;
+  }
+
+  .result-link {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.65rem;
+    text-decoration: none;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 0.45rem 0.6rem;
+    color: var(--color-text);
+    background: var(--color-surface);
+  }
+
+  .result-link small {
+    color: var(--color-text-muted);
+  }
+
+  .search-empty {
+    margin: 0.45rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.86rem;
   }
 
   .category-wrapper {

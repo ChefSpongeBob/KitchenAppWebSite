@@ -339,12 +339,12 @@ export const actions: Actions = {
     const title = String(f.get('title') ?? '').trim();
     const category = normalizeRecipeCategory(String(f.get('category') ?? ''));
     const ingredients = String(f.get('ingredients') ?? '').trim();
-    const procedure = String(f.get('procedure') ?? '').trim();
+    const materialsNeeded = String(f.get('materials_needed') ?? f.get('procedure') ?? '').trim();
     const instruction = String(f.get('instruction') ?? '').trim();
     const fallbackInstructions = String(f.get('instructions') ?? '').trim();
 
-    const instructions = procedure && instruction
-      ? `Procedure:\n${procedure}\n\nInstruction:\n${instruction}`
+    const instructions = materialsNeeded && instruction
+      ? `Materials needed:\n${materialsNeeded}\n\nInstruction:\n${instruction}`
       : fallbackInstructions;
 
     if (!title || !category || !ingredients || !instructions) {

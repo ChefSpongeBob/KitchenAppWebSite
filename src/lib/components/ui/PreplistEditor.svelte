@@ -16,7 +16,7 @@
 </script>
 
 <Layout>
-  <PageHeader title={title} subtitle="Users update prep amount and complete items. Admins can edit item names and par counts." />
+  <PageHeader title={title} subtitle="Submit prep counts together. Admins can adjust par levels in admin tools." />
 
   {#if items.length === 0}
     <p class="empty">No prep items found yet.</p>
@@ -29,69 +29,73 @@
         <span>Par</span>
       </div>
 
-      {#each items as item}
-        <div class="sheet-row" class:done={item.is_checked === 1}>
-          <form method="POST" action="?/toggle_checked" class="done-form">
-            <input type="hidden" name="id" value={item.id} />
-            <input type="hidden" name="is_checked" value={item.is_checked === 1 ? 0 : 1} />
-            <button type="submit" class="check-btn" aria-label={`Toggle ${item.content} complete`}>
-              {#if item.is_checked === 1}✓{:else}○{/if}
-            </button>
-          </form>
-
-          {#if isAdmin}
-            <form method="POST" action="?/update_content" class="item-form">
+      <div class="batch-form">
+        {#each items as item}
+          <div class="sheet-row" class:done={item.is_checked === 1}>
+            <form method="POST" action="?/toggle_checked" class="done-form">
               <input type="hidden" name="id" value={item.id} />
-              <input
-                id={`content-${item.id}`}
-                name="content"
-                type="text"
-                value={item.content}
-                required
-                class="text-input"
-              />
-              <button type="submit" class="mini-btn">Save</button>
+              <input type="hidden" name="is_checked" value={item.is_checked === 1 ? 0 : 1} />
+              <button type="submit" class="check-btn" aria-label={`Toggle ${item.content} complete`}>
+                {#if item.is_checked === 1}✓{:else}○{/if}
+              </button>
             </form>
-          {:else}
+
             <div class="item-cell">{item.content}</div>
-          {/if}
 
-          <form method="POST" action="?/update_amount" class="number-form">
-            <input type="hidden" name="id" value={item.id} />
-            <input
-              id={`amount-${item.id}`}
-              name="amount"
-              type="number"
-              min="0"
-              step="0.1"
-              value={item.amount}
-              required
-              class="number-input"
-              class:green={item.is_checked === 1}
-            />
-            <button type="submit" class="mini-btn">Save</button>
-          </form>
-
-          {#if isAdmin}
-            <form method="POST" action="?/update_par" class="number-form">
-              <input type="hidden" name="id" value={item.id} />
+            <div class="number-form">
+              <span class="field-tag">PREP:</span>
               <input
-                id={`par-${item.id}`}
-                name="par_count"
+                id={`amount-${item.id}`}
+                name={`amount_${item.id}`}
                 type="number"
                 min="0"
                 step="0.1"
-                value={item.par_count}
+                value={item.amount}
+                form="prep-batch-form"
                 required
                 class="number-input"
+                class:green={item.is_checked === 1}
               />
-              <button type="submit" class="mini-btn">Save</button>
-            </form>
-          {:else}
-            <div class="par-readonly">{item.par_count}</div>
-          {/if}
-        </div>
-      {/each}
+            </div>
+
+            <div class="par-readonly">
+              <span class="field-tag">PAR:</span>
+              <span>{item.par_count}</span>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+        <form id="prep-batch-form" method="POST" action="?/submit_prep_counts" class="actions-row">
+          <button type="submit" class="submit-btn">Submit Prep List</button>
+        </form>
+
+      {#if isAdmin}
+        <details class="admin-par">
+          <summary>+ Admin Par Levels</summary>
+          <form method="POST" action="?/save_par_levels" class="admin-par-form">
+            {#each items as item}
+              <label class="par-edit-row" for={`par-${item.id}`}>
+                <span>{item.content}</span>
+                <div class="number-form">
+                  <span class="field-tag">PAR:</span>
+                  <input
+                    id={`par-${item.id}`}
+                    name={`par_${item.id}`}
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={item.par_count}
+                    required
+                    class="number-input"
+                  />
+                </div>
+              </label>
+            {/each}
+            <button type="submit" class="mini-btn subtle">Save Par Levels</button>
+          </form>
+        </details>
+      {/if}
     </section>
   {/if}
 </Layout>
@@ -119,6 +123,12 @@
     color: var(--color-text-muted);
   }
 
+  .batch-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
   .sheet-row {
     padding: 0.5rem;
     border-radius: 12px;
@@ -131,7 +141,6 @@
   }
 
   .done-form,
-  .item-form,
   .number-form {
     display: flex;
     align-items: center;
@@ -155,7 +164,6 @@
     color: var(--color-text);
   }
 
-  .text-input,
   .number-input {
     width: 100%;
     min-width: 0;
@@ -171,6 +179,51 @@
     box-shadow: inset 0 0 0 1px #16a34a55;
   }
 
+  .actions-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+  }
+
+  .submit-btn {
+    padding: 0.55rem 0.8rem;
+    border-radius: 9px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .admin-par {
+    margin-top: 0.55rem;
+  }
+
+  .admin-par summary {
+    cursor: pointer;
+    width: fit-content;
+    padding: 0.2rem 0.45rem;
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .admin-par-form {
+    margin-top: 0.55rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .par-edit-row {
+    display: grid;
+    grid-template-columns: 1fr minmax(100px, 140px);
+    gap: 0.5rem;
+    align-items: center;
+  }
+
   .mini-btn {
     width: fit-content;
     padding: 0.35rem 0.5rem;
@@ -182,10 +235,24 @@
     font-size: 0.8rem;
   }
 
+  .subtle {
+    opacity: 0.85;
+  }
+
   .par-readonly {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     font-size: 0.95rem;
     color: var(--color-text);
     padding: 0.25rem 0.35rem;
+  }
+
+  .field-tag {
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    color: var(--color-text-muted);
+    white-space: nowrap;
   }
 
   .empty {
@@ -204,7 +271,6 @@
     }
 
     .number-form,
-    .item-form,
     .par-readonly {
       grid-column: 2 / -1;
     }

@@ -398,7 +398,7 @@
           {/each}
         </select>
         <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
-        <textarea name="procedure" placeholder="Procedure" rows="3" required></textarea>
+        <textarea name="materials_needed" placeholder="Materials needed" rows="3" required></textarea>
         <textarea name="instruction" placeholder="Instruction" rows="3" required></textarea>
         <button type="submit">+ Add</button>
       </form>

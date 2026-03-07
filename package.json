@@ -32,6 +32,8 @@
 		"db:migrate:nodenames:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0010_sensor_nodes.sql",
 		"db:migrate:whiteboardmod:local": "npx wrangler d1 execute kitchen --local --file=./migrations/0011_whiteboard_moderation.sql",
 		"db:migrate:whiteboardmod:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0011_whiteboard_moderation.sql",
+		"db:migrate:vegprep:local": "npx wrangler d1 execute kitchen --local --file=./migrations/0012_veg_prep_refresh.sql",
+		"db:migrate:vegprep:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0012_veg_prep_refresh.sql",
 		"lint": "prettier --check .",
 		"format": "prettier --write ."
 	},
