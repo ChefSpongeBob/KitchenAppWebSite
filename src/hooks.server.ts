@@ -26,14 +26,24 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.DB = event.platform?.env?.DB as App.Platform['env']['DB'];
 
 	const { pathname } = event.url;
+	const isAuthRoute =
+		pathname.startsWith('/login') ||
+		pathname.startsWith('/register') ||
+		pathname.startsWith('/logout');
+	const withAuthNoStore = async () => {
+		const response = await resolve(event);
+		response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+		response.headers.set('pragma', 'no-cache');
+		response.headers.set('expires', '0');
+		return response;
+	};
 
 	// Public routes
 	if (
-		pathname.startsWith('/login') ||
-		pathname.startsWith('/register') ||
+		isAuthRoute ||
 		pathname.startsWith('/api/temps')
 	) {
-		return resolve(event);
+		return isAuthRoute ? withAuthNoStore() : resolve(event);
 	}
 
 	const db = event.locals.DB;

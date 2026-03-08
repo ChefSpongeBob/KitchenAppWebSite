@@ -26,14 +26,21 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
 	if (event.request.method !== 'GET') return;
+	const url = new URL(event.request.url);
+	const authPath =
+		url.pathname.startsWith('/login') ||
+		url.pathname.startsWith('/register') ||
+		url.pathname.startsWith('/logout');
 
 	// Always fetch fresh HTML/routes first so deployed UI updates are visible immediately.
-	if (event.request.mode === 'navigate') {
+	if (event.request.mode === 'navigate' || authPath) {
 		event.respondWith(
 			fetch(event.request)
 				.then((response) => {
-					const copy = response.clone();
-					caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
+					if (!authPath) {
+						const copy = response.clone();
+						caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
+					}
 					return response;
 				})
 				.catch(async () => {
