@@ -16,7 +16,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const db = event.locals.DB;
-	const sessionToken = event.cookies.get('session_id');
+	const sessionToken = event.cookies.get('session_id') ?? event.cookies.get('session_id_pwa');
 
 	if (!db || !sessionToken) {
 		throw redirect(303, '/login');
@@ -47,7 +47,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}>();
 
 		if (!session || session.revoked_at !== null || session.expires_at < now) {
-			throw redirect(303, '/login');
+			throw redirect(303, '/login?error=session');
 		}
 
 		// Validate device
@@ -64,7 +64,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				.first();
 
 			if (!device || device.revoked_at !== null) {
-				throw redirect(303, '/login');
+				throw redirect(303, '/login?error=session');
 			}
 		}
 
@@ -80,7 +80,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			.first<{ id: string; role: string | null }>();
 
 		if (!user) {
-			throw redirect(303, '/login');
+			throw redirect(303, '/login?error=session');
 		}
 
 		// Upgrade legacy plaintext token storage to hashed token.
@@ -98,13 +98,24 @@ export const handle: Handle = async ({ event, resolve }) => {
 				.bind(replacementHash, now, session.id)
 				.run();
 
+			const secure = !event.url.hostname.includes('localhost');
+			const maxAge = 60 * 60 * 24 * 30;
 			event.cookies.set('session_id', replacementToken, {
 				path: '/',
 				httpOnly: true,
 				sameSite: 'lax',
-				secure: !event.url.hostname.includes('localhost'),
-				maxAge: 60 * 60 * 24 * 30
+				secure,
+				maxAge
 			});
+			if (secure) {
+				event.cookies.set('session_id_pwa', replacementToken, {
+					path: '/',
+					httpOnly: true,
+					sameSite: 'none',
+					secure: true,
+					maxAge
+				});
+			}
 		} else {
 			await db
 				.prepare(
@@ -123,6 +134,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		return resolve(event);
 	} catch {
-		throw redirect(303, '/login');
+		throw redirect(303, '/login?error=session');
 	}
 };

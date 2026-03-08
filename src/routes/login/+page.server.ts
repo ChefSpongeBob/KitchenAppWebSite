@@ -7,6 +7,32 @@ async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
 	return (columns.results ?? []).some((column) => column.name === 'email_normalized');
 }
 
+function setSessionCookies(
+	cookies: Parameters<Actions['default']>[0]['cookies'],
+	sessionToken: string
+) {
+	const maxAge = 60 * 60 * 24 * 30;
+	const secure = !dev;
+	cookies.set('session_id', sessionToken, {
+		path: '/',
+		httpOnly: true,
+		sameSite: 'lax',
+		secure,
+		maxAge
+	});
+
+	// PWA/iOS fallback for standalone cookie handling quirks.
+	if (secure) {
+		cookies.set('session_id_pwa', sessionToken, {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'none',
+			secure: true,
+			maxAge
+		});
+	}
+}
+
 export const actions: Actions = {
 	default: async ({ request, cookies, locals }) => {
 		try {
@@ -134,13 +160,7 @@ export const actions: Actions = {
 					.run();
 			}
 
-			cookies.set('session_id', sessionToken, {
-				path: '/',
-				httpOnly: true,
-				sameSite: 'lax',
-				secure: !dev,
-				maxAge: 60 * 60 * 24 * 30
-			});
+			setSessionCookies(cookies, sessionToken);
 
 			throw redirect(303, '/');
 		} catch (err) {

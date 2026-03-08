@@ -3,6 +3,8 @@
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import { page } from '$app/stores';
+	let showPassword = false;
 </script>
 
 <Layout>
@@ -16,7 +18,12 @@
 
 		<div>
 			<label>Password</label>
-			<input name="password" type="password" required />
+			<div class="password-row">
+				<input name="password" type={showPassword ? 'text' : 'password'} required />
+				<button type="button" on:click={() => (showPassword = !showPassword)}>
+					{showPassword ? 'Hide' : 'Show'}
+				</button>
+			</div>
 		</div>
 
 		<button type="submit">Login</button>
@@ -24,6 +31,8 @@
 
 	{#if form?.error}
 		<p style="color:red;">{form.error}</p>
+	{:else if $page.url.searchParams.get('error') === 'session'}
+		<p style="color:red;">Your session could not be restored. Please sign in again.</p>
 	{/if}
 
 	<p>
@@ -71,5 +80,22 @@
 
 	a {
 		color: var(--color-text);
+	}
+
+	.password-row {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.password-row input {
+		flex: 1;
+	}
+
+	@media (max-width: 760px) {
+		.password-row {
+			flex-direction: column;
+			align-items: stretch;
+		}
 	}
 </style>

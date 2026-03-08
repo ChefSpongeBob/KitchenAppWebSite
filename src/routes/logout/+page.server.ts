@@ -4,7 +4,7 @@ import { hashSessionToken } from '$lib/server/auth';
 export const actions: Actions = {
 	default: async ({ cookies, locals }) => {
 		const db = locals.DB;
-		const sessionToken = cookies.get('session_id');
+		const sessionToken = cookies.get('session_id') ?? cookies.get('session_id_pwa');
 
 		if (sessionToken && db) {
 			const now = Math.floor(Date.now() / 1000);
@@ -24,6 +24,7 @@ export const actions: Actions = {
 
 		// Clear cookies
 		cookies.delete('session_id', { path: '/' });
+		cookies.delete('session_id_pwa', { path: '/' });
 
 		throw redirect(303, '/login');
 	}
