@@ -13,13 +13,13 @@
 	<form method="POST">
 		<div>
 			<label>Email</label>
-			<input name="email" type="email" required />
+			<input name="email" type="email" required autocapitalize="none" autocorrect="off" spellcheck="false" />
 		</div>
 
 		<div>
 			<label>Password</label>
 			<div class="password-row">
-				<input name="password" type={showPassword ? 'text' : 'password'} required />
+				<input name="password" type={showPassword ? 'text' : 'password'} required autocapitalize="none" autocorrect="off" spellcheck="false" />
 				<button type="button" on:click={() => (showPassword = !showPassword)}>
 					{showPassword ? 'Hide' : 'Show'}
 				</button>

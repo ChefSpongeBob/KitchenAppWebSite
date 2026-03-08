@@ -79,8 +79,11 @@ export const actions: Actions = {
 						.bind(email)
 						.first<{ id: string; password_hash: string | null; is_active?: number | null }>();
 
-			if (!user || !user.password_hash) {
-				return fail(400, { error: 'Invalid credentials.' });
+			if (!user) {
+				return fail(400, { error: 'No account found for this email on this environment.' });
+			}
+			if (!user.password_hash) {
+				return fail(400, { error: 'This account is missing password setup. Contact admin.' });
 			}
 			if (hasIsActive && user.is_active !== 1) {
 				return fail(403, { error: 'Your account is pending admin approval.' });
@@ -88,7 +91,7 @@ export const actions: Actions = {
 
 			const passwordCheck = await verifyPassword(password, user.password_hash);
 			if (!passwordCheck.valid) {
-				return fail(400, { error: 'Invalid credentials.' });
+				return fail(400, { error: 'Password did not match. Check for typos or autofill.' });
 			}
 
 			const now = Math.floor(Date.now() / 1000);
