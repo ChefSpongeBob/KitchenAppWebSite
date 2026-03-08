@@ -100,6 +100,18 @@
   <main class="app-content">
     <slot />
   </main>
+  <footer class="app-footer">
+    <div class="footer-top">
+      <strong>Nexus North Systems, LLC</strong>
+      <span>Kitchen App v2.1</span>
+    </div>
+    <p class="footer-copy">Kitchen operations hub for tasks, lists, docs, recipes, and live temperature monitoring.</p>
+    <nav class="footer-links" aria-label="Footer links">
+      <a href="/about">About App</a>
+      <a href="/docs">Documentation</a>
+      <a href="https://charlottesweb.nexus" target="_blank" rel="noreferrer">Support Contact</a>
+    </nav>
+  </footer>
 </div>
 
 <style>
@@ -220,6 +232,64 @@
     opacity: 1;
   }
 
+  .app-footer {
+    margin-top: auto;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    padding: 0.85rem 1rem calc(0.85rem + var(--safe-bottom));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    background: color-mix(in srgb, var(--color-bg) 88%, black 12%);
+  }
+
+  .footer-top {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .footer-top strong {
+    color: var(--color-text);
+    font-size: 0.79rem;
+    font-weight: var(--weight-semibold);
+  }
+
+  .footer-copy {
+    margin: 0;
+    max-width: 620px;
+    text-align: center;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--color-text-muted);
+  }
+
+  .footer-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .app-footer a {
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 0.74rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.18rem 0.5rem;
+    background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  }
+
+  .app-footer a:hover {
+    text-decoration: underline;
+  }
+
   @media (max-width: 760px) {
     .app-content {
       padding-bottom: calc(4.5rem + var(--safe-bottom));
@@ -234,6 +304,15 @@
       padding: 11px 12px;
       font-size: 0.95rem;
       gap: 12px;
+    }
+
+    .app-footer {
+      font-size: 0.74rem;
+      padding-inline: 0.75rem;
+    }
+
+    .footer-copy {
+      font-size: 0.7rem;
     }
   }
 
