@@ -7,6 +7,11 @@ async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
 	return (columns.results ?? []).some((column) => column.name === 'email_normalized');
 }
 
+async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
+	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
+	return (columns.results ?? []).some((column) => column.name === 'is_active');
+}
+
 function setSessionCookies(
 	cookies: Parameters<Actions['default']>[0]['cookies'],
 	sessionToken: string
@@ -51,32 +56,34 @@ export const actions: Actions = {
 			}
 
 			const hasNormalized = await hasEmailNormalizedColumn(db);
+			const hasIsActive = await hasIsActiveColumn(db);
 			const user = hasNormalized
 				? await db
 						.prepare(
 							`
-			SELECT id, password_hash
+			SELECT id, password_hash${hasIsActive ? ', is_active' : ''}
 			FROM users
 			WHERE email_normalized = ?
-			AND is_active = 1
 			`
 						)
 						.bind(email)
-						.first<{ id: string; password_hash: string | null }>()
+						.first<{ id: string; password_hash: string | null; is_active?: number | null }>()
 				: await db
 						.prepare(
 							`
-			SELECT id, password_hash
+			SELECT id, password_hash${hasIsActive ? ', is_active' : ''}
 			FROM users
 			WHERE lower(email) = ?
-			AND is_active = 1
 			`
 						)
 						.bind(email)
-						.first<{ id: string; password_hash: string | null }>();
+						.first<{ id: string; password_hash: string | null; is_active?: number | null }>();
 
 			if (!user || !user.password_hash) {
 				return fail(400, { error: 'Invalid credentials.' });
+			}
+			if (hasIsActive && user.is_active !== 1) {
+				return fail(403, { error: 'Your account is pending admin approval.' });
 			}
 
 			const passwordCheck = await verifyPassword(password, user.password_hash);

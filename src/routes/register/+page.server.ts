@@ -1,10 +1,14 @@
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
-import { dev } from '$app/environment';
-import { hashPassword, hashSessionToken } from '$lib/server/auth';
+import { hashPassword } from '$lib/server/auth';
 
 async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
 	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
 	return (columns.results ?? []).some((column) => column.name === 'email_normalized');
+}
+
+async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
+	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
+	return (columns.results ?? []).some((column) => column.name === 'is_active');
 }
 
 async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
@@ -18,33 +22,8 @@ async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
 	`).run();
 }
 
-function setSessionCookies(
-	cookies: Parameters<Actions['default']>[0]['cookies'],
-	sessionToken: string
-) {
-	const maxAge = 60 * 60 * 24 * 30;
-	const secure = !dev;
-	cookies.set('session_id', sessionToken, {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax',
-		secure,
-		maxAge
-	});
-
-	if (secure) {
-		cookies.set('session_id_pwa', sessionToken, {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'none',
-			secure: true,
-			maxAge
-		});
-	}
-}
-
 export const actions: Actions = {
-	default: async ({ request, cookies, locals }) => {
+	default: async ({ request, locals }) => {
 		try {
 			const formData = await request.formData();
 
@@ -74,6 +53,7 @@ export const actions: Actions = {
 			}
 
 			const hasNormalized = await hasEmailNormalizedColumn(db);
+			const hasIsActive = await hasIsActiveColumn(db);
 			const existing = hasNormalized
 				? await db
 						.prepare(
@@ -101,15 +81,24 @@ export const actions: Actions = {
 			const now = Math.floor(Date.now() / 1000);
 
 			const userId = crypto.randomUUID();
-			const deviceId = crypto.randomUUID();
-			const sessionId = crypto.randomUUID();
-			const sessionToken = crypto.randomUUID();
-			const sessionTokenHash = await hashSessionToken(sessionToken);
 			const passwordHash = await hashPassword(password);
 
 			if (hasNormalized) {
-				await db
-					.prepare(`
+				const sql = hasIsActive
+					? `
+			INSERT INTO users (
+				id,
+				email,
+				email_normalized,
+				password_hash,
+				display_name,
+				is_active,
+				created_at,
+				updated_at
+			)
+			VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+		`
+					: `
 			INSERT INTO users (
 				id,
 				email,
@@ -120,12 +109,28 @@ export const actions: Actions = {
 				updated_at
 			)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`)
-					.bind(userId, email, email, passwordHash, displayName, now, now)
-					.run();
+		`;
+				const stmt = db.prepare(sql);
+				if (hasIsActive) {
+					await stmt.bind(userId, email, email, passwordHash, displayName, now, now).run();
+				} else {
+					await stmt.bind(userId, email, email, passwordHash, displayName, now, now).run();
+				}
 			} else {
-				await db
-					.prepare(`
+				const sql = hasIsActive
+					? `
+			INSERT INTO users (
+				id,
+				email,
+				password_hash,
+				display_name,
+				is_active,
+				created_at,
+				updated_at
+			)
+			VALUES (?, ?, ?, ?, 0, ?, ?)
+		`
+					: `
 			INSERT INTO users (
 				id,
 				email,
@@ -135,9 +140,13 @@ export const actions: Actions = {
 				updated_at
 			)
 			VALUES (?, ?, ?, ?, ?, ?)
-		`)
-					.bind(userId, email, passwordHash, displayName, now, now)
-					.run();
+		`;
+				const stmt = db.prepare(sql);
+				if (hasIsActive) {
+					await stmt.bind(userId, email, passwordHash, displayName, now, now).run();
+				} else {
+					await stmt.bind(userId, email, passwordHash, displayName, now, now).run();
+				}
 			}
 
 			await ensureUserPreferencesTable(db);
@@ -151,45 +160,7 @@ export const actions: Actions = {
 				.bind(userId, wantsEmailUpdates ? 1 : 0, now)
 				.run();
 
-			await db.prepare(`
-			INSERT INTO devices (
-				id,
-				user_id,
-				pin_hash,
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ?)
-		`)
-				.bind(deviceId, userId, '', now, now)
-				.run();
-
-			await db.prepare(`
-			INSERT INTO sessions (
-				id,
-				user_id,
-				device_id,
-				session_token_hash,
-				created_at,
-				last_seen_at,
-				expires_at
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`)
-				.bind(
-					sessionId,
-					userId,
-					deviceId,
-					sessionTokenHash,
-					now,
-					now,
-					now + 60 * 60 * 24 * 30
-				)
-				.run();
-
-			setSessionCookies(cookies, sessionToken);
-
-			throw redirect(303, '/');
+			throw redirect(303, '/login?registered=pending');
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;

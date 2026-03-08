@@ -33,6 +33,8 @@
 		<p style="color:red;">{form.error}</p>
 	{:else if $page.url.searchParams.get('error') === 'session'}
 		<p style="color:red;">Your session could not be restored. Please sign in again.</p>
+	{:else if $page.url.searchParams.get('registered') === 'pending'}
+		<p class="notice">Account created. An admin must approve access before first login.</p>
 	{/if}
 
 	<p>
@@ -80,6 +82,11 @@
 
 	a {
 		color: var(--color-text);
+	}
+
+	.notice {
+		color: var(--color-text-muted);
+		margin-top: 0.5rem;
 	}
 
 	.password-row {

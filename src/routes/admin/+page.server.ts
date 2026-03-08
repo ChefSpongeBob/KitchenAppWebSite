@@ -83,6 +83,11 @@ async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
   return Boolean(table);
 }
 
+async function usersHasIsActiveColumn(db: App.Platform['env']['DB']) {
+  const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
+  return (columns.results ?? []).some((column) => column.name === 'is_active');
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -171,16 +176,26 @@ export const load: PageServerLoad = async ({ locals }) => {
     )
     .all();
 
-  const users = await db
-    .prepare(
-      `
-      SELECT id, display_name, email, COALESCE(role, 'user') AS role
+  const hasIsActive = await usersHasIsActiveColumn(db);
+  const users = hasIsActive
+    ? await db
+        .prepare(
+          `
+      SELECT id, display_name, email, COALESCE(role, 'user') AS role, COALESCE(is_active, 1) AS is_active
       FROM users
-      WHERE is_active = 1
       ORDER BY COALESCE(display_name, email) ASC
       `
-    )
-    .all();
+        )
+        .all()
+    : await db
+        .prepare(
+          `
+      SELECT id, display_name, email, COALESCE(role, 'user') AS role, 1 AS is_active
+      FROM users
+      ORDER BY COALESCE(display_name, email) ASC
+      `
+        )
+        .all();
 
   const nodeNamesTableExists = await tableExists(db, 'sensor_nodes');
   let nodeNames: NodeNameRow[] = [];
@@ -658,6 +673,26 @@ export const actions: Actions = {
 
     await db
       .prepare(`UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?`)
+      .bind(Math.floor(Date.now() / 1000), userId)
+      .run();
+
+    return { success: true };
+  },
+
+  approve_user: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+
+    const formData = await request.formData();
+    const userId = String(formData.get('user_id') ?? '').trim();
+    if (!userId) return fail(400, { error: 'Missing user id.' });
+    if (!(await usersHasIsActiveColumn(db))) {
+      return fail(400, { error: 'users.is_active column missing. Run auth migration first.' });
+    }
+
+    await db
+      .prepare(`UPDATE users SET is_active = 1, updated_at = ? WHERE id = ?`)
       .bind(Math.floor(Date.now() / 1000), userId)
       .run();
 

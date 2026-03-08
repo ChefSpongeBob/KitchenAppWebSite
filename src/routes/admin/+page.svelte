@@ -41,6 +41,7 @@
     display_name: string | null;
     email: string;
     role: string;
+    is_active: number;
   };
 
   type NodeName = {
@@ -177,28 +178,45 @@
         <tr>
           <th>User</th>
           <th>Email</th>
+          <th>Access</th>
           <th>Role</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {#if data.users.length === 0}
-          <tr><td colspan="4">No users found.</td></tr>
+          <tr><td colspan="5">No users found.</td></tr>
         {:else}
           {#each data.users as user}
             <tr>
               <td>{user.display_name ?? 'Unnamed User'}</td>
               <td>{user.email}</td>
+              <td>
+                {#if user.is_active === 1}
+                  <span class="status status-approved">Approved</span>
+                {:else}
+                  <span class="status status-pending">Pending</span>
+                {/if}
+              </td>
               <td>{user.role}</td>
               <td>
+                <div class="inline">
+                {#if user.is_active !== 1}
+                  <form method="POST" action="?/approve_user" use:enhance class="inline">
+                    <input type="hidden" name="user_id" value={user.id} />
+                    <button type="submit" class="icon-btn" aria-label="Approve user account">OK</button>
+                  </form>
+                {/if}
                 {#if user.role !== 'admin'}
                   <form method="POST" action="?/make_user_admin" use:enhance class="inline">
                     <input type="hidden" name="user_id" value={user.id} />
                     <button type="submit" class="icon-btn" aria-label="Promote user to admin">A</button>
                   </form>
-                {:else}
+                {/if}
+                {#if user.role === 'admin'}
                   <span class="status status-approved">Admin</span>
                 {/if}
+                </div>
               </td>
             </tr>
           {/each}
