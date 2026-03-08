@@ -1,16 +1,20 @@
 import { redirect, type Handle } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { hashSessionToken } from '$lib/server/auth';
 
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const secure = !event.url.hostname.includes('localhost');
 	const maxAge = 60 * 60 * 24 * 30;
-	event.cookies.set('session_id', sessionToken, {
+	const cookieName = dev ? 'kitchen_session' : '__Host-kitchen_session';
+	event.cookies.set(cookieName, sessionToken, {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
 		secure,
 		maxAge
 	});
+	event.cookies.delete('session_id', { path: '/' });
+	event.cookies.delete('session_id_pwa', { path: '/' });
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -38,7 +42,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const db = event.locals.DB;
-	const sessionToken = event.cookies.get('session_id');
+	const primaryCookie = dev ? 'kitchen_session' : '__Host-kitchen_session';
+	const sessionToken =
+		event.cookies.get(primaryCookie) ??
+		event.cookies.get('session_id') ??
+		event.cookies.get('session_id_pwa');
 
 	if (!db || !sessionToken) {
 		throw redirect(303, '/login');
@@ -129,7 +137,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 				)
 				.bind(now, session.id)
 				.run();
-			setSessionCookies(event, sessionToken);
+
+			// Normalize to a single canonical cookie key only when legacy key was used.
+			if (!event.cookies.get(primaryCookie)) {
+				setSessionCookies(event, sessionToken);
+			}
 		}
 
 		event.locals.userId = user.id;

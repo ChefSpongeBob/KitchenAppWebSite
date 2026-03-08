@@ -18,13 +18,17 @@ function setSessionCookies(
 ) {
 	const maxAge = 60 * 60 * 24 * 30;
 	const secure = !dev;
-	cookies.set('session_id', sessionToken, {
+	const cookieName = dev ? 'kitchen_session' : '__Host-kitchen_session';
+	cookies.set(cookieName, sessionToken, {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
 		secure,
 		maxAge
 	});
+	// Remove legacy cookie keys so only one session key is used.
+	cookies.delete('session_id', { path: '/' });
+	cookies.delete('session_id_pwa', { path: '/' });
 }
 
 export const actions: Actions = {
