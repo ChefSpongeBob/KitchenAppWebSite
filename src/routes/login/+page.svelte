@@ -31,6 +31,8 @@
 
 	{#if form?.error}
 		<p style="color:red;">{form.error}</p>
+	{:else if $page.url.searchParams.get('error') === 'cookie'}
+		<p style="color:red;">Login succeeded but Chrome blocked/stale-stored the session cookie. Clear site data and retry.</p>
 	{:else if $page.url.searchParams.get('error') === 'session'}
 		<p style="color:red;">Your session could not be restored. Please sign in again.</p>
 	{:else if $page.url.searchParams.get('registered') === 'pending'}

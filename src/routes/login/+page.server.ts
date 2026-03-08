@@ -14,32 +14,44 @@ async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
 
 function setSessionCookies(
 	cookies: Parameters<Actions['default']>[0]['cookies'],
-	sessionToken: string
+	sessionToken: string,
+	hostname: string
 ) {
 	const maxAge = 60 * 60 * 24 * 30;
 	const secure = !dev;
-	cookies.set('session_id', sessionToken, {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax',
-		secure,
-		maxAge
-	});
+	const domains = new Set<string | undefined>([undefined]);
+	if (secure && hostname.startsWith('www.') && hostname.split('.').length >= 3) {
+		domains.add(hostname.slice(4));
+	}
+
+	for (const domain of domains) {
+		cookies.set('session_id', sessionToken, {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'lax',
+			secure,
+			maxAge,
+			...(domain ? { domain } : {})
+		});
+	}
 
 	// PWA/iOS fallback for standalone cookie handling quirks.
 	if (secure) {
-		cookies.set('session_id_pwa', sessionToken, {
-			path: '/',
-			httpOnly: true,
-			sameSite: 'none',
-			secure: true,
-			maxAge
-		});
+		for (const domain of domains) {
+			cookies.set('session_id_pwa', sessionToken, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'none',
+				secure: true,
+				maxAge,
+				...(domain ? { domain } : {})
+			});
+		}
 	}
 }
 
 export const actions: Actions = {
-	default: async ({ request, cookies, locals }) => {
+	default: async ({ request, cookies, locals, url }) => {
 		try {
 			const formData = await request.formData();
 
@@ -170,9 +182,9 @@ export const actions: Actions = {
 					.run();
 			}
 
-			setSessionCookies(cookies, sessionToken);
+			setSessionCookies(cookies, sessionToken, url.hostname);
 
-			throw redirect(303, '/');
+			throw redirect(303, '/?auth=1');
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;

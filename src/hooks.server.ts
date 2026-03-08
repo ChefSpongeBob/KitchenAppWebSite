@@ -4,21 +4,32 @@ import { hashSessionToken } from '$lib/server/auth';
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const secure = !event.url.hostname.includes('localhost');
 	const maxAge = 60 * 60 * 24 * 30;
-	event.cookies.set('session_id', sessionToken, {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax',
-		secure,
-		maxAge
-	});
-	if (secure) {
-		event.cookies.set('session_id_pwa', sessionToken, {
+	const domains = new Set<string | undefined>([undefined]);
+	if (secure && event.url.hostname.startsWith('www.') && event.url.hostname.split('.').length >= 3) {
+		domains.add(event.url.hostname.slice(4));
+	}
+
+	for (const domain of domains) {
+		event.cookies.set('session_id', sessionToken, {
 			path: '/',
 			httpOnly: true,
-			sameSite: 'none',
-			secure: true,
-			maxAge
+			sameSite: 'lax',
+			secure,
+			maxAge,
+			...(domain ? { domain } : {})
 		});
+	}
+	if (secure) {
+		for (const domain of domains) {
+			event.cookies.set('session_id_pwa', sessionToken, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'none',
+				secure: true,
+				maxAge,
+				...(domain ? { domain } : {})
+			});
+		}
 	}
 }
 
@@ -50,9 +61,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const sessionTokenCandidates = Array.from(
 		new Set([event.cookies.get('session_id'), event.cookies.get('session_id_pwa')].filter(Boolean))
 	) as string[];
+	const loginAttempted = event.url.searchParams.get('auth') === '1';
 
 	if (!db || sessionTokenCandidates.length === 0) {
-		throw redirect(303, '/login');
+		throw redirect(303, loginAttempted ? '/login?error=cookie' : '/login');
 	}
 	try {
 		const now = Math.floor(Date.now() / 1000);
