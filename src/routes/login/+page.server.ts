@@ -2,6 +2,11 @@ import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { hashSessionToken, verifyPassword } from '$lib/server/auth';
 
+async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
+	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
+	return (columns.results ?? []).some((column) => column.name === 'email_normalized');
+}
+
 export const actions: Actions = {
 	default: async ({ request, cookies, locals }) => {
 		try {
@@ -19,18 +24,30 @@ export const actions: Actions = {
 				return fail(503, { error: 'Database is not configured yet.' });
 			}
 
-			// Find active user
-			const user = await db
-				.prepare(
-					`
+			const hasNormalized = await hasEmailNormalizedColumn(db);
+			const user = hasNormalized
+				? await db
+						.prepare(
+							`
 			SELECT id, password_hash
 			FROM users
 			WHERE email_normalized = ?
 			AND is_active = 1
 			`
-				)
-				.bind(email)
-				.first<{ id: string; password_hash: string | null }>();
+						)
+						.bind(email)
+						.first<{ id: string; password_hash: string | null }>()
+				: await db
+						.prepare(
+							`
+			SELECT id, password_hash
+			FROM users
+			WHERE lower(email) = ?
+			AND is_active = 1
+			`
+						)
+						.bind(email)
+						.first<{ id: string; password_hash: string | null }>();
 
 			if (!user || !user.password_hash) {
 				return fail(400, { error: 'Invalid credentials.' });
