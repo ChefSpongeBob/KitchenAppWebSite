@@ -27,17 +27,24 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
 	if (event.request.method !== 'GET') return;
 	const url = new URL(event.request.url);
+	const isSameOrigin = url.origin === self.location.origin;
 	const authPath =
 		url.pathname.startsWith('/login') ||
 		url.pathname.startsWith('/register') ||
 		url.pathname.startsWith('/logout');
+	const isSvelteData = url.pathname.includes('/__data.json');
+	const isApi = url.pathname.startsWith('/api/');
+	const isStaticAsset = isSameOrigin && ASSETS.includes(url.pathname);
+
+	if (!isSameOrigin) return;
 
 	// Always fetch fresh HTML/routes first so deployed UI updates are visible immediately.
-	if (event.request.mode === 'navigate' || authPath) {
+	if (event.request.mode === 'navigate' || authPath || isSvelteData || isApi || !isStaticAsset) {
 		event.respondWith(
 			fetch(event.request)
 				.then((response) => {
-					if (!authPath) {
+					// Keep an offline fallback for shell navigations only.
+					if (event.request.mode === 'navigate' && !authPath) {
 						const copy = response.clone();
 						caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
 					}
