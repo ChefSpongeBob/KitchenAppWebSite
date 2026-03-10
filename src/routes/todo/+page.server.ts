@@ -156,55 +156,60 @@ export const actions: Actions = {
 			SELECT
 				t.id,
 				t.title,
+				t.completed_at,
 				ta.user_id AS assigned_to
 			FROM todos t
 			LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
-			WHERE t.id = ? AND t.completed_at IS NULL
+			WHERE t.id = ?
 		`)
 					.bind(id)
-					.first<{ id: string; title: string; assigned_to: string | null }>()
+					.first<{ id: string; title: string; completed_at: number | null; assigned_to: string | null }>()
 			: await db
 					.prepare(
 						`
             SELECT
               t.id,
               t.title,
+              t.completed_at,
               NULL AS assigned_to
             FROM todos t
-            WHERE t.id = ? AND t.completed_at IS NULL
+            WHERE t.id = ?
           `
 					)
 					.bind(id)
-					.first<{ id: string; title: string; assigned_to: string | null }>();
+					.first<{ id: string; title: string; completed_at: number | null; assigned_to: string | null }>();
 
 		if (!todo) return fail(404);
+		if (todo.completed_at !== null) return { success: true };
 		if (todo.assigned_to && todo.assigned_to !== locals.userId && locals.userRole !== 'admin') {
 			return fail(403, { error: 'This task is assigned to another user.' });
 		}
 
-		await db
+		const updateResult = await db
 			.prepare(`
 			UPDATE todos
 			SET completed_by = ?, completed_at = ?, updated_at = ?
-			WHERE id = ? AND completed_at IS NULL
+			WHERE id = ?
 		`)
 			.bind(locals.userId, now, now, id)
 			.run();
 
-		await db.prepare(`
-			INSERT INTO todo_completion_log (
-				id, todo_id, title, completed_by, completed_at
-			)
-			VALUES (?, ?, ?, ?, ?)
-		`)
-		.bind(
-			crypto.randomUUID(),
-			id,
-			todo.title,
-			locals.userId,
-			now
-		)
-		.run();
+		if (!updateResult.success || (updateResult.meta?.changes ?? 0) < 1) {
+			return fail(409, { error: 'Task could not be completed.' });
+		}
+
+		// Completion itself should not depend on audit log availability.
+		if (await tableExists(db, 'todo_completion_log')) {
+			await db
+				.prepare(`
+				INSERT INTO todo_completion_log (
+					id, todo_id, title, completed_by, completed_at
+				)
+				VALUES (?, ?, ?, ?, ?)
+			`)
+				.bind(crypto.randomUUID(), id, todo.title, locals.userId, now)
+				.run();
+		}
 
 		return { success: true };
 	}

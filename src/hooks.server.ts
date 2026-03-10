@@ -25,7 +25,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||
 		pathname.startsWith('/logout');
-	const withAuthNoStore = async () => {
+	const resolveWithNoStore = async () => {
 		const response = await resolve(event);
 		response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
 		response.headers.set('pragma', 'no-cache');
@@ -38,7 +38,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		isAuthRoute ||
 		pathname.startsWith('/api/temps')
 	) {
-		return isAuthRoute ? withAuthNoStore() : resolve(event);
+		return isAuthRoute ? resolveWithNoStore() : resolve(event);
 	}
 
 	const db = event.locals.DB;
@@ -147,7 +147,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.userId = user.id;
 		event.locals.userRole = user.role ?? 'user';
 
-		return resolve(event);
+		return resolveWithNoStore();
 	} catch {
 		throw redirect(303, '/login?error=session');
 	}
