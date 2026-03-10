@@ -107,6 +107,12 @@ export function createPreplistPage(sectionSlug: string, pageTitle: string) {
 			const db = locals.DB;
 			if (!db) return fail(503, { error: 'Database not configured.' });
 
+			const section = await db
+				.prepare(`SELECT id FROM list_sections WHERE domain = 'preplists' AND slug = ? LIMIT 1`)
+				.bind(sectionSlug)
+				.first<{ id: string }>();
+			if (!section) return fail(404, { error: 'Prep section not found.' });
+
 			const formData = await request.formData();
 			const id = String(formData.get('id') ?? '');
 			const isCheckedValue = formData.get('is_checked') ?? formData.get(`is_checked_${id}`);
