@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import { redirect, fail } from '@sveltejs/kit';
+import { fail } from '@sveltejs/kit';
 
 type TodoRow = {
 	id: string;
@@ -11,13 +11,6 @@ type TodoRow = {
 	assigned_to?: string | null;
 	assigned_name?: string | null;
 	assigned_email?: string | null;
-};
-
-type UserRow = {
-	id: string;
-	display_name: string | null;
-	email: string;
-	is_active?: number;
 };
 
 async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
@@ -35,15 +28,10 @@ async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
 	return Boolean(row);
 }
 
-async function usersHasIsActiveColumn(db: App.Platform['env']['DB']) {
-	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
-	return (columns.results ?? []).some((column) => column.name === 'is_active');
-}
-
 export const load: PageServerLoad = async ({ locals }) => {
 	const db = locals.DB;
 	if (!db) {
-		return { active: [], completed: [], users: [], canManageAssignments: false };
+		return { active: [], completed: [] };
 	}
 	const now = Math.floor(Date.now() / 1000);
 	const isAdmin = locals.userRole === 'admin';
@@ -144,130 +132,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 				)
 				.all<TodoRow>();
 
-	const hasIsActive = isAdmin ? await usersHasIsActiveColumn(db) : false;
-	const users = isAdmin
-		? hasIsActive
-			? await db
-					.prepare(
-						`
-            SELECT id, display_name, email, COALESCE(is_active, 1) AS is_active
-            FROM users
-            WHERE COALESCE(is_active, 1) = 1
-            ORDER BY COALESCE(display_name, email) ASC
-          `
-					)
-					.all<UserRow>()
-			: await db
-					.prepare(
-						`
-            SELECT id, display_name, email, 1 AS is_active
-            FROM users
-            ORDER BY COALESCE(display_name, email) ASC
-          `
-					)
-					.all<UserRow>()
-		: { results: [] as UserRow[] };
-
 	return {
 		active: active.results ?? [],
-		completed: completed.results ?? [],
-		users: users.results ?? [],
-		canManageAssignments: isAdmin && hasAssignmentsTable
+		completed: completed.results ?? []
 	};
 };
 
 export const actions: Actions = {
-	create: async ({ request, locals }) => {
-		if (locals.userRole !== 'admin') {
-			throw redirect(303, '/');
-		}
-
-		const db = locals.DB;
-		if (!db) return fail(503, { error: 'Database not configured.' });
-		const formData = await request.formData();
-		const title = String(formData.get('title') || '').trim();
-		const description = String(formData.get('description') || '').trim();
-		const assignedTo = String(formData.get('assigned_to') ?? '').trim();
-
-		if (!title) {
-			return fail(400, { error: 'Title required' });
-		}
-
-		const now = Math.floor(Date.now() / 1000);
-		const todoId = crypto.randomUUID();
-
-		await db
-			.prepare(`
-			INSERT INTO todos (
-				id, title, description,
-				created_by,
-				created_at, updated_at
-			)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`)
-			.bind(todoId, title, description, locals.userId, now, now)
-			.run();
-
-		if (assignedTo) {
-			const hasAssignmentsTable = await tableExists(db, 'todo_assignments');
-			if (!hasAssignmentsTable) return fail(400, { error: 'Todo assignments table missing.' });
-			const assignee = await db.prepare(`SELECT id FROM users WHERE id = ? LIMIT 1`).bind(assignedTo).first<{ id: string }>();
-			if (!assignee) return fail(400, { error: 'Invalid assigned user.' });
-
-			await db
-				.prepare(
-					`
-            INSERT OR REPLACE INTO todo_assignments (todo_id, user_id, assigned_at)
-            VALUES (?, ?, ?)
-          `
-				)
-				.bind(todoId, assignedTo, now)
-				.run();
-		}
-
-		return { success: true };
-	},
-
-	assign: async ({ request, locals }) => {
-		if (locals.userRole !== 'admin') {
-			throw redirect(303, '/');
-		}
-
-		const db = locals.DB;
-		if (!db) return fail(503, { error: 'Database not configured.' });
-		if (!(await tableExists(db, 'todo_assignments'))) {
-			return fail(400, { error: 'Todo assignments table missing.' });
-		}
-
-		const formData = await request.formData();
-		const id = String(formData.get('id') ?? '').trim();
-		const assignedTo = String(formData.get('assigned_to') ?? '').trim();
-		if (!id) return fail(400, { error: 'Missing todo id.' });
-
-		const todo = await db.prepare(`SELECT id FROM todos WHERE id = ? LIMIT 1`).bind(id).first<{ id: string }>();
-		if (!todo) return fail(404, { error: 'Todo not found.' });
-
-		if (!assignedTo) {
-			await db.prepare(`DELETE FROM todo_assignments WHERE todo_id = ?`).bind(id).run();
-			return { success: true };
-		}
-
-		const assignee = await db.prepare(`SELECT id FROM users WHERE id = ? LIMIT 1`).bind(assignedTo).first<{ id: string }>();
-		if (!assignee) return fail(400, { error: 'Assigned user not found.' });
-
-		await db
-			.prepare(
-				`
-          INSERT OR REPLACE INTO todo_assignments (todo_id, user_id, assigned_at)
-          VALUES (?, ?, ?)
-        `
-			)
-			.bind(id, assignedTo, Math.floor(Date.now() / 1000))
-			.run();
-
-		return { success: true };
-	},
-
 	complete: async ({ request, locals }) => {
 		const db = locals.DB;
 		if (!db) return fail(503, { error: 'Database not configured.' });
