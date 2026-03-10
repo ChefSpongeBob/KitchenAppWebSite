@@ -14,6 +14,15 @@ type PreplistLocals = {
 	userRole?: string | null;
 };
 
+function parseNonNegativeInteger(raw: FormDataEntryValue | null, fieldName: string) {
+	if (raw === null) return { ok: false as const, error: `${fieldName} is required.` };
+	const value = Number(raw);
+	if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+		return { ok: false as const, error: `${fieldName} must be a non-negative whole number.` };
+	}
+	return { ok: true as const, value };
+}
+
 export function createPreplistPage(sectionSlug: string, pageTitle: string) {
 	const load = async ({ locals }: { locals: PreplistLocals }) => {
 		const db = locals.DB;
@@ -57,23 +66,40 @@ export function createPreplistPage(sectionSlug: string, pageTitle: string) {
 			if (!section) return fail(404, { error: 'Prep section not found.' });
 
 			const formData = await request.formData();
-			const items = await db
-				.prepare(`SELECT id FROM list_items WHERE section_id = ?`)
-				.bind(section.id)
-				.all<{ id: string }>();
+			const items = await db.prepare(`SELECT id FROM list_items WHERE section_id = ?`).bind(section.id).all<{ id: string }>();
 
 			const now = Math.floor(Date.now() / 1000);
+			let updatedCount = 0;
 			for (const item of items.results ?? []) {
 				const raw = formData.get(`amount_${item.id}`);
 				if (raw === null) continue;
-				const amount = Number(raw);
-				if (!Number.isFinite(amount) || amount < 0) return fail(400, { error: 'Invalid prep amount.' });
+				const parsed = parseNonNegativeInteger(raw, 'Prep amount');
+				if (!parsed.ok) return fail(400, { error: parsed.error });
 
 				await db
 					.prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ?`)
-					.bind(amount, now, item.id)
+					.bind(parsed.value, now, item.id)
 					.run();
+				updatedCount += 1;
 			}
+			if (updatedCount === 0) return fail(400, { error: 'No prep amounts were submitted.' });
+
+			return { success: true };
+		},
+		new_prep_list: async ({ locals }: { locals: PreplistLocals }) => {
+			const db = locals.DB;
+			if (!db) return fail(503, { error: 'Database not configured.' });
+
+			const section = await db
+				.prepare(`SELECT id FROM list_sections WHERE domain = 'preplists' AND slug = ? LIMIT 1`)
+				.bind(sectionSlug)
+				.first<{ id: string }>();
+			if (!section) return fail(404, { error: 'Prep section not found.' });
+
+			await db
+				.prepare(`UPDATE list_items SET amount = 0, is_checked = 0, updated_at = ? WHERE section_id = ?`)
+				.bind(Math.floor(Date.now() / 1000), section.id)
+				.run();
 
 			return { success: true };
 		},
@@ -83,13 +109,20 @@ export function createPreplistPage(sectionSlug: string, pageTitle: string) {
 
 			const formData = await request.formData();
 			const id = String(formData.get('id') ?? '');
-			const isChecked = Number(formData.get('is_checked'));
+			const isCheckedValue = formData.get('is_checked') ?? formData.get(`is_checked_${id}`);
+			const isChecked = Number(isCheckedValue);
 			if (!id || (isChecked !== 0 && isChecked !== 1))
 				return fail(400, { error: 'Invalid completion state.' });
 
 			await db
-				.prepare(`UPDATE list_items SET is_checked = ?, updated_at = ? WHERE id = ?`)
-				.bind(isChecked, Math.floor(Date.now() / 1000), id)
+				.prepare(
+					`
+          UPDATE list_items
+          SET is_checked = ?, updated_at = ?
+          WHERE id = ? AND section_id = ?
+        `
+				)
+				.bind(isChecked, Math.floor(Date.now() / 1000), id, section.id)
 				.run();
 
 			return { success: true };
@@ -115,12 +148,12 @@ export function createPreplistPage(sectionSlug: string, pageTitle: string) {
 			for (const item of items.results ?? []) {
 				const raw = formData.get(`par_${item.id}`);
 				if (raw === null) continue;
-				const parCount = Number(raw);
-				if (!Number.isFinite(parCount) || parCount < 0) return fail(400, { error: 'Invalid par count.' });
+				const parsed = parseNonNegativeInteger(raw, 'Par count');
+				if (!parsed.ok) return fail(400, { error: parsed.error });
 
 				await db
 					.prepare(`UPDATE list_items SET par_count = ?, updated_at = ? WHERE id = ?`)
-					.bind(parCount, now, item.id)
+					.bind(parsed.value, now, item.id)
 					.run();
 			}
 

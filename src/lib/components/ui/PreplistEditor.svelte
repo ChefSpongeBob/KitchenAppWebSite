@@ -13,6 +13,8 @@
   export let title = 'Prep List';
   export let items: PreplistItem[] = [];
   export let isAdmin = false;
+
+  const isDone = (item: PreplistItem) => Number(item.is_checked) === 1;
 </script>
 
 <Layout>
@@ -29,16 +31,23 @@
         <span>Par</span>
       </div>
 
-      <div class="batch-form">
+      <form id="prep-batch-form" method="POST" action="?/submit_prep_counts" class="batch-form">
         {#each items as item}
-          <div class="sheet-row" class:done={item.is_checked === 1}>
-            <form method="POST" action="?/toggle_checked" class="done-form">
-              <input type="hidden" name="id" value={item.id} />
-              <input type="hidden" name="is_checked" value={item.is_checked === 1 ? 0 : 1} />
-              <button type="submit" class="check-btn" aria-label={`Toggle ${item.content} complete`}>
-                {#if item.is_checked === 1}✓{:else}○{/if}
-              </button>
-            </form>
+          <div class="sheet-row" class:done={isDone(item)}>
+            <button
+              type="submit"
+              class="check-btn"
+              aria-label={`Toggle ${item.content} complete`}
+              form="prep-batch-form"
+              formaction="?/toggle_checked"
+              formmethod="POST"
+              formnovalidate
+              name="id"
+              value={item.id}
+            >
+              {#if isDone(item)}X{:else}O{/if}
+            </button>
+            <input type="hidden" name={`is_checked_${item.id}`} value={isDone(item) ? 0 : 1} />
 
             <div class="item-cell">{item.content}</div>
 
@@ -49,12 +58,10 @@
                 name={`amount_${item.id}`}
                 type="number"
                 min="0"
-                step="0.1"
+                step="1"
                 value={item.amount}
-                form="prep-batch-form"
                 required
                 class="number-input"
-                class:green={item.is_checked === 1}
               />
             </div>
 
@@ -64,11 +71,16 @@
             </div>
           </div>
         {/each}
-      </div>
+        <div class="actions-row">
+          <button type="submit" class="submit-btn">Submit Prep Counts</button>
+        </div>
+      </form>
 
-        <form id="prep-batch-form" method="POST" action="?/submit_prep_counts" class="actions-row">
-          <button type="submit" class="submit-btn">Submit Prep List</button>
-        </form>
+        <div class="actions-row reset-row">
+          <form method="POST" action="?/new_prep_list">
+            <button type="submit" class="submit-btn subtle-btn">New Prep List (Reset to 0)</button>
+          </form>
+        </div>
 
       {#if isAdmin}
         <details class="admin-par">
@@ -84,7 +96,7 @@
                     name={`par_${item.id}`}
                     type="number"
                     min="0"
-                    step="0.1"
+                    step="1"
                     value={item.par_count}
                     required
                     class="number-input"
@@ -140,7 +152,6 @@
     background: color-mix(in srgb, #16a34a 17%, var(--color-surface) 83%);
   }
 
-  .done-form,
   .number-form {
     display: flex;
     align-items: center;
@@ -174,15 +185,15 @@
     color: var(--color-text);
   }
 
-  .number-input.green {
-    border-color: #16a34a;
-    box-shadow: inset 0 0 0 1px #16a34a55;
-  }
-
   .actions-row {
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
     margin-top: 0.25rem;
+  }
+
+  .reset-row {
+    margin-top: 0.5rem;
   }
 
   .submit-btn {
@@ -194,6 +205,10 @@
     cursor: pointer;
     font-size: 0.88rem;
     font-weight: 600;
+  }
+
+  .subtle-btn {
+    opacity: 0.88;
   }
 
   .admin-par {
@@ -276,3 +291,4 @@
     }
   }
 </style>
+

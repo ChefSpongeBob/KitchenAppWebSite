@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { error } from '@sveltejs/kit';
 
 type SectionRow = {
   slug: string;
@@ -15,7 +16,7 @@ const hrefBySlug: Record<string, string> = {
 
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
-  if (!db) return { sections: [] };
+  if (!db) throw error(503, 'Database binding is missing.');
 
   const result = await db
     .prepare(
