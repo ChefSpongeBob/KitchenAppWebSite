@@ -7,7 +7,8 @@
   const lists = [
     { href: '/lists/preplists', title: 'Prep Lists', description: 'Kitchen and sushi prep checklists' },
     { href: '/lists/orders', title: 'Orders', description: 'Track and manage orders' },
-    { href: '/lists/inventory', title: 'Inventory', description: 'Stock and supply tracking' }
+    { href: '/lists/inventory', title: 'Inventory', description: 'Stock and supply tracking' },
+    { href: '/todo', title: 'To Do', description: 'Assigned tasks and completion flow' }
   ];
 </script>
 
