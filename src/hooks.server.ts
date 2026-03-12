@@ -72,9 +72,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			FROM sessions s
 			LEFT JOIN devices d ON d.id = s.device_id
 			LEFT JOIN users u ON u.id = s.user_id
-			WHERE session_token_hash = ?
-			   OR session_token_hash = ?
-			   OR id = ?
+			WHERE s.session_token_hash = ?
+			   OR s.session_token_hash = ?
+			   OR s.id = ?
 			LIMIT 1
 		`
 			)
