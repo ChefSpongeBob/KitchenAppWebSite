@@ -15,6 +15,12 @@
   };
   type Idea = { text: string; votes: number };
   type NodeTemp = { sensorId: number; nodeName: string | null; temperature: number; ts: number };
+  type DailySpecial = {
+    category: 'roll' | 'nigiri' | 'sashimi' | 'kitchen';
+    label: string;
+    content: string;
+    updatedAt: number;
+  };
   type HomeKpis = {
     openTasks: number;
     completedToday: number;
@@ -25,6 +31,7 @@
   export let data: {
     isAdmin?: boolean;
     userName?: string;
+    dailySpecials?: DailySpecial[];
     todayTasks?: HomeTask[];
     todayMeta?: { assignedCount: number; unassignedCount: number };
     topIdeas?: Idea[];
@@ -39,6 +46,7 @@
   let time = '';
   let greeting = '';
   let userName = data.userName ?? 'Team';
+  let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
   let todayTasks: HomeTask[] = data.todayTasks ?? [];
   let topIdeas: Idea[] = data.topIdeas ?? [];
   let nodeTemps: NodeTemp[] = data.nodeTemps ?? [];
@@ -133,6 +141,12 @@
   $: tempFreshText = latestTempTs ? secondsAgoLabel(latestTempTs) : 'no data';
   $: ideasFreshText = secondsAgoLabel(lastIdeasRefresh);
   $: highTempNodes = nodeTemps.filter((node) => node.temperature >= 45);
+  $: activeSpecials = dailySpecials
+    .filter((special) => special.content.trim().length > 0)
+    .map((special) => ({
+      ...special,
+      preview: special.content.trim()
+    }));
 
   onMount(() => {
     updateTime();
@@ -181,6 +195,43 @@
         <small class="alert">Alert: {highTempNodes.length} temp node(s) above 45F</small>
       {/if}
     </div>
+
+    <a
+      href="/specials"
+      class="tile specials-card"
+      style="transform: translate({px * 2}px, {py * 2}px);"
+      in:fly={{ y: 20, duration: 525 }}
+    >
+      <div class="tile-head">
+        <span class="tile-label">Daily Specials</span>
+        <small>{activeSpecials.length} posted</small>
+      </div>
+      {#if activeSpecials.length === 0}
+        <small class="specials-empty">No specials posted yet.</small>
+      {:else}
+        <div class="specials-list">
+          {#each activeSpecials as special}
+            <div class="special-row">
+              <strong>{special.label}</strong>
+              <span>{special.preview}</span>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </a>
+
+    <a
+      href="/menu"
+      class="tile menu-card"
+      style="transform: translate({px * 3}px, {py * 3}px);"
+      in:fly={{ y: 20, duration: 540 }}
+    >
+      <div class="tile-head">
+        <span class="tile-label">Secret Rolls & Menu</span>
+        <small>pdfs</small>
+      </div>
+      <p class="menu-copy">Open static menu sheets, secret rolls, and visual references.</p>
+    </a>
 
     <div
       class="tile temps"
@@ -308,7 +359,54 @@
   .greeting { grid-row: span 2; }
   .greeting h2 { margin: 0; font-size: 1.5rem; }
   .time { margin-top: 6px; color: var(--color-text-muted); }
+  .specials-list {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .specials-card {
+    text-decoration: none;
+    color: inherit;
+    gap: 0.7rem;
+    min-height: 0;
+  }
+  .menu-card {
+    text-decoration: none;
+    color: inherit;
+    gap: 0.55rem;
+    min-height: 0;
+  }
+  .menu-copy {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+  .special-row {
+    display: grid;
+    grid-template-columns: 4.8rem 1fr;
+    gap: 0.5rem;
+    align-items: start;
+    font-size: 0.76rem;
+  }
+  .special-row strong {
+    color: var(--color-text);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .special-row span {
+    color: var(--color-text-muted);
+    line-height: 1.35;
+    display: -webkit-box;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   .alert { margin-top: 0.35rem; color: #f59e0b; font-size: 0.78rem; }
+  .specials-empty {
+    color: var(--color-text-muted);
+  }
 
   .tile-head { display: flex; justify-content: space-between; align-items: center; gap: 0.35rem; }
   .tile-head small { color: var(--color-text-muted); font-size: 0.72rem; }
@@ -369,13 +467,20 @@
       font-size: 0.94rem;
     }
     .mosaic {
-      grid-template-columns: 1fr;
-      grid-auto-rows: auto;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: minmax(108px, auto);
       gap: 10px;
       padding: 0.85rem 0.9rem;
     }
     .greeting {
+      grid-column: 1 / -1;
       grid-row: auto;
+    }
+    .specials-card,
+    .menu-card,
+    .ideas {
+      min-height: 0;
+      align-self: stretch;
     }
     .tile {
       padding: 12px;
@@ -383,6 +488,9 @@
     }
     .greeting h2 {
       font-size: 1.25rem;
+    }
+    .special-row {
+      grid-template-columns: 4.2rem 1fr;
     }
     .tile-head {
       flex-wrap: wrap;
@@ -441,6 +549,10 @@
     }
     .section-muted {
       display: none;
+    }
+    .special-row {
+      grid-template-columns: 1fr;
+      gap: 0.18rem;
     }
   }
 

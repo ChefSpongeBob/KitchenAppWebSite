@@ -11,14 +11,19 @@
   };
 
   export let title = 'Prep List';
+  export let subtitle = 'Submit prep counts together. Admins can adjust par levels in admin tools.';
   export let items: PreplistItem[] = [];
   export let isAdmin = false;
+  export let valueLabel = 'Prep';
+  export let submitLabel = 'Submit Prep Counts';
+  export let resetLabel = 'New Prep List (Reset to 0)';
+  export let adminSummaryLabel = '+ Admin Par Levels';
 
   const isDone = (item: PreplistItem) => Number(item.is_checked) === 1;
 </script>
 
 <Layout>
-  <PageHeader title={title} subtitle="Submit prep counts together. Admins can adjust par levels in admin tools." />
+  <PageHeader {title} {subtitle} />
 
   {#if items.length === 0}
     <p class="empty">No prep items found yet.</p>
@@ -52,7 +57,7 @@
             <div class="item-cell">{item.content}</div>
 
             <div class="number-form">
-              <span class="field-tag">PREP:</span>
+              <span class="field-tag">{valueLabel.toUpperCase()}:</span>
               <input
                 id={`amount-${item.id}`}
                 name={`amount_${item.id}`}
@@ -72,19 +77,19 @@
           </div>
         {/each}
         <div class="actions-row">
-          <button type="submit" class="submit-btn">Submit Prep Counts</button>
+          <button type="submit" class="submit-btn">{submitLabel}</button>
         </div>
       </form>
 
         <div class="actions-row reset-row">
           <form method="POST" action="?/new_prep_list">
-            <button type="submit" class="submit-btn subtle-btn">New Prep List (Reset to 0)</button>
+            <button type="submit" class="submit-btn subtle-btn">{resetLabel}</button>
           </form>
         </div>
 
       {#if isAdmin}
         <details class="admin-par">
-          <summary>+ Admin Par Levels</summary>
+          <summary>{adminSummaryLabel}</summary>
           <form method="POST" action="?/save_par_levels" class="admin-par-form">
             {#each items as item}
               <label class="par-edit-row" for={`par-${item.id}`}>

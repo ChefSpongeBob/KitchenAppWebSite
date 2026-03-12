@@ -42,6 +42,7 @@
     email: string;
     role: string;
     is_active: number;
+    can_manage_specials: number;
   };
 
   type NodeName = {
@@ -72,6 +73,7 @@
   export let data: {
     preplists: Section[];
     inventory: Section[];
+    orders: Section[];
     recipes: Recipe[];
     todos: Todo[];
     users: UserOption[];
@@ -124,6 +126,7 @@
     <a href="#nodes">Node Names</a>
     <a href="#preplists">Preplists</a>
     <a href="#inventory">Inventory</a>
+    <a href="#orders">Orders</a>
     <a href="#recipes">Recipes</a>
     <a href="#documents">Documents</a>
   </nav>
@@ -179,13 +182,14 @@
           <th>User</th>
           <th>Email</th>
           <th>Access</th>
+          <th>Specials</th>
           <th>Role</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {#if data.users.length === 0}
-          <tr><td colspan="5">No users found.</td></tr>
+          <tr><td colspan="6">No users found.</td></tr>
         {:else}
           {#each data.users as user}
             <tr>
@@ -196,6 +200,13 @@
                   <span class="status status-approved">Approved</span>
                 {:else}
                   <span class="status status-pending">Pending</span>
+                {/if}
+              </td>
+              <td>
+                {#if user.role === 'admin' || user.can_manage_specials === 1}
+                  <span class="status status-approved">Allowed</span>
+                {:else}
+                  <span class="status status-pending">Off</span>
                 {/if}
               </td>
               <td>{user.role}</td>
@@ -211,6 +222,16 @@
                   <form method="POST" action="?/make_user_admin" use:enhance class="inline">
                     <input type="hidden" name="user_id" value={user.id} />
                     <button type="submit" class="icon-btn" aria-label="Promote user to admin">A</button>
+                  </form>
+                  <form method="POST" action="?/toggle_specials_access" use:enhance class="inline">
+                    <input type="hidden" name="user_id" value={user.id} />
+                    <button
+                      type="submit"
+                      class="icon-btn"
+                      aria-label={user.can_manage_specials === 1 ? 'Remove daily specials access' : 'Grant daily specials access'}
+                    >
+                      {user.can_manage_specials === 1 ? 'S-' : 'S+'}
+                    </button>
                   </form>
                 {/if}
                 {#if user.role === 'admin'}
@@ -417,6 +438,56 @@
             <button type="submit">Add</button>
           </form>
         </details>
+      </details>
+    {/each}
+  </section>
+
+  <section class="panel" id="orders">
+    <h2>Orders</h2>
+    {#each data.orders as section}
+      <details class="section-block">
+        <summary>
+          <h3>{section.title}</h3>
+          <span>{section.items.length} items</span>
+        </summary>
+
+        <form method="POST" action="?/add_list_item" use:enhance class="add-row compact-row">
+          <input type="hidden" name="section_id" value={section.id} />
+          <input name="content" placeholder="New order item" required />
+          <input name="par_count" type="number" min="0" value="0" placeholder="Par" required />
+          <button type="submit">+ Add</button>
+        </form>
+
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Par</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each section.items as item}
+              <tr>
+                <td>
+                  <form method="POST" action="?/update_list_item" use:enhance class="inline-edit">
+                    <input type="hidden" name="id" value={item.id} />
+                    <input name="content" value={item.content} required />
+                    <input name="par_count" type="number" min="0" value={item.par_count} required />
+                    <button type="submit" class="icon-btn">S</button>
+                  </form>
+                </td>
+                <td>{item.par_count}</td>
+                <td>
+                  <form method="POST" action="?/delete_list_item" use:enhance class="inline">
+                    <input type="hidden" name="id" value={item.id} />
+                    <button type="submit" class="icon-btn danger" aria-label="Delete order item">X</button>
+                  </form>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </details>
     {/each}
   </section>

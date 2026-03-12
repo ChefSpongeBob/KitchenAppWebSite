@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { loadDailySpecials } from '$lib/server/dailySpecials';
 
 type HomeTask = {
   id: string;
@@ -48,6 +49,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     return {
       isAdmin,
       userName: 'Team',
+      dailySpecials: [],
       todayTasks: [],
       todayMeta: { assignedCount: 0, unassignedCount: 0 },
       topIdeas: [],
@@ -66,6 +68,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       .first<{ display_name: string | null; email: string | null }>();
     userName = user?.display_name || user?.email || 'Team';
   }
+
+  const dailySpecials = await loadDailySpecials(db);
 
   let todayTasks: HomeTask[] = [];
   if (locals.userId) {
@@ -199,6 +203,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     isAdmin,
     userName,
+    dailySpecials,
     todayTasks,
     todayMeta: { assignedCount, unassignedCount },
     topIdeas: (topIdeasResult.results ?? []).map((r) => ({ text: r.content, votes: r.votes })),

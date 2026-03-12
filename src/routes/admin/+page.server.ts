@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
+import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 
 type SectionRow = {
   section_id: string;
@@ -26,7 +27,7 @@ type SectionItem = {
 
 type SectionGroup = {
   id: string;
-  domain: 'preplists' | 'inventory';
+  domain: 'preplists' | 'inventory' | 'orders';
   slug: string;
   title: string;
   items: SectionItem[];
@@ -92,8 +93,10 @@ export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) {
-    return { preplists: [], inventory: [], recipes: [], todos: [], users: [], nodeNames: [], whiteboardIdeas: [] };
+    return { preplists: [], inventory: [], orders: [], recipes: [], todos: [], users: [], nodeNames: [], whiteboardIdeas: [] };
   }
+
+  await ensureDailySpecialsSchema(db);
 
   const sectionRows = await db
     .prepare(
@@ -111,7 +114,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         i.sort_order
       FROM list_sections s
       LEFT JOIN list_items i ON i.section_id = s.id
-      WHERE s.domain IN ('preplists', 'inventory')
+      WHERE s.domain IN ('preplists', 'inventory', 'orders')
       ORDER BY s.domain ASC, s.slug ASC, i.sort_order ASC, i.created_at ASC
       `
     )
@@ -145,6 +148,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   const sections = Array.from(grouped.values());
   const preplists = sections.filter((s) => s.domain === 'preplists');
   const inventory = sections.filter((s) => s.domain === 'inventory');
+  const orders = sections.filter((s) => s.domain === 'orders');
 
   const recipes = await db
     .prepare(
@@ -181,18 +185,32 @@ export const load: PageServerLoad = async ({ locals }) => {
     ? await db
         .prepare(
           `
-      SELECT id, display_name, email, COALESCE(role, 'user') AS role, COALESCE(is_active, 1) AS is_active
-      FROM users
-      ORDER BY COALESCE(display_name, email) ASC
+      SELECT
+        u.id,
+        u.display_name,
+        u.email,
+        COALESCE(u.role, 'user') AS role,
+        COALESCE(u.is_active, 1) AS is_active,
+        CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
+      FROM users u
+      LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id
+      ORDER BY COALESCE(u.display_name, u.email) ASC
       `
         )
         .all()
     : await db
         .prepare(
           `
-      SELECT id, display_name, email, COALESCE(role, 'user') AS role, 1 AS is_active
-      FROM users
-      ORDER BY COALESCE(display_name, email) ASC
+      SELECT
+        u.id,
+        u.display_name,
+        u.email,
+        COALESCE(u.role, 'user') AS role,
+        1 AS is_active,
+        CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
+      FROM users u
+      LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id
+      ORDER BY COALESCE(u.display_name, u.email) ASC
       `
         )
         .all();
@@ -270,6 +288,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     preplists,
     inventory,
+    orders,
     recipes: recipes.results ?? [],
     todos: todos.results ?? [],
     users: users.results ?? [],
@@ -694,6 +713,40 @@ export const actions: Actions = {
     await db
       .prepare(`UPDATE users SET is_active = 1, updated_at = ? WHERE id = ?`)
       .bind(Math.floor(Date.now() / 1000), userId)
+      .run();
+
+    return { success: true };
+  },
+
+  toggle_specials_access: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+
+    await ensureDailySpecialsSchema(db);
+
+    const formData = await request.formData();
+    const userId = String(formData.get('user_id') ?? '').trim();
+    if (!userId) return fail(400, { error: 'Missing user id.' });
+
+    const existing = await db
+      .prepare(`SELECT user_id FROM daily_specials_editors WHERE user_id = ? LIMIT 1`)
+      .bind(userId)
+      .first<{ user_id: string }>();
+
+    if (existing) {
+      await db.prepare(`DELETE FROM daily_specials_editors WHERE user_id = ?`).bind(userId).run();
+      return { success: true };
+    }
+
+    await db
+      .prepare(
+        `
+        INSERT INTO daily_specials_editors (user_id, granted_by, updated_at)
+        VALUES (?, ?, ?)
+        `
+      )
+      .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000))
       .run();
 
     return { success: true };
