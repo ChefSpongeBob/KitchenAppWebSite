@@ -23,6 +23,7 @@
   };
 
   export let data: {
+    isAdmin?: boolean;
     userName?: string;
     todayTasks?: HomeTask[];
     todayMeta?: { assignedCount: number; unassignedCount: number };
@@ -34,6 +35,7 @@
   };
 
   let series: Record<string, number[]> = data.tempSeries ?? { avg: [] };
+  let isAdmin = data.isAdmin ?? false;
   let time = '';
   let greeting = '';
   let userName = data.userName ?? 'Team';
@@ -162,6 +164,7 @@
 
   <section
     class="mosaic"
+    class:admin-mosaic={isAdmin}
     on:mousemove={handleMove}
     on:touchmove={handleMove}
     aria-label="Dashboard Tiles"
@@ -225,6 +228,7 @@
         {/each}
       {/if}
     </div>
+
   </section>
 
   <section class="today-area">
@@ -263,6 +267,14 @@
     <a href="/temper" class="card-link">
       <DashboardCard title="Temps" description="Temperature logs" />
     </a>
+    {#if isAdmin}
+      <a href="/meeting-notes" class="card-link">
+        <DashboardCard
+          title="Meeting Notes"
+          description="Admin notes, follow-ups, and meeting records"
+        />
+      </a>
+    {/if}
   </section>
 </Layout>
 
@@ -307,7 +319,6 @@
   .mini-graph { width: 100%; height: 40px; margin-top: 4px; overflow: hidden; }
   .tile-label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); }
   .idea { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-muted); }
-
   .today-area { margin: 1rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background:
       linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 35%),
       var(--color-surface); }

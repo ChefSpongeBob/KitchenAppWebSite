@@ -43,8 +43,10 @@ async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
 
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
+  const isAdmin = locals.userRole === 'admin';
   if (!db) {
     return {
+      isAdmin,
       userName: 'Team',
       todayTasks: [],
       todayMeta: { assignedCount: 0, unassignedCount: 0 },
@@ -195,6 +197,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     : { count: 0 };
 
   return {
+    isAdmin,
     userName,
     todayTasks,
     todayMeta: { assignedCount, unassignedCount },
