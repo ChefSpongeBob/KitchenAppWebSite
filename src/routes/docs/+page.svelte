@@ -21,7 +21,7 @@
   <PageHeader title="Documents" subtitle="Handbook, SOPs, and general docs." />
 
   {#if docs.length === 0}
-    <p class="empty">No documents yet.</p>
+    <p class="empty">No documents available.</p>
   {:else}
     <section class="grid">
       {#each docs as d}

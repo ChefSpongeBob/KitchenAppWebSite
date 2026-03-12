@@ -14,7 +14,7 @@
 <style>
   .page {
     width: 100%;
-    max-width: 780px;
+    max-width: 820px;
     margin: 0 auto;
   }
 

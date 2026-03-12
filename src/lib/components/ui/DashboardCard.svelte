@@ -19,7 +19,6 @@
 </div>
 
 <style>
-  /* Ensure any link wrapping the card inherits the card style */
   :global(a) {
     color: inherit;
     text-decoration: none;
@@ -32,23 +31,40 @@
   }
 
   .card {
-    background: var(--color-surface, #1e1e1e);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
-    padding: 16px;
+    position: relative;
+    background:
+      linear-gradient(160deg, color-mix(in srgb, var(--color-surface) 90%, var(--color-primary) 10%), color-mix(in srgb, var(--color-surface) 96%, black 4%));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
+    padding: 18px;
     overflow-wrap: anywhere;
     color: var(--color-text);
+    box-shadow: 0 16px 34px rgba(4, 5, 7, 0.16);
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: linear-gradient(90deg, rgba(195, 32, 43, 0.95), rgba(195, 32, 43, 0.12));
   }
 
   .header h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1.06rem;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
   }
 
   .header p {
-    margin: 4px 0 12px;
+    margin: 6px 0 12px;
     color: var(--color-text-muted);
-    font-size: 0.9rem;
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
   }
 
   .content {
@@ -58,8 +74,12 @@
 
   @media (max-width: 760px) {
     .card {
-      padding: 12px;
-      border-radius: 12px;
+      padding: 14px;
+      border-radius: var(--radius-md);
+    }
+
+    .card::before {
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
     }
 
     .header h2 {

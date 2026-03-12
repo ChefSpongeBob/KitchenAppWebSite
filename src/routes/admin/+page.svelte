@@ -639,38 +639,65 @@
 <style>
   .jump-nav {
     display: flex;
-    gap: 0.45rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
-    margin: 0.5rem 0 0.8rem;
+    margin: 0.65rem 0 1rem;
   }
 
   .jump-nav a {
     text-decoration: none;
     color: var(--color-text-muted);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 999px;
-    padding: 0.22rem 0.55rem;
-    font-size: 0.78rem;
-    background: var(--color-surface);
+    padding: 0.32rem 0.7rem;
+    font-size: 0.76rem;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out), background 120ms var(--ease-out);
+  }
+
+  .jump-nav a:hover,
+  .jump-nav a:focus-visible {
+    color: var(--color-text);
+    border-color: rgba(195, 32, 43, 0.22);
+    background:
+      linear-gradient(180deg, rgba(195, 32, 43, 0.12), rgba(195, 32, 43, 0.02)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    outline: none;
   }
 
   .panel {
-    margin-top: 0.8rem;
-    padding: 0.8rem;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    background: var(--color-surface);
+    position: relative;
+    margin-top: 0.95rem;
+    padding: 1rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
+      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
     overflow-x: auto;
   }
 
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.88), rgba(195, 32, 43, 0.2));
+  }
+
   h2 {
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.85rem;
+    letter-spacing: -0.02em;
   }
 
   h3 {
     margin: 0;
     font-size: 0.95rem;
-    color: var(--color-text-muted);
+    color: var(--color-text-soft);
   }
 
   .section-block + .section-block {
@@ -683,7 +710,7 @@
     align-items: center;
     cursor: pointer;
     list-style: none;
-    padding: 0.35rem 0.1rem;
+    padding: 0.45rem 0.1rem;
   }
 
   summary::-webkit-details-marker {
@@ -697,9 +724,9 @@
 
   .section-block > summary::after {
     content: '+';
-    font-size: 0.95rem;
+    font-size: 1rem;
     line-height: 1;
-    color: var(--color-text-muted);
+    color: var(--color-primary);
     margin-left: 0.45rem;
   }
 
@@ -711,19 +738,33 @@
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
+    border-radius: 14px;
+    overflow: hidden;
   }
 
   .sheet th {
     text-align: left;
     font-size: 0.7rem;
     color: var(--color-text-muted);
-    padding: 0.35rem 0.32rem;
+    padding: 0.55rem 0.42rem;
     text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
   }
 
   .sheet td {
-    padding: 0.28rem 0.32rem;
+    padding: 0.48rem 0.42rem;
     vertical-align: middle;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .sheet tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .sheet tbody tr:nth-child(even) td {
+    background: rgba(255,255,255,0.012);
   }
 
   .add-row,
@@ -735,7 +776,7 @@
   }
 
   .add-row {
-    margin-top: 0.6rem;
+    margin-top: 0.7rem;
   }
 
   .add-toggle {
@@ -747,10 +788,11 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 0.78rem;
-    padding: 0.2rem 0.4rem;
-    border: 1px dashed var(--color-border);
-    border-radius: 7px;
+    padding: 0.28rem 0.5rem;
+    border: 1px dashed rgba(195, 32, 43, 0.22);
+    border-radius: 10px;
     width: fit-content;
+    background: rgba(255,255,255,0.015);
   }
 
   .add-toggle[open] > summary {
@@ -758,37 +800,39 @@
   }
 
   .edit-doc summary {
-    border: 1px dashed var(--color-border);
-    border-radius: 7px;
-    padding: 0.18rem 0.45rem;
+    border: 1px dashed rgba(195, 32, 43, 0.22);
+    border-radius: 10px;
+    padding: 0.22rem 0.5rem;
     font-size: 0.75rem;
+    background: rgba(255,255,255,0.015);
   }
 
   input,
   textarea,
   select {
-    border: 1px solid var(--color-border);
-    border-radius: 7px;
-    padding: 0.3rem 0.42rem;
-    background: var(--color-surface-alt);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 0.42rem 0.55rem;
+    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
     color: var(--color-text);
     font-size: 0.82rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid var(--color-border);
-    border-radius: 7px;
-    background: var(--color-surface-alt);
-    color: var(--color-text);
-    padding: 0.3rem 0.45rem;
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
+    padding: 0.4rem 0.62rem;
     cursor: pointer;
     font-size: 0.78rem;
+    font-weight: var(--weight-medium);
   }
 
   .icon-btn {
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 1.9rem;
+    height: 1.9rem;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -797,16 +841,18 @@
   }
 
   .danger {
-    border-color: #ef4444;
-    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ffb6b6;
+    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
   }
 
   .status {
     display: inline-flex;
     border-radius: 999px;
-    border: 1px solid var(--color-border);
-    padding: 0.12rem 0.45rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 0.18rem 0.5rem;
     font-size: 0.72rem;
+    background: rgba(255,255,255,0.03);
   }
 
   .status-pending {
@@ -882,8 +928,8 @@
     }
 
     .icon-btn {
-      width: 1.9rem;
-      height: 1.9rem;
+      width: 2rem;
+      height: 2rem;
     }
 
     .recipe-add input,

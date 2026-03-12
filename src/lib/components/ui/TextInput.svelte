@@ -1,29 +1,39 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+
   export let label: string | null = null;
   export let value: string = '';
   export let placeholder: string = '';
   export let textarea: boolean = false;
   export let rows: number = 3;
+  export let id: string | undefined = undefined;
+
+  const dispatch = createEventDispatcher<{ input: string }>();
+  const inputId = id ?? `field-${label?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'input'}`;
 </script>
 
 <div class="field">
   {#if label}
-    <label class="label">{label}</label>
+    <label class="label" for={inputId}>{label}</label>
   {/if}
 
   {#if textarea}
     <textarea
+      id={inputId}
       class="input"
       bind:value
       rows={rows}
       placeholder={placeholder}
-    />
+      on:input={() => dispatch('input', value)}
+    ></textarea>
   {:else}
     <input
+      id={inputId}
       class="input"
       type="text"
       bind:value
       placeholder={placeholder}
+      on:input={() => dispatch('input', value)}
     />
   {/if}
 </div>

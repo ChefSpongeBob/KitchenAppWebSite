@@ -8,51 +8,56 @@
 </script>
 
 <Layout>
-	<PageHeader title="Create Account" subtitle="Register a new account" />
+	<PageHeader title="Create Account" subtitle="Get set up and wait for approval" />
 
-	<form method="POST">
-		<div>
-			<input name="display_name" placeholder="Display Name" required />
-
-			<label>Email</label>
-			<input name="email" type="email" required />
-
-			<label>Confirm Email</label>
-			<input name="confirm_email" type="email" required />
-		</div>
-
-		<div>
-			<label>Password</label>
-			<div>
-				<input name="password" type={showPassword ? 'text' : 'password'} required />
-				<button type="button" on:click={() => (showPassword = !showPassword)}>
-					{showPassword ? 'Hide' : 'Show'}
-				</button>
+	<section class="auth-shell">
+		<form method="POST" class="auth-card">
+			<div class="field">
+				<label for="register-display-name">Display Name</label>
+				<input id="register-display-name" name="display_name" placeholder="How your name should appear" required />
 			</div>
-		</div>
 
-		<div>
-			<label>Confirm Password</label>
-			<div>
-				<input name="confirm_password" type={showConfirmPassword ? 'text' : 'password'} required />
-				<button type="button" on:click={() => (showConfirmPassword = !showConfirmPassword)}>
-					{showConfirmPassword ? 'Hide' : 'Show'}
-				</button>
+			<div class="field">
+				<label for="register-email">Email</label>
+				<input id="register-email" name="email" type="email" required />
 			</div>
-		</div>
 
-		<div>
-			<label>
-				<input name="email_updates" type="checkbox" value="1" checked />
-				Receive email updates
+			<div class="field">
+				<label for="register-confirm-email">Confirm Email</label>
+				<input id="register-confirm-email" name="confirm_email" type="email" required />
+			</div>
+
+			<div class="field">
+				<label for="register-password">Password</label>
+				<div class="password-row">
+					<input id="register-password" name="password" type={showPassword ? 'text' : 'password'} required />
+					<button type="button" class="toggle" on:click={() => (showPassword = !showPassword)}>
+						{showPassword ? 'Hide' : 'Show'}
+					</button>
+				</div>
+			</div>
+
+			<div class="field">
+				<label for="register-confirm-password">Confirm Password</label>
+				<div class="password-row">
+					<input id="register-confirm-password" name="confirm_password" type={showConfirmPassword ? 'text' : 'password'} required />
+					<button type="button" class="toggle" on:click={() => (showConfirmPassword = !showConfirmPassword)}>
+						{showConfirmPassword ? 'Hide' : 'Show'}
+					</button>
+				</div>
+			</div>
+
+			<label class="checkbox-row" for="register-email-updates">
+				<input id="register-email-updates" name="email_updates" type="checkbox" value="1" checked />
+				<span>Receive email updates</span>
 			</label>
-		</div>
 
-		<button type="submit">Register</button>
-	</form>
+			<button type="submit" class="submit">Create Account</button>
+		</form>
+	</section>
 
 	{#if form?.error}
-		<p style="color:red;">{form.error}</p>
+		<p class="error">{form.error}</p>
 	{/if}
 
 	<p>
@@ -65,14 +70,34 @@
 
 <style>
 	form {
+		width: min(100%, 36rem);
 		display: grid;
-		gap: 0.75rem;
+		gap: 0.95rem;
+	}
+
+	.auth-shell {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.auth-card {
+		padding: 1.15rem;
+		border: 1px solid rgba(255,255,255,0.08);
+		border-radius: var(--radius-lg);
+		background:
+			linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+			color-mix(in srgb, var(--color-surface) 94%, black 6%);
+		box-shadow: 0 18px 38px rgba(4, 5, 7, 0.2);
+	}
+
+	.field {
+		display: grid;
+		gap: 0.35rem;
 	}
 
 	label {
 		display: block;
-		margin-bottom: 0.25rem;
-		font-size: 0.85rem;
+		font-size: 0.83rem;
 		color: var(--color-text-muted);
 	}
 
@@ -85,22 +110,39 @@
 		color: var(--color-text);
 	}
 
-	form > div > div {
+	.password-row {
 		display: flex;
 		gap: 0.5rem;
 		align-items: center;
 	}
 
-	form > div > div input {
+	.password-row input {
 		flex: 1;
 	}
 
-	button {
-		padding: 0.56rem 0.7rem;
-		border-radius: 10px;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface);
-		color: var(--color-text);
+	.toggle {
+		min-width: 4.4rem;
+		padding: 0.58rem 0.72rem;
+	}
+
+	.checkbox-row {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		margin-top: 0.15rem;
+	}
+
+	.checkbox-row input {
+		width: auto;
+	}
+
+	.submit {
+		padding: 0.72rem 0.85rem;
+		border-radius: 12px;
+		border: 1px solid rgba(179, 58, 63, 0.24);
+		background: linear-gradient(180deg, rgba(179, 58, 63, 0.24), rgba(179, 58, 63, 0.15));
+		color: var(--color-primary-contrast);
+		font-weight: var(--weight-semibold);
 	}
 
 	p {
@@ -112,8 +154,12 @@
 		color: var(--color-text);
 	}
 
+	.error {
+		color: #ff8d92;
+	}
+
 	@media (max-width: 760px) {
-		form > div > div {
+		.password-row {
 			flex-direction: column;
 			align-items: stretch;
 		}

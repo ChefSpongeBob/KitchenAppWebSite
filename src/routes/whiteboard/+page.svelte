@@ -94,7 +94,7 @@
 
 <div class="input-row">
   <input
-    placeholder="Drop an idea..."
+    placeholder="Share an idea..."
     bind:value={newIdea}
     on:keydown={(e) => e.key === 'Enter' && addIdea()}
   />

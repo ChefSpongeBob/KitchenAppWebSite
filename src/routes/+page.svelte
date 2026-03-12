@@ -167,8 +167,8 @@
 <Layout>
   <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
     <h1>{greeting}, {userName}</h1>
-    <p class="header-sub">Kitchen operations dashboard</p>
-    <div class="divider"></div>
+    <p class="header-sub">Here's what's happening today</p>
+    <img class="divider" src="/sujihiki-divider.svg" alt="" aria-hidden="true" />
   </section>
 
   <section class="kpis" aria-label="Operational snapshot">
@@ -201,7 +201,7 @@
           {#if announcement.content}
             <p>{announcement.content}</p>
           {:else}
-            <p class="announcement-empty">No current announcement.</p>
+            <p class="announcement-empty">Nothing new right now.</p>
           {/if}
         </div>
       </div>
@@ -221,7 +221,7 @@
         <small>{activeSpecials.length} posted</small>
       </div>
       {#if activeSpecials.length === 0}
-        <small class="specials-empty">No specials posted yet.</small>
+        <small class="specials-empty">No specials up yet.</small>
       {:else}
         <div class="specials-list">
           {#each activeSpecials as special}
@@ -244,7 +244,7 @@
         <span class="tile-label">Secret Rolls & Menu</span>
         <small>pdfs</small>
       </div>
-      <p class="menu-copy">Open static menu sheets, secret rolls, and visual references.</p>
+      <p class="menu-copy">Open the menu sheets and secret roll references.</p>
     </a>
 
     <div
@@ -283,7 +283,7 @@
         <small>updated {ideasFreshText}</small>
       </div>
       {#if topIdeas.length === 0}
-        <small>No whiteboard ideas yet.</small>
+        <small>No ideas posted.</small>
       {:else}
         {#each topIdeas as idea}
           <div class="idea">
@@ -302,7 +302,7 @@
       <small>{todayMeta.assignedCount} assigned | {todayMeta.unassignedCount} open</small>
     </div>
     {#if todayTasks.length === 0}
-      <p class="today-empty">No assigned or open tasks right now.</p>
+      <p class="today-empty">Nothing assigned right now.</p>
     {:else}
       <ul class="today-list">
         {#each todayTasks as task}
@@ -324,7 +324,7 @@
       <DashboardCard title="Lists" description="Prep lists, inventory, and orders" />
     </a>
     <a href="/todo" class="card-link">
-      <DashboardCard title="ToDos" description="Track your tasks" />
+      <DashboardCard title="ToDos" description="Open current tasks" />
     </a>
     <a href="/whiteboard" class="card-link">
       <DashboardCard title="Whiteboard" description="Notes and ideas" />
@@ -347,7 +347,14 @@
   .page-header { padding: 3rem 1rem 0.5rem; }
   .page-header h1 { margin: 0; font-size: 2.2rem; font-weight: var(--weight-semibold); letter-spacing: -0.03em; }
   .header-sub { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: 0.9rem; }
-  .divider { height: 1px; background: var(--color-border); margin-top: 12px; opacity: .6; }
+  .divider {
+    display: block;
+    width: 184px;
+    height: auto;
+    margin-top: 12px;
+    filter: drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
+    opacity: 0.98;
+  }
 
   .kpis {
     display: grid;
@@ -492,6 +499,10 @@
     }
     .header-sub {
       font-size: 0.82rem;
+    }
+
+    .divider {
+      width: 148px;
     }
     .kpis {
       grid-template-columns: repeat(2, minmax(0, 1fr));

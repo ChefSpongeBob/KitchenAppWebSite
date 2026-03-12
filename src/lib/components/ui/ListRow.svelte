@@ -16,8 +16,4 @@
 
     box-shadow: var(--shadow-sm);
   }
-
-  .row + .row {
-    margin-top: var(--space-2);
-  }
 </style>

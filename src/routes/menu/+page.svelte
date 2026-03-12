@@ -28,16 +28,15 @@
 <Layout>
   <PageHeader
     title="Secret Rolls & Menu"
-    subtitle="Static PDF references for menu visuals and roll sheets."
+    subtitle="Menu sheets and roll references."
   />
 
   <section class="grid">
     {#each menuPdfs as item}
       <DashboardCard title={item.title} description={item.description}>
         <div class="card-copy">
-          <p>Open the current PDF reference.</p>
-          <a href={item.href} target="_blank" rel="noreferrer" class="pdf-link">Open PDF</a>
-          <small>Replace file in `static/menus/{item.file}` when updates are needed.</small>
+          <p>View this menu reference.</p>
+          <a href={item.href} target="_blank" rel="noreferrer" class="pdf-link">View PDF</a>
         </div>
       </DashboardCard>
     {/each}
@@ -56,13 +55,11 @@
     gap: 0.65rem;
   }
 
-  .card-copy p,
-  .card-copy small {
+  .card-copy p {
     margin: 0;
   }
 
-  .card-copy p,
-  .card-copy small {
+  .card-copy p {
     color: var(--color-text-muted);
   }
 

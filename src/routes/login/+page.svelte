@@ -8,31 +8,33 @@
 </script>
 
 <Layout>
-	<PageHeader title="Login" subtitle="Sign in to continue" />
+	<PageHeader title="Login" subtitle="Sign in and get back on the line" />
 
-	<form method="POST">
-		<div>
-			<label>Email</label>
-			<input name="email" type="email" required autocapitalize="none" autocorrect="off" spellcheck="false" />
-		</div>
-
-		<div>
-			<label>Password</label>
-			<div class="password-row">
-				<input name="password" type={showPassword ? 'text' : 'password'} required autocapitalize="none" autocorrect="off" spellcheck="false" />
-				<button type="button" on:click={() => (showPassword = !showPassword)}>
-					{showPassword ? 'Hide' : 'Show'}
-				</button>
+	<section class="auth-shell">
+		<form method="POST" class="auth-card">
+			<div class="field">
+				<label for="login-email">Email</label>
+				<input id="login-email" name="email" type="email" required autocapitalize="none" autocorrect="off" spellcheck="false" />
 			</div>
-		</div>
 
-		<button type="submit">Login</button>
-	</form>
+			<div class="field">
+				<label for="login-password">Password</label>
+				<div class="password-row">
+					<input id="login-password" name="password" type={showPassword ? 'text' : 'password'} required autocapitalize="none" autocorrect="off" spellcheck="false" />
+					<button type="button" class="toggle" on:click={() => (showPassword = !showPassword)}>
+						{showPassword ? 'Hide' : 'Show'}
+					</button>
+				</div>
+			</div>
+
+			<button type="submit" class="submit">Login</button>
+		</form>
+	</section>
 
 	{#if form?.error}
-		<p style="color:red;">{form.error}</p>
+		<p class="error">{form.error}</p>
 	{:else if $page.url.searchParams.get('error') === 'session'}
-		<p style="color:red;">Your session could not be restored. Please sign in again.</p>
+		<p class="error">Your session could not be restored. Please sign in again.</p>
 	{:else if $page.url.searchParams.get('registered') === 'pending'}
 		<p class="notice">Account created. An admin must approve access before first login.</p>
 	{/if}
@@ -47,14 +49,34 @@
 
 <style>
 	form {
+		width: min(100%, 34rem);
 		display: grid;
-		gap: 0.75rem;
+		gap: 0.95rem;
+	}
+
+	.auth-shell {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.auth-card {
+		padding: 1.15rem;
+		border: 1px solid rgba(255,255,255,0.08);
+		border-radius: var(--radius-lg);
+		background:
+			linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+			color-mix(in srgb, var(--color-surface) 94%, black 6%);
+		box-shadow: 0 18px 38px rgba(4, 5, 7, 0.2);
+	}
+
+	.field {
+		display: grid;
+		gap: 0.35rem;
 	}
 
 	label {
 		display: block;
-		margin-bottom: 0.25rem;
-		font-size: 0.85rem;
+		font-size: 0.83rem;
 		color: var(--color-text-muted);
 	}
 
@@ -67,12 +89,13 @@
 		color: var(--color-text);
 	}
 
-	button[type='submit'] {
-		padding: 0.58rem 0.72rem;
-		border-radius: 10px;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface);
-		color: var(--color-text);
+	.submit {
+		padding: 0.72rem 0.85rem;
+		border-radius: 12px;
+		border: 1px solid rgba(179, 58, 63, 0.24);
+		background: linear-gradient(180deg, rgba(179, 58, 63, 0.24), rgba(179, 58, 63, 0.15));
+		color: var(--color-primary-contrast);
+		font-weight: var(--weight-semibold);
 	}
 
 	p {
@@ -89,6 +112,11 @@
 		margin-top: 0.5rem;
 	}
 
+	.error {
+		color: #ff8d92;
+		margin-top: 0.5rem;
+	}
+
 	.password-row {
 		display: flex;
 		gap: 0.5rem;
@@ -97,6 +125,11 @@
 
 	.password-row input {
 		flex: 1;
+	}
+
+	.toggle {
+		min-width: 4.4rem;
+		padding: 0.58rem 0.72rem;
 	}
 
 	@media (max-width: 760px) {

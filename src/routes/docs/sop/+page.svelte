@@ -12,11 +12,11 @@
 
   {#if data.doc}
     <DashboardCard title={data.doc.title} description={data.doc.category}>
-      <p>{data.doc.content ?? 'No content yet.'}</p>
-      {#if data.doc.file_url}<a href={data.doc.file_url}>Open file</a>{/if}
+      <p>{data.doc.content ?? 'Details will appear here once added.'}</p>
+      {#if data.doc.file_url}<a href={data.doc.file_url}>View file</a>{/if}
     </DashboardCard>
   {:else}
-    <p class="empty">No SOP document configured yet.</p>
+    <p class="empty">SOP content is not available yet.</p>
   {/if}
 </Layout>
 
