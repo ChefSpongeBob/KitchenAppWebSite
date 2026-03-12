@@ -2,8 +2,10 @@ export type HomepageAnnouncement = {
   content: string;
   updatedAt: number;
 };
+let announcementsSchemaEnsured = false;
 
 export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
+  if (announcementsSchemaEnsured) return;
   await db
     .prepare(
       `
@@ -17,6 +19,7 @@ export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
       `
     )
     .run();
+  announcementsSchemaEnsured = true;
 }
 
 export async function loadHomepageAnnouncement(db: App.Platform['env']['DB']) {

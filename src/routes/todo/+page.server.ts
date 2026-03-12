@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
+import { hasTable } from '$lib/server/dbSchema';
 
 type TodoRow = {
 	id: string;
@@ -13,20 +14,7 @@ type TodoRow = {
 	assigned_email?: string | null;
 };
 
-async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
-	const row = await db
-		.prepare(
-			`
-      SELECT name
-      FROM sqlite_master
-      WHERE type = 'table' AND name = ?
-      LIMIT 1
-    `
-		)
-		.bind(tableName)
-		.first<{ name: string }>();
-	return Boolean(row);
-}
+let lastTodoCleanupAt = 0;
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const db = locals.DB;
@@ -35,18 +23,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 	const now = Math.floor(Date.now() / 1000);
 	const isAdmin = locals.userRole === 'admin';
-	const hasAssignmentsTable = await tableExists(db, 'todo_assignments');
+	const hasAssignmentsTable = await hasTable(db, 'todo_assignments');
 
 	// LAZY CLEANUP (delete completed todos older than 3 days)
 	const threeDaysAgo = now - 60 * 60 * 24 * 3;
-
-	await db.prepare(`
-		DELETE FROM todos
-		WHERE completed_at IS NOT NULL
-		AND completed_at < ?
-	`)
-	.bind(threeDaysAgo)
-	.run();
+	if (now - lastTodoCleanupAt >= 900) {
+		await db.prepare(`
+			DELETE FROM todos
+			WHERE completed_at IS NOT NULL
+			AND completed_at < ?
+		`)
+		.bind(threeDaysAgo)
+		.run();
+		lastTodoCleanupAt = now;
+	}
 
 	const active = hasAssignmentsTable
 		? await db
@@ -148,7 +138,7 @@ export const actions: Actions = {
 		if (!id) return fail(400);
 
 		const now = Math.floor(Date.now() / 1000);
-		const hasAssignmentsTable = await tableExists(db, 'todo_assignments');
+		const hasAssignmentsTable = await hasTable(db, 'todo_assignments');
 
 		const todo = hasAssignmentsTable
 			? await db
@@ -199,7 +189,7 @@ export const actions: Actions = {
 		}
 
 		// Completion itself should not depend on audit log availability.
-		if (await tableExists(db, 'todo_completion_log')) {
+		if (await hasTable(db, 'todo_completion_log')) {
 			await db
 				.prepare(`
 				INSERT INTO todo_completion_log (

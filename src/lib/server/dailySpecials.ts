@@ -1,4 +1,5 @@
 export const dailySpecialCategories = ['roll', 'nigiri', 'sashimi', 'kitchen'] as const;
+let dailySpecialsSchemaEnsured = false;
 
 export type DailySpecialCategory = (typeof dailySpecialCategories)[number];
 
@@ -22,6 +23,7 @@ export function getDailySpecialLabel(category: DailySpecialCategory) {
 }
 
 export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
+  if (dailySpecialsSchemaEnsured) return;
   await db
     .prepare(
       `
@@ -49,6 +51,7 @@ export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
       `
     )
     .run();
+  dailySpecialsSchemaEnsured = true;
 }
 
 export async function userCanEditDailySpecials(

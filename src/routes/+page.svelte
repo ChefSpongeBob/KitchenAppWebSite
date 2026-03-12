@@ -119,7 +119,7 @@
   }
 
   async function refreshTemps() {
-    const response = await fetch('/api/temps?limit=1200');
+    const response = await fetch('/api/temps?limit=600');
     if (!response.ok) return;
     const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; ts: number }>;
     if (!rows?.length) return;
@@ -156,7 +156,7 @@
     const refreshLoop = setInterval(() => {
       refreshTemps();
       refreshIdeas();
-    }, 30000);
+    }, 60000);
     return () => {
       clearInterval(clock);
       clearInterval(refreshLoop);

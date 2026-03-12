@@ -1,15 +1,14 @@
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { hashSessionToken, verifyPassword } from '$lib/server/auth';
+import { hasColumn } from '$lib/server/dbSchema';
 
 async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
-	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
-	return (columns.results ?? []).some((column) => column.name === 'email_normalized');
+	return hasColumn(db, 'users', 'email_normalized');
 }
 
 async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
-	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
-	return (columns.results ?? []).some((column) => column.name === 'is_active');
+	return hasColumn(db, 'users', 'is_active');
 }
 
 function setSessionCookies(

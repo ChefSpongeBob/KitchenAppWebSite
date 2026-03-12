@@ -10,6 +10,7 @@ type MeetingNoteRow = {
   author_name: string | null;
   author_email: string | null;
 };
+let meetingNotesSchemaEnsured = false;
 
 function requireAdmin(role: string | undefined | null) {
   if (role !== 'admin') {
@@ -18,6 +19,7 @@ function requireAdmin(role: string | undefined | null) {
 }
 
 async function ensureMeetingNotesTable(db: App.Platform['env']['DB']) {
+  if (meetingNotesSchemaEnsured) return;
   await db
     .prepare(
       `
@@ -41,6 +43,7 @@ async function ensureMeetingNotesTable(db: App.Platform['env']['DB']) {
       `
     )
     .run();
+  meetingNotesSchemaEnsured = true;
 }
 
 async function getNoteForAuthor(

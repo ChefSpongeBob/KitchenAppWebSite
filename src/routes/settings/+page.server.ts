@@ -1,7 +1,10 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
+import { getTableColumns, hasColumn, hasTable } from '$lib/server/dbSchema';
+let userPreferencesSchemaEnsured = false;
 
 async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
+	if (userPreferencesSchemaEnsured) return;
 	try {
 		await db
 			.prepare(
@@ -15,31 +18,19 @@ async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
 			`
 			)
 			.run();
+		userPreferencesSchemaEnsured = true;
 	} catch (error) {
 		console.error('Failed to ensure user_preferences table:', error);
 	}
 }
 
 async function getUsersColumns(db: App.Platform['env']['DB']) {
-	const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
-	return new Set((columns.results ?? []).map((column) => column.name));
+	return getTableColumns(db, 'users');
 }
 
 async function hasUserPreferencesEmailUpdatesColumn(db: App.Platform['env']['DB']) {
-	const table = await db
-		.prepare(
-			`
-			SELECT name
-			FROM sqlite_master
-			WHERE type = 'table' AND name = 'user_preferences'
-			LIMIT 1
-		`
-		)
-		.first<{ name: string }>();
-	if (!table) return false;
-
-	const columns = await db.prepare(`PRAGMA table_info(user_preferences)`).all<{ name: string }>();
-	return (columns.results ?? []).some((column) => column.name === 'email_updates');
+	if (!(await hasTable(db, 'user_preferences'))) return false;
+	return hasColumn(db, 'user_preferences', 'email_updates');
 }
 
 export const load: PageServerLoad = async ({ locals }) => {

@@ -5,6 +5,7 @@ type WhiteboardRow = {
   content: string;
   votes: number;
 };
+let whiteboardVotesSchemaEnsured = false;
 
 async function hasReviewTable(db: App.Platform['env']['DB']) {
   const table = await db
@@ -21,6 +22,7 @@ async function hasReviewTable(db: App.Platform['env']['DB']) {
 }
 
 async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
+  if (whiteboardVotesSchemaEnsured) return;
   await db
     .prepare(
       `
@@ -35,6 +37,7 @@ async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
       `
     )
     .run();
+  whiteboardVotesSchemaEnsured = true;
 }
 
 export const GET: RequestHandler = async ({ platform }) => {
@@ -66,7 +69,9 @@ export const GET: RequestHandler = async ({ platform }) => {
         )
         .all<WhiteboardRow>();
 
-  return json(result.results ?? []);
+  return json(result.results ?? [], {
+    headers: { 'cache-control': 'public, max-age=15, s-maxage=15, stale-while-revalidate=30' }
+  });
 };
 
 export const POST: RequestHandler = async ({ platform, request, locals }) => {

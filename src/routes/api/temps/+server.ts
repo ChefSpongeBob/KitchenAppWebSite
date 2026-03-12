@@ -45,7 +45,9 @@ export const GET: RequestHandler = async ({ platform, url }) => {
       )
       .bind(sensorId, limit)
       .all<TempRow>();
-    return json(result.results ?? []);
+    return json(result.results ?? [], {
+      headers: { 'cache-control': 'public, max-age=10, s-maxage=10, stale-while-revalidate=20' }
+    });
   }
 
   const result = await db
@@ -60,7 +62,9 @@ export const GET: RequestHandler = async ({ platform, url }) => {
     .bind(limit)
     .all<TempRow>();
 
-  return json(result.results ?? []);
+  return json(result.results ?? [], {
+    headers: { 'cache-control': 'public, max-age=10, s-maxage=10, stale-while-revalidate=20' }
+  });
 };
 
 export const POST: RequestHandler = async ({ platform, request }) => {

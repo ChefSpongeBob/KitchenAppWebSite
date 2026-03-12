@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { loadHomepageAnnouncement } from '$lib/server/announcements';
+import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 
 type HomeTask = {
@@ -28,21 +29,6 @@ type NodeNameRow = {
   name: string;
 };
 
-async function tableExists(db: App.Platform['env']['DB'], tableName: string) {
-  const row = await db
-    .prepare(
-      `
-      SELECT name
-      FROM sqlite_master
-      WHERE type = 'table' AND name = ?
-      LIMIT 1
-      `
-    )
-    .bind(tableName)
-    .first<{ name: string }>();
-  return Boolean(row);
-}
-
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   const isAdmin = locals.userRole === 'admin';
@@ -62,48 +48,95 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   }
 
-  let userName = 'Team';
-  if (locals.userId) {
-    const user = await db
-      .prepare(`SELECT display_name, email FROM users WHERE id = ? LIMIT 1`)
-      .bind(locals.userId)
-      .first<{ display_name: string | null; email: string | null }>();
-    userName = user?.display_name || user?.email || 'Team';
-  }
+  const reviewEnabledPromise = hasTable(db, 'whiteboard_review');
+  const nodeTablePromise = hasTable(db, 'sensor_nodes');
+  const announcementPromise = loadHomepageAnnouncement(db);
+  const dailySpecialsPromise = loadDailySpecials(db);
+  const userPromise = locals.userId
+    ? db
+        .prepare(`SELECT display_name, email FROM users WHERE id = ? LIMIT 1`)
+        .bind(locals.userId)
+        .first<{ display_name: string | null; email: string | null }>()
+    : Promise.resolve(null);
+  const todayTasksPromise = locals.userId
+    ? db
+        .prepare(
+          `
+          SELECT
+            t.id,
+            t.title,
+            t.description,
+            ta.user_id AS assigned_to,
+            au.display_name AS assigned_name,
+            au.email AS assigned_email
+          FROM todos t
+          LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
+          LEFT JOIN users au ON au.id = ta.user_id
+          WHERE t.completed_at IS NULL
+            AND (ta.user_id = ? OR ta.user_id IS NULL)
+          ORDER BY CASE WHEN ta.user_id = ? THEN 0 ELSE 1 END ASC, t.created_at DESC
+          LIMIT 6
+          `
+        )
+        .bind(locals.userId, locals.userId)
+        .all<HomeTask>()
+    : Promise.resolve({ results: [] as HomeTask[] });
+  const tempsPromise = db
+    .prepare(
+      `
+      SELECT sensor_id, temperature, ts
+      FROM temps
+      ORDER BY ts DESC
+      LIMIT 1200
+      `
+    )
+    .all<TempRow>();
+  const openTasksPromise = db
+    .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NULL`)
+    .first<{ count: number }>();
 
-  const announcement = await loadHomepageAnnouncement(db);
-  const dailySpecials = await loadDailySpecials(db);
+  const dayStart = Math.floor(new Date(new Date().toDateString()).getTime() / 1000);
+  const completedTodayPromise = locals.userId
+    ? db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM todo_completion_log
+          WHERE completed_by = ? AND completed_at >= ?
+          `
+        )
+        .bind(locals.userId, dayStart)
+        .first<{ count: number }>()
+    : Promise.resolve({ count: 0 });
 
-  let todayTasks: HomeTask[] = [];
-  if (locals.userId) {
-    const taskResult = await db
-      .prepare(
-        `
-        SELECT
-          t.id,
-          t.title,
-          t.description,
-          ta.user_id AS assigned_to,
-          au.display_name AS assigned_name,
-          au.email AS assigned_email
-        FROM todos t
-        LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
-        LEFT JOIN users au ON au.id = ta.user_id
-        WHERE t.completed_at IS NULL
-          AND (ta.user_id = ? OR ta.user_id IS NULL)
-        ORDER BY CASE WHEN ta.user_id = ? THEN 0 ELSE 1 END ASC, t.created_at DESC
-        LIMIT 6
-        `
-      )
-      .bind(locals.userId, locals.userId)
-      .all<HomeTask>();
-    todayTasks = taskResult.results ?? [];
-  }
+  const [
+    reviewEnabled,
+    nodeTable,
+    announcement,
+    dailySpecials,
+    user,
+    taskResult,
+    tempsResult,
+    openTasksRow,
+    completedTodayRow
+  ] = await Promise.all([
+    reviewEnabledPromise,
+    nodeTablePromise,
+    announcementPromise,
+    dailySpecialsPromise,
+    userPromise,
+    todayTasksPromise,
+    tempsPromise,
+    openTasksPromise,
+    completedTodayPromise
+  ]);
+
+  const userName = user?.display_name || user?.email || 'Team';
+  const todayTasks = taskResult.results ?? [];
 
   const assignedCount = todayTasks.filter((task) => task.assigned_to === locals.userId).length;
   const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
 
-  const reviewEnabled = await tableExists(db, 'whiteboard_review');
   const topIdeasResult = reviewEnabled
     ? await db
         .prepare(
@@ -128,17 +161,6 @@ export const load: PageServerLoad = async ({ locals }) => {
         )
         .all<IdeaRow>();
 
-  const tempsResult = await db
-    .prepare(
-      `
-      SELECT sensor_id, temperature, ts
-      FROM temps
-      ORDER BY ts DESC
-      LIMIT 1500
-      `
-    )
-    .all<TempRow>();
-
   const rows = tempsResult.results ?? [];
   const latestBySensor = new Map<number, TempRow>();
   for (const row of rows) {
@@ -149,7 +171,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
   const nodeTemps = Array.from(latestBySensor.values()).sort((a, b) => a.sensor_id - b.sensor_id);
 
-  const nodeTable = await tableExists(db, 'sensor_nodes');
   const namesBySensor = new Map<number, string>();
   if (nodeTable) {
     const nameRows = await db
@@ -172,24 +193,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     .sort((a, b) => a[0] - b[0])
     .slice(-24)
     .map(([, value]) => Number((value.sum / value.count).toFixed(2)));
-
-  const openTasksRow = await db
-    .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NULL`)
-    .first<{ count: number }>();
-
-  const dayStart = Math.floor(new Date(new Date().toDateString()).getTime() / 1000);
-  const completedTodayRow = locals.userId
-    ? await db
-        .prepare(
-          `
-          SELECT COUNT(*) AS count
-          FROM todo_completion_log
-          WHERE completed_by = ? AND completed_at >= ?
-          `
-        )
-        .bind(locals.userId, dayStart)
-        .first<{ count: number }>()
-    : { count: 0 };
 
   const pendingIdeasRow = reviewEnabled
     ? await db

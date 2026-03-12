@@ -57,8 +57,21 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const session = await db
 			.prepare(
 				`
-			SELECT id, user_id, device_id, expires_at, revoked_at, session_token_hash
-			FROM sessions
+			SELECT
+				s.id,
+				s.user_id,
+				s.device_id,
+				s.expires_at,
+				s.revoked_at,
+				s.session_token_hash,
+				s.last_seen_at,
+				d.id AS found_device_id,
+				d.revoked_at AS device_revoked_at,
+				u.id AS found_user_id,
+				u.role AS user_role
+			FROM sessions s
+			LEFT JOIN devices d ON d.id = s.device_id
+			LEFT JOIN users u ON u.id = s.user_id
 			WHERE session_token_hash = ?
 			   OR session_token_hash = ?
 			   OR id = ?
@@ -73,43 +86,21 @@ export const handle: Handle = async ({ event, resolve }) => {
 				expires_at: number;
 				revoked_at: number | null;
 				session_token_hash: string;
+				last_seen_at: number;
+				found_device_id: string | null;
+				device_revoked_at: number | null;
+				found_user_id: string | null;
+				user_role: string | null;
 			}>();
 
 		if (!session || session.revoked_at !== null || session.expires_at < now) {
 			throw redirect(303, '/login?error=session');
 		}
 
-		if (session.device_id) {
-			const device = await db
-				.prepare(
-					`
-				SELECT revoked_at
-				FROM devices
-				WHERE id = ?
-			`
-				)
-				.bind(session.device_id)
-				.first();
-
-			if (!device || device.revoked_at !== null) {
-				throw redirect(303, '/login?error=session');
-			}
-		}
-
-		const user = await db
-			.prepare(
-				`
-			SELECT id, role
-			FROM users
-			WHERE id = ?
-		`
-			)
-			.bind(session.user_id)
-			.first<{ id: string; role: string | null }>();
-
-		if (!user) {
+		if (session.device_id && (!session.found_device_id || session.device_revoked_at !== null)) {
 			throw redirect(303, '/login?error=session');
 		}
+		if (!session.found_user_id) throw redirect(303, '/login?error=session');
 
 		// Upgrade legacy plaintext token storage to hashed token.
 		if (session.session_token_hash === sessionToken) {
@@ -127,16 +118,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 				.run();
 			setSessionCookies(event, replacementToken);
 		} else {
-			await db
-				.prepare(
-					`
-				UPDATE sessions
-				SET last_seen_at = ?
-				WHERE id = ?
-			`
-				)
-				.bind(now, session.id)
-				.run();
+			// Throttle session touch writes so high page traffic does not write on every request.
+			if (now - (session.last_seen_at ?? 0) >= 300) {
+				await db
+					.prepare(
+						`
+					UPDATE sessions
+					SET last_seen_at = ?
+					WHERE id = ?
+				`
+					)
+					.bind(now, session.id)
+					.run();
+			}
 
 			// Normalize to a single canonical cookie key only when legacy key was used.
 			if (!event.cookies.get(primaryCookie)) {
@@ -144,8 +138,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
-		event.locals.userId = user.id;
-		event.locals.userRole = user.role ?? 'user';
+		event.locals.userId = session.found_user_id;
+		event.locals.userRole = session.user_role ?? 'user';
 
 		return resolveWithNoStore();
 	} catch {
