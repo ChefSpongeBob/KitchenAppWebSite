@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { loadHomepageAnnouncement } from '$lib/server/announcements';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 
 type HomeTask = {
@@ -49,6 +50,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     return {
       isAdmin,
       userName: 'Team',
+      announcement: { content: '', updatedAt: 0 },
       dailySpecials: [],
       todayTasks: [],
       todayMeta: { assignedCount: 0, unassignedCount: 0 },
@@ -69,6 +71,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     userName = user?.display_name || user?.email || 'Team';
   }
 
+  const announcement = await loadHomepageAnnouncement(db);
   const dailySpecials = await loadDailySpecials(db);
 
   let todayTasks: HomeTask[] = [];
@@ -203,6 +206,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     isAdmin,
     userName,
+    announcement,
     dailySpecials,
     todayTasks,
     todayMeta: { assignedCount, unassignedCount },

@@ -70,6 +70,11 @@
     is_active: number;
   };
 
+  type Announcement = {
+    content: string;
+    updatedAt: number;
+  };
+
   export let data: {
     preplists: Section[];
     inventory: Section[];
@@ -80,6 +85,7 @@
     nodeNames: NodeName[];
     whiteboardIdeas: WhiteboardIdea[];
     documents: DocumentItem[];
+    announcement: Announcement;
   };
 
   const defaultRecipeCategories = [...recipeCategories];
@@ -123,6 +129,7 @@
     <a href="#todos">Todo</a>
     <a href="#access">User Access</a>
     <a href="#whiteboard">Whiteboard</a>
+    <a href="#announcement">Announcement</a>
     <a href="#nodes">Node Names</a>
     <a href="#preplists">Preplists</a>
     <a href="#inventory">Inventory</a>
@@ -291,6 +298,18 @@
         {/if}
       </tbody>
     </table>
+  </section>
+
+  <section class="panel" id="announcement">
+    <h2>Homepage Announcement</h2>
+    <form method="POST" action="?/save_announcement" use:enhance class="add-row docs-form">
+      <textarea
+        name="content"
+        rows="5"
+        placeholder="Add the current announcement for the greeting card..."
+      >{data.announcement.content}</textarea>
+      <button type="submit">Save Announcement</button>
+    </form>
   </section>
 
   <section class="panel" id="nodes">
@@ -551,7 +570,7 @@
 
   <section class="panel" id="documents">
     <h2>Documents</h2>
-    <details class="section-block" open>
+    <details class="section-block">
       <summary>
         <h3>Document Manager</h3>
         <span>{data.documents.length} docs</span>

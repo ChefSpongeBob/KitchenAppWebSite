@@ -20,6 +20,23 @@ async function hasReviewTable(db: App.Platform['env']['DB']) {
   return Boolean(table);
 }
 
+async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS whiteboard_votes (
+        post_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (post_id, user_id),
+        FOREIGN KEY (post_id) REFERENCES whiteboard_posts(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+      `
+    )
+    .run();
+}
+
 export const GET: RequestHandler = async ({ platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
@@ -67,8 +84,52 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
   const action = String(payload.action ?? '');
 
   if (action === 'upvote') {
+    if (!locals.userId) {
+      return json({ error: 'Login required to vote.' }, { status: 401 });
+    }
+
+    await ensureWhiteboardVotesTable(db);
+
     const id = String(payload.id ?? '');
     if (!id) return json({ error: 'Missing id' }, { status: 400 });
+
+    const existingVote = await db
+      .prepare(
+        `
+        SELECT post_id
+        FROM whiteboard_votes
+        WHERE post_id = ? AND user_id = ?
+        LIMIT 1
+        `
+      )
+      .bind(id, locals.userId)
+      .first<{ post_id: string }>();
+
+    if (existingVote) {
+      const current = await db
+        .prepare(
+          `
+          SELECT id, content, votes
+          FROM whiteboard_posts
+          WHERE id = ?
+          `
+        )
+        .bind(id)
+        .first<WhiteboardRow>();
+      return json({ ...current, alreadyVoted: true }, { status: 409 });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    await db
+      .prepare(
+        `
+        INSERT INTO whiteboard_votes (post_id, user_id, created_at)
+        VALUES (?, ?, ?)
+        `
+      )
+      .bind(id, locals.userId, now)
+      .run();
 
     await db
       .prepare(
@@ -78,7 +139,7 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
         WHERE id = ?
       `
       )
-      .bind(Math.floor(Date.now() / 1000), id)
+      .bind(now, id)
       .run();
 
     const updated = await db

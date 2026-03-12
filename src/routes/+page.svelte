@@ -31,6 +31,7 @@
   export let data: {
     isAdmin?: boolean;
     userName?: string;
+    announcement?: { content: string; updatedAt: number };
     dailySpecials?: DailySpecial[];
     todayTasks?: HomeTask[];
     todayMeta?: { assignedCount: number; unassignedCount: number };
@@ -46,6 +47,7 @@
   let time = '';
   let greeting = '';
   let userName = data.userName ?? 'Team';
+  let announcement = data.announcement ?? { content: '', updatedAt: 0 };
   let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
   let todayTasks: HomeTask[] = data.todayTasks ?? [];
   let topIdeas: Idea[] = data.topIdeas ?? [];
@@ -189,8 +191,20 @@
       style="transform: translate({px * -6}px, {py * -6}px);"
       in:fly={{ y: 20, duration: 500 }}
     >
-      <h2>{greeting}</h2>
-      <span class="time">{time}</span>
+      <div class="greeting-main">
+        <div class="greeting-copy">
+          <h2>{greeting}</h2>
+          <span class="time">{time}</span>
+        </div>
+        <div class="announcement-block">
+          <span class="tile-label">Announcements</span>
+          {#if announcement.content}
+            <p>{announcement.content}</p>
+          {:else}
+            <p class="announcement-empty">No current announcement.</p>
+          {/if}
+        </div>
+      </div>
       {#if highTempNodes.length > 0}
         <small class="alert">Alert: {highTempNodes.length} temp node(s) above 45F</small>
       {/if}
@@ -357,8 +371,35 @@
   .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--color-surface) 88%, var(--color-primary) 12%), var(--color-surface)); border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; justify-content: center; transition: transform .25s ease, box-shadow .25s ease, border-color .2s ease; }
   .tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
   .greeting { grid-row: span 2; }
+  .greeting-main {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 0.85rem;
+    align-items: start;
+  }
+  .greeting-copy {
+    display: grid;
+    gap: 0.3rem;
+    align-content: start;
+  }
   .greeting h2 { margin: 0; font-size: 1.5rem; }
-  .time { margin-top: 6px; color: var(--color-text-muted); }
+  .time { color: var(--color-text-muted); }
+  .announcement-block {
+    display: grid;
+    gap: 0.35rem;
+    align-content: start;
+    padding-left: 0.85rem;
+    border-left: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  }
+  .announcement-block p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+  .announcement-empty {
+    opacity: 0.85;
+  }
   .specials-list {
     display: grid;
     gap: 0.35rem;
@@ -476,6 +517,10 @@
       grid-column: 1 / -1;
       grid-row: auto;
     }
+    .greeting-main {
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      gap: 0.7rem;
+    }
     .specials-card,
     .menu-card,
     .ideas {
@@ -488,6 +533,9 @@
     }
     .greeting h2 {
       font-size: 1.25rem;
+    }
+    .announcement-block {
+      padding-left: 0.7rem;
     }
     .special-row {
       grid-template-columns: 4.2rem 1fr;
@@ -549,6 +597,13 @@
     }
     .section-muted {
       display: none;
+    }
+    .greeting-main {
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+      gap: 0.6rem;
+    }
+    .announcement-block {
+      padding-left: 0.6rem;
     }
     .special-row {
       grid-template-columns: 1fr;

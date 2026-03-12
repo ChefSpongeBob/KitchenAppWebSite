@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
+import { ensureAnnouncementsSchema, loadHomepageAnnouncement } from '$lib/server/announcements';
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 
 type SectionRow = {
@@ -97,6 +98,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   await ensureDailySpecialsSchema(db);
+  await ensureAnnouncementsSchema(db);
 
   const sectionRows = await db
     .prepare(
@@ -285,6 +287,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     )
     .all<DocumentRow>();
 
+  const announcement = await loadHomepageAnnouncement(db);
+
   return {
     preplists,
     inventory,
@@ -294,7 +298,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     users: users.results ?? [],
     nodeNames,
     whiteboardIdeas: whiteboardIdeas.results ?? [],
-    documents: documents.results ?? []
+    documents: documents.results ?? [],
+    announcement
   };
 };
 
@@ -669,6 +674,34 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: 'Missing document id.' });
 
     await db.prepare(`DELETE FROM documents WHERE id = ?`).bind(id).run();
+
+    return { success: true };
+  },
+
+  save_announcement: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+
+    await ensureAnnouncementsSchema(db);
+
+    const formData = await request.formData();
+    const content = String(formData.get('content') ?? '').trim();
+    const now = Math.floor(Date.now() / 1000);
+
+    await db
+      .prepare(
+        `
+        INSERT INTO announcements (id, content, updated_by, updated_at)
+        VALUES ('homepage', ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          content = excluded.content,
+          updated_by = excluded.updated_by,
+          updated_at = excluded.updated_at
+        `
+      )
+      .bind(content, locals.userId ?? null, now)
+      .run();
 
     return { success: true };
   },

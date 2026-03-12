@@ -8,6 +8,7 @@
 
   let ideas: Idea[] = [];
   let submitNote = '';
+  let voteNote = '';
 
   let newIdea = '';
   let offsets: Record<string, Offset> = {};
@@ -42,11 +43,20 @@
   }
 
   async function upvote(id: string) {
+    voteNote = '';
     const res = await fetch('/api/whiteboard', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'upvote', id })
     });
+    if (res.status === 409) {
+      voteNote = 'You already voted on that idea.';
+      return;
+    }
+    if (res.status === 401) {
+      voteNote = 'Login required to vote.';
+      return;
+    }
     if (!res.ok) return;
     const updated = (await res.json()) as { id: string; content: string; votes: number } | null;
     if (!updated) return;
@@ -92,6 +102,9 @@
 </div>
 {#if submitNote}
   <p class="submit-note">{submitNote}</p>
+{/if}
+{#if voteNote}
+  <p class="submit-note">{voteNote}</p>
 {/if}
 
 <section class="board">
