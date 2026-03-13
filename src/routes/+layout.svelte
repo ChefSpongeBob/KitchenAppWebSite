@@ -67,10 +67,7 @@
   on:click={toggleSidebar}
   aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
 >
-  <span class="sushi-icon" aria-hidden="true">
-    <span class="rice"></span>
-    <span class="topping"></span>
-  </span>
+  <img class="sushi-icon" src="/sushi-assets/sushi-tray.svg" alt="" aria-hidden="true" />
 </button>
 
 <!-- ===== Overlay ===== -->
@@ -116,16 +113,27 @@
     <slot />
   </main>
   <footer class="app-footer">
-    <div class="footer-top">
-      <strong>Nexus North Systems, LLC</strong>
-      <span>Kitchen App v2.1</span>
+    <div class="footer-shell">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <img src="/spider-mark.svg" alt="" aria-hidden="true" class="footer-logo" />
+          <div class="footer-brand-copy">
+            <strong>Nexus North Systems, LLC</strong>
+            <span class="footer-version">Kitchen App v2.1</span>
+          </div>
+        </div>
+      </div>
+      <p class="footer-copy">Kitchen operations hub for tasks, lists, docs, recipes, and live temperature monitoring.</p>
+      <nav class="footer-links" aria-label="Footer links">
+        <a href="/about">About App</a>
+        <a href="/docs">Documentation</a>
+        <a href="https://charlottesweb.nexus" target="_blank" rel="noreferrer">Support Contact</a>
+      </nav>
+      <div class="footer-bottom">
+        <span>&copy; 2026 Nexus North Systems, LLC</span>
+        <span>Built for connected kitchen operations</span>
+      </div>
     </div>
-    <p class="footer-copy">Kitchen operations hub for tasks, lists, docs, recipes, and live temperature monitoring.</p>
-    <nav class="footer-links" aria-label="Footer links">
-      <a href="/about">About App</a>
-      <a href="/docs">Documentation</a>
-      <a href="https://charlottesweb.nexus" target="_blank" rel="noreferrer">Support Contact</a>
-    </nav>
   </footer>
 </div>
 
@@ -136,6 +144,7 @@
     display: flex;
     flex-direction: column;
     position: relative;
+    z-index: 1;
   }
 
   .app-content {
@@ -176,51 +185,10 @@
   }
 
   .sushi-icon {
-    position: relative;
-    width: 1.18rem;
-    height: 0.95rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transform: rotate(-6deg);
-  }
-
-  .rice {
-    position: absolute;
-    left: 0.08rem;
-    right: 0.08rem;
-    bottom: 0.04rem;
-    height: 0.48rem;
-    border-radius: 999px 999px 999px 999px / 85% 85% 100% 100%;
-    background: #f4ede6;
-    box-shadow:
-      inset 0 -1px 0 rgba(0,0,0,0.08),
-      0 0 0 1px rgba(255,255,255,0.06);
-  }
-
-  .rice::before {
-    content: "";
-    position: absolute;
-    left: 0.16rem;
-    right: 0.16rem;
-    top: 0.1rem;
-    bottom: 0.12rem;
-    border-radius: 999px;
-    border-top: 1px solid rgba(0,0,0,0.07);
-    opacity: 0.55;
-  }
-
-  .topping {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0.06rem;
-    height: 0.44rem;
-    border-radius: 999px 999px 0.48rem 0.48rem;
-    background: linear-gradient(180deg, #d72b36, #9f141e);
-    box-shadow:
-      0 0 0 1px rgba(0,0,0,0.16),
-      inset 0 -1px 0 rgba(255,255,255,0.08);
+    width: 1.42rem;
+    height: 1.42rem;
+    object-fit: contain;
+    filter: brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%);
   }
 
   .hamburger.open,
@@ -383,47 +351,120 @@
 
   .app-footer {
     margin-top: auto;
-    border-top: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+    border-top: 1px solid rgba(255,255,255,0.06);
     color: var(--color-text-muted);
     font-size: 0.78rem;
-    padding: 1rem 1rem calc(1rem + var(--safe-bottom));
+    padding: 1rem 1rem calc(0.95rem + var(--safe-bottom));
+    background:
+      radial-gradient(circle at top center, rgba(195, 32, 43, 0.14), transparent 50%),
+      linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0)),
+      color-mix(in srgb, var(--color-bg) 90%, black 10%);
+    backdrop-filter: blur(14px);
+    box-shadow:
+      0 -10px 26px rgba(195, 32, 43, 0.08),
+      inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .app-footer::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    width: min(86%, 980px);
+    transform: translateX(-50%);
+    top: -1px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(195, 32, 43, 0.06), rgba(195, 32, 43, 0.55), rgba(195, 32, 43, 0.06));
+    box-shadow: 0 0 18px rgba(195, 32, 43, 0.22);
+  }
+
+  .footer-shell {
+    width: min(100%, 1040px);
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.45rem;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-bg) 90%, black 10%);
-    backdrop-filter: blur(10px);
+    gap: 0.65rem;
+    padding: 0.25rem 0 0;
+  }
+
+  .footer-shell::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: 0.08;
+    border-radius: 0;
   }
 
   .footer-top {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    justify-content: flex-start;
+    gap: 0.6rem;
     flex-wrap: wrap;
-    justify-content: center;
+  }
+
+  .footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .footer-logo {
+    width: 2.35rem;
+    height: 2.35rem;
+    opacity: 0.92;
+    filter:
+      brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
+      drop-shadow(0 0 10px rgba(195, 32, 43, 0.18));
+  }
+
+  .footer-brand-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.12rem;
   }
 
   .footer-top strong {
     color: var(--color-text);
-    font-size: 0.83rem;
+    font-size: 0.95rem;
     font-weight: var(--weight-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  .footer-version {
+    font-size: 0.74rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .footer-copy {
+    position: relative;
+    z-index: 1;
     margin: 0;
-    max-width: 620px;
-    text-align: center;
-    font-size: 0.72rem;
-    line-height: 1.35;
+    max-width: 40rem;
+    text-align: left;
+    font-size: 0.77rem;
+    line-height: 1.45;
     color: var(--color-text-muted);
+    text-wrap: balance;
   }
 
   .footer-links {
+    position: relative;
+    z-index: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-direction: row;
     gap: 0.55rem;
     flex-wrap: wrap;
   }
@@ -444,6 +485,21 @@
     border-color: rgba(179, 58, 63, 0.22);
     color: var(--color-primary-contrast);
     background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
+  }
+
+  .footer-bottom {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    padding-top: 0.2rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    border-top: 1px solid rgba(255,255,255,0.05);
+    margin-top: 0.2rem;
   }
 
   @media (max-width: 760px) {
@@ -473,7 +529,21 @@
     }
 
     .footer-copy {
-      font-size: 0.7rem;
+      font-size: 0.76rem;
+    }
+
+    .footer-bottom {
+      font-size: 0.72rem;
+      flex-direction: column;
+    }
+
+    .footer-links {
+      gap: 0.45rem;
+    }
+
+    .footer-logo {
+      width: 2.05rem;
+      height: 2.05rem;
     }
   }
 

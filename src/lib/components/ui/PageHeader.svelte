@@ -10,7 +10,7 @@
     <p class="subtitle">{subtitle}</p>
   {/if}
 
-  <img class="divider-blade" src="/sujihiki-divider.svg" alt="" aria-hidden="true" />
+  <img class="divider-blade" src="/knife-divider.svg" alt="" aria-hidden="true" />
 </header>
 
 <style>
@@ -40,10 +40,15 @@
 
   .divider-blade {
     display: block;
-    width: 184px;
+    width: 112px;
     height: auto;
-    margin-top: 12px;
-    filter: drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
+    margin-top: -6px;
+    margin-left: 1.35rem;
+    transform: rotate(45deg);
+    transform-origin: left center;
+    filter:
+      brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
+      drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
     opacity: 0.98;
   }
 
@@ -75,7 +80,9 @@
     }
 
     .divider-blade {
-      width: 148px;
+      width: 92px;
+      margin-top: -5px;
+      margin-left: 1rem;
     }
 
     h1 {

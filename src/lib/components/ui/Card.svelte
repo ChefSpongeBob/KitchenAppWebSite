@@ -59,5 +59,6 @@
     .card::before {
       border-radius: var(--radius-md) 0 0 var(--radius-md);
     }
+
   }
 </style>

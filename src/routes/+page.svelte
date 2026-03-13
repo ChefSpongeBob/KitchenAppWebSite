@@ -168,7 +168,7 @@
   <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
     <h1>{greeting}, {userName}</h1>
     <p class="header-sub">Here's what's happening today</p>
-    <img class="divider" src="/sujihiki-divider.svg" alt="" aria-hidden="true" />
+    <img class="divider" src="/knife-divider.svg" alt="" aria-hidden="true" />
   </section>
 
   <section class="kpis" aria-label="Operational snapshot">
@@ -349,10 +349,15 @@
   .header-sub { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: 0.9rem; }
   .divider {
     display: block;
-    width: 184px;
+    width: 112px;
     height: auto;
-    margin-top: 12px;
-    filter: drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
+    margin-top: -6px;
+    margin-left: 1.35rem;
+    transform: rotate(45deg);
+    transform-origin: left center;
+    filter:
+      brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
+      drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
     opacity: 0.98;
   }
 
@@ -502,7 +507,9 @@
     }
 
     .divider {
-      width: 148px;
+      width: 92px;
+      margin-top: -5px;
+      margin-left: 1rem;
     }
     .kpis {
       grid-template-columns: repeat(2, minmax(0, 1fr));

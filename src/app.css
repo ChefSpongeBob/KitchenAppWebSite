@@ -112,21 +112,48 @@ body {
 }
 
 body {
+  position: relative;
   background:
     radial-gradient(circle at 18% 0%, rgba(223, 99, 105, 0.05), transparent 24%),
     radial-gradient(circle at 84% 14%, rgba(195, 32, 43, 0.06), transparent 22%),
     linear-gradient(180deg, rgba(195, 32, 43, 0.03), transparent 18%),
-    url("/sushi-pattern.svg"),
-    url("/sushi-pattern.svg"),
     var(--color-bg);
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat, no-repeat;
-  background-size: auto, auto, auto, 360px 360px, 220px 220px, auto;
-  background-position: top left, top right, top left, top left, 120px 90px, top left;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  background-size: auto, auto, auto, auto;
+  background-position: top left, top right, top left, top left;
   color: var(--color-text);
   overscroll-behavior: none;
   transition:
     background var(--duration-medium) var(--ease-out),
     color var(--duration-medium) var(--ease-out);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.075;
+  background-image:
+    url("/sushi-assets/sushi-piece-a.svg"),
+    url("/sushi-assets/sushi-piece-b.svg"),
+    url("/sushi-assets/onigiri.svg"),
+    url("/sushi-assets/onigiri.svg"),
+    url("/sushi-assets/sushi-piece-a.svg"),
+    url("/sushi-assets/sushi-piece-b.svg"),
+    url("/sushi-assets/onigiri.svg");
+  background-repeat: no-repeat;
+  background-size: 108px auto, 110px auto, 58px auto, 52px auto, 96px auto, 100px auto, 54px auto;
+  background-position:
+    left 2.5rem top 8rem,
+    right 2.5rem top 13rem,
+    left 6rem top 22rem,
+    center top 5.5rem,
+    right 6rem bottom 13rem,
+    left 3rem bottom 7rem,
+    right 8rem bottom 22rem;
+  filter: brightness(0) saturate(100%) invert(70%) sepia(7%) saturate(180%) hue-rotate(292deg) brightness(72%) contrast(82%);
 }
 
 main {
@@ -267,5 +294,18 @@ a:focus-visible {
   .page {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+  }
+
+  body::before {
+    opacity: 0.065;
+    background-size: 82px auto, 84px auto, 44px auto, 38px auto, 74px auto, 78px auto, 42px auto;
+    background-position:
+      left 0.8rem top 7rem,
+      right 0.8rem top 11rem,
+      left 1.6rem top 17.5rem,
+      center top 5.25rem,
+      right 1.8rem bottom 11rem,
+      left 1rem bottom 6rem,
+      right 2.8rem bottom 18rem;
   }
 }
