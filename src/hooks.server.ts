@@ -36,7 +36,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Public routes
 	if (
 		isAuthRoute ||
-		pathname.startsWith('/api/temps')
+		pathname.startsWith('/api/temps') ||
+		pathname.startsWith('/api/camera/')
 	) {
 		return isAuthRoute ? resolveWithNoStore() : resolve(event);
 	}
