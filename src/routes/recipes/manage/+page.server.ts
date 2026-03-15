@@ -1,10 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/admin';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (locals.userRole !== 'admin') {
-    throw redirect(303, '/');
-  }
-
-  throw redirect(303, '/admin#recipes');
+  requireAdmin(locals.userRole);
+  throw redirect(303, '/admin/recipes');
 };

@@ -2,30 +2,6 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { enhance } from '$app/forms';
-  import { recipeCategories } from '$lib/assets/recipeCategories';
-
-  type ListItem = {
-    id: string;
-    content: string;
-    amount: number;
-    par_count: number;
-    is_checked: number;
-  };
-
-  type Section = {
-    id: string;
-    slug: string;
-    title: string;
-    items: ListItem[];
-  };
-
-  type Recipe = {
-    id: number;
-    title: string;
-    category: string;
-    ingredients: string;
-    instructions: string;
-  };
 
   type Todo = {
     id: string;
@@ -59,687 +35,506 @@
     submitted_email?: string | null;
   };
 
-  type DocumentItem = {
-    id: string;
-    slug: string;
-    title: string;
-    section: string;
-    category: string;
-    content: string | null;
-    file_url: string | null;
-    is_active: number;
-  };
-
   type Announcement = {
     content: string;
     updatedAt: number;
   };
 
   export let data: {
-    preplists: Section[];
-    inventory: Section[];
-    orders: Section[];
-    recipes: Recipe[];
     todos: Todo[];
     users: UserOption[];
     nodeNames: NodeName[];
     whiteboardIdeas: WhiteboardIdea[];
-    documents: DocumentItem[];
     announcement: Announcement;
+    summary: {
+      pendingUsers: number;
+      openTodos: number;
+      pendingIdeas: number;
+      nodeCount: number;
+    };
   };
 
-  const defaultRecipeCategories = [...recipeCategories];
-  $: recipeCategoryOptions = Array.from(
-    new Set([
-      ...defaultRecipeCategories,
-      ...data.recipes.map((recipe) => recipe.category).filter(Boolean)
-    ])
-  );
-  $: recipesByCategory = recipeCategoryOptions.map((category) => ({
-    category,
-    recipes: data.recipes.filter((recipe) => recipe.category === category)
-  }));
-
-  let newDocSlug = 'about';
-  const preferredDocSlugOrder = ['about', 'sop', 'handbook'];
-  $: documentBuckets = Array.from(
-    data.documents.reduce((acc, doc) => {
-      const bucket = acc.get(doc.slug) ?? [];
-      bucket.push(doc);
-      acc.set(doc.slug, bucket);
-      return acc;
-    }, new Map<string, DocumentItem[]>())
-  ).sort((a, b) => {
-    const aIndex = preferredDocSlugOrder.indexOf(a[0]);
-    const bIndex = preferredDocSlugOrder.indexOf(b[0]);
-    if (aIndex === -1 && bIndex === -1) return a[0].localeCompare(b[0]);
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
+  const editorLinks = [
+    {
+      href: '/admin/lists',
+      title: 'Lists',
+      description: 'Edit prep, inventory, and order sheets.'
+    },
+    {
+      href: '/admin/recipes',
+      title: 'Recipes',
+      description: 'Add and remove recipes by category.'
+    },
+    {
+      href: '/admin/documents',
+      title: 'Documents',
+      description: 'Update docs, handbook pages, and file links.'
+    },
+    {
+      href: '/admin/camera',
+      title: 'Camera Activity',
+      description: 'View camera clips and live feed settings.'
+    }
+  ];
 </script>
 
 <Layout>
   <PageHeader
     title="Admin Dashboard"
-    subtitle="Manage high-traffic operations from one panel."
+    subtitle="Handle approvals and updates from one admin page."
   />
 
-  <nav class="jump-nav" aria-label="Admin sections">
+  <section class="hero-grid" aria-label="Admin overview">
+    <article class="hero-card">
+      <span class="eyebrow">Pending Users</span>
+      <strong>{data.summary.pendingUsers}</strong>
+      <p>Accounts waiting for approval.</p>
+    </article>
+    <article class="hero-card">
+      <span class="eyebrow">Open Tasks</span>
+      <strong>{data.summary.openTodos}</strong>
+      <p>Tasks still waiting to be finished.</p>
+    </article>
+    <article class="hero-card">
+      <span class="eyebrow">Pending Ideas</span>
+      <strong>{data.summary.pendingIdeas}</strong>
+      <p>Ideas waiting for approval.</p>
+    </article>
+    <article class="hero-card">
+      <span class="eyebrow">Named Nodes</span>
+      <strong>{data.summary.nodeCount}</strong>
+      <p>Named temperature nodes.</p>
+    </article>
+  </section>
+
+  <section class="editor-grid" aria-label="Admin editors">
+    {#each editorLinks as link}
+      <a class="editor-link" href={link.href}>
+        <span class="editor-kicker">Editor</span>
+        <h2>{link.title}</h2>
+        <p>{link.description}</p>
+        <span class="editor-cta">Open</span>
+      </a>
+    {/each}
+  </section>
+
+  <nav class="jump-nav" aria-label="Admin quick sections">
     <a href="#todos">Todo</a>
     <a href="#access">User Access</a>
     <a href="#whiteboard">Whiteboard</a>
     <a href="#announcement">Announcement</a>
     <a href="#nodes">Node Names</a>
-    <a href="#preplists">Preplists</a>
-    <a href="#inventory">Inventory</a>
-    <a href="#orders">Orders</a>
-    <a href="#recipes">Recipes</a>
-    <a href="#documents">Documents</a>
   </nav>
 
-  <section class="panel" id="todos">
-    <h2>Todo</h2>
-    <form method="POST" action="?/create_todo" use:enhance class="add-row">
-      <input name="title" placeholder="Task title" required />
-      <input name="description" placeholder="Description" />
-      <select name="assigned_to">
-        <option value="">Assign: Anyone</option>
-        {#each data.users as user}
-          <option value={user.id}>{user.display_name ?? user.email}</option>
-        {/each}
-      </select>
-      <button type="submit">+ Add</button>
-    </form>
+  <section class="stack">
+    <details class="panel" id="todos" open>
+      <summary>
+        <div>
+          <span class="panel-kicker">Quick Actions</span>
+          <h2>Todo</h2>
+        </div>
+        <span>{data.todos.length} items</span>
+      </summary>
 
-    <table class="sheet">
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Description</th>
-          <th>Assigned</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each data.todos as todo}
-          <tr>
-            <td>{todo.title}</td>
-            <td>{todo.description}</td>
-            <td>{todo.assigned_name ?? todo.assigned_email ?? 'Anyone'}</td>
-            <td>{todo.completed_at ? 'Completed' : 'Active'}</td>
-            <td>
-              <form method="POST" action="?/delete_todo" use:enhance class="inline">
-                <input type="hidden" name="id" value={todo.id} />
-                <button type="submit" class="icon-btn danger" aria-label="Remove task">X</button>
-              </form>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </section>
-
-  <section class="panel" id="access">
-    <h2>User Access</h2>
-    <table class="sheet">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th>Email</th>
-          <th>Access</th>
-          <th>Specials</th>
-          <th>Role</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#if data.users.length === 0}
-          <tr><td colspan="6">No users found.</td></tr>
-        {:else}
+      <form method="POST" action="?/create_todo" use:enhance class="add-row">
+        <input name="title" placeholder="Task title" required />
+        <input name="description" placeholder="Description" />
+        <select name="assigned_to">
+          <option value="">Assign: Anyone</option>
           {#each data.users as user}
-            <tr>
-              <td>{user.display_name ?? 'Unnamed User'}</td>
-              <td>{user.email}</td>
-              <td>
-                {#if user.is_active === 1}
-                  <span class="status status-approved">Approved</span>
-                {:else}
-                  <span class="status status-pending">Pending</span>
-                {/if}
-              </td>
-              <td>
-                {#if user.role === 'admin' || user.can_manage_specials === 1}
-                  <span class="status status-approved">Allowed</span>
-                {:else}
-                  <span class="status status-pending">Off</span>
-                {/if}
-              </td>
-              <td>{user.role}</td>
-              <td>
-                <div class="inline">
-                {#if user.is_active !== 1}
-                  <form method="POST" action="?/approve_user" use:enhance class="inline">
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <button type="submit" class="icon-btn" aria-label="Approve user account">OK</button>
-                  </form>
-                {/if}
-                {#if user.role !== 'admin'}
-                  <form method="POST" action="?/make_user_admin" use:enhance class="inline">
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <button type="submit" class="icon-btn" aria-label="Promote user to admin">A</button>
-                  </form>
-                  <form method="POST" action="?/toggle_specials_access" use:enhance class="inline">
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <button
-                      type="submit"
-                      class="icon-btn"
-                      aria-label={user.can_manage_specials === 1 ? 'Remove daily specials access' : 'Grant daily specials access'}
-                    >
-                      {user.can_manage_specials === 1 ? 'S-' : 'S+'}
-                    </button>
-                  </form>
-                {/if}
-                {#if user.role === 'admin'}
-                  <span class="status status-approved">Admin</span>
-                {/if}
-                </div>
-              </td>
-            </tr>
+            <option value={user.id}>{user.display_name ?? user.email}</option>
           {/each}
-        {/if}
-      </tbody>
-    </table>
-  </section>
+        </select>
+        <button type="submit">Add Task</button>
+      </form>
 
-  <section class="panel" id="whiteboard">
-    <h2>Whiteboard Approval</h2>
-    <table class="sheet">
-      <thead>
-        <tr>
-          <th>Idea</th>
-          <th>Votes</th>
-          <th>Status</th>
-          <th>Submitted By</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#if data.whiteboardIdeas.length === 0}
-          <tr><td colspan="5">No whiteboard ideas yet.</td></tr>
-        {:else}
-          {#each data.whiteboardIdeas as idea}
-            <tr>
-              <td>{idea.content}</td>
-              <td>{idea.votes}</td>
-              <td>
-                <span class="status status-{idea.status}">{idea.status}</span>
-              </td>
-              <td>{idea.submitted_name ?? idea.submitted_email ?? 'Unknown'}</td>
-              <td>
-                <div class="inline">
-                  <form method="POST" action="?/approve_whiteboard" use:enhance class="inline">
-                    <input type="hidden" name="id" value={idea.id} />
-                    <button type="submit" class="icon-btn" aria-label="Approve idea">A</button>
-                  </form>
-                  <form method="POST" action="?/reject_whiteboard" use:enhance class="inline">
-                    <input type="hidden" name="id" value={idea.id} />
-                    <button type="submit" class="icon-btn" aria-label="Reject idea">R</button>
-                  </form>
-                  <form method="POST" action="?/delete_whiteboard" use:enhance class="inline">
-                    <input type="hidden" name="id" value={idea.id} />
-                    <button type="submit" class="icon-btn danger" aria-label="Delete idea">X</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          {/each}
-        {/if}
-      </tbody>
-    </table>
-  </section>
-
-  <section class="panel" id="announcement">
-    <h2>Homepage Announcement</h2>
-    <form method="POST" action="?/save_announcement" use:enhance class="add-row docs-form">
-      <textarea
-        name="content"
-        rows="5"
-        placeholder="Add the current announcement for the greeting card..."
-      >{data.announcement.content}</textarea>
-      <button type="submit">Save Announcement</button>
-    </form>
-  </section>
-
-  <section class="panel" id="nodes">
-    <h2>Node Names</h2>
-    <form method="POST" action="?/add_node_name" use:enhance class="add-row">
-      <input name="sensor_id" type="number" min="1" placeholder="Node ID" required />
-      <input name="name" placeholder="Display name (Cook Bus, Fry Line, etc.)" required />
-      <button type="submit">+ Save</button>
-    </form>
-
-    <table class="sheet">
-      <thead>
-        <tr>
-          <th>Node ID</th>
-          <th>Name</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#if data.nodeNames.length === 0}
+      <table class="sheet">
+        <thead>
           <tr>
-            <td colspan="3">No node names yet.</td>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Assigned</th>
+            <th>Status</th>
+            <th></th>
           </tr>
-        {:else}
-          {#each data.nodeNames as node}
+        </thead>
+        <tbody>
+          {#each data.todos as todo}
             <tr>
-              <td>{node.sensor_id}</td>
-              <td>{node.name}</td>
+              <td>{todo.title}</td>
+              <td>{todo.description || 'No description'}</td>
+              <td>{todo.assigned_name ?? todo.assigned_email ?? 'Anyone'}</td>
+              <td>{todo.completed_at ? 'Completed' : 'Active'}</td>
               <td>
-                <form method="POST" action="?/delete_node_name" use:enhance class="inline">
-                  <input type="hidden" name="sensor_id" value={node.sensor_id} />
-                  <button type="submit" class="icon-btn danger" aria-label="Remove node name">X</button>
+                <form method="POST" action="?/delete_todo" use:enhance class="inline">
+                  <input type="hidden" name="id" value={todo.id} />
+                  <button type="submit" class="icon-btn danger" aria-label="Remove task">X</button>
                 </form>
               </td>
             </tr>
           {/each}
-        {/if}
-      </tbody>
-    </table>
-  </section>
-
-  <section class="panel" id="preplists">
-    <h2>Preplists</h2>
-    {#each data.preplists as section}
-      <details class="section-block">
-        <summary>
-          <h3>{section.title}</h3>
-          <span>{section.items.length} items</span>
-        </summary>
-        <table class="sheet">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Par</th>
-              <th>Current Prep</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each section.items as item}
-              <tr>
-                <td>
-                  <form method="POST" action="?/update_list_item" use:enhance class="inline">
-                    <input type="hidden" name="id" value={item.id} />
-                    <input name="content" value={item.content} required />
-                    <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
-                    <button type="submit" class="icon-btn" aria-label="Save item">S</button>
-                  </form>
-                </td>
-                <td>{item.par_count}</td>
-                <td>{item.amount}</td>
-                <td>{item.is_checked ? 'Done' : 'Open'}</td>
-                <td>
-                  <form method="POST" action="?/delete_list_item" use:enhance class="inline">
-                    <input type="hidden" name="id" value={item.id} />
-                    <button type="submit" class="icon-btn danger" aria-label="Remove item">X</button>
-                  </form>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-
-        <details class="add-toggle">
-          <summary>+ Add item</summary>
-          <form method="POST" action="?/add_list_item" use:enhance class="add-row">
-            <input type="hidden" name="section_id" value={section.id} />
-            <input name="content" placeholder={`Add item to ${section.title}`} required />
-            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
-            <button type="submit">Add</button>
-          </form>
-        </details>
-      </details>
-    {/each}
-  </section>
-
-  <section class="panel" id="inventory">
-    <h2>Inventory</h2>
-    {#each data.inventory as section}
-      <details class="section-block">
-        <summary>
-          <h3>{section.title}</h3>
-          <span>{section.items.length} items</span>
-        </summary>
-        <table class="sheet">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Par</th>
-              <th>Current</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each section.items as item}
-              <tr>
-                <td>
-                  <form method="POST" action="?/update_list_item" use:enhance class="inline">
-                    <input type="hidden" name="id" value={item.id} />
-                    <input name="content" value={item.content} required />
-                    <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
-                    <button type="submit" class="icon-btn" aria-label="Save item">S</button>
-                  </form>
-                </td>
-                <td>{item.par_count}</td>
-                <td>{item.amount}</td>
-                <td>
-                  <form method="POST" action="?/delete_list_item" use:enhance class="inline">
-                    <input type="hidden" name="id" value={item.id} />
-                    <button type="submit" class="icon-btn danger" aria-label="Remove item">X</button>
-                  </form>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-
-        <details class="add-toggle">
-          <summary>+ Add item</summary>
-          <form method="POST" action="?/add_list_item" use:enhance class="add-row">
-            <input type="hidden" name="section_id" value={section.id} />
-            <input name="content" placeholder={`Add item to ${section.title}`} required />
-            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
-            <button type="submit">Add</button>
-          </form>
-        </details>
-      </details>
-    {/each}
-  </section>
-
-  <section class="panel" id="orders">
-    <h2>Orders</h2>
-    {#each data.orders as section}
-      <details class="section-block">
-        <summary>
-          <h3>{section.title}</h3>
-          <span>{section.items.length} items</span>
-        </summary>
-
-        <form method="POST" action="?/add_list_item" use:enhance class="add-row compact-row">
-          <input type="hidden" name="section_id" value={section.id} />
-          <input name="content" placeholder="New order item" required />
-          <input name="par_count" type="number" min="0" value="0" placeholder="Par" required />
-          <button type="submit">+ Add</button>
-        </form>
-
-        <table class="sheet">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Par</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each section.items as item}
-              <tr>
-                <td>
-                  <form method="POST" action="?/update_list_item" use:enhance class="inline-edit">
-                    <input type="hidden" name="id" value={item.id} />
-                    <input name="content" value={item.content} required />
-                    <input name="par_count" type="number" min="0" value={item.par_count} required />
-                    <button type="submit" class="icon-btn">S</button>
-                  </form>
-                </td>
-                <td>{item.par_count}</td>
-                <td>
-                  <form method="POST" action="?/delete_list_item" use:enhance class="inline">
-                    <input type="hidden" name="id" value={item.id} />
-                    <button type="submit" class="icon-btn danger" aria-label="Delete order item">X</button>
-                  </form>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </details>
-    {/each}
-  </section>
-
-  <section class="panel" id="recipes">
-    <h2>Recipes</h2>
-    <details class="section-block">
-      <summary>
-        <h3>Recipe Manager</h3>
-        <span>{data.recipes.length} recipes</span>
-      </summary>
-
-      <form method="POST" action="?/create_recipe" use:enhance class="add-row recipe-add">
-        <select name="category" required>
-          <option value="">Select Category</option>
-          {#each recipeCategoryOptions as category}
-            <option value={category}>{category}</option>
-          {/each}
-        </select>
-        <input name="title" placeholder="Title" required />
-        <textarea name="materials_needed" placeholder="Materials needed" rows="3" required></textarea>
-        <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
-        <textarea name="instruction" placeholder="Instruction" rows="3" required></textarea>
-        <button type="submit">+ Add</button>
-      </form>
-
-      <div class="recipe-tabs">
-        {#each recipesByCategory as bucket}
-          <details class="add-toggle recipe-cat">
-            <summary>{bucket.category} ({bucket.recipes.length})</summary>
-            {#if bucket.recipes.length === 0}
-              <p class="muted">No recipes in this category yet.</p>
-            {:else}
-              <table class="sheet">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each bucket.recipes as recipe}
-                    <tr>
-                      <td>{recipe.title}</td>
-                      <td>
-                        <form method="POST" action="?/delete_recipe" use:enhance class="inline">
-                          <input type="hidden" name="id" value={recipe.id} />
-                          <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
-                        </form>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            {/if}
-          </details>
-        {/each}
-      </div>
+        </tbody>
+      </table>
     </details>
-  </section>
 
-  <section class="panel" id="documents">
-    <h2>Documents</h2>
-    <details class="section-block">
+    <details class="panel" id="access" open>
       <summary>
-        <h3>Document Manager</h3>
-        <span>{data.documents.length} docs</span>
+        <div>
+          <span class="panel-kicker">Permissions</span>
+          <h2>User Access</h2>
+        </div>
+        <span>{data.users.length} users</span>
       </summary>
 
-      <form method="POST" action="?/create_document" use:enhance class="add-row docs-form">
-        <select name="slug" bind:value={newDocSlug} required>
-          <option value="about">About</option>
-          <option value="sop">SOP</option>
-          <option value="handbook">Handbook</option>
-          <option value="custom">Custom slug</option>
-        </select>
-        {#if newDocSlug === 'custom'}
-          <input name="slug_custom" placeholder="custom-slug" required />
-        {/if}
-        <input name="title" placeholder="Document title" required />
-        <input name="section" placeholder="Section" value="Docs" />
-        <input name="category" placeholder="Category" value="General" />
-        <input name="file_url" placeholder="File URL (optional)" />
-        <textarea name="content" rows="8" placeholder="Full document content / notes"></textarea>
-        <select name="is_active">
-          <option value="1" selected>Active</option>
-          <option value="0">Inactive</option>
-        </select>
-        <button type="submit">+ Add Document</button>
+      <table class="sheet">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Access</th>
+            <th>Specials</th>
+            <th>Role</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#if data.users.length === 0}
+            <tr><td colspan="6">No users found.</td></tr>
+          {:else}
+            {#each data.users as user}
+              <tr>
+                <td>{user.display_name ?? 'Unnamed User'}</td>
+                <td>{user.email}</td>
+                <td>
+                  {#if user.is_active === 1}
+                    <span class="status status-approved">Approved</span>
+                  {:else}
+                    <span class="status status-pending">Pending</span>
+                  {/if}
+                </td>
+                <td>
+                  {#if user.role === 'admin' || user.can_manage_specials === 1}
+                    <span class="status status-approved">Allowed</span>
+                  {:else}
+                    <span class="status">Off</span>
+                  {/if}
+                </td>
+                <td>{user.role}</td>
+                <td>
+                  <div class="inline">
+                    {#if user.is_active !== 1}
+                      <form method="POST" action="?/approve_user" use:enhance class="inline">
+                        <input type="hidden" name="user_id" value={user.id} />
+                        <button type="submit" class="icon-btn" aria-label="Approve user account">OK</button>
+                      </form>
+                    {/if}
+                    {#if user.role !== 'admin'}
+                      <form method="POST" action="?/make_user_admin" use:enhance class="inline">
+                        <input type="hidden" name="user_id" value={user.id} />
+                        <button type="submit" class="icon-btn" aria-label="Promote user to admin">A</button>
+                      </form>
+                      <form method="POST" action="?/toggle_specials_access" use:enhance class="inline">
+                        <input type="hidden" name="user_id" value={user.id} />
+                        <button
+                          type="submit"
+                          class="icon-btn"
+                          aria-label={user.can_manage_specials === 1
+                            ? 'Remove daily specials access'
+                            : 'Grant daily specials access'}
+                        >
+                          {user.can_manage_specials === 1 ? 'S-' : 'S+'}
+                        </button>
+                      </form>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          {/if}
+        </tbody>
+      </table>
+    </details>
+
+    <details class="panel" id="whiteboard">
+      <summary>
+        <div>
+          <span class="panel-kicker">Moderation</span>
+          <h2>Whiteboard</h2>
+        </div>
+        <span>{data.whiteboardIdeas.length} ideas</span>
+      </summary>
+
+      <table class="sheet">
+        <thead>
+          <tr>
+            <th>Idea</th>
+            <th>Votes</th>
+            <th>Status</th>
+            <th>Submitted By</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#if data.whiteboardIdeas.length === 0}
+            <tr><td colspan="5">No whiteboard ideas yet.</td></tr>
+          {:else}
+            {#each data.whiteboardIdeas as idea}
+              <tr>
+                <td>{idea.content}</td>
+                <td>{idea.votes}</td>
+                <td><span class="status status-{idea.status}">{idea.status}</span></td>
+                <td>{idea.submitted_name ?? idea.submitted_email ?? 'Unknown'}</td>
+                <td>
+                  <div class="inline">
+                    <form method="POST" action="?/approve_whiteboard" use:enhance class="inline">
+                      <input type="hidden" name="id" value={idea.id} />
+                      <button type="submit" class="icon-btn" aria-label="Approve idea">A</button>
+                    </form>
+                    <form method="POST" action="?/reject_whiteboard" use:enhance class="inline">
+                      <input type="hidden" name="id" value={idea.id} />
+                      <button type="submit" class="icon-btn" aria-label="Reject idea">R</button>
+                    </form>
+                    <form method="POST" action="?/delete_whiteboard" use:enhance class="inline">
+                      <input type="hidden" name="id" value={idea.id} />
+                      <button type="submit" class="icon-btn danger" aria-label="Delete idea">X</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          {/if}
+        </tbody>
+      </table>
+    </details>
+
+    <details class="panel" id="announcement">
+      <summary>
+        <div>
+          <span class="panel-kicker">Homepage</span>
+          <h2>Announcement</h2>
+        </div>
+        <span>{data.announcement.content ? 'Live' : 'Empty'}</span>
+      </summary>
+
+      <form method="POST" action="?/save_announcement" use:enhance class="add-row docs-form">
+        <textarea
+          name="content"
+          rows="5"
+          placeholder="Write the message shown on the homepage..."
+        >{data.announcement.content}</textarea>
+        <button type="submit">Save Announcement</button>
+      </form>
+    </details>
+
+    <details class="panel" id="nodes">
+      <summary>
+        <div>
+          <span class="panel-kicker">Temper</span>
+          <h2>Node Names</h2>
+        </div>
+        <span>{data.nodeNames.length} saved</span>
+      </summary>
+
+      <form method="POST" action="?/add_node_name" use:enhance class="add-row">
+        <input name="sensor_id" type="number" min="1" placeholder="Node ID" required />
+        <input name="name" placeholder="Display name" required />
+        <button type="submit">Save Node</button>
       </form>
 
-      <div class="recipe-tabs">
-        {#if documentBuckets.length === 0}
-          <p class="muted">No documents found.</p>
-        {:else}
-          {#each documentBuckets as [slug, docs]}
-            <details class="add-toggle recipe-cat">
-              <summary>{slug} ({docs.length})</summary>
-              {#each docs as doc}
-                <details class="edit-doc">
-                  <summary>{doc.title}</summary>
-                  <form method="POST" action="?/update_document" use:enhance class="add-row docs-form">
-                    <input type="hidden" name="id" value={doc.id} />
-                    <input name="slug" value={doc.slug} required />
-                    <input name="title" value={doc.title} required />
-                    <input name="section" value={doc.section} />
-                    <input name="category" value={doc.category} />
-                    <input name="file_url" value={doc.file_url ?? ''} />
-                    <textarea name="content" rows="8">{doc.content ?? ''}</textarea>
-                    <select name="is_active">
-                      <option value="1" selected={doc.is_active === 1}>Active</option>
-                      <option value="0" selected={doc.is_active === 0}>Inactive</option>
-                    </select>
-                    <button type="submit">Save</button>
+      <table class="sheet">
+        <thead>
+          <tr>
+            <th>Node ID</th>
+            <th>Name</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#if data.nodeNames.length === 0}
+            <tr><td colspan="3">No node names yet.</td></tr>
+          {:else}
+            {#each data.nodeNames as node}
+              <tr>
+                <td>{node.sensor_id}</td>
+                <td>{node.name}</td>
+                <td>
+                  <form method="POST" action="?/delete_node_name" use:enhance class="inline">
+                    <input type="hidden" name="sensor_id" value={node.sensor_id} />
+                    <button type="submit" class="icon-btn danger" aria-label="Remove node name">X</button>
                   </form>
-                  <form method="POST" action="?/delete_document" use:enhance class="inline">
-                    <input type="hidden" name="id" value={doc.id} />
-                    <button type="submit" class="icon-btn danger" aria-label="Delete document">X</button>
-                  </form>
-                </details>
-              {/each}
-            </details>
-          {/each}
-        {/if}
-      </div>
+                </td>
+              </tr>
+            {/each}
+          {/if}
+        </tbody>
+      </table>
     </details>
   </section>
 </Layout>
 
 <style>
-  .jump-nav {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin: 0.65rem 0 1rem;
+  .hero-grid,
+  .editor-grid {
+    display: grid;
+    gap: 0.8rem;
   }
 
-  .jump-nav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    font-size: 0.76rem;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out), background 120ms var(--ease-out);
+  .hero-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0.5rem 0 1rem;
   }
 
-  .jump-nav a:hover,
-  .jump-nav a:focus-visible {
-    color: var(--color-text);
-    border-color: rgba(195, 32, 43, 0.22);
-    background:
-      linear-gradient(180deg, rgba(195, 32, 43, 0.12), rgba(195, 32, 43, 0.02)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    outline: none;
-  }
-
+  .hero-card,
+  .editor-link,
   .panel {
     position: relative;
-    margin-top: 0.95rem;
-    padding: 1rem;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-lg);
     background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
     box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
-    overflow-x: auto;
   }
 
+  .hero-card,
+  .editor-link {
+    overflow: hidden;
+    padding: 1rem;
+  }
+
+  .hero-card::before,
+  .editor-link::before,
   .panel::before {
     content: '';
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.88), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.9), rgba(195, 32, 43, 0.2));
   }
 
-  h2 {
-    margin: 0 0 0.85rem;
-    letter-spacing: -0.02em;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 0.95rem;
-    color: var(--color-text-soft);
-  }
-
-  .section-block + .section-block {
-    margin-top: 0.6rem;
-  }
-
-  summary {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    list-style: none;
-    padding: 0.45rem 0.1rem;
-  }
-
-  summary::-webkit-details-marker {
-    display: none;
-  }
-
-  summary span {
-    font-size: 0.75rem;
+  .eyebrow,
+  .panel-kicker,
+  .editor-kicker {
+    display: inline-flex;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--color-text-muted);
   }
 
-  .section-block > summary::after {
-    content: '+';
-    font-size: 1rem;
+  .hero-card strong {
+    display: block;
+    margin-top: 0.45rem;
+    font-size: 2rem;
     line-height: 1;
-    color: var(--color-primary);
-    margin-left: 0.45rem;
   }
 
-  .section-block[open] > summary::after {
-    content: '-';
+  .hero-card p,
+  .editor-link p {
+    margin: 0.45rem 0 0;
+    color: var(--color-text-muted);
+  }
+
+  .editor-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 1rem;
+  }
+
+  .editor-link {
+    text-decoration: none;
+    color: inherit;
+    transition: transform 150ms var(--ease-out), border-color 150ms var(--ease-out);
+  }
+
+  .editor-link:hover,
+  .editor-link:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(195, 32, 43, 0.28);
+    outline: none;
+  }
+
+  .editor-link h2 {
+    margin: 0.45rem 0 0;
+    font-size: 1rem;
+  }
+
+  .editor-cta {
+    display: inline-flex;
+    margin-top: 0.9rem;
+    border-radius: 999px;
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    color: var(--color-text-soft);
+    background: rgba(195, 32, 43, 0.08);
+  }
+
+  .jump-nav {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0 0 1rem;
+  }
+
+  .jump-nav a {
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem;
+    font-size: 0.76rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+  }
+
+  .stack {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .panel {
+    overflow: hidden;
+  }
+
+  .panel summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    list-style: none;
+    padding: 1rem 1rem 0.95rem 1.1rem;
+  }
+
+  .panel summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .panel summary span:last-child {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .panel h2 {
+    margin: 0.2rem 0 0;
+  }
+
+  .panel[open] > :global(form),
+  .panel[open] > :global(table),
+  .panel[open] > :global(div) {
+    margin-left: 1.1rem;
+    margin-right: 1rem;
+  }
+
+  .panel[open] > :global(table) {
+    margin-bottom: 1rem;
   }
 
   .sheet {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    border-radius: 14px;
-    overflow: hidden;
   }
 
   .sheet th {
@@ -749,22 +544,18 @@
     padding: 0.55rem 0.42rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
   }
 
   .sheet td {
     padding: 0.48rem 0.42rem;
     vertical-align: middle;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .sheet tbody tr:last-child td {
     border-bottom: none;
-  }
-
-  .sheet tbody tr:nth-child(even) td {
-    background: rgba(255,255,255,0.012);
   }
 
   .add-row,
@@ -776,41 +567,13 @@
   }
 
   .add-row {
-    margin-top: 0.7rem;
-  }
-
-  .add-toggle {
-    margin-top: 0.45rem;
-  }
-
-  .add-toggle > summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.78rem;
-    padding: 0.28rem 0.5rem;
-    border: 1px dashed rgba(195, 32, 43, 0.22);
-    border-radius: 10px;
-    width: fit-content;
-    background: rgba(255,255,255,0.015);
-  }
-
-  .add-toggle[open] > summary {
-    color: var(--color-text);
-  }
-
-  .edit-doc summary {
-    border: 1px dashed rgba(195, 32, 43, 0.22);
-    border-radius: 10px;
-    padding: 0.22rem 0.5rem;
-    font-size: 0.75rem;
-    background: rgba(255,255,255,0.015);
+    margin: 0 1rem 0.9rem 1.1rem;
   }
 
   input,
   textarea,
   select {
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     padding: 0.42rem 0.55rem;
     background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
@@ -849,10 +612,10 @@
   .status {
     display: inline-flex;
     border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 0.18rem 0.5rem;
     font-size: 0.72rem;
-    background: rgba(255,255,255,0.03);
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .status-pending {
@@ -870,49 +633,44 @@
     color: #ef4444;
   }
 
-  .recipe-add input {
-    min-width: 150px;
-  }
-
-  .recipe-add textarea {
-    min-width: 220px;
-    resize: vertical;
-  }
-
-  .recipe-tabs {
-    margin-top: 0.6rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .recipe-cat .muted {
-    margin: 0.25rem 0 0.35rem;
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-  }
-
   .docs-form {
     align-items: flex-start;
   }
 
   .docs-form textarea {
-    width: 100%;
-    min-height: 180px;
+    min-height: 160px;
     resize: vertical;
     flex: 1 1 100%;
   }
 
+  @media (max-width: 1100px) {
+    .hero-grid,
+    .editor-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .hero-card,
+    .editor-link {
+      padding: 0.82rem;
+    }
+
+    .hero-card strong {
+      font-size: 1.6rem;
+    }
+
+    .editor-link h2 {
+      font-size: 0.92rem;
+    }
+
+    .editor-link p,
+    .hero-card p {
+      font-size: 0.8rem;
+    }
+  }
+
   @media (max-width: 900px) {
-    .jump-nav {
-      gap: 0.35rem;
-    }
-
-    .jump-nav a {
-      font-size: 0.72rem;
-      padding: 0.2rem 0.5rem;
-    }
-
     .sheet {
       min-width: 680px;
     }
@@ -926,16 +684,6 @@
     .inline .icon-btn {
       flex: 0 0 auto;
     }
-
-    .icon-btn {
-      width: 2rem;
-      height: 2rem;
-    }
-
-    .recipe-add input,
-    .recipe-add textarea {
-      min-width: 0;
-      width: 100%;
-    }
   }
+
 </style>
