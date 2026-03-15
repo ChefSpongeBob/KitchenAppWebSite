@@ -68,3 +68,18 @@ export async function ensureCameraSchema(db: D1) {
     )
     .run();
 }
+
+export function cameraIngestAuthorized(request: Request, apiKey?: string) {
+  if (!apiKey) return true;
+  return request.headers.get('x-api-key') === apiKey;
+}
+
+export function extensionFromContentType(contentType: string, fallback = 'bin') {
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  if (contentType.includes('mp4')) return 'mp4';
+  if (contentType.includes('webm')) return 'webm';
+  if (contentType.includes('ogg')) return 'ogg';
+  return fallback;
+}

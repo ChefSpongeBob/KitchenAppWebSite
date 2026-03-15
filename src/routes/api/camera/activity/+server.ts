@@ -1,10 +1,13 @@
 import { json } from '@sveltejs/kit';
-import { ensureCameraSchema } from '$lib/server/camera';
+import { cameraIngestAuthorized, ensureCameraSchema } from '$lib/server/camera';
 
 export async function POST({ request, platform }) {
   const db = platform?.env?.DB;
   if (!db) {
     return json({ error: 'Database not configured.' }, { status: 503 });
+  }
+  if (!cameraIngestAuthorized(request, platform?.env?.IOT_API_KEY)) {
+    return json({ error: 'Unauthorized.' }, { status: 401 });
   }
 
   await ensureCameraSchema(db);

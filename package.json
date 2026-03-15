@@ -36,6 +36,8 @@
 		"db:migrate:vegprep:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0012_veg_prep_refresh.sql",
 		"db:migrate:preplists:integrity:local": "npx wrangler d1 execute kitchen --local --file=./migrations/0013_preplists_integrity_guards.sql",
 		"db:migrate:preplists:integrity:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0013_preplists_integrity_guards.sql",
+		"db:migrate:camera:local": "npx wrangler d1 execute kitchen --local --file=./migrations/0018_camera.sql",
+		"db:migrate:camera:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0018_camera.sql",
 		"lint": "prettier --check .",
 		"format": "prettier --write ."
 	},

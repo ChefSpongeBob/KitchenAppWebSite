@@ -8,5 +8,11 @@
 			"database_name": "kitchen",
 			"database_id": "b15f561e-782d-4695-97cf-91787ae8d4b4"
 		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "CAMERA_MEDIA",
+			"bucket_name": "kitchen-camera-media"
+		}
 	]
 }
