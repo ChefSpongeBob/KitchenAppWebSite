@@ -1,8 +1,11 @@
 type D1 = App.Platform['env']['DB'];
+type CameraBucket = App.Platform['env']['CAMERA_MEDIA'];
 
 type ColumnInfo = {
   name: string;
 };
+
+let lastCameraCleanupAt = 0;
 
 async function tableColumns(db: D1, table: string) {
   const columns = await db.prepare(`PRAGMA table_info(${table})`).all<ColumnInfo>();
@@ -82,4 +85,56 @@ export function extensionFromContentType(contentType: string, fallback = 'bin') 
   if (contentType.includes('webm')) return 'webm';
   if (contentType.includes('ogg')) return 'ogg';
   return fallback;
+}
+
+function mediaKeyFromUrl(url: string | null) {
+  if (!url) return null;
+  const marker = '/api/camera/media/';
+  const markerIndex = url.indexOf(marker);
+  if (markerIndex === -1) return null;
+  return url.slice(markerIndex + marker.length);
+}
+
+export async function cleanupExpiredCameraMedia(
+  db: D1,
+  bucket?: CameraBucket,
+  now = Math.floor(Date.now() / 1000)
+) {
+  if (now - lastCameraCleanupAt < 1800) return;
+  lastCameraCleanupAt = now;
+
+  const cutoff = now - 60 * 60 * 24 * 7;
+  const expired = await db
+    .prepare(
+      `
+      SELECT id, image_url, clip_url
+      FROM camera_events
+      WHERE created_at < ?
+      `
+    )
+    .bind(cutoff)
+    .all<{ id: string; image_url: string | null; clip_url: string | null }>();
+
+  for (const event of expired.results ?? []) {
+    if (bucket) {
+      const imageKey = mediaKeyFromUrl(event.image_url);
+      const clipKey = mediaKeyFromUrl(event.clip_url);
+      if (imageKey) await bucket.delete(imageKey);
+      if (clipKey && clipKey !== imageKey) await bucket.delete(clipKey);
+    }
+  }
+
+  await db.prepare(`DELETE FROM camera_events WHERE created_at < ?`).bind(cutoff).run();
+}
+
+export async function deleteCameraEventAssets(
+  bucket: CameraBucket | undefined,
+  imageUrl: string | null,
+  clipUrl: string | null
+) {
+  if (!bucket) return;
+  const imageKey = mediaKeyFromUrl(imageUrl);
+  const clipKey = mediaKeyFromUrl(clipUrl);
+  if (imageKey) await bucket.delete(imageKey);
+  if (clipKey && clipKey !== imageKey) await bucket.delete(clipKey);
 }

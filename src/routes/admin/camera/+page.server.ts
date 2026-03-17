@@ -1,7 +1,11 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { requireAdmin } from '$lib/server/admin';
-import { ensureCameraSchema } from '$lib/server/camera';
+import {
+  cleanupExpiredCameraMedia,
+  deleteCameraEventAssets,
+  ensureCameraSchema
+} from '$lib/server/camera';
 
 type CameraEvent = {
   id: string;
@@ -25,14 +29,15 @@ type CameraSource = {
   updated_at: number;
 };
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, platform }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) {
-    return { events: [], sources: [], endpoint: '/api/camera/activity', status: url.origin };
+    return { events: [], sources: [] };
   }
 
   await ensureCameraSchema(db);
+  await cleanupExpiredCameraMedia(db, platform?.env?.CAMERA_MEDIA);
 
   const [events, sources] = await Promise.all([
     db
@@ -67,24 +72,30 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   return {
     events: events.results ?? [],
-    sources: sources.results ?? [],
-    endpoint: '/api/camera/activity',
-    status: url.origin
+    sources: sources.results ?? []
   };
 };
 
 export const actions: Actions = {
-  clear_events: async ({ locals }) => {
+  clear_events: async ({ locals, platform }) => {
     requireAdmin(locals.userRole);
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
 
     await ensureCameraSchema(db);
+    const events = await db
+      .prepare(`SELECT image_url, clip_url FROM camera_events`)
+      .all<{ image_url: string | null; clip_url: string | null }>();
+
+    for (const event of events.results ?? []) {
+      await deleteCameraEventAssets(platform?.env?.CAMERA_MEDIA, event.image_url, event.clip_url);
+    }
+
     await db.prepare(`DELETE FROM camera_events`).run();
     return { success: true };
   },
 
-  delete_event: async ({ request, locals }) => {
+  delete_event: async ({ request, locals, platform }) => {
     requireAdmin(locals.userRole);
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
@@ -93,6 +104,15 @@ export const actions: Actions = {
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
     if (!id) return fail(400, { error: 'Missing event id.' });
+
+    const event = await db
+      .prepare(`SELECT image_url, clip_url FROM camera_events WHERE id = ? LIMIT 1`)
+      .bind(id)
+      .first<{ image_url: string | null; clip_url: string | null }>();
+
+    if (event) {
+      await deleteCameraEventAssets(platform?.env?.CAMERA_MEDIA, event.image_url, event.clip_url);
+    }
 
     await db.prepare(`DELETE FROM camera_events WHERE id = ?`).bind(id).run();
     return { success: true };
