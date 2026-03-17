@@ -1,11 +1,11 @@
 import { redirect, type Actions } from '@sveltejs/kit';
-import { dev } from '$app/environment';
 import { hashSessionToken } from '$lib/server/auth';
+import { getSessionCookieDeleteOptions, getSessionCookieName } from '$lib/server/authCookies';
 
 export const actions: Actions = {
-	default: async ({ cookies, locals }) => {
+	default: async ({ cookies, locals, request }) => {
 		const db = locals.DB;
-		const primaryCookie = dev ? 'kitchen_session' : '__Host-kitchen_session';
+		const primaryCookie = getSessionCookieName();
 		const sessionToken =
 			cookies.get(primaryCookie) ?? cookies.get('session_id') ?? cookies.get('session_id_pwa');
 
@@ -26,7 +26,7 @@ export const actions: Actions = {
 		}
 
 		// Clear cookies
-		cookies.delete(primaryCookie, { path: '/' });
+		cookies.delete(primaryCookie, getSessionCookieDeleteOptions(request));
 		cookies.delete('session_id', { path: '/' });
 		cookies.delete('session_id_pwa', { path: '/' });
 

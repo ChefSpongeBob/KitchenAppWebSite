@@ -1,18 +1,22 @@
 import { redirect, type Handle } from '@sveltejs/kit';
-import { dev } from '$app/environment';
 import { hashSessionToken } from '$lib/server/auth';
+import {
+	getSessionCookieDeleteOptions,
+	getSessionCookieName,
+	getSessionCookieOptions
+} from '$lib/server/authCookies';
 
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
-	const secure = !event.url.hostname.includes('localhost');
-	const maxAge = 60 * 60 * 24 * 30;
-	const cookieName = dev ? 'kitchen_session' : '__Host-kitchen_session';
-	event.cookies.set(cookieName, sessionToken, {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax',
-		secure,
-		maxAge
-	});
+	const cookieName = getSessionCookieName();
+	event.cookies.set(cookieName, sessionToken, getSessionCookieOptions(event.request));
+	event.cookies.delete('session_id', { path: '/' });
+	event.cookies.delete('session_id_pwa', { path: '/' });
+}
+
+function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
+	const cookieName = getSessionCookieName();
+	const deleteOptions = getSessionCookieDeleteOptions(event.request);
+	event.cookies.delete(cookieName, deleteOptions);
 	event.cookies.delete('session_id', { path: '/' });
 	event.cookies.delete('session_id_pwa', { path: '/' });
 }
@@ -43,13 +47,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const db = event.locals.DB;
-	const primaryCookie = dev ? 'kitchen_session' : '__Host-kitchen_session';
+	const primaryCookie = getSessionCookieName();
 	const sessionToken =
 		event.cookies.get(primaryCookie) ??
 		event.cookies.get('session_id') ??
 		event.cookies.get('session_id_pwa');
 
 	if (!db || !sessionToken) {
+		clearSessionCookies(event);
 		throw redirect(303, '/login');
 	}
 	try {
@@ -95,13 +100,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}>();
 
 		if (!session || session.revoked_at !== null || session.expires_at < now) {
+			clearSessionCookies(event);
 			throw redirect(303, '/login?error=session');
 		}
 
 		if (session.device_id && (!session.found_device_id || session.device_revoked_at !== null)) {
+			clearSessionCookies(event);
 			throw redirect(303, '/login?error=session');
 		}
-		if (!session.found_user_id) throw redirect(303, '/login?error=session');
+		if (!session.found_user_id) {
+			clearSessionCookies(event);
+			throw redirect(303, '/login?error=session');
+		}
 
 		// Upgrade legacy plaintext token storage to hashed token.
 		if (session.session_token_hash === sessionToken) {
@@ -144,6 +154,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		return resolveWithNoStore();
 	} catch {
+		clearSessionCookies(event);
 		throw redirect(303, '/login?error=session');
 	}
 };

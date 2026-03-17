@@ -97,6 +97,7 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
   background:
     radial-gradient(circle at top, rgba(195, 32, 43, 0.1), transparent 34%),
     linear-gradient(180deg, #17191c, #111214 58%, #0f1012);
@@ -113,6 +114,7 @@ body {
 
 body {
   position: relative;
+  min-height: 100dvh;
   background:
     radial-gradient(circle at 18% 0%, rgba(223, 99, 105, 0.05), transparent 24%),
     radial-gradient(circle at 84% 14%, rgba(195, 32, 43, 0.06), transparent 22%),
@@ -126,6 +128,14 @@ body {
   transition:
     background var(--duration-medium) var(--ease-out),
     color var(--duration-medium) var(--ease-out);
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
 }
 
 body::before {
@@ -291,6 +301,12 @@ a:focus-visible {
 }
 
 @media (max-width: 760px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
   .page {
     padding-left: 0.75rem;
     padding-right: 0.75rem;

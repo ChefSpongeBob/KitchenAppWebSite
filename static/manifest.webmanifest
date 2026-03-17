@@ -1,12 +1,15 @@
 {
   "name": "Kitchen Software",
   "short_name": "Kitchen",
+  "id": "/",
   "description": "Kitchen operations dashboard",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#121315",
+  "theme_color": "#121315",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/pwa-192x192.png",

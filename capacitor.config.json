@@ -1,0 +1,27 @@
+{
+  "appId": "com.nexusnorthsystems.kitchen",
+  "appName": "Kitchen",
+  "webDir": "build",
+  "loggingBehavior": "debug",
+  "appendUserAgent": " KitchenNative/2.1 Capacitor",
+  "zoomEnabled": false,
+  "initialFocus": true,
+  "backgroundColor": "#121315",
+  "server": {
+    "url": "https://nexusnorthsystems.com",
+    "cleartext": false,
+    "allowNavigation": [
+      "nexusnorthsystems.com",
+      "www.nexusnorthsystems.com"
+    ]
+  },
+  "ios": {
+    "contentInset": "always",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": true
+  }
+}

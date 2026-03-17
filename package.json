@@ -38,6 +38,12 @@
 		"db:migrate:preplists:integrity:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0013_preplists_integrity_guards.sql",
 		"db:migrate:camera:local": "npx wrangler d1 execute kitchen --local --file=./migrations/0018_camera.sql",
 		"db:migrate:camera:remote": "npx wrangler d1 execute kitchen --remote --file=./migrations/0018_camera.sql",
+		"cap:add:ios": "npx cap add ios",
+		"cap:add:android": "npx cap add android",
+		"cap:sync": "npx cap sync",
+		"cap:copy": "npx cap copy",
+		"cap:open:ios": "npx cap open ios",
+		"cap:open:android": "npx cap open android",
 		"lint": "prettier --check .",
 		"format": "prettier --write ."
 	},
@@ -52,5 +58,11 @@
 		"svelte-check": "^4.3.5",
 		"typescript": "^5.9.3",
 		"vite": "^7.3.1"
+	},
+	"dependencies": {
+		"@capacitor/android": "^8.2.0",
+		"@capacitor/cli": "^8.2.0",
+		"@capacitor/core": "^8.2.0",
+		"@capacitor/ios": "^8.2.0"
 	}
 }
