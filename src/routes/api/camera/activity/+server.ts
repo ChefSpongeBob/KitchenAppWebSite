@@ -1,5 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { cameraIngestAuthorized, ensureCameraSchema } from '$lib/server/camera';
+import {
+  cameraIngestAuthorized,
+  cleanupExpiredCameraMedia,
+  ensureCameraSchema
+} from '$lib/server/camera';
+import { allowIoTIngest } from '$lib/server/iotIngest';
 
 export async function POST({ request, platform }) {
   const db = platform?.env?.DB;
@@ -11,6 +16,7 @@ export async function POST({ request, platform }) {
   }
 
   await ensureCameraSchema(db);
+  await cleanupExpiredCameraMedia(db, platform?.env?.CAMERA_MEDIA);
 
   const contentType = request.headers.get('content-type') ?? '';
   let payload: Record<string, unknown> = {};
@@ -31,6 +37,24 @@ export async function POST({ request, platform }) {
   const clipDurationSeconds = Number.isFinite(durationRaw) ? Math.max(0, Math.floor(durationRaw)) : 60;
   const createdAt = Number(payload.ts ?? payload.timestamp ?? Math.floor(Date.now() / 1000));
   const normalizedCreatedAt = Number.isFinite(createdAt) ? Math.floor(createdAt) : Math.floor(Date.now() / 1000);
+  const guardCameraKey = cameraId ?? cameraName ?? 'camera';
+  const allowed = await allowIoTIngest(
+    db,
+    `camera-activity:${guardCameraKey}:${eventType}:${normalizedCreatedAt}`,
+    30
+  );
+
+  if (!allowed) {
+    return json(
+      {
+        success: true,
+        accepted: true,
+        skipped: true,
+        message: 'Duplicate camera activity ignored.'
+      },
+      { status: 202 }
+    );
+  }
 
   await db
     .prepare(

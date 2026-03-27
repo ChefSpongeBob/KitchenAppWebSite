@@ -181,11 +181,15 @@
   }
 
   .subnav a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     text-decoration: none;
     color: var(--color-text-muted);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    padding: 0.32rem 0.7rem;
+    min-height: 2.4rem;
+    padding: 0.42rem 0.8rem;
     background: rgba(255, 255, 255, 0.03);
   }
 
@@ -272,6 +276,7 @@
     display: flex;
     gap: 0.55rem;
     margin-top: 0.8rem;
+    flex-wrap: wrap;
   }
 
   .control-link,
@@ -280,13 +285,14 @@
     align-items: center;
     justify-content: center;
     text-decoration: none;
+    min-height: 2.5rem;
   }
 
   .control-link {
     border: 1px solid rgba(195, 32, 43, 0.22);
     border-radius: 10px;
     background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
-    padding: 0.4rem 0.62rem;
+    padding: 0.55rem 0.78rem;
     font-size: 0.78rem;
     color: var(--color-text-soft);
   }
@@ -367,9 +373,11 @@
     border-radius: 10px;
     background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
     color: var(--color-text-soft);
-    padding: 0.4rem 0.62rem;
+    min-height: 2.5rem;
+    padding: 0.55rem 0.78rem;
     cursor: pointer;
     font-size: 0.78rem;
+    font-weight: var(--weight-medium);
   }
 
   .danger {

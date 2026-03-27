@@ -13,7 +13,12 @@
   {#if data.doc}
     <DashboardCard title={data.doc.title} description={data.doc.category}>
       <p>{data.doc.content ?? 'Details will appear here once added.'}</p>
-      {#if data.doc.file_url}<a href={data.doc.file_url}>View file</a>{/if}
+      {#if data.doc.file_url}
+        <div class="doc-actions">
+          <a href={data.doc.file_url} target="_blank" rel="noreferrer">Open File</a>
+          <a href={data.doc.file_url} download>Download File</a>
+        </div>
+      {/if}
     </DashboardCard>
   {:else}
     <p class="empty">SOP content is not available yet.</p>
@@ -26,10 +31,22 @@
     color: var(--color-text-muted);
   }
 
-  a {
-    display: inline-block;
-    margin-top: 0.6rem;
-    color: var(--color-primary);
+  .doc-actions {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    margin-top: 0.8rem;
+  }
+
+  .doc-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.48rem 0.75rem;
+    border-radius: 10px;
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
     text-decoration: none;
   }
 

@@ -5,26 +5,18 @@
   import { fade } from 'svelte/transition';
 
   const lists = [
-    { href: '/lists/preplists', title: 'Prep Lists', description: 'Kitchen and sushi prep checklists' },
-    { href: '/lists/checklists', title: 'Check Lists', description: 'Opening, mid day, and closing station checks' },
-    { href: '/lists/orders', title: 'Orders', description: 'Track and manage orders' },
-    { href: '/lists/inventory', title: 'Inventory', description: 'Stock and supply tracking' }
+    { href: '/lists/checklists/sushiprep', title: 'Sushi Prep', description: 'Opening, mid day, and closing checks.' },
+    { href: '/lists/checklists/sushi', title: 'Sushi', description: 'Opening, mid day, and closing checks.' },
+    { href: '/lists/checklists/kitchen', title: 'Kitchen', description: 'Opening, mid day, and closing checks.' }
   ];
 </script>
 
 <Layout>
-  <PageHeader title="Lists" subtitle="Prep lists, check lists, orders, and inventory" />
+  <PageHeader title="Check Lists" subtitle="Select a checklist station" />
   <div class="grid">
     {#each lists as list, index}
-      <a
-        href={list.href}
-        class="card-link"
-        in:fade={{ delay: index * 80, duration: 180 }}
-      >
-        <DashboardCard
-          title={list.title}
-          description={list.description}
-        />
+      <a href={list.href} class="card-link" in:fade={{ delay: index * 80, duration: 180 }}>
+        <DashboardCard title={list.title} description={list.description} />
       </a>
     {/each}
   </div>

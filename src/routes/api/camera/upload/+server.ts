@@ -1,9 +1,11 @@
 import { json } from '@sveltejs/kit';
 import {
+  cleanupExpiredCameraMedia,
   cameraIngestAuthorized,
   ensureCameraSchema,
   extensionFromContentType
 } from '$lib/server/camera';
+import { allowIoTIngest } from '$lib/server/iotIngest';
 
 export async function POST({ request, platform, url }) {
   const bucket = platform?.env?.CAMERA_MEDIA;
@@ -27,10 +29,28 @@ export async function POST({ request, platform, url }) {
   const eventType = (url.searchParams.get('event_type') ?? kind).trim() || kind;
   const logEvent = url.searchParams.get('log_event') === '1';
   const filename = (url.searchParams.get('filename') ?? '').trim();
+  const explicitTimestamp = Number(url.searchParams.get('ts') ?? url.searchParams.get('timestamp') ?? NaN);
   const explicitExt = filename.includes('.') ? filename.split('.').pop() ?? '' : '';
   const ext = explicitExt || extensionFromContentType(contentType, kind === 'clip' ? 'mp4' : 'jpg');
   const timestamp = Math.floor(Date.now() / 1000);
   const safeCameraId = cameraId.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+  if (db) {
+    const guardSuffix = Number.isFinite(explicitTimestamp)
+      ? `${Math.floor(explicitTimestamp)}`
+      : `${Math.floor(timestamp / 15)}`;
+    const allowed = await allowIoTIngest(db, `camera-upload:${safeCameraId}:${kind}:${guardSuffix}`, 15);
+
+    if (!allowed) {
+      return json(
+        {
+          success: true,
+          skipped: true,
+          message: 'Duplicate camera upload ignored.'
+        },
+        { status: 202 }
+      );
+    }
+  }
   const key = `${safeCameraId}/${kind}/${timestamp}-${crypto.randomUUID()}.${ext}`;
 
   await bucket.put(key, fileBuffer, {
@@ -43,6 +63,7 @@ export async function POST({ request, platform, url }) {
 
   if (logEvent && db) {
     await ensureCameraSchema(db);
+    await cleanupExpiredCameraMedia(db, bucket);
 
     await db
       .prepare(

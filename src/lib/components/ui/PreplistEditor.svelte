@@ -220,6 +220,7 @@
     justify-content: flex-end;
     gap: 0.5rem;
     margin-top: 0.35rem;
+    flex-wrap: wrap;
   }
 
   .reset-row {
@@ -227,7 +228,8 @@
   }
 
   .submit-btn {
-    padding: 0.68rem 0.95rem;
+    min-height: 2.75rem;
+    padding: 0.72rem 1rem;
     border-radius: 10px;
     border: 1px solid rgba(195, 32, 43, 0.22);
     background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
@@ -272,7 +274,8 @@
 
   .mini-btn {
     width: fit-content;
-    padding: 0.46rem 0.62rem;
+    min-height: 2.35rem;
+    padding: 0.55rem 0.72rem;
     border-radius: 10px;
     border: 1px solid rgba(195, 32, 43, 0.22);
     background: linear-gradient(180deg, rgba(195, 32, 43, 0.18), rgba(195, 32, 43, 0.06));
@@ -322,6 +325,15 @@
     .number-form,
     .par-readonly {
       grid-column: 2 / -1;
+    }
+
+    .actions-row > * {
+      width: 100%;
+    }
+
+    .actions-row button,
+    .actions-row .submit-btn {
+      width: 100%;
     }
   }
 </style>

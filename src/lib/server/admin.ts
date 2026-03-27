@@ -35,6 +35,22 @@ export type AdminSectionGroup = {
   items: AdminSectionItem[];
 };
 
+export type AdminChecklistItem = {
+  id: string;
+  content: string;
+  amount: number;
+  par_count: number;
+  is_checked: number;
+  sort_order: number;
+};
+
+export type AdminChecklistGroup = {
+  id: string;
+  slug: string;
+  title: string;
+  items: AdminChecklistItem[];
+};
+
 export type AdminNodeName = {
   sensor_id: number;
   name: string;
@@ -79,6 +95,12 @@ export type AdminUser = {
   role: string;
   is_active: number;
   can_manage_specials: number;
+};
+
+export type AdminAssignableUser = {
+  id: string;
+  display_name: string | null;
+  email: string;
 };
 
 export function requireAdmin(role: string | undefined | null) {
@@ -166,6 +188,63 @@ export async function loadAdminSections(db: D1) {
   };
 }
 
+export async function loadAdminChecklists(db: D1) {
+  if (!(await tableExists(db, 'checklist_sections')) || !(await tableExists(db, 'checklist_items'))) {
+    return [];
+  }
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        s.id AS section_id,
+        s.slug,
+        s.title,
+        i.id AS item_id,
+        i.content,
+        i.is_checked,
+        i.sort_order
+      FROM checklist_sections s
+      LEFT JOIN checklist_items i ON i.section_id = s.id
+      ORDER BY s.slug ASC, i.sort_order ASC, i.created_at ASC
+      `
+    )
+    .all<{
+      section_id: string;
+      slug: string;
+      title: string;
+      item_id: string | null;
+      content: string | null;
+      is_checked: number | null;
+      sort_order: number | null;
+    }>();
+
+  const grouped = new Map<string, AdminChecklistGroup>();
+  for (const row of rows.results ?? []) {
+    if (!grouped.has(row.section_id)) {
+      grouped.set(row.section_id, {
+        id: row.section_id,
+        slug: row.slug,
+        title: row.title,
+        items: []
+      });
+    }
+
+    if (row.item_id) {
+      grouped.get(row.section_id)?.items.push({
+        id: row.item_id,
+        content: row.content ?? '',
+        amount: 0,
+        par_count: 0,
+        is_checked: row.is_checked ?? 0,
+        sort_order: row.sort_order ?? 0
+      });
+    }
+  }
+
+  return Array.from(grouped.values());
+}
+
 export async function loadAdminRecipes(db: D1) {
   const recipes = await db
     .prepare(
@@ -239,6 +318,38 @@ export async function loadAdminUsers(db: D1) {
           `
         )
         .all<AdminUser>();
+
+  return users.results ?? [];
+}
+
+export async function loadAdminAssignableUsers(db: D1) {
+  const hasIsActive = await usersHasIsActiveColumn(db);
+  const users = hasIsActive
+    ? await db
+        .prepare(
+          `
+          SELECT
+            id,
+            display_name,
+            email
+          FROM users
+          WHERE COALESCE(is_active, 1) = 1
+          ORDER BY COALESCE(display_name, email) ASC
+          `
+        )
+        .all<AdminAssignableUser>()
+    : await db
+        .prepare(
+          `
+          SELECT
+            id,
+            display_name,
+            email
+          FROM users
+          ORDER BY COALESCE(display_name, email) ASC
+          `
+        )
+        .all<AdminAssignableUser>();
 
   return users.results ?? [];
 }
@@ -390,6 +501,72 @@ export async function deleteListItem(request: Request, locals: App.Locals) {
   if (!id) return fail(400, { error: 'Missing list item id.' });
 
   await db.prepare(`DELETE FROM list_items WHERE id = ?`).bind(id).run();
+  return { success: true };
+}
+
+export async function addChecklistItem(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const sectionId = String(formData.get('section_id') ?? '');
+  const content = String(formData.get('content') ?? '').trim();
+  if (!sectionId || !content) {
+    return fail(400, { error: 'Invalid checklist item input.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const maxSort = await db
+    .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM checklist_items WHERE section_id = ?`)
+    .bind(sectionId)
+    .first<{ max_sort: number }>();
+
+  await db
+    .prepare(
+      `
+      INSERT INTO checklist_items (
+        id, section_id, content, sort_order, is_checked, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, 0, ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, now, now)
+    .run();
+
+  return { success: true };
+}
+
+export async function updateChecklistItem(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const id = String(formData.get('id') ?? '');
+  const content = String(formData.get('content') ?? '').trim();
+  if (!id || !content) {
+    return fail(400, { error: 'Invalid checklist update input.' });
+  }
+
+  await db
+    .prepare(`UPDATE checklist_items SET content = ?, updated_at = ? WHERE id = ?`)
+    .bind(content, Math.floor(Date.now() / 1000), id)
+    .run();
+
+  return { success: true };
+}
+
+export async function deleteChecklistItem(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const id = String(formData.get('id') ?? '');
+  if (!id) return fail(400, { error: 'Missing checklist item id.' });
+
+  await db.prepare(`DELETE FROM checklist_items WHERE id = ?`).bind(id).run();
   return { success: true };
 }
 
@@ -762,6 +939,95 @@ export async function approveUser(request: Request, locals: App.Locals) {
     .prepare(`UPDATE users SET is_active = 1, updated_at = ? WHERE id = ?`)
     .bind(Math.floor(Date.now() / 1000), userId)
     .run();
+
+  return { success: true };
+}
+
+async function getUserById(db: D1, userId: string) {
+  return db
+    .prepare(
+      `
+      SELECT id, COALESCE(role, 'user') AS role, COALESCE(is_active, 1) AS is_active
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId)
+    .first<{ id: string; role: string; is_active: number }>();
+}
+
+async function countAdmins(db: D1) {
+  const result = await db
+    .prepare(`SELECT COUNT(*) AS count FROM users WHERE COALESCE(role, 'user') = 'admin'`)
+    .first<{ count: number }>();
+  return result?.count ?? 0;
+}
+
+async function revokeUserAccess(db: D1, userId: string, now: number) {
+  await db
+    .prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
+    .bind(now, userId)
+    .run();
+
+  await db
+    .prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
+    .bind(now, now, userId)
+    .run();
+}
+
+export async function denyUser(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await usersHasIsActiveColumn(db))) {
+    return fail(400, { error: 'users.is_active column missing. Run auth migration first.' });
+  }
+  if (userId === locals.userId) {
+    return fail(400, { error: 'You cannot deny your own account.' });
+  }
+
+  const target = await getUserById(db, userId);
+  if (!target) return fail(404, { error: 'User not found.' });
+  if (target.role === 'admin' && (await countAdmins(db)) <= 1) {
+    return fail(400, { error: 'At least one admin must remain active.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(`UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?`)
+    .bind(now, userId)
+    .run();
+  await revokeUserAccess(db, userId, now);
+
+  return { success: true };
+}
+
+export async function deleteUser(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (userId === locals.userId) {
+    return fail(400, { error: 'You cannot delete your own account.' });
+  }
+
+  const target = await getUserById(db, userId);
+  if (!target) return fail(404, { error: 'User not found.' });
+  if (target.role === 'admin' && (await countAdmins(db)) <= 1) {
+    return fail(400, { error: 'At least one admin must remain.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await revokeUserAccess(db, userId, now);
+  await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
 
   return { success: true };
 }

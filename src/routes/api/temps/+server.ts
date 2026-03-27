@@ -1,4 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { cleanupExpiredTemps } from '$lib/server/retention';
+import { allowIoTIngest } from '$lib/server/iotIngest';
 
 type TempRow = {
   sensor_id: number;
@@ -97,6 +99,27 @@ export const POST: RequestHandler = async ({ platform, request }) => {
     return json({ error: 'No valid readings supplied' }, { status: 400 });
   }
 
+  const sensorSignature = items
+    .map((row) => row.sensor_id)
+    .sort((a, b) => a - b)
+    .join(',');
+  const timestampSignature = Array.from(new Set(items.map((row) => row.ts)))
+    .sort((a, b) => a - b)
+    .join(',');
+  const guardKey = `temps:${sensorSignature}:${timestampSignature}`;
+  const allowed = await allowIoTIngest(db, guardKey, 60);
+
+  if (!allowed) {
+    return json(
+      {
+        inserted: 0,
+        skipped: true,
+        message: 'Duplicate temp batch ignored.'
+      },
+      { status: 202 }
+    );
+  }
+
   const statements = items.map((row) =>
     db
       .prepare(
@@ -109,5 +132,6 @@ export const POST: RequestHandler = async ({ platform, request }) => {
   );
 
   await db.batch(statements);
+  await cleanupExpiredTemps(db);
   return json({ inserted: items.length }, { status: 201 });
 };

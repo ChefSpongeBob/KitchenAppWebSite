@@ -1,22 +1,25 @@
 import type { Actions, PageServerLoad } from './$types';
 import {
   addNodeName,
+  loadAdminAssignableUsers,
   approveUser,
   approveWhiteboard,
   createTodo,
+  deleteUser,
   deleteNodeName,
   deleteTodo,
   deleteWhiteboard,
+  denyUser,
   loadAdminAnnouncement,
   loadAdminNodeNames,
   loadAdminTodos,
-  loadAdminUsers,
   loadAdminWhiteboardIdeas,
   rejectWhiteboard,
   makeUserAdmin,
   requireAdmin,
   saveAnnouncement,
-  toggleSpecialsAccess
+  toggleSpecialsAccess,
+  usersHasIsActiveColumn
 } from '$lib/server/admin';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -26,7 +29,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   if (!db) {
     return {
       todos: [],
-      users: [],
+    users: [],
       nodeNames: [],
       whiteboardIdeas: [],
       announcement: { content: '', updatedAt: 0 },
@@ -39,13 +42,22 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   }
 
-  const [todos, users, nodeNames, whiteboardIdeas, announcement] = await Promise.all([
+  const [todos, users, nodeNames, whiteboardIdeas, announcement, hasIsActive] = await Promise.all([
     loadAdminTodos(db),
-    loadAdminUsers(db),
+    loadAdminAssignableUsers(db),
     loadAdminNodeNames(db),
     loadAdminWhiteboardIdeas(db),
-    loadAdminAnnouncement(db)
+    loadAdminAnnouncement(db),
+    usersHasIsActiveColumn(db)
   ]);
+
+  const pendingUsers = hasIsActive
+    ? (
+        await db
+          .prepare(`SELECT COUNT(*) AS count FROM users WHERE COALESCE(is_active, 1) != 1`)
+          .first<{ count: number }>()
+      )?.count ?? 0
+    : 0;
 
   return {
     todos,
@@ -54,7 +66,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     whiteboardIdeas,
     announcement,
     summary: {
-      pendingUsers: users.filter((user) => user.is_active !== 1).length,
+      pendingUsers,
       openTodos: todos.filter((todo) => !todo.completed_at).length,
       pendingIdeas: whiteboardIdeas.filter((idea) => idea.status === 'pending').length,
       nodeCount: nodeNames.length
@@ -73,5 +85,7 @@ export const actions: Actions = {
   save_announcement: ({ request, locals }) => saveAnnouncement(request, locals),
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
   approve_user: ({ request, locals }) => approveUser(request, locals),
+  deny_user: ({ request, locals }) => denyUser(request, locals),
+  delete_user: ({ request, locals }) => deleteUser(request, locals),
   toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals)
 };

@@ -16,9 +16,6 @@
     id: string;
     display_name: string | null;
     email: string;
-    role: string;
-    is_active: number;
-    can_manage_specials: number;
   };
 
   type NodeName = {
@@ -55,6 +52,11 @@
   };
 
   const editorLinks = [
+    {
+      href: '/admin/users',
+      title: 'Users',
+      description: 'Approve, deny, and manage staff access.'
+    },
     {
       href: '/admin/lists',
       title: 'Lists',
@@ -120,7 +122,6 @@
 
   <nav class="jump-nav" aria-label="Admin quick sections">
     <a href="#todos">Todo</a>
-    <a href="#access">User Access</a>
     <a href="#whiteboard">Whiteboard</a>
     <a href="#announcement">Announcement</a>
     <a href="#nodes">Node Names</a>
@@ -148,7 +149,7 @@
         <button type="submit">Add Task</button>
       </form>
 
-      <table class="sheet">
+      <table class="sheet action-sheet user-sheet">
         <thead>
           <tr>
             <th>Title</th>
@@ -177,84 +178,6 @@
       </table>
     </details>
 
-    <details class="panel" id="access" open>
-      <summary>
-        <div>
-          <span class="panel-kicker">Permissions</span>
-          <h2>User Access</h2>
-        </div>
-        <span>{data.users.length} users</span>
-      </summary>
-
-      <table class="sheet">
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Email</th>
-            <th>Access</th>
-            <th>Specials</th>
-            <th>Role</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if data.users.length === 0}
-            <tr><td colspan="6">No users found.</td></tr>
-          {:else}
-            {#each data.users as user}
-              <tr>
-                <td>{user.display_name ?? 'Unnamed User'}</td>
-                <td>{user.email}</td>
-                <td>
-                  {#if user.is_active === 1}
-                    <span class="status status-approved">Approved</span>
-                  {:else}
-                    <span class="status status-pending">Pending</span>
-                  {/if}
-                </td>
-                <td>
-                  {#if user.role === 'admin' || user.can_manage_specials === 1}
-                    <span class="status status-approved">Allowed</span>
-                  {:else}
-                    <span class="status">Off</span>
-                  {/if}
-                </td>
-                <td>{user.role}</td>
-                <td>
-                  <div class="inline">
-                    {#if user.is_active !== 1}
-                      <form method="POST" action="?/approve_user" use:enhance class="inline">
-                        <input type="hidden" name="user_id" value={user.id} />
-                        <button type="submit" class="icon-btn" aria-label="Approve user account">OK</button>
-                      </form>
-                    {/if}
-                    {#if user.role !== 'admin'}
-                      <form method="POST" action="?/make_user_admin" use:enhance class="inline">
-                        <input type="hidden" name="user_id" value={user.id} />
-                        <button type="submit" class="icon-btn" aria-label="Promote user to admin">A</button>
-                      </form>
-                      <form method="POST" action="?/toggle_specials_access" use:enhance class="inline">
-                        <input type="hidden" name="user_id" value={user.id} />
-                        <button
-                          type="submit"
-                          class="icon-btn"
-                          aria-label={user.can_manage_specials === 1
-                            ? 'Remove daily specials access'
-                            : 'Grant daily specials access'}
-                        >
-                          {user.can_manage_specials === 1 ? 'S-' : 'S+'}
-                        </button>
-                      </form>
-                    {/if}
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </details>
-
     <details class="panel" id="whiteboard">
       <summary>
         <div>
@@ -264,7 +187,7 @@
         <span>{data.whiteboardIdeas.length} ideas</span>
       </summary>
 
-      <table class="sheet">
+      <table class="sheet whiteboard-sheet">
         <thead>
           <tr>
             <th>Idea</th>
@@ -341,7 +264,7 @@
         <button type="submit">Save Node</button>
       </form>
 
-      <table class="sheet">
+      <table class="sheet action-sheet">
         <thead>
           <tr>
             <th>Node ID</th>
@@ -369,6 +292,7 @@
         </tbody>
       </table>
     </details>
+
   </section>
 </Layout>
 
@@ -675,6 +599,54 @@
       min-width: 680px;
     }
 
+    .action-sheet,
+    .whiteboard-sheet {
+      min-width: 0;
+      width: 100%;
+      table-layout: fixed;
+    }
+
+    .action-sheet th:last-child,
+    .action-sheet td:last-child {
+      width: 132px;
+    }
+
+    .whiteboard-sheet th:nth-child(1),
+    .whiteboard-sheet td:nth-child(1) {
+      width: auto;
+    }
+
+    .whiteboard-sheet th:nth-child(2),
+    .whiteboard-sheet td:nth-child(2) {
+      width: 64px;
+    }
+
+    .whiteboard-sheet th:nth-child(3),
+    .whiteboard-sheet td:nth-child(3) {
+      width: 92px;
+    }
+
+    .whiteboard-sheet th:nth-child(4),
+    .whiteboard-sheet td:nth-child(4) {
+      width: 132px;
+    }
+
+    .whiteboard-sheet th:nth-child(5),
+    .whiteboard-sheet td:nth-child(5) {
+      width: 132px;
+    }
+
+    .action-sheet td,
+    .whiteboard-sheet td {
+      overflow-wrap: anywhere;
+    }
+
+    .action-sheet .inline,
+    .whiteboard-sheet .inline {
+      flex-wrap: nowrap;
+      gap: 0.3rem;
+    }
+
     .add-row > *,
     .inline > * {
       flex: 1 1 100%;
@@ -684,6 +656,18 @@
     .inline .icon-btn {
       flex: 0 0 auto;
     }
+
+    .action-sheet td:last-child .inline,
+    .whiteboard-sheet td:last-child .inline {
+      flex: 0 0 auto;
+    }
+
+    .action-sheet td:last-child .inline > *,
+    .whiteboard-sheet td:last-child .inline > * {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
   }
 
 </style>

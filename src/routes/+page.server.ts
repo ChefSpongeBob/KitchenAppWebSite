@@ -32,6 +32,7 @@ type NodeNameRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   const isAdmin = locals.userRole === 'admin';
+  const HOMEPAGE_TEMP_LIMIT = 480;
   if (!db) {
     return {
       isAdmin,
@@ -87,9 +88,10 @@ export const load: PageServerLoad = async ({ locals }) => {
       SELECT sensor_id, temperature, ts
       FROM temps
       ORDER BY ts DESC
-      LIMIT 1200
+      LIMIT ?
       `
     )
+    .bind(HOMEPAGE_TEMP_LIMIT)
     .all<TempRow>();
   const openTasksPromise = db
     .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NULL`)

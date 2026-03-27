@@ -101,9 +101,11 @@
                     <option value="1" selected={doc.is_active === 1}>Active</option>
                     <option value="0" selected={doc.is_active === 0}>Inactive</option>
                   </select>
-                  <button type="submit">Save</button>
+                  <div class="form-actions">
+                    <button type="submit">Save</button>
+                  </div>
                 </form>
-                <form method="POST" action="?/delete_document" use:enhance class="inline">
+                <form method="POST" action="?/delete_document" use:enhance class="inline delete-row">
                   <input type="hidden" name="id" value={doc.id} />
                   <button type="submit" class="icon-btn danger" aria-label="Delete document">X</button>
                 </form>
@@ -188,6 +190,13 @@
     flex: 1 1 100%;
   }
 
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: 0.2rem;
+  }
+
   .doc-groups {
     margin-top: 0.8rem;
     display: grid;
@@ -224,6 +233,11 @@
     padding: 0;
   }
 
+  .delete-row {
+    justify-content: flex-end;
+    margin-top: 0.45rem;
+  }
+
   input,
   textarea,
   select {
@@ -241,14 +255,17 @@
     border-radius: 10px;
     background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
     color: var(--color-primary-contrast);
-    padding: 0.4rem 0.62rem;
+    min-height: 2.6rem;
+    padding: 0.55rem 0.78rem;
     cursor: pointer;
     font-size: 0.78rem;
+    font-weight: var(--weight-medium);
   }
 
   .icon-btn {
     width: 1.9rem;
     height: 1.9rem;
+    min-height: 1.9rem;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -266,6 +283,14 @@
     .panel-header {
       flex-direction: column;
       align-items: start;
+    }
+
+    .form-actions {
+      justify-content: stretch;
+    }
+
+    .form-actions button {
+      width: 100%;
     }
   }
 </style>

@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import TempGraph from '$lib/components/ui/TempGraph.svelte';
+  import { startVisiblePolling } from '$lib/client/polling';
   import { fly, fade } from 'svelte/transition';
   import { onMount } from 'svelte';
 
@@ -57,6 +58,8 @@
   let lastIdeasRefresh = data.refreshedAt ?? Math.floor(Date.now() / 1000);
   let px = 0;
   let py = 0;
+  const TEMP_WARNING_THRESHOLD = 42;
+  const HOMEPAGE_TEMP_LIMIT = 480;
 
   const namesBySensor = new Map<number, string | null>(
     nodeTemps.map((node) => [node.sensorId, node.nodeName])
@@ -119,7 +122,7 @@
   }
 
   async function refreshTemps() {
-    const response = await fetch('/api/temps?limit=600');
+    const response = await fetch(`/api/temps?limit=${HOMEPAGE_TEMP_LIMIT}`);
     if (!response.ok) return;
     const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; ts: number }>;
     if (!rows?.length) return;
@@ -142,7 +145,7 @@
   $: latestTempTs = nodeTemps.length ? Math.max(...nodeTemps.map((node) => node.ts)) : 0;
   $: tempFreshText = latestTempTs ? secondsAgoLabel(latestTempTs) : 'no data';
   $: ideasFreshText = secondsAgoLabel(lastIdeasRefresh);
-  $: highTempNodes = nodeTemps.filter((node) => node.temperature >= 45);
+  $: highTempNodes = nodeTemps.filter((node) => node.temperature >= TEMP_WARNING_THRESHOLD);
   $: activeSpecials = dailySpecials
     .filter((special) => special.content.trim().length > 0)
     .map((special) => ({
@@ -153,13 +156,13 @@
   onMount(() => {
     updateTime();
     const clock = setInterval(updateTime, 1000);
-    const refreshLoop = setInterval(() => {
-      refreshTemps();
-      refreshIdeas();
-    }, 60000);
+    const stopPolling = startVisiblePolling(
+      () => Promise.all([refreshTemps(), refreshIdeas()]).then(() => undefined),
+      { intervalMs: 60000, runImmediately: false, refreshOnVisible: true }
+    );
     return () => {
       clearInterval(clock);
-      clearInterval(refreshLoop);
+      stopPolling();
     };
   });
 </script>
@@ -206,7 +209,7 @@
         </div>
       </div>
       {#if highTempNodes.length > 0}
-        <small class="alert">Alert: {highTempNodes.length} temp node(s) above 45F</small>
+        <small class="alert">Alert: {highTempNodes.length} temp node(s) at or above {TEMP_WARNING_THRESHOLD}F</small>
       {/if}
     </div>
 
@@ -261,13 +264,23 @@
           <small>No recent nodes</small>
         {:else}
           {#each nodeTemps as node}
-            <div class="node-pill" class:warn={node.temperature >= 45}>
+            <div class="node-pill" class:warn={node.temperature >= TEMP_WARNING_THRESHOLD}>
               <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
               <span>{node.temperature.toFixed(1)}F</span>
             </div>
           {/each}
         {/if}
       </div>
+      {#if highTempNodes.length > 0}
+        <div class="temp-warnings">
+          {#each highTempNodes as node}
+            <a href="/temper" class="temp-warning-line">
+              <strong>{node.nodeName ?? `Node ${node.sensorId}`}</strong>
+              <span>{node.temperature.toFixed(1)}F</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
       <div class="mini-graph">
         <TempGraph {series} height={40} />
       </div>
@@ -456,7 +469,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .alert { margin-top: 0.35rem; color: #f59e0b; font-size: 0.78rem; }
+  .alert { margin-top: 0.35rem; color: #fca5a5; font-size: 0.78rem; }
   .specials-empty {
     color: var(--color-text-muted);
   }
@@ -467,6 +480,23 @@
   .node-pill { display: inline-flex; gap: 6px; align-items: center; font-size: 0.72rem; border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 7px; color: var(--color-text-muted); }
   .node-pill.warn { border-color: #f59e0b; color: #f59e0b; }
   .node-pill strong { color: var(--color-text); font-size: 0.7rem; }
+  .temp-warnings {
+    display: grid;
+    gap: 0.28rem;
+    margin-top: 0.35rem;
+  }
+  .temp-warning-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: #fecaca;
+    font-size: 0.76rem;
+    line-height: 1.25;
+  }
+  .temp-warning-line strong {
+    font-weight: var(--weight-semibold);
+  }
   .mini-graph { width: 100%; height: 40px; margin-top: 4px; overflow: hidden; }
   .tile-label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); }
   .idea { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-muted); }

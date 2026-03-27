@@ -18,16 +18,60 @@
     items: Item[];
   };
 
+  type ChecklistItem = {
+    id: string;
+    content: string;
+    amount: number;
+    par_count: number;
+    is_checked: number;
+  };
+
+  type ChecklistSection = {
+    id: string;
+    slug: string;
+    title: string;
+    items: ChecklistItem[];
+  };
+
+  type ChecklistCategory = {
+    id: string;
+    title: string;
+    sections: ChecklistSection[];
+  };
+
   export let data: {
     preplists: Section[];
     inventory: Section[];
     orders: Section[];
+    checklists: ChecklistSection[];
   };
 
   const buckets = [
     { id: 'preplists', title: 'Preplists', sections: data.preplists, description: 'Prep sheets for the day.' },
     { id: 'inventory', title: 'Inventory', sections: data.inventory, description: 'Count sheets for stocked items.' },
-    { id: 'orders', title: 'Orders', sections: data.orders, description: 'Order sheets and supply lists.' }
+    { id: 'orders', title: 'Orders', sections: data.orders, description: 'Order sheets and supply lists.' },
+    { id: 'checklists', title: 'Checklists', sections: [], description: 'Opening, mid day, and closing checklist tasks.' }
+  ];
+
+  const isShiftChecklist = (slug: string, prefix: string) =>
+    [`${prefix}-opening`, `${prefix}-midday`, `${prefix}-closing`].includes(slug);
+
+  const checklistCategories: ChecklistCategory[] = [
+    {
+      id: 'sushi-prep',
+      title: 'Sushi Prep',
+      sections: data.checklists.filter((section) => isShiftChecklist(section.slug, 'sushi-prep'))
+    },
+    {
+      id: 'sushi',
+      title: 'Sushi',
+      sections: data.checklists.filter((section) => isShiftChecklist(section.slug, 'sushi'))
+    },
+    {
+      id: 'kitchen',
+      title: 'Kitchen',
+      sections: data.checklists.filter((section) => isShiftChecklist(section.slug, 'kitchen'))
+    }
   ];
 </script>
 
@@ -54,54 +98,108 @@
         <p>{bucket.description}</p>
       </header>
 
-      {#each bucket.sections as section}
-        <details class="section-block">
-          <summary>
-            <h3>{section.title}</h3>
-            <span>{section.items.length} items</span>
-          </summary>
-          <table class="sheet">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Par</th>
-                <th>Current</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each section.items as item}
+      {#if bucket.id === 'checklists'}
+        {#each checklistCategories as category}
+          <details class="section-block category-block">
+            <summary>
+              <h3>{category.title}</h3>
+              <span>{category.sections.length} lists</span>
+            </summary>
+
+            {#each category.sections as section}
+              <details class="subsection-block">
+                <summary>
+                  <h4>{section.title}</h4>
+                  <span>{section.items.length} items</span>
+                </summary>
+                <table class="sheet">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.items as item}
+                      <tr>
+                        <td>
+                          <form method="POST" action="?/update_checklist_item" use:enhance class="inline-edit checklist-edit">
+                            <input type="hidden" name="id" value={item.id} />
+                            <input name="content" value={item.content} required />
+                            <button type="submit" class="icon-btn" aria-label="Save item">S</button>
+                          </form>
+                        </td>
+                        <td>{item.is_checked ? 'Done' : 'Open'}</td>
+                        <td>
+                          <form method="POST" action="?/delete_checklist_item" use:enhance class="inline">
+                            <input type="hidden" name="id" value={item.id} />
+                            <button type="submit" class="icon-btn danger" aria-label="Delete item">X</button>
+                          </form>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+                <form method="POST" action="?/add_checklist_item" use:enhance class="add-row checklist-add">
+                  <input type="hidden" name="section_id" value={section.id} />
+                  <input name="content" placeholder={`Add item to ${section.title}`} required />
+                  <button type="submit">Add Item</button>
+                </form>
+              </details>
+            {/each}
+          </details>
+        {/each}
+      {:else}
+        {#each bucket.sections as section}
+          <details class="section-block">
+            <summary>
+              <h3>{section.title}</h3>
+              <span>{section.items.length} items</span>
+            </summary>
+            <table class="sheet">
+              <thead>
                 <tr>
-                  <td>
-                    <form method="POST" action="?/update_list_item" use:enhance class="inline-edit">
-                      <input type="hidden" name="id" value={item.id} />
-                      <input name="content" value={item.content} required />
-                      <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
-                      <button type="submit" class="icon-btn" aria-label="Save item">S</button>
-                    </form>
-                  </td>
-                  <td>{item.par_count}</td>
-                  <td>{item.amount}</td>
-                  <td>{item.is_checked ? 'Done' : 'Open'}</td>
-                  <td>
-                    <form method="POST" action="?/delete_list_item" use:enhance class="inline">
-                      <input type="hidden" name="id" value={item.id} />
-                      <button type="submit" class="icon-btn danger" aria-label="Delete item">X</button>
-                    </form>
-                  </td>
+                  <th>Item</th>
+                  <th>Par</th>
+                  <th>Current</th>
+                  <th>Status</th>
+                  <th></th>
                 </tr>
-              {/each}
-            </tbody>
-          </table>
-          <form method="POST" action="?/add_list_item" use:enhance class="add-row">
-            <input type="hidden" name="section_id" value={section.id} />
-            <input name="content" placeholder={`Add item to ${section.title}`} required />
-            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
-            <button type="submit">Add Item</button>
-          </form>
-        </details>
-      {/each}
+              </thead>
+              <tbody>
+                {#each section.items as item}
+                  <tr>
+                    <td>
+                      <form method="POST" action="?/update_list_item" use:enhance class="inline-edit">
+                        <input type="hidden" name="id" value={item.id} />
+                        <input name="content" value={item.content} required />
+                        <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
+                        <button type="submit" class="icon-btn" aria-label="Save item">S</button>
+                      </form>
+                    </td>
+                    <td>{item.par_count}</td>
+                    <td>{item.amount}</td>
+                    <td>{item.is_checked ? 'Done' : 'Open'}</td>
+                    <td>
+                      <form method="POST" action="?/delete_list_item" use:enhance class="inline">
+                        <input type="hidden" name="id" value={item.id} />
+                        <button type="submit" class="icon-btn danger" aria-label="Delete item">X</button>
+                      </form>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+            <form method="POST" action="?/add_list_item" use:enhance class="add-row">
+              <input type="hidden" name="section_id" value={section.id} />
+              <input name="content" placeholder={`Add item to ${section.title}`} required />
+              <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
+              <button type="submit">Add Item</button>
+            </form>
+          </details>
+        {/each}
+      {/if}
     </section>
   {/each}
 </Layout>
@@ -167,6 +265,18 @@
     margin-top: 0.7rem;
   }
 
+  .subsection-block {
+    margin-top: 0.6rem;
+    margin-left: 0.4rem;
+    padding-left: 0.8rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .subsection-block h4 {
+    margin: 0;
+    font-size: 0.98rem;
+  }
+
   summary {
     display: flex;
     justify-content: space-between;
@@ -212,6 +322,15 @@
 
   .add-row {
     margin-top: 0.7rem;
+  }
+
+  .checklist-edit input {
+    flex: 1 1 auto;
+  }
+
+  .checklist-add {
+    display: grid;
+    grid-template-columns: 1fr auto;
   }
 
   input {

@@ -15,6 +15,11 @@
 
   export let data: { docs?: DocItem[] };
   const docs: DocItem[] = data.docs ?? [];
+
+  function getDocHref(doc: DocItem) {
+    if (doc.slug === 'about') return '/about';
+    return `/docs/${doc.slug}`;
+  }
 </script>
 
 <Layout>
@@ -25,16 +30,21 @@
   {:else}
     <section class="grid">
       {#each docs as d}
-        <a href={d.slug === 'about' ? '/about' : d.slug === 'sop' ? '/docs/sop' : d.slug === 'handbook' ? '/docs/handbook' : '/docs'} class="card-link">
-          <DashboardCard title={d.title} description={`${d.section} / ${d.category}`}>
-            {#if d.content}
-              <p>{d.content}</p>
-            {/if}
-            {#if d.file_url}
-              <small>File: {d.file_url}</small>
-            {/if}
-          </DashboardCard>
-        </a>
+        <div class="doc-card">
+          <a href={getDocHref(d)} class="card-link">
+            <DashboardCard title={d.title} description={`${d.section} / ${d.category}`}>
+              {#if d.content}
+                <p>{d.content}</p>
+              {/if}
+            </DashboardCard>
+          </a>
+          {#if d.file_url}
+            <div class="doc-actions">
+              <a href={d.file_url} target="_blank" rel="noreferrer">Open File</a>
+              <a href={d.file_url} download>Download</a>
+            </div>
+          {/if}
+        </div>
       {/each}
     </section>
   {/if}
@@ -53,14 +63,33 @@
     color: inherit;
   }
 
-  p {
-    margin: 0.5rem 0 0;
-    color: var(--color-text-muted);
+  .doc-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
   }
 
-  small {
-    display: block;
-    margin-top: 0.4rem;
+  .doc-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .doc-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.42rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
+    text-decoration: none;
+    font-size: 0.78rem;
+  }
+
+  p {
+    margin: 0.5rem 0 0;
     color: var(--color-text-muted);
   }
 

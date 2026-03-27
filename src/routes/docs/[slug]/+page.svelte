@@ -3,26 +3,30 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
 
-  type Doc = { title: string; content: string | null; file_url: string | null; category: string };
-  export let data: { doc: Doc | null };
+  type Doc = {
+    title: string;
+    content: string | null;
+    file_url: string | null;
+    category: string;
+    slug: string;
+  };
+
+  export let data: { doc: Doc };
 </script>
 
 <Layout>
-  <PageHeader title="Handbook" subtitle="Team handbook and working standards." />
+  <PageHeader title={data.doc.title} subtitle={data.doc.category} />
 
-  {#if data.doc}
-    <DashboardCard title={data.doc.title} description={data.doc.category}>
-      <p>{data.doc.content ?? 'Details will appear here once added.'}</p>
-      {#if data.doc.file_url}
-        <div class="doc-actions">
-          <a href={data.doc.file_url} target="_blank" rel="noreferrer">Open File</a>
-          <a href={data.doc.file_url} download>Download File</a>
-        </div>
-      {/if}
-    </DashboardCard>
-  {:else}
-    <p class="empty">Handbook content is not available yet.</p>
-  {/if}
+  <DashboardCard title={data.doc.title} description={data.doc.category}>
+    <p>{data.doc.content ?? 'Details will appear here once added.'}</p>
+
+    {#if data.doc.file_url}
+      <div class="doc-actions">
+        <a href={data.doc.file_url} target="_blank" rel="noreferrer">Open File</a>
+        <a href={data.doc.file_url} download>Download File</a>
+      </div>
+    {/if}
+  </DashboardCard>
 </Layout>
 
 <style>
@@ -49,8 +53,5 @@
     color: var(--color-primary-contrast);
     text-decoration: none;
   }
-
-  .empty {
-    color: var(--color-text-muted);
-  }
 </style>
+

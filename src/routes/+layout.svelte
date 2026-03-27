@@ -151,7 +151,6 @@
 
   .app-content {
     flex: 1;
-    overflow-y: auto;
     padding: clamp(0.75rem, 2.6vw, var(--space-4));
     padding-bottom: var(--space-8);
     padding-top: calc(2.5rem + var(--safe-top));

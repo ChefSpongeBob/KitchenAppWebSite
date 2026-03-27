@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade } from 'svelte/transition';
-  import TempGraph from '$lib/components/ui/TempGraph.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import { startVisiblePolling } from '$lib/client/polling';
 
   type NodeName = {
     sensor_id: number;
@@ -15,9 +14,9 @@
 
   let temps: Array<{ sensor_id: number; temperature: number; ts: number }> = [];
   let latest: Record<number, number> = {};
-  let series: Record<number, number[]> = {};
   let lastSeen: Record<number, number> = {};
   let seenSensorIds: number[] = [];
+  const TEMP_WARNING_THRESHOLD = 42;
 
   const URL = '/api/temps';
 
@@ -42,7 +41,6 @@
       const responseData = await res.json();
 
       const latestMap: Record<number, number> = {};
-      const grouped: Record<number, number[]> = {};
       const seen: Record<number, number> = {};
       const seenIds = new Set<number>();
 
@@ -53,16 +51,16 @@
         if (!Number.isFinite(sensor) || !Number.isFinite(temp) || !Number.isFinite(tsMs)) continue;
         seenIds.add(sensor);
 
-        latestMap[sensor] = temp;
+        if (latestMap[sensor] === undefined) {
+          latestMap[sensor] = temp;
+        }
 
-        if (!grouped[sensor]) grouped[sensor] = [];
-        grouped[sensor].push(temp);
-
-        seen[sensor] = tsMs;
+        if (seen[sensor] === undefined) {
+          seen[sensor] = tsMs;
+        }
       }
 
       latest = latestMap;
-      series = grouped;
       lastSeen = seen;
       temps = responseData;
       seenSensorIds = Array.from(seenIds).sort((a, b) => a - b);
@@ -72,14 +70,17 @@
   }
 
   onMount(() => {
-    load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
+    const stopPolling = startVisiblePolling(load, {
+      intervalMs: 30000,
+      runImmediately: true,
+      refreshOnVisible: true
+    });
+    return () => stopPolling();
   });
 
   function tempClass(temp?: number) {
     if (temp === undefined) return '';
-    if (temp > 75) return 'hot';
+    if (temp >= TEMP_WARNING_THRESHOLD) return 'hot';
     if (temp < 38) return 'cold';
     return 'normal';
   }
@@ -103,27 +104,44 @@
     const namedIds = Object.keys(nodeNames).map((v) => Number(v)).filter((v) => Number.isFinite(v));
     return Array.from(new Set([...baselineIds, ...namedIds, ...seenSensorIds])).sort((a, b) => a - b);
   })();
-  $: hasGraphData = Object.values(series).some((vals) => Array.isArray(vals) && vals.length > 1);
+  $: warningNodes = nodeIds
+    .filter((node) => latest[node] !== undefined && latest[node] >= TEMP_WARNING_THRESHOLD)
+    .map((node) => ({
+      sensorId: node,
+      name: nodeNames[node] ?? `Node ${node}`,
+      temperature: latest[node],
+      ts: lastSeen[node]
+    }));
 </script>
 
 <PageHeader title="Kitchen Temps" subtitle="12h history" />
 
-<div class="graph-wrap" in:fade={{ duration: 400 }}>
-  {#if hasGraphData}
-    <TempGraph {series} height={84} />
-  {:else}
-    <div class="graph-empty">No recent graph data yet.</div>
-  {/if}
-</div>
+{#if warningNodes.length > 0}
+  <section class="warning-row" aria-label="Temperature warnings">
+    {#each warningNodes as node}
+      <div class="warning-card">
+        <span class="warning-label">Temp Warning</span>
+        <strong>{node.name}</strong>
+        <div class="warning-reading">{node.temperature.toFixed(1)}F</div>
+        <small>Last update: {formatTime(node.ts)}</small>
+      </div>
+    {/each}
+  </section>
+{/if}
 
 <div class="grid">
   {#each nodeIds as node}
     <div class="tile {tempClass(latest[node])}">
       <h2 title="Sensor ID: {node}">{nodeNames[node] ?? `Node ${node}`}</h2>
 
-      {#if latest[node] !== undefined && isOnline(lastSeen[node])}
+      {#if latest[node] !== undefined}
         <div class="temp">{latest[node]}F</div>
-        <small class="seen">Last update: {formatTime(lastSeen[node])}</small>
+        <small class="seen">
+          Last update: {formatTime(lastSeen[node])}
+          {#if !isOnline(lastSeen[node])}
+            (stale)
+          {/if}
+        </small>
       {:else}
         <div class="temp offline">--</div>
         <small class="seen">No recent data</small>
@@ -133,24 +151,47 @@
 </div>
 
 <style>
-  .graph-wrap {
-    width: 100%;
-    max-width: 700px;
-    margin: 0 auto 0.6rem;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    padding: 0.35rem 0.45rem;
-    background: var(--color-surface);
-    min-height: 96px;
-    display: flex;
-    align-items: center;
+  .warning-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin: 0 0 1rem;
   }
 
-  .graph-empty {
-    width: 100%;
-    text-align: center;
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
+  .warning-card {
+    border: 1px solid rgba(220, 38, 38, 0.38);
+    background:
+      linear-gradient(180deg, rgba(220, 38, 38, 0.16), rgba(220, 38, 38, 0.04)),
+      color-mix(in srgb, var(--color-surface) 90%, black 10%);
+    border-radius: var(--radius-lg);
+    padding: 0.9rem 1rem;
+    display: grid;
+    gap: 0.22rem;
+    box-shadow: 0 10px 28px rgba(127, 29, 29, 0.16);
+    color: var(--color-text);
+  }
+
+  .warning-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #fca5a5;
+  }
+
+  .warning-card strong {
+    font-size: 1rem;
+  }
+
+  .warning-reading {
+    font-size: 1.7rem;
+    font-weight: var(--weight-bold);
+    color: #fecaca;
+    line-height: 1.05;
+  }
+
+  .warning-card small {
+    color: rgba(255, 232, 232, 0.78);
+    font-size: 0.76rem;
   }
 
   .grid {
@@ -203,8 +244,18 @@
   }
 
   @media (max-width: 760px) {
-    .graph-wrap {
-      max-width: 100%;
+    .warning-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .warning-card {
+      padding: 0.75rem 0.8rem;
+    }
+
+    .warning-reading {
+      font-size: 1.35rem;
     }
 
     .grid {
@@ -229,6 +280,10 @@
   }
 
   @media (max-width: 430px) {
+    .warning-row {
+      grid-template-columns: 1fr;
+    }
+
     .grid {
       grid-template-columns: 1fr;
     }
