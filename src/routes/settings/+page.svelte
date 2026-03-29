@@ -76,18 +76,32 @@
   }
 
   .setting-card {
-    background: var(--color-surface);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
     padding: var(--space-5);
     display: flex;
     flex-direction: column;
-    transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out), border-color 120ms var(--ease-out);
+    overflow: hidden;
+  }
+
+  .setting-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.9), rgba(195, 32, 43, 0.2));
   }
 
   .setting-card:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-md);
+    border-color: rgba(195, 32, 43, 0.18);
   }
 
   .setting-card h3 {
@@ -130,10 +144,10 @@
 
   .save-btn {
     grid-column: 1 / -1;
-    background: var(--color-surface);
-    color: var(--color-text);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
     padding: var(--space-4) var(--space-6);
     font-weight: var(--weight-semibold);
@@ -153,10 +167,10 @@
   }
 
   .logout-btn {
-    background: rgba(235, 24, 24, 0.15);
-    color: var(--color-text);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
+    color: #ffb6b6;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
     padding: var(--space-3) var(--space-4);
     font-weight: var(--weight-semibold);

@@ -2,10 +2,11 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
 
   const menuPdfs = [
     {
-      title: 'Secret Rolls',
+      title: 'Secret Menu',
       description: 'Off-menu and specialty roll reference.',
       href: '/menus/secret-rolls.pdf',
       file: 'secret-rolls.pdf'
@@ -23,6 +24,12 @@
       file: 'seasonal-menu.pdf'
     }
   ];
+
+  let activeMenu: (typeof menuPdfs)[number] | null = null;
+
+  function toggleMenu(item: (typeof menuPdfs)[number]) {
+    activeMenu = activeMenu?.href === item.href ? null : item;
+  }
 </script>
 
 <Layout>
@@ -33,14 +40,36 @@
 
   <section class="grid">
     {#each menuPdfs as item}
-      <DashboardCard title={item.title} description={item.description}>
-        <div class="card-copy">
-          <p>View this menu reference.</p>
-          <a href={item.href} target="_blank" rel="noreferrer" class="pdf-link">View PDF</a>
-        </div>
-      </DashboardCard>
+      <div class="doc-card">
+        <button
+          type="button"
+          class="menu-select"
+          class:active={activeMenu?.href === item.href}
+          on:click={() => toggleMenu(item)}
+        >
+          <DashboardCard title={item.title} description={item.description}>
+            <div class="card-copy">
+              <span class="state-pill">{activeMenu?.href === item.href ? 'Close' : 'Open'}</span>
+            </div>
+          </DashboardCard>
+        </button>
+      </div>
     {/each}
   </section>
+
+  {#if activeMenu}
+    <section class="viewer-shell" aria-label="Menu viewer">
+      <div class="viewer-head">
+        <div>
+          <span class="viewer-kicker">Menu Sheet</span>
+          <h2>{activeMenu.title}</h2>
+        </div>
+      </div>
+      <div class="document-stage">
+        <PdfPageStack src={activeMenu.href} title={activeMenu.title} />
+      </div>
+    </section>
+  {/if}
 </Layout>
 
 <style>
@@ -52,32 +81,90 @@
 
   .card-copy {
     display: grid;
-    gap: 0.65rem;
+    gap: 0.45rem;
   }
 
-  .card-copy p {
-    margin: 0;
+  .state-pill {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem 0.72rem;
+    border-radius: 999px;
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.18), rgba(195, 32, 43, 0.06));
+    color: var(--color-primary-contrast);
+    font-size: 0.76rem;
+    font-weight: var(--weight-medium);
   }
 
-  .card-copy p {
+  .doc-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .menu-select {
+    display: block;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    text-align: left;
+  }
+
+  .menu-select :global(.card) {
+    transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
+  }
+
+  .menu-select:hover :global(.card),
+  .menu-select:focus-visible :global(.card) {
+    transform: translateY(-2px);
+    border-color: rgba(195, 32, 43, 0.18);
+    box-shadow: var(--shadow-md);
+  }
+
+  .menu-select.active :global(.card) {
+    border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border) 45%);
+    box-shadow: 0 0 0 1px rgba(195, 32, 43, 0.12), var(--shadow-md);
+  }
+
+  .viewer-shell {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+  }
+
+  .viewer-head {
+    display: block;
+  }
+
+  .viewer-kicker {
+    display: inline-flex;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--color-text-muted);
   }
 
-  .pdf-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: fit-content;
-    min-width: 8rem;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 0.65rem 0.9rem;
-    text-decoration: none;
-    color: var(--color-text);
-    background: color-mix(in srgb, var(--color-surface) 92%, black 8%);
+  .viewer-head h2 {
+    margin: 0.25rem 0 0;
+    font-size: 1.05rem;
   }
 
-  .pdf-link:hover {
-    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  .document-stage {
+    display: grid;
+  }
+
+  @media (max-width: 760px) {
+    .viewer-shell {
+      padding: 0.85rem;
+    }
   }
 </style>
