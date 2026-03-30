@@ -115,7 +115,7 @@
                     name={`par_${item.id}`}
                     type="number"
                     min="0"
-                    step="1"
+                    step="0.1"
                     value={item.par_count}
                     required
                     class="number-input"

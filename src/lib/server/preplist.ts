@@ -39,6 +39,15 @@ function parseNonNegativeInteger(raw: FormDataEntryValue | null, fieldName: stri
   return { ok: true as const, value };
 }
 
+function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: string) {
+  if (raw === null) return { ok: false as const, error: `${fieldName} is required.` };
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    return { ok: false as const, error: `${fieldName} must be a non-negative number.` };
+  }
+  return { ok: true as const, value };
+}
+
 async function getSection(db: DB, domain: Domain, sectionSlug: string) {
   return db
     .prepare(`SELECT id FROM list_sections WHERE domain = ? AND slug = ? LIMIT 1`)
@@ -231,7 +240,7 @@ export function createListPage(
       for (const item of items.results ?? []) {
         const raw = formData.get(`par_${item.id}`);
         if (raw === null) continue;
-        const parsed = parseNonNegativeInteger(raw, 'Par count');
+        const parsed = parseNonNegativeNumber(raw, 'Par count');
         if (!parsed.ok) return fail(400, { error: parsed.error });
 
         await db
