@@ -74,7 +74,7 @@
                   name={`amount_${item.id}`}
                   type="number"
                   min="0"
-                  step="1"
+                  step="0.1"
                   value={item.amount}
                   required
                   class="number-input"

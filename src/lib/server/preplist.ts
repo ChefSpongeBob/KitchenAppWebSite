@@ -30,15 +30,6 @@ type ListPageOptions = {
   defaults?: DefaultItem[];
 };
 
-function parseNonNegativeInteger(raw: FormDataEntryValue | null, fieldName: string) {
-  if (raw === null) return { ok: false as const, error: `${fieldName} is required.` };
-  const value = Number(raw);
-  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
-    return { ok: false as const, error: `${fieldName} must be a non-negative whole number.` };
-  }
-  return { ok: true as const, value };
-}
-
 function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: string) {
   if (raw === null) return { ok: false as const, error: `${fieldName} is required.` };
   const value = Number(raw);
@@ -167,7 +158,7 @@ export function createListPage(
       for (const item of items.results ?? []) {
         const raw = formData.get(`amount_${item.id}`);
         if (raw === null) continue;
-        const parsed = parseNonNegativeInteger(raw, options.valueLabel);
+        const parsed = parseNonNegativeNumber(raw, options.valueLabel);
         if (!parsed.ok) return fail(400, { error: parsed.error });
 
         await db
