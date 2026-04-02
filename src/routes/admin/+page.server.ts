@@ -4,6 +4,7 @@ import {
   loadAdminAssignableUsers,
   approveUser,
   approveWhiteboard,
+  cleanupExpiredRejectedWhiteboardIdeas,
   createTodo,
   deleteUser,
   deleteNodeName,
@@ -41,6 +42,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       }
     };
   }
+
+  await cleanupExpiredRejectedWhiteboardIdeas(db);
 
   const [todos, users, nodeNames, whiteboardIdeas, announcement, hasIsActive] = await Promise.all([
     loadAdminTodos(db),

@@ -23,6 +23,10 @@
   let lastTapIndex: number | null = null;
 
   const ZOOM_SCALE = 2;
+  const DOUBLE_TAP_DELAY_MS = 420;
+  const MAX_RENDER_WIDTH = 1400;
+  const MIN_RENDER_QUALITY = 2;
+  const MAX_RENDER_QUALITY = 3;
 
   function resetZoom() {
     zoomedPageIndex = null;
@@ -60,7 +64,7 @@
 
   function handleTouchEnd(index: number) {
     const now = Date.now();
-    if (lastTapIndex === index && now - lastTapAt < 280) {
+    if (lastTapIndex === index && now - lastTapAt < DOUBLE_TAP_DELAY_MS) {
       toggleZoom(index);
       lastTapAt = 0;
       lastTapIndex = null;
@@ -119,13 +123,18 @@
       const pdf = await loadingTask.promise;
 
       const nextPages: string[] = [];
-      const targetWidth = Math.min(container.clientWidth || 900, 960);
+      const targetWidth = Math.min(container.clientWidth || 900, MAX_RENDER_WIDTH);
+      const deviceScale = Math.min(
+        Math.max(window.devicePixelRatio || 1, MIN_RENDER_QUALITY),
+        MAX_RENDER_QUALITY
+      );
 
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
         const page = await pdf.getPage(pageNumber);
         const initialViewport = page.getViewport({ scale: 1 });
-        const scale = targetWidth / initialViewport.width;
-        const viewport = page.getViewport({ scale });
+        const displayScale = targetWidth / initialViewport.width;
+        const renderScale = displayScale * deviceScale;
+        const viewport = page.getViewport({ scale: renderScale });
 
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');

@@ -41,7 +41,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (
 		isAuthRoute ||
 		pathname.startsWith('/api/temps') ||
-		pathname.startsWith('/api/camera/')
+		pathname.startsWith('/api/camera/upload') ||
+		pathname.startsWith('/api/camera/activity')
 	) {
 		return isAuthRoute ? resolveWithNoStore() : resolve(event);
 	}
@@ -74,7 +75,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 				d.id AS found_device_id,
 				d.revoked_at AS device_revoked_at,
 				u.id AS found_user_id,
-				u.role AS user_role
+				u.role AS user_role,
+				COALESCE(u.is_active, 1) AS user_is_active
 			FROM sessions s
 			LEFT JOIN devices d ON d.id = s.device_id
 			LEFT JOIN users u ON u.id = s.user_id
@@ -97,6 +99,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				device_revoked_at: number | null;
 				found_user_id: string | null;
 				user_role: string | null;
+				user_is_active: number;
 			}>();
 
 		if (!session || session.revoked_at !== null || session.expires_at < now) {
@@ -109,6 +112,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(303, '/login?error=session');
 		}
 		if (!session.found_user_id) {
+			clearSessionCookies(event);
+			throw redirect(303, '/login?error=session');
+		}
+		if (session.user_is_active !== 1) {
 			clearSessionCookies(event);
 			throw redirect(303, '/login?error=session');
 		}

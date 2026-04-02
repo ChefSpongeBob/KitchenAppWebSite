@@ -12,12 +12,28 @@
     can_manage_specials: number;
   };
 
+  type InviteOption = {
+    id: string;
+    email: string;
+    invite_code: string;
+    created_at: number;
+    expires_at: number | null;
+    used_at: number | null;
+    revoked_at: number | null;
+  };
+
   export let data: {
     users: UserOption[];
+    invites: InviteOption[];
   };
 
   $: pendingUsers = data.users.filter((user) => user.is_active !== 1);
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
+  $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
+  $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
+
+  const formatDate = (value: number | null) =>
+    value ? new Date(value * 1000).toLocaleDateString() : 'None';
 </script>
 
 <Layout>
@@ -41,9 +57,90 @@
       <strong>{activeUsers.length}</strong>
       <p>Accounts currently allowed to sign in.</p>
     </article>
+    <article class="summary-card">
+      <span class="eyebrow">Invites</span>
+      <strong>{activeInvites.length}</strong>
+      <p>Pre-authorized registrations ready to use.</p>
+    </article>
   </section>
 
   <section class="stack">
+    <section class="panel">
+      <header class="panel-head">
+        <div>
+          <span class="panel-kicker">Invites</span>
+          <h2>Registration Invites</h2>
+        </div>
+        <span>{activeInvites.length} active</span>
+      </header>
+
+      <form method="POST" action="?/create_user_invite" use:enhance class="invite-form">
+        <input
+          name="email"
+          type="email"
+          placeholder="staff@email.com"
+          aria-label="Invite email"
+          required
+        />
+        <button type="submit">Create Invite</button>
+      </form>
+
+      <div class="user-grid">
+        {#if activeInvites.length === 0}
+          <article class="user-card empty-card">No active invites.</article>
+        {:else}
+          {#each activeInvites as invite}
+            <article class="user-card">
+              <div class="user-head">
+                <div>
+                  <h3>{invite.email}</h3>
+                  <p>Expires {formatDate(invite.expires_at)}</p>
+                </div>
+                <span class="status status-approved">Ready</span>
+              </div>
+
+              <dl class="meta">
+                <div>
+                  <dt>Invite Code</dt>
+                  <dd class="code-value">{invite.invite_code}</dd>
+                </div>
+                <div>
+                  <dt>Created</dt>
+                  <dd>{formatDate(invite.created_at)}</dd>
+                </div>
+              </dl>
+
+              <div class="actions">
+                <form method="POST" action="?/revoke_user_invite" use:enhance>
+                  <input type="hidden" name="invite_id" value={invite.id} />
+                  <button type="submit" class="warn-action">Revoke Invite</button>
+                </form>
+              </div>
+            </article>
+          {/each}
+        {/if}
+      </div>
+
+      {#if usedInvites.length > 0}
+        <details class="used-invites">
+          <summary>Used Invites ({usedInvites.length})</summary>
+          <div class="user-grid compact-grid">
+            {#each usedInvites as invite}
+              <article class="user-card compact-card">
+                <div class="user-head">
+                  <div>
+                    <h3>{invite.email}</h3>
+                    <p>Used {formatDate(invite.used_at)}</p>
+                  </div>
+                  <span class="status">Used</span>
+                </div>
+              </article>
+            {/each}
+          </div>
+        </details>
+      {/if}
+    </section>
+
     <section class="panel">
       <header class="panel-head">
         <div>
@@ -186,7 +283,7 @@
   }
 
   .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin: 0.5rem 0 1rem;
   }
 
@@ -321,6 +418,35 @@
     flex: 1 1 150px;
   }
 
+  .invite-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .code-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .used-invites {
+    margin-top: 0.9rem;
+  }
+
+  .used-invites summary {
+    cursor: pointer;
+    color: var(--color-text-muted);
+  }
+
+  .compact-grid {
+    margin-top: 0.75rem;
+  }
+
+  .compact-card {
+    padding: 0.8rem;
+  }
+
   button {
     width: 100%;
     border: 1px solid rgba(195, 32, 43, 0.22);
@@ -400,6 +526,10 @@
 
     .actions form {
       flex-basis: 100%;
+    }
+
+    .invite-form {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

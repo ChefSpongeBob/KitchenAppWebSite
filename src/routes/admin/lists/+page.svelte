@@ -1,7 +1,8 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { enhance } from '$app/forms';
+  import { applyAction, enhance } from '$app/forms';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type Item = {
     id: string;
@@ -73,6 +74,21 @@
       sections: data.checklists.filter((section) => isShiftChecklist(section.slug, 'kitchen'))
     }
   ];
+
+  let feedbackMessage = '';
+
+  const withFeedback: SubmitFunction = () => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      feedbackMessage =
+        result.type === 'success'
+          ? 'List changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That list change could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -97,6 +113,10 @@
         </div>
         <p>{bucket.description}</p>
       </header>
+
+      {#if feedbackMessage}
+        <p class="feedback-banner">{feedbackMessage}</p>
+      {/if}
 
       {#if bucket.id === 'checklists'}
         {#each checklistCategories as category}
@@ -124,24 +144,24 @@
                     {#each section.items as item}
                       <tr>
                         <td>
-                          <form method="POST" action="?/update_checklist_item" use:enhance class="inline-edit checklist-edit">
+                          <form method="POST" action="?/update_checklist_item" use:enhance={withFeedback} class="inline-edit checklist-edit">
                             <input type="hidden" name="id" value={item.id} />
                             <input name="content" value={item.content} required />
-                            <button type="submit" class="icon-btn" aria-label="Save item">S</button>
+                            <button type="submit" class="text-action" aria-label="Save item">Save</button>
                           </form>
                         </td>
                         <td>{item.is_checked ? 'Done' : 'Open'}</td>
                         <td>
-                          <form method="POST" action="?/delete_checklist_item" use:enhance class="inline">
+                          <form method="POST" action="?/delete_checklist_item" use:enhance={withFeedback} class="inline">
                             <input type="hidden" name="id" value={item.id} />
-                            <button type="submit" class="icon-btn danger" aria-label="Delete item">X</button>
+                            <button type="submit" class="text-action danger" aria-label="Delete item">Delete</button>
                           </form>
                         </td>
                       </tr>
                     {/each}
                   </tbody>
                 </table>
-                <form method="POST" action="?/add_checklist_item" use:enhance class="add-row checklist-add">
+                <form method="POST" action="?/add_checklist_item" use:enhance={withFeedback} class="add-row checklist-add">
                   <input type="hidden" name="section_id" value={section.id} />
                   <input name="content" placeholder={`Add item to ${section.title}`} required />
                   <button type="submit">Add Item</button>
@@ -162,36 +182,34 @@
                 <tr>
                   <th>Item</th>
                   <th>Par</th>
-                  <th>Current</th>
                   <th>Status</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {#each section.items as item}
                   <tr>
                     <td>
-                      <form method="POST" action="?/update_list_item" use:enhance class="inline-edit">
-                        <input type="hidden" name="id" value={item.id} />
-                        <input name="content" value={item.content} required />
-                        <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
-                        <button type="submit" class="icon-btn" aria-label="Save item">S</button>
-                      </form>
+                      <div class="item-editor">
+                        <form method="POST" action="?/update_list_item" use:enhance={withFeedback} class="inline-edit list-item-form">
+                          <input type="hidden" name="id" value={item.id} />
+                          <input name="content" value={item.content} required />
+                          <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
+                          <button type="submit" class="text-action" aria-label="Save item">Save</button>
+                        </form>
+
+                        <form method="POST" action="?/delete_list_item" use:enhance={withFeedback} class="list-delete-form">
+                          <input type="hidden" name="id" value={item.id} />
+                          <button type="submit" class="text-action danger" aria-label="Delete item">Delete</button>
+                        </form>
+                      </div>
                     </td>
                     <td>{item.par_count}</td>
-                    <td>{item.amount}</td>
                     <td>{item.is_checked ? 'Done' : 'Open'}</td>
-                    <td>
-                      <form method="POST" action="?/delete_list_item" use:enhance class="inline">
-                        <input type="hidden" name="id" value={item.id} />
-                        <button type="submit" class="icon-btn danger" aria-label="Delete item">X</button>
-                      </form>
-                    </td>
                   </tr>
                 {/each}
               </tbody>
             </table>
-            <form method="POST" action="?/add_list_item" use:enhance class="add-row">
+            <form method="POST" action="?/add_list_item" use:enhance={withFeedback} class="add-row">
               <input type="hidden" name="section_id" value={section.id} />
               <input name="content" placeholder={`Add item to ${section.title}`} required />
               <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
@@ -301,6 +319,8 @@
     text-align: left;
     padding: 0.48rem 0.42rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    vertical-align: top;
+    overflow-wrap: anywhere;
   }
 
   .sheet th {
@@ -324,8 +344,34 @@
     margin-top: 0.7rem;
   }
 
+  .feedback-banner {
+    margin: 0 0 0.8rem;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
+  }
+
   .checklist-edit input {
     flex: 1 1 auto;
+  }
+
+  .item-editor {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .list-item-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(92px, 120px) auto;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .list-delete-form {
+    display: flex;
+    justify-content: flex-start;
   }
 
   .checklist-add {
@@ -353,14 +399,10 @@
     font-size: 0.78rem;
   }
 
-  .icon-btn {
-    width: 1.9rem;
-    height: 1.9rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
+  .text-action {
+    min-width: 5.8rem;
+    min-height: 2rem;
+    white-space: nowrap;
   }
 
   .danger {
@@ -376,13 +418,21 @@
     }
 
     .sheet {
-      min-width: 680px;
+      min-width: 0;
     }
 
     .add-row > *,
     .inline-edit > * {
       flex: 1 1 100%;
       min-width: 0;
+    }
+
+    .list-item-form {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .text-action {
+      width: 100%;
     }
   }
 </style>

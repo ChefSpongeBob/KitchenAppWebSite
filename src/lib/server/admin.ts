@@ -97,6 +97,16 @@ export type AdminUser = {
   can_manage_specials: number;
 };
 
+export type AdminInvite = {
+  id: string;
+  email: string;
+  invite_code: string;
+  created_at: number;
+  expires_at: number | null;
+  used_at: number | null;
+  revoked_at: number | null;
+};
+
 export type AdminAssignableUser = {
   id: string;
   display_name: string | null;
@@ -131,6 +141,51 @@ export async function tableExists(db: D1, tableName: string) {
 export async function usersHasIsActiveColumn(db: D1) {
   const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
   return (columns.results ?? []).some((column) => column.name === 'is_active');
+}
+
+export async function ensureUserInvitesTable(db: D1) {
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS user_invites (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        email_normalized TEXT NOT NULL,
+        invite_code TEXT NOT NULL UNIQUE,
+        invited_by TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        used_at INTEGER,
+        used_by_user_id TEXT,
+        revoked_at INTEGER,
+        FOREIGN KEY (invited_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (used_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_user_invites_email_normalized
+      ON user_invites(email_normalized)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_user_invites_active
+      ON user_invites(email_normalized, revoked_at, used_at, expires_at)
+      `
+    )
+    .run();
+}
+
+function generateInviteCode() {
+  return `INV-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
 }
 
 export async function loadAdminSections(db: D1) {
@@ -322,6 +377,28 @@ export async function loadAdminUsers(db: D1) {
   return users.results ?? [];
 }
 
+export async function loadAdminInvites(db: D1) {
+  await ensureUserInvitesTable(db);
+
+  const invites = await db
+    .prepare(
+      `
+      SELECT id, email, invite_code, created_at, expires_at, used_at, revoked_at
+      FROM user_invites
+      ORDER BY
+        CASE
+          WHEN revoked_at IS NULL AND used_at IS NULL THEN 0
+          WHEN used_at IS NOT NULL THEN 1
+          ELSE 2
+        END ASC,
+        created_at DESC
+      `
+    )
+    .all<AdminInvite>();
+
+  return invites.results ?? [];
+}
+
 export async function loadAdminAssignableUsers(db: D1) {
   const hasIsActive = await usersHasIsActiveColumn(db);
   const users = hasIsActive
@@ -415,6 +492,28 @@ export async function loadAdminWhiteboardIdeas(db: D1) {
         .all<AdminWhiteboardIdea>();
 
   return ideas.results ?? [];
+}
+
+export async function cleanupExpiredRejectedWhiteboardIdeas(db: D1) {
+  if (!(await tableExists(db, 'whiteboard_review'))) return;
+
+  const cutoff = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 7;
+  const rejected = await db
+    .prepare(
+      `
+      SELECT post_id
+      FROM whiteboard_review
+      WHERE status = 'rejected'
+        AND COALESCE(reviewed_at, 0) < ?
+      `
+    )
+    .bind(cutoff)
+    .all<{ post_id: string }>();
+
+  for (const row of rejected.results ?? []) {
+    await db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ?`).bind(row.post_id).run();
+    await db.prepare(`DELETE FROM whiteboard_posts WHERE id = ?`).bind(row.post_id).run();
+  }
 }
 
 export async function loadAdminDocuments(db: D1) {
@@ -1061,6 +1160,58 @@ export async function toggleSpecialsAccess(request: Request, locals: App.Locals)
       `
     )
     .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000))
+    .run();
+
+  return { success: true };
+}
+
+export async function createUserInvite(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  await ensureUserInvitesTable(db);
+
+  const formData = await request.formData();
+  const email = String(formData.get('email') ?? '').trim();
+  const emailNormalized = email.toLowerCase();
+  if (!email || !email.includes('@')) {
+    return fail(400, { error: 'A valid email is required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = now + 60 * 60 * 24 * 14;
+  const inviteCode = generateInviteCode();
+
+  await db
+    .prepare(
+      `
+      INSERT INTO user_invites (
+        id, email, email_normalized, invite_code, invited_by, created_at, expires_at, revoked_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+      `
+    )
+    .bind(crypto.randomUUID(), email, emailNormalized, inviteCode, locals.userId ?? null, now, expiresAt)
+    .run();
+
+  return { success: true };
+}
+
+export async function revokeUserInvite(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  await ensureUserInvitesTable(db);
+
+  const formData = await request.formData();
+  const inviteId = String(formData.get('invite_id') ?? '').trim();
+  if (!inviteId) return fail(400, { error: 'Missing invite id.' });
+
+  await db
+    .prepare(`UPDATE user_invites SET revoked_at = ? WHERE id = ?`)
+    .bind(Math.floor(Date.now() / 1000), inviteId)
     .run();
 
   return { success: true };

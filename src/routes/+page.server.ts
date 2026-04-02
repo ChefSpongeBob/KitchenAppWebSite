@@ -44,7 +44,6 @@ export const load: PageServerLoad = async ({ locals }) => {
       topIdeas: [],
       nodeTemps: [],
       tempSeries: { avg: [] },
-      kpis: { openTasks: 0, completedToday: 0, avgTemp: null, pendingIdeas: 0 },
       refreshedAt: Math.floor(Date.now() / 1000)
     };
   }
@@ -93,24 +92,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     )
     .bind(HOMEPAGE_TEMP_LIMIT)
     .all<TempRow>();
-  const openTasksPromise = db
-    .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NULL`)
-    .first<{ count: number }>();
-
-  const dayStart = Math.floor(new Date(new Date().toDateString()).getTime() / 1000);
-  const completedTodayPromise = locals.userId
-    ? db
-        .prepare(
-          `
-          SELECT COUNT(*) AS count
-          FROM todo_completion_log
-          WHERE completed_by = ? AND completed_at >= ?
-          `
-        )
-        .bind(locals.userId, dayStart)
-        .first<{ count: number }>()
-    : Promise.resolve({ count: 0 });
-
   const [
     reviewEnabled,
     nodeTable,
@@ -118,9 +99,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     dailySpecials,
     user,
     taskResult,
-    tempsResult,
-    openTasksRow,
-    completedTodayRow
+    tempsResult
   ] = await Promise.all([
     reviewEnabledPromise,
     nodeTablePromise,
@@ -128,9 +107,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     dailySpecialsPromise,
     userPromise,
     todayTasksPromise,
-    tempsPromise,
-    openTasksPromise,
-    completedTodayPromise
+    tempsPromise
   ]);
 
   const userName = user?.display_name || user?.email || 'Team';
@@ -196,18 +173,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     .slice(-24)
     .map(([, value]) => Number((value.sum / value.count).toFixed(2)));
 
-  const pendingIdeasRow = reviewEnabled
-    ? await db
-        .prepare(
-          `
-          SELECT COUNT(*) AS count
-          FROM whiteboard_review
-          WHERE status = 'pending'
-          `
-        )
-        .first<{ count: number }>()
-    : { count: 0 };
-
   return {
     isAdmin,
     userName,
@@ -223,12 +188,6 @@ export const load: PageServerLoad = async ({ locals }) => {
       ts: r.ts
     })),
     tempSeries: { avg },
-    kpis: {
-      openTasks: openTasksRow?.count ?? 0,
-      completedToday: completedTodayRow?.count ?? 0,
-      avgTemp: avg.length ? Number((avg.reduce((sum, value) => sum + value, 0) / avg.length).toFixed(1)) : null,
-      pendingIdeas: pendingIdeasRow?.count ?? 0
-    },
     refreshedAt: Math.floor(Date.now() / 1000)
   };
 };

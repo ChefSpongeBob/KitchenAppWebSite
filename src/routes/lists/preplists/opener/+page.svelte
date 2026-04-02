@@ -16,5 +16,11 @@
   };
 </script>
 
-<PreplistEditor title={data.title} items={data.items} isAdmin={data.isAdmin} />
+<PreplistEditor
+  title={data.title}
+  items={data.items}
+  isAdmin={data.isAdmin}
+  enablePictureSubmit
+  pictureParseMode="ordered-single-column"
+/>
 

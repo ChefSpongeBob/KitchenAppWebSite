@@ -22,12 +22,6 @@
     content: string;
     updatedAt: number;
   };
-  type HomeKpis = {
-    openTasks: number;
-    completedToday: number;
-    avgTemp: number | null;
-    pendingIdeas: number;
-  };
 
   export let data: {
     isAdmin?: boolean;
@@ -39,7 +33,6 @@
     topIdeas?: Idea[];
     nodeTemps?: NodeTemp[];
     tempSeries?: Record<string, number[]>;
-    kpis?: HomeKpis;
     refreshedAt?: number;
   };
 
@@ -47,6 +40,7 @@
   let isAdmin = data.isAdmin ?? false;
   let time = '';
   let greeting = '';
+  let topGreeting = '';
   let userName = data.userName ?? 'Team';
   let announcement = data.announcement ?? { content: '', updatedAt: 0 };
   let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
@@ -54,7 +48,6 @@
   let topIdeas: Idea[] = data.topIdeas ?? [];
   let nodeTemps: NodeTemp[] = data.nodeTemps ?? [];
   let todayMeta = data.todayMeta ?? { assignedCount: 0, unassignedCount: 0 };
-  let kpis: HomeKpis = data.kpis ?? { openTasks: 0, completedToday: 0, avgTemp: null, pendingIdeas: 0 };
   let lastIdeasRefresh = data.refreshedAt ?? Math.floor(Date.now() / 1000);
   let px = 0;
   let py = 0;
@@ -70,6 +63,7 @@
     time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const h = now.getHours();
     greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    topGreeting = h < 12 ? 'おはよう' : h < 18 ? 'こんにちは' : 'こんばんは';
   }
 
   function handleMove(e: MouseEvent | TouchEvent) {
@@ -127,11 +121,6 @@
     const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; ts: number }>;
     if (!rows?.length) return;
     buildTempState(rows);
-    const avg = series.avg;
-    kpis = {
-      ...kpis,
-      avgTemp: avg.length ? Number((avg.reduce((sum, value) => sum + value, 0) / avg.length).toFixed(1)) : null
-    };
   }
 
   async function refreshIdeas() {
@@ -169,16 +158,9 @@
 
 <Layout>
   <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
-    <h1>{greeting}, {userName}</h1>
+    <h1>{topGreeting}, {userName}</h1>
     <p class="header-sub">Here's what's happening today</p>
     <img class="divider" src="/knife-divider.svg" alt="" aria-hidden="true" />
-  </section>
-
-  <section class="kpis" aria-label="Operational snapshot">
-    <div class="kpi"><small>Open Tasks</small><strong>{kpis.openTasks}</strong></div>
-    <div class="kpi"><small>Completed Today</small><strong>{kpis.completedToday}</strong></div>
-    <div class="kpi"><small>Avg Temp</small><strong>{kpis.avgTemp === null ? 'N/A' : `${kpis.avgTemp.toFixed(1)}F`}</strong></div>
-    <div class="kpi"><small>Pending Ideas</small><strong>{kpis.pendingIdeas}</strong></div>
   </section>
 
   <section
@@ -374,24 +356,6 @@
     opacity: 0.98;
   }
 
-  .kpis {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.7rem;
-    padding: 0.6rem 1rem 0;
-  }
-  .kpi {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    border-radius: 10px;
-    padding: 0.5rem 0.6rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.18rem;
-  }
-  .kpi small { color: var(--color-text-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .kpi strong { font-size: 1rem; }
-
   .mosaic { display: grid; grid-template-columns: 1.2fr 1fr; grid-auto-rows: 118px; gap: 12px; padding: 1rem; }
   .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--color-surface) 88%, var(--color-primary) 12%), var(--color-surface)); border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; justify-content: center; transition: transform .25s ease, box-shadow .25s ease, border-color .2s ease; }
   .tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
@@ -541,20 +505,6 @@
       margin-top: -5px;
       margin-left: 1rem;
     }
-    .kpis {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.5rem;
-      padding: 0.55rem 0.9rem 0;
-    }
-    .kpi {
-      padding: 0.5rem 0.55rem;
-    }
-    .kpi small {
-      font-size: 0.66rem;
-    }
-    .kpi strong {
-      font-size: 0.94rem;
-    }
     .mosaic {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       grid-auto-rows: minmax(108px, auto);
@@ -637,9 +587,6 @@
   }
 
   @media (max-width: 430px) {
-    .kpis {
-      grid-template-columns: 1fr;
-    }
     .page-header h1 {
       font-size: 1.42rem;
     }

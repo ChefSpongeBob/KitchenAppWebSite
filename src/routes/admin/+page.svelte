@@ -1,7 +1,8 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { enhance } from '$app/forms';
+  import { applyAction, enhance } from '$app/forms';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type Todo = {
     id: string;
@@ -48,6 +49,21 @@
       openTodos: number;
       pendingIdeas: number;
       nodeCount: number;
+    };
+  };
+
+  let adminMessage = '';
+
+  const withAdminFeedback: SubmitFunction = () => {
+    adminMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      adminMessage =
+        result.type === 'success'
+          ? 'Admin changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That action could not be completed.'
+            : '';
     };
   };
 
@@ -128,7 +144,11 @@
   </nav>
 
   <section class="stack">
-    <details class="panel" id="todos" open>
+    {#if adminMessage}
+      <p class="feedback-banner">{adminMessage}</p>
+    {/if}
+
+    <details class="panel" id="todos">
       <summary>
         <div>
           <span class="panel-kicker">Quick Actions</span>
@@ -137,7 +157,7 @@
         <span>{data.todos.length} items</span>
       </summary>
 
-      <form method="POST" action="?/create_todo" use:enhance class="add-row">
+      <form method="POST" action="?/create_todo" use:enhance={withAdminFeedback} class="add-row">
         <input name="title" placeholder="Task title" required />
         <input name="description" placeholder="Description" />
         <select name="assigned_to">
@@ -167,9 +187,9 @@
               <td>{todo.assigned_name ?? todo.assigned_email ?? 'Anyone'}</td>
               <td>{todo.completed_at ? 'Completed' : 'Active'}</td>
               <td>
-                <form method="POST" action="?/delete_todo" use:enhance class="inline">
+                <form method="POST" action="?/delete_todo" use:enhance={withAdminFeedback} class="inline">
                   <input type="hidden" name="id" value={todo.id} />
-                  <button type="submit" class="icon-btn danger" aria-label="Remove task">X</button>
+                  <button type="submit" class="danger text-action" aria-label="Delete task">Delete</button>
                 </form>
               </td>
             </tr>
@@ -187,47 +207,40 @@
         <span>{data.whiteboardIdeas.length} ideas</span>
       </summary>
 
-      <table class="sheet whiteboard-sheet">
-        <thead>
-          <tr>
-            <th>Idea</th>
-            <th>Votes</th>
-            <th>Status</th>
-            <th>Submitted By</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if data.whiteboardIdeas.length === 0}
-            <tr><td colspan="5">No whiteboard ideas yet.</td></tr>
-          {:else}
-            {#each data.whiteboardIdeas as idea}
-              <tr>
-                <td>{idea.content}</td>
-                <td>{idea.votes}</td>
-                <td><span class="status status-{idea.status}">{idea.status}</span></td>
-                <td>{idea.submitted_name ?? idea.submitted_email ?? 'Unknown'}</td>
-                <td>
-                  <div class="inline">
-                    <form method="POST" action="?/approve_whiteboard" use:enhance class="inline">
-                      <input type="hidden" name="id" value={idea.id} />
-                      <button type="submit" class="icon-btn" aria-label="Approve idea">A</button>
-                    </form>
-                    <form method="POST" action="?/reject_whiteboard" use:enhance class="inline">
-                      <input type="hidden" name="id" value={idea.id} />
-                      <button type="submit" class="icon-btn" aria-label="Reject idea">R</button>
-                    </form>
-                    <form method="POST" action="?/delete_whiteboard" use:enhance class="inline">
-                      <input type="hidden" name="id" value={idea.id} />
-                      <button type="submit" class="icon-btn danger" aria-label="Delete idea">X</button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
+      <div class="whiteboard-list">
+        {#if data.whiteboardIdeas.length === 0}
+          <p class="empty-note">No whiteboard ideas yet.</p>
+        {:else}
+          {#each data.whiteboardIdeas as idea}
+            <article class="whiteboard-card">
+              <div class="whiteboard-head">
+                <p class="whiteboard-content">{idea.content}</p>
+                <span class="status status-{idea.status}">{idea.status}</span>
+              </div>
+
+              <div class="whiteboard-meta">
+                <span><strong>Votes:</strong> {idea.votes}</span>
+                <span><strong>Submitted By:</strong> {idea.submitted_name ?? idea.submitted_email ?? 'Unknown'}</span>
+              </div>
+
+              <div class="whiteboard-actions">
+                <form method="POST" action="?/approve_whiteboard" use:enhance={withAdminFeedback}>
+                  <input type="hidden" name="id" value={idea.id} />
+                  <button type="submit" class="text-action">Approve</button>
+                </form>
+                <form method="POST" action="?/reject_whiteboard" use:enhance={withAdminFeedback}>
+                  <input type="hidden" name="id" value={idea.id} />
+                  <button type="submit" class="warn-action text-action">Reject</button>
+                </form>
+                <form method="POST" action="?/delete_whiteboard" use:enhance={withAdminFeedback}>
+                  <input type="hidden" name="id" value={idea.id} />
+                  <button type="submit" class="danger text-action">Delete</button>
+                </form>
+              </div>
+            </article>
+          {/each}
+        {/if}
+      </div>
     </details>
 
     <details class="panel" id="announcement">
@@ -239,7 +252,7 @@
         <span>{data.announcement.content ? 'Live' : 'Empty'}</span>
       </summary>
 
-      <form method="POST" action="?/save_announcement" use:enhance class="add-row docs-form">
+      <form method="POST" action="?/save_announcement" use:enhance={withAdminFeedback} class="add-row docs-form">
         <textarea
           name="content"
           rows="5"
@@ -258,7 +271,7 @@
         <span>{data.nodeNames.length} saved</span>
       </summary>
 
-      <form method="POST" action="?/add_node_name" use:enhance class="add-row">
+      <form method="POST" action="?/add_node_name" use:enhance={withAdminFeedback} class="add-row">
         <input name="sensor_id" type="number" min="1" placeholder="Node ID" required />
         <input name="name" placeholder="Display name" required />
         <button type="submit">Save Node</button>
@@ -281,9 +294,9 @@
                 <td>{node.sensor_id}</td>
                 <td>{node.name}</td>
                 <td>
-                  <form method="POST" action="?/delete_node_name" use:enhance class="inline">
+                  <form method="POST" action="?/delete_node_name" use:enhance={withAdminFeedback} class="inline">
                     <input type="hidden" name="sensor_id" value={node.sensor_id} />
-                    <button type="submit" class="icon-btn danger" aria-label="Remove node name">X</button>
+                    <button type="submit" class="danger text-action" aria-label="Delete node name">Delete</button>
                   </form>
                 </td>
               </tr>
@@ -494,6 +507,15 @@
     margin: 0 1rem 0.9rem 1.1rem;
   }
 
+  .feedback-banner {
+    margin: 0;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
+  }
+
   input,
   textarea,
   select {
@@ -517,6 +539,13 @@
     font-weight: var(--weight-medium);
   }
 
+  .text-action {
+    width: auto;
+    min-width: 6.2rem;
+    min-height: 2rem;
+    white-space: nowrap;
+  }
+
   .icon-btn {
     width: 1.9rem;
     height: 1.9rem;
@@ -531,6 +560,12 @@
     border-color: rgba(239, 68, 68, 0.3);
     color: #ffb6b6;
     background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
+  }
+
+  .warn-action {
+    border-color: rgba(245, 158, 11, 0.28);
+    color: #fcd34d;
+    background: linear-gradient(180deg, rgba(120, 86, 10, 0.42), rgba(120, 86, 10, 0.14));
   }
 
   .status {
@@ -567,6 +602,53 @@
     flex: 1 1 100%;
   }
 
+  .whiteboard-list {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0 1rem 1rem 1.1rem;
+  }
+
+  .whiteboard-card {
+    padding: 0.85rem 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .whiteboard-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .whiteboard-content {
+    margin: 0;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+  }
+
+  .whiteboard-meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.7rem;
+    color: var(--color-text-muted);
+    font-size: 0.84rem;
+  }
+
+  .whiteboard-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.8rem;
+  }
+
+  .empty-note {
+    margin: 0;
+    color: var(--color-text-muted);
+  }
+
   @media (max-width: 1100px) {
     .hero-grid,
     .editor-grid {
@@ -599,8 +681,7 @@
       min-width: 680px;
     }
 
-    .action-sheet,
-    .whiteboard-sheet {
+    .action-sheet {
       min-width: 0;
       width: 100%;
       table-layout: fixed;
@@ -611,38 +692,11 @@
       width: 132px;
     }
 
-    .whiteboard-sheet th:nth-child(1),
-    .whiteboard-sheet td:nth-child(1) {
-      width: auto;
-    }
-
-    .whiteboard-sheet th:nth-child(2),
-    .whiteboard-sheet td:nth-child(2) {
-      width: 64px;
-    }
-
-    .whiteboard-sheet th:nth-child(3),
-    .whiteboard-sheet td:nth-child(3) {
-      width: 92px;
-    }
-
-    .whiteboard-sheet th:nth-child(4),
-    .whiteboard-sheet td:nth-child(4) {
-      width: 132px;
-    }
-
-    .whiteboard-sheet th:nth-child(5),
-    .whiteboard-sheet td:nth-child(5) {
-      width: 132px;
-    }
-
-    .action-sheet td,
-    .whiteboard-sheet td {
+    .action-sheet td {
       overflow-wrap: anywhere;
     }
 
-    .action-sheet .inline,
-    .whiteboard-sheet .inline {
+    .action-sheet .inline {
       flex-wrap: nowrap;
       gap: 0.3rem;
     }
@@ -653,21 +707,30 @@
       min-width: 0;
     }
 
-    .inline .icon-btn {
+    .action-sheet td:last-child .inline {
       flex: 0 0 auto;
     }
 
-    .action-sheet td:last-child .inline,
-    .whiteboard-sheet td:last-child .inline {
-      flex: 0 0 auto;
-    }
-
-    .action-sheet td:last-child .inline > *,
-    .whiteboard-sheet td:last-child .inline > * {
+    .action-sheet td:last-child .inline > * {
       flex: 0 0 auto;
       min-width: 0;
     }
 
+  }
+
+  @media (max-width: 700px) {
+    .whiteboard-head {
+      flex-direction: column;
+      align-items: start;
+    }
+
+    .whiteboard-actions form {
+      width: 100%;
+    }
+
+    .text-action {
+      width: 100%;
+    }
   }
 
 </style>

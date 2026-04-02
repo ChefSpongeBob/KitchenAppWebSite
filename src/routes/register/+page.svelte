@@ -28,6 +28,11 @@
 			</div>
 
 			<div class="field">
+				<label for="register-invite-code">Invite Code</label>
+				<input id="register-invite-code" name="invite_code" placeholder="INV-XXXXXXXXXXXX" required />
+			</div>
+
+			<div class="field">
 				<label for="register-password">Password</label>
 				<div class="password-row">
 					<input id="register-password" name="password" type={showPassword ? 'text' : 'password'} required />
@@ -64,6 +69,7 @@
 		Already have an account?
 		<a href="/login">Login</a>
 	</p>
+	<p>Registration now requires an invite code from an admin, and new accounts still need approval before first login.</p>
 
 	<AppInstallCard compact />
 </Layout>

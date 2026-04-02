@@ -21,6 +21,23 @@ async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
 	`).run();
 }
 
+async function ensureUserInvitesTable(db: App.Platform['env']['DB']) {
+	await db.prepare(`
+		CREATE TABLE IF NOT EXISTS user_invites (
+			id TEXT PRIMARY KEY,
+			email TEXT NOT NULL,
+			email_normalized TEXT NOT NULL,
+			invite_code TEXT NOT NULL UNIQUE,
+			invited_by TEXT,
+			created_at INTEGER NOT NULL,
+			expires_at INTEGER,
+			used_at INTEGER,
+			used_by_user_id TEXT,
+			revoked_at INTEGER
+		)
+	`).run();
+}
+
 export const actions: Actions = {
 	default: async ({ request, locals }) => {
 		try {
@@ -31,9 +48,10 @@ export const actions: Actions = {
 			const confirmEmail = String(formData.get('confirm_email') || '').trim().toLowerCase();
 			const password = String(formData.get('password') || '');
 			const confirmPassword = String(formData.get('confirm_password') || '');
+			const inviteCode = String(formData.get('invite_code') || '').trim().toUpperCase();
 			const wantsEmailUpdates = String(formData.get('email_updates') || '0') === '1';
 
-			if (!displayName || !email || !confirmEmail || !password || !confirmPassword) {
+			if (!displayName || !email || !confirmEmail || !password || !confirmPassword || !inviteCode) {
 				return fail(400, { error: 'All fields required.' });
 			}
 			if (email !== confirmEmail) {
@@ -50,6 +68,8 @@ export const actions: Actions = {
 			if (!db) {
 				return fail(503, { error: 'Database is not configured yet.' });
 			}
+
+			await ensureUserInvitesTable(db);
 
 			const hasNormalized = await hasEmailNormalizedColumn(db);
 			const hasIsActive = await hasIsActiveColumn(db);
@@ -78,6 +98,35 @@ export const actions: Actions = {
 			}
 
 			const now = Math.floor(Date.now() / 1000);
+			const invite = await db
+				.prepare(
+					`
+			SELECT id, email_normalized, expires_at, revoked_at, used_at
+			FROM user_invites
+			WHERE invite_code = ?
+			LIMIT 1
+		`
+				)
+				.bind(inviteCode)
+				.first<{
+					id: string;
+					email_normalized: string;
+					expires_at: number | null;
+					revoked_at: number | null;
+					used_at: number | null;
+				}>();
+
+			if (!invite || invite.revoked_at !== null || invite.used_at !== null) {
+				return fail(400, { error: 'Invite code is invalid.' });
+			}
+
+			if (invite.email_normalized !== email) {
+				return fail(400, { error: 'Invite code does not match this email address.' });
+			}
+
+			if (invite.expires_at !== null && invite.expires_at < now) {
+				return fail(400, { error: 'Invite code has expired.' });
+			}
 
 			const userId = crypto.randomUUID();
 			const passwordHash = await hashPassword(password);
@@ -157,6 +206,17 @@ export const actions: Actions = {
 		`
 				)
 				.bind(userId, wantsEmailUpdates ? 1 : 0, now)
+				.run();
+
+			await db
+				.prepare(
+					`
+			UPDATE user_invites
+			SET used_at = ?, used_by_user_id = ?
+			WHERE id = ?
+		`
+				)
+				.bind(now, userId, invite.id)
 				.run();
 
 			throw redirect(303, '/login?registered=pending');
