@@ -3,7 +3,9 @@ import { fail } from '@sveltejs/kit';
 type ItemRow = {
   id: string;
   content: string;
+  details?: string | null;
   amount: number;
+  amount_text?: string | null;
   par_count: number;
   is_checked: number;
 };
@@ -28,6 +30,7 @@ type ListPageOptions = {
   resetLabel: string;
   adminSummaryLabel: string;
   defaults?: DefaultItem[];
+  valueType?: 'number' | 'text';
 };
 
 function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: string) {
@@ -77,6 +80,20 @@ async function seedDefaultsIfMissing(
   }
 }
 
+async function hasAmountTextColumn(db: DB) {
+  const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{
+    name: string;
+  }>();
+  return (columns.results ?? []).some((column) => column.name === 'amount_text');
+}
+
+async function hasDetailsColumn(db: DB) {
+  const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{
+    name: string;
+  }>();
+  return (columns.results ?? []).some((column) => column.name === 'details');
+}
+
 export function createListPage(
   domain: Domain,
   sectionSlug: string,
@@ -85,6 +102,9 @@ export function createListPage(
 ) {
   const load = async ({ locals }: { locals: PreplistLocals }) => {
     const db = locals.DB;
+    const useTextValues = options.valueType === 'text';
+    const amountTextEnabled = db && useTextValues ? await hasAmountTextColumn(db) : false;
+    const detailsEnabled = db ? await hasDetailsColumn(db) : false;
     if (!db) {
       return {
         title: pageTitle,
@@ -94,7 +114,8 @@ export function createListPage(
         valueLabel: options.valueLabel,
         submitLabel: options.submitLabel,
         resetLabel: options.resetLabel,
-        adminSummaryLabel: options.adminSummaryLabel
+        adminSummaryLabel: options.adminSummaryLabel,
+        valueType: options.valueType ?? 'number'
       };
     }
 
@@ -109,7 +130,8 @@ export function createListPage(
         valueLabel: options.valueLabel,
         submitLabel: options.submitLabel,
         resetLabel: options.resetLabel,
-        adminSummaryLabel: options.adminSummaryLabel
+        adminSummaryLabel: options.adminSummaryLabel,
+        valueType: options.valueType ?? 'number'
       };
     }
 
@@ -118,7 +140,7 @@ export function createListPage(
     const items = await db
       .prepare(
         `
-        SELECT id, content, amount, par_count, is_checked
+        SELECT id, content, ${detailsEnabled ? 'details' : "'' AS details"}, amount, ${amountTextEnabled ? 'amount_text' : "'' AS amount_text"}, par_count, is_checked
         FROM list_items
         WHERE section_id = ?
         ORDER BY sort_order ASC, created_at ASC
@@ -130,12 +152,20 @@ export function createListPage(
     return {
       title: pageTitle,
       subtitle: options.subtitle,
-      items: items.results ?? [],
+      items: (items.results ?? []).map((item) => ({
+        ...item,
+        details: detailsEnabled ? (item.details ?? '') : '',
+        amount_text:
+          amountTextEnabled
+            ? (item.amount_text ?? '')
+            : String(item.amount ?? 0)
+      })),
       isAdmin: locals.userRole === 'admin',
       valueLabel: options.valueLabel,
       submitLabel: options.submitLabel,
       resetLabel: options.resetLabel,
-      adminSummaryLabel: options.adminSummaryLabel
+      adminSummaryLabel: options.adminSummaryLabel,
+      valueType: options.valueType ?? 'number'
     };
   };
 
@@ -155,16 +185,26 @@ export function createListPage(
 
       const now = Math.floor(Date.now() / 1000);
       let updatedCount = 0;
+      const useTextValues = options.valueType === 'text';
+      const amountTextEnabled = useTextValues ? await hasAmountTextColumn(db) : false;
       for (const item of items.results ?? []) {
         const raw = formData.get(`amount_${item.id}`);
         if (raw === null) continue;
-        const parsed = parseNonNegativeNumber(raw, options.valueLabel);
-        if (!parsed.ok) return fail(400, { error: parsed.error });
+        if (useTextValues && amountTextEnabled) {
+          const value = String(raw).trim();
+          await db
+            .prepare(`UPDATE list_items SET amount_text = ?, updated_at = ? WHERE id = ?`)
+            .bind(value, now, item.id)
+            .run();
+        } else {
+          const parsed = parseNonNegativeNumber(raw, options.valueLabel);
+          if (!parsed.ok) return fail(400, { error: parsed.error });
 
-        await db
-          .prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ?`)
-          .bind(parsed.value, now, item.id)
-          .run();
+          await db
+            .prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ?`)
+            .bind(parsed.value, now, item.id)
+            .run();
+        }
         updatedCount += 1;
       }
       if (updatedCount === 0) return fail(400, { error: `No ${options.valueLabel.toLowerCase()} values were submitted.` });
@@ -178,10 +218,23 @@ export function createListPage(
       const section = await getSection(db, domain, sectionSlug);
       if (!section) return fail(404, { error: 'List section not found.' });
 
-      await db
-        .prepare(`UPDATE list_items SET amount = 0, is_checked = 0, updated_at = ? WHERE section_id = ?`)
-        .bind(Math.floor(Date.now() / 1000), section.id)
-        .run();
+      const now = Math.floor(Date.now() / 1000);
+      const useTextValues = options.valueType === 'text';
+      const amountTextEnabled = useTextValues ? await hasAmountTextColumn(db) : false;
+
+      if (useTextValues && amountTextEnabled) {
+        await db
+          .prepare(
+            `UPDATE list_items SET amount = 0, amount_text = '', is_checked = 0, updated_at = ? WHERE section_id = ?`
+          )
+          .bind(now, section.id)
+          .run();
+      } else {
+        await db
+          .prepare(`UPDATE list_items SET amount = 0, is_checked = 0, updated_at = ? WHERE section_id = ?`)
+          .bind(now, section.id)
+          .run();
+      }
 
       return { success: true };
     },
@@ -253,6 +306,7 @@ export function createPreplistPage(sectionSlug: string, pageTitle: string) {
     valueLabel: 'Prep',
     submitLabel: 'Submit Prep Counts',
     resetLabel: 'New Prep List (Reset to 0)',
-    adminSummaryLabel: '+ Admin Par Levels'
+    adminSummaryLabel: '+ Admin Par Levels',
+    valueType: 'text'
   });
 }

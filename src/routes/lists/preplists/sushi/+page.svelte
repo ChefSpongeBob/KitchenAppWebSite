@@ -5,6 +5,7 @@
   type PreplistItem = {
     id: string;
     content: string;
+    details?: string | null;
     amount: number;
     par_count: number;
     is_checked: number;
@@ -40,6 +41,7 @@
         <span>Done</span>
         <span>Item</span>
         <span>Prep</span>
+        <span>Ref</span>
         <span>Par</span>
       </div>
 
@@ -65,7 +67,6 @@
 
             {#if isSortedCard(item)}
               <div class="sorted-label">Sorted</div>
-              <div></div>
             {:else}
               <div class="number-form">
                 <span class="field-tag">{(data.valueLabel ?? 'Prep').toUpperCase()}:</span>
@@ -79,6 +80,11 @@
                   required
                   class="number-input"
                 />
+              </div>
+
+              <div class="ref-readonly">
+                <span class="field-tag">REF:</span>
+                <span>{item.details?.trim() || '—'}</span>
               </div>
 
               <div class="par-readonly">
@@ -142,7 +148,12 @@
   .sheet-header,
   .sheet-row {
     display: grid;
-    grid-template-columns: 58px minmax(180px, 1.7fr) minmax(140px, 1fr) minmax(120px, 0.9fr);
+    grid-template-columns:
+      58px
+      minmax(180px, 1.6fr)
+      minmax(140px, 1fr)
+      minmax(130px, 1fr)
+      minmax(120px, 0.9fr);
     gap: 0.65rem;
     align-items: center;
   }
@@ -220,6 +231,7 @@
   }
 
   .sorted-label {
+    grid-column: 3 / -1;
     font-size: 0.85rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -320,6 +332,25 @@
     background: rgba(255,255,255,0.02);
   }
 
+  .ref-readonly {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2.3rem;
+    font-size: 0.88rem;
+    color: var(--color-text);
+    padding: 0.3rem 0.45rem;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.02);
+    overflow: hidden;
+  }
+
+  .ref-readonly span:last-child,
+  .par-readonly span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .field-tag {
     font-size: 0.7rem;
     letter-spacing: 0.08em;
@@ -345,6 +376,7 @@
 
     .number-form,
     .par-readonly,
+    .ref-readonly,
     .sorted-label {
       grid-column: 2 / -1;
     }

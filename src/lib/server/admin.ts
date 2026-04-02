@@ -12,6 +12,7 @@ export type AdminSectionRow = {
   title: string;
   item_id: string | null;
   content: string | null;
+  details: string | null;
   amount: number | null;
   par_count: number | null;
   is_checked: number | null;
@@ -21,6 +22,7 @@ export type AdminSectionRow = {
 export type AdminSectionItem = {
   id: string;
   content: string;
+  details: string;
   amount: number;
   par_count: number;
   is_checked: number;
@@ -189,6 +191,8 @@ function generateInviteCode() {
 }
 
 export async function loadAdminSections(db: D1) {
+  const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
+  const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
   const sectionRows = await db
     .prepare(
       `
@@ -199,6 +203,7 @@ export async function loadAdminSections(db: D1) {
         s.title,
         i.id AS item_id,
         i.content,
+        ${detailsEnabled ? 'i.details,' : "'' AS details,"}
         i.amount,
         i.par_count,
         i.is_checked,
@@ -227,6 +232,7 @@ export async function loadAdminSections(db: D1) {
       grouped.get(row.section_id)?.items.push({
         id: row.item_id,
         content: row.content ?? '',
+        details: row.details ?? '',
         amount: row.amount ?? 0,
         par_count: row.par_count ?? 0,
         is_checked: row.is_checked ?? 0,
@@ -542,6 +548,7 @@ export async function addListItem(request: Request, locals: App.Locals) {
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '');
   const content = String(formData.get('content') ?? '').trim();
+  const details = String(formData.get('details') ?? '').trim();
   const parCount = Number(formData.get('par_count') ?? 0);
   if (!sectionId || !content || !Number.isFinite(parCount) || parCount < 0) {
     return fail(400, { error: 'Invalid list item input.' });
@@ -553,18 +560,36 @@ export async function addListItem(request: Request, locals: App.Locals) {
     .bind(sectionId)
     .first<{ max_sort: number }>();
 
-  await db
-    .prepare(
-      `
-      INSERT INTO list_items (
-        id, section_id, content, sort_order, is_checked,
-        amount, par_count, created_at, updated_at
+  const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
+  const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
+
+  if (detailsEnabled) {
+    await db
+      .prepare(
+        `
+        INSERT INTO list_items (
+          id, section_id, content, details, sort_order, is_checked,
+          amount, par_count, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+        `
       )
-      VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
-      `
-    )
-    .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, parCount, now, now)
-    .run();
+      .bind(crypto.randomUUID(), sectionId, content, details, (maxSort?.max_sort ?? -1) + 1, parCount, now, now)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `
+        INSERT INTO list_items (
+          id, section_id, content, sort_order, is_checked,
+          amount, par_count, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+        `
+      )
+      .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, parCount, now, now)
+      .run();
+  }
 
   return { success: true };
 }
@@ -577,15 +602,26 @@ export async function updateListItem(request: Request, locals: App.Locals) {
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
   const content = String(formData.get('content') ?? '').trim();
+  const details = String(formData.get('details') ?? '').trim();
   const parCount = Number(formData.get('par_count') ?? 0);
   if (!id || !content || !Number.isFinite(parCount) || parCount < 0) {
     return fail(400, { error: 'Invalid update input.' });
   }
 
-  await db
-    .prepare(`UPDATE list_items SET content = ?, par_count = ?, updated_at = ? WHERE id = ?`)
-    .bind(content, parCount, Math.floor(Date.now() / 1000), id)
-    .run();
+  const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
+  const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
+
+  if (detailsEnabled) {
+    await db
+      .prepare(`UPDATE list_items SET content = ?, details = ?, par_count = ?, updated_at = ? WHERE id = ?`)
+      .bind(content, details, parCount, Math.floor(Date.now() / 1000), id)
+      .run();
+  } else {
+    await db
+      .prepare(`UPDATE list_items SET content = ?, par_count = ?, updated_at = ? WHERE id = ?`)
+      .bind(content, parCount, Math.floor(Date.now() / 1000), id)
+      .run();
+  }
 
   return { success: true };
 }

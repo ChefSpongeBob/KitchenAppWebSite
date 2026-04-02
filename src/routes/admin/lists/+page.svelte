@@ -7,6 +7,7 @@
   type Item = {
     id: string;
     content: string;
+    details: string;
     amount: number;
     par_count: number;
     is_checked: number;
@@ -193,6 +194,7 @@
                         <form method="POST" action="?/update_list_item" use:enhance={withFeedback} class="inline-edit list-item-form">
                           <input type="hidden" name="id" value={item.id} />
                           <input name="content" value={item.content} required />
+                          <input name="details" value={item.details} placeholder="Reference / pan size" />
                           <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
                           <button type="submit" class="text-action" aria-label="Save item">Save</button>
                         </form>
@@ -212,6 +214,7 @@
             <form method="POST" action="?/add_list_item" use:enhance={withFeedback} class="add-row">
               <input type="hidden" name="section_id" value={section.id} />
               <input name="content" placeholder={`Add item to ${section.title}`} required />
+              <input name="details" placeholder="Reference / pan size" />
               <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
               <button type="submit">Add Item</button>
             </form>
@@ -364,7 +367,7 @@
 
   .list-item-form {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(92px, 120px) auto;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(92px, 120px) auto;
     gap: 0.45rem;
     align-items: center;
   }
