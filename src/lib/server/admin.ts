@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { ensureAnnouncementsSchema, loadHomepageAnnouncement } from '$lib/server/announcements';
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
+import { isEmailConfigured, sendApprovalEmail, sendInviteEmail } from '$lib/server/email';
 
 type D1 = App.Platform['env']['DB'];
 
@@ -108,6 +109,12 @@ export type AdminInvite = {
   used_at: number | null;
   revoked_at: number | null;
 };
+
+export type AdminEmailStatus = {
+  emailConfigured: boolean;
+};
+
+type EmailEnv = Partial<App.Platform['env']>;
 
 export type AdminAssignableUser = {
   id: string;
@@ -403,6 +410,12 @@ export async function loadAdminInvites(db: D1) {
     .all<AdminInvite>();
 
   return invites.results ?? [];
+}
+
+export function getAdminEmailStatus(env?: EmailEnv | null): AdminEmailStatus {
+  return {
+    emailConfigured: isEmailConfigured(env)
+  };
 }
 
 export async function loadAdminAssignableUsers(db: D1) {
@@ -1058,7 +1071,12 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
   return { success: true };
 }
 
-export async function approveUser(request: Request, locals: App.Locals) {
+export async function approveUser(
+  request: Request,
+  locals: App.Locals,
+  origin?: string,
+  env?: EmailEnv | null
+) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -1075,7 +1093,28 @@ export async function approveUser(request: Request, locals: App.Locals) {
     .bind(Math.floor(Date.now() / 1000), userId)
     .run();
 
-  return { success: true };
+  const approvedUser = await db
+    .prepare(`SELECT email, display_name FROM users WHERE id = ? LIMIT 1`)
+    .bind(userId)
+    .first<{ email: string; display_name: string | null }>();
+
+  if (!approvedUser) {
+    return { success: true, message: 'User approved.' };
+  }
+
+  const emailResult = await sendApprovalEmail({
+    env,
+    origin: origin ?? 'https://nexusnorthsystems.com',
+    userEmail: approvedUser.email,
+    displayName: approvedUser.display_name
+  });
+
+  return {
+    success: true,
+    message: emailResult.sent
+      ? 'User approved and approval email sent.'
+      : `User approved. ${emailResult.reason ?? 'Approval email was not sent.'}`
+  };
 }
 
 async function getUserById(db: D1, userId: string) {
@@ -1201,7 +1240,12 @@ export async function toggleSpecialsAccess(request: Request, locals: App.Locals)
   return { success: true };
 }
 
-export async function createUserInvite(request: Request, locals: App.Locals) {
+export async function createUserInvite(
+  request: Request,
+  locals: App.Locals,
+  origin?: string,
+  env?: EmailEnv | null
+) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -1231,7 +1275,20 @@ export async function createUserInvite(request: Request, locals: App.Locals) {
     .bind(crypto.randomUUID(), email, emailNormalized, inviteCode, locals.userId ?? null, now, expiresAt)
     .run();
 
-  return { success: true };
+  const emailResult = await sendInviteEmail({
+    env,
+    origin: origin ?? 'https://nexusnorthsystems.com',
+    inviteeEmail: email,
+    inviteCode,
+    expiresAt
+  });
+
+  return {
+    success: true,
+    message: emailResult.sent
+      ? 'Invite created and email sent.'
+      : `Invite created. ${emailResult.reason ?? 'Invite email was not sent.'}`
+  };
 }
 
 export async function revokeUserInvite(request: Request, locals: App.Locals) {

@@ -4,6 +4,7 @@ import {
   createUserInvite,
   deleteUser,
   denyUser,
+  getAdminEmailStatus,
   loadAdminInvites,
   loadAdminUsers,
   makeUserAdmin,
@@ -12,26 +13,29 @@ import {
   toggleSpecialsAccess
 } from '$lib/server/admin';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, platform }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
 
   if (!db) {
     return {
       users: [],
-      invites: []
+      invites: [],
+      emailConfigured: false
     };
   }
 
   const users = await loadAdminUsers(db);
   const invites = await loadAdminInvites(db);
-  return { users, invites };
+  return { users, invites, ...getAdminEmailStatus(platform?.env) };
 };
 
 export const actions: Actions = {
-  create_user_invite: ({ request, locals }) => createUserInvite(request, locals),
+  create_user_invite: ({ request, locals, url, platform }) =>
+    createUserInvite(request, locals, url.origin, platform?.env),
   revoke_user_invite: ({ request, locals }) => revokeUserInvite(request, locals),
-  approve_user: ({ request, locals }) => approveUser(request, locals),
+  approve_user: ({ request, locals, url, platform }) =>
+    approveUser(request, locals, url.origin, platform?.env),
   deny_user: ({ request, locals }) => denyUser(request, locals),
   delete_user: ({ request, locals }) => deleteUser(request, locals),
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),

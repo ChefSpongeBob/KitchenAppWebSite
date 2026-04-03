@@ -9,6 +9,10 @@ declare global {
 				DB: D1Database;
 				IOT_API_KEY?: string;
 				CAMERA_MEDIA?: R2Bucket;
+				RESEND_API_KEY?: string;
+				RESEND_FROM_EMAIL?: string;
+				RESEND_REPLY_TO_EMAIL?: string;
+				APP_BASE_URL?: string;
 			};
 		}
 

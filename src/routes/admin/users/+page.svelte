@@ -1,7 +1,8 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { enhance } from '$app/forms';
+  import { applyAction, enhance } from '$app/forms';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type UserOption = {
     id: string;
@@ -25,6 +26,7 @@
   export let data: {
     users: UserOption[];
     invites: InviteOption[];
+    emailConfigured: boolean;
   };
 
   $: pendingUsers = data.users.filter((user) => user.is_active !== 1);
@@ -34,6 +36,21 @@
 
   const formatDate = (value: number | null) =>
     value ? new Date(value * 1000).toLocaleDateString() : 'None';
+
+  let feedbackMessage = '';
+
+  const withFeedback: SubmitFunction = () => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      feedbackMessage =
+        result.type === 'success'
+          ? result.data?.message ?? 'User access updated.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That user change could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -74,7 +91,18 @@
         <span>{activeInvites.length} active</span>
       </header>
 
-      <form method="POST" action="?/create_user_invite" use:enhance class="invite-form">
+      {#if feedbackMessage}
+        <p class="feedback-banner">{feedbackMessage}</p>
+      {/if}
+
+      {#if !data.emailConfigured}
+        <p class="config-banner">
+          Invite and approval emails are not configured yet. Add `RESEND_API_KEY` and
+          `RESEND_FROM_EMAIL` to enable sending.
+        </p>
+      {/if}
+
+      <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
         <input
           name="email"
           type="email"
@@ -111,7 +139,7 @@
               </dl>
 
               <div class="actions">
-                <form method="POST" action="?/revoke_user_invite" use:enhance>
+                <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
                   <input type="hidden" name="invite_id" value={invite.id} />
                   <button type="submit" class="warn-action">Revoke Invite</button>
                 </form>
@@ -172,11 +200,11 @@
               </dl>
 
               <div class="actions">
-                <form method="POST" action="?/approve_user" use:enhance>
+                <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button type="submit">Approve</button>
                 </form>
-                <form method="POST" action="?/deny_user" use:enhance>
+                <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button type="submit" class="warn-action">Deny</button>
                 </form>
@@ -222,19 +250,19 @@
               </dl>
 
               <div class="actions">
-                <form method="POST" action="?/deny_user" use:enhance>
+                <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button type="submit" class="warn-action">Deny</button>
                 </form>
 
                 {#if user.role !== 'admin'}
-                  <form method="POST" action="?/make_user_admin" use:enhance>
+                  <form method="POST" action="?/make_user_admin" use:enhance={withFeedback}>
                     <input type="hidden" name="user_id" value={user.id} />
                     <button type="submit">Make Admin</button>
                   </form>
                 {/if}
 
-                <form method="POST" action="?/toggle_specials_access" use:enhance>
+                <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button
                     type="submit"
@@ -246,7 +274,7 @@
                   </button>
                 </form>
 
-                <form method="POST" action="?/delete_user" use:enhance>
+                <form method="POST" action="?/delete_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button type="submit" class="danger-action">Delete</button>
                 </form>
@@ -343,6 +371,25 @@
 
   .panel {
     padding: 1rem;
+  }
+
+  .feedback-banner,
+  .config-banner {
+    margin: 0 0 0.9rem;
+    padding: 0.72rem 0.9rem;
+    border-radius: 12px;
+  }
+
+  .feedback-banner {
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
+  }
+
+  .config-banner {
+    border: 1px solid rgba(245, 158, 11, 0.26);
+    background: linear-gradient(180deg, rgba(120, 86, 10, 0.3), rgba(120, 86, 10, 0.12));
+    color: #fde68a;
   }
 
   .panel-head {
