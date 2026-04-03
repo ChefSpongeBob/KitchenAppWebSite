@@ -8,7 +8,7 @@
 </script>
 
 <Layout>
-	<PageHeader title="Create Account" subtitle="Get set up and wait for approval" />
+	<PageHeader title="Create Account" subtitle="Use your invite code to create an account" />
 
 	<section class="auth-shell">
 		<form method="POST" class="auth-card">
@@ -69,7 +69,7 @@
 		Already have an account?
 		<a href="/login">Login</a>
 	</p>
-	<p>Registration now requires an invite code from an admin, and new accounts still need approval before first login.</p>
+	<p>Registration requires an invite code from an admin. Once the code is accepted, your account is ready to sign in.</p>
 
 	<AppInstallCard compact />
 </Layout>

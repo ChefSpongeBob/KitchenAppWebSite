@@ -144,7 +144,7 @@ export const actions: Actions = {
 				created_at,
 				updated_at
 			)
-			VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+			VALUES (?, ?, ?, ?, ?, 1, ?, ?)
 		`
 					: `
 			INSERT INTO users (
@@ -176,7 +176,7 @@ export const actions: Actions = {
 				created_at,
 				updated_at
 			)
-			VALUES (?, ?, ?, ?, 0, ?, ?)
+			VALUES (?, ?, ?, ?, 1, ?, ?)
 		`
 					: `
 			INSERT INTO users (
@@ -219,7 +219,7 @@ export const actions: Actions = {
 				.bind(now, userId, invite.id)
 				.run();
 
-			throw redirect(303, '/login?registered=pending');
+			throw redirect(303, '/login?registered=success');
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;

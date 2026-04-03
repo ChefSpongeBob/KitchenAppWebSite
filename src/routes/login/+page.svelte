@@ -35,8 +35,8 @@
 		<p class="error">{form.error}</p>
 	{:else if $page.url.searchParams.get('error') === 'session'}
 		<p class="error">Your session could not be restored. Please sign in again.</p>
-	{:else if $page.url.searchParams.get('registered') === 'pending'}
-		<p class="notice">Account created. An admin must approve access before first login.</p>
+	{:else if $page.url.searchParams.get('registered') === 'success'}
+		<p class="notice">Account created. You can sign in now.</p>
 	{/if}
 
 	<p>

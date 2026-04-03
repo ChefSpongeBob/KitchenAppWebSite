@@ -29,7 +29,7 @@
     emailConfigured: boolean;
   };
 
-  $: pendingUsers = data.users.filter((user) => user.is_active !== 1);
+  $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
   $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
   $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
@@ -65,9 +65,9 @@
 
   <section class="summary-grid" aria-label="User summary">
     <article class="summary-card">
-      <span class="eyebrow">Pending</span>
-      <strong>{pendingUsers.length}</strong>
-      <p>Accounts waiting for approval.</p>
+      <span class="eyebrow">Restricted</span>
+      <strong>{restrictedUsers.length}</strong>
+      <p>Accounts currently blocked from signing in.</p>
     </article>
     <article class="summary-card">
       <span class="eyebrow">Active</span>
@@ -172,24 +172,24 @@
     <section class="panel">
       <header class="panel-head">
         <div>
-          <span class="panel-kicker">Pending</span>
-          <h2>Awaiting Approval</h2>
+          <span class="panel-kicker">Restricted</span>
+          <h2>Restricted Users</h2>
         </div>
-        <span>{pendingUsers.length} users</span>
+        <span>{restrictedUsers.length} users</span>
       </header>
 
       <div class="user-grid">
-        {#if pendingUsers.length === 0}
-          <article class="user-card empty-card">No pending users.</article>
+        {#if restrictedUsers.length === 0}
+          <article class="user-card empty-card">No restricted users.</article>
         {:else}
-          {#each pendingUsers as user}
+          {#each restrictedUsers as user}
             <article class="user-card">
               <div class="user-head">
                 <div>
                   <h3>{user.display_name ?? 'Unnamed User'}</h3>
                   <p>{user.email}</p>
                 </div>
-                <span class="status status-pending">Pending</span>
+                <span class="status status-restricted">Restricted</span>
               </div>
 
               <dl class="meta">
@@ -202,11 +202,11 @@
               <div class="actions">
                 <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit">Approve</button>
+                  <button type="submit">Allow Access</button>
                 </form>
                 <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit" class="warn-action">Deny</button>
+                  <button type="submit" class="warn-action">Keep Blocked</button>
                 </form>
               </div>
             </article>
@@ -219,7 +219,7 @@
       <header class="panel-head">
         <div>
           <span class="panel-kicker">Active</span>
-          <h2>Approved Users</h2>
+          <h2>Active Users</h2>
         </div>
         <span>{activeUsers.length} users</span>
       </header>
@@ -235,7 +235,7 @@
                   <h3>{user.display_name ?? 'Unnamed User'}</h3>
                   <p>{user.email}</p>
                 </div>
-                <span class="status status-approved">Approved</span>
+                <span class="status status-approved">Active</span>
               </div>
 
               <dl class="meta">
@@ -252,7 +252,7 @@
               <div class="actions">
                 <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit" class="warn-action">Deny</button>
+                  <button type="submit" class="warn-action">Restrict</button>
                 </form>
 
                 {#if user.role !== 'admin'}
@@ -535,7 +535,7 @@
     background: rgba(255, 255, 255, 0.03);
   }
 
-  .status-pending {
+  .status-restricted {
     border-color: #f59e0b;
     color: #f59e0b;
   }

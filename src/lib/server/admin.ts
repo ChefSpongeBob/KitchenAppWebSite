@@ -1112,8 +1112,8 @@ export async function approveUser(
   return {
     success: true,
     message: emailResult.sent
-      ? 'User approved and approval email sent.'
-      : `User approved. ${emailResult.reason ?? 'Approval email was not sent.'}`
+      ? 'Access restored and approval email sent.'
+      : `Access restored. ${emailResult.reason ?? 'Approval email was not sent.'}`
   };
 }
 
