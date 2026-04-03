@@ -25,6 +25,22 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;');
 }
 
+function extractErrorMessage(body: string) {
+  if (!body) return '';
+
+  try {
+    const parsed = JSON.parse(body) as {
+      message?: string;
+      error?: { message?: string };
+      name?: string;
+    };
+
+    return parsed.message || parsed.error?.message || parsed.name || body;
+  } catch {
+    return body;
+  }
+}
+
 export function isEmailConfigured(env?: EmailEnv | null) {
   return Boolean(env?.RESEND_API_KEY && env?.RESEND_FROM_EMAIL);
 }
@@ -65,6 +81,7 @@ export async function sendTransactionalEmail({
       headers: {
         Authorization: `Bearer ${env?.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
+        'User-Agent': 'KitchenApp/1.0',
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
       },
       body: JSON.stringify({
@@ -79,10 +96,13 @@ export async function sendTransactionalEmail({
 
     if (!response.ok) {
       const body = await response.text();
+      const errorMessage = extractErrorMessage(body);
       console.error('Resend email send failed:', response.status, body);
       return {
         sent: false,
-        reason: `Email send failed (${response.status}).`
+        reason: errorMessage
+          ? `Email send failed (${response.status}): ${errorMessage}`
+          : `Email send failed (${response.status}).`
       };
     }
 
