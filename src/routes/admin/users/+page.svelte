@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type UserOption = {
@@ -43,6 +44,9 @@
     feedbackMessage = '';
     return async ({ result }) => {
       await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+      }
       feedbackMessage =
         result.type === 'success'
           ? result.data?.message ?? 'User access updated.'

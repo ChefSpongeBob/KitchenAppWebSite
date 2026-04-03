@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type Todo = {
@@ -58,6 +59,9 @@
     adminMessage = '';
     return async ({ result }) => {
       await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+      }
       adminMessage =
         result.type === 'success'
           ? 'Admin changes saved.'

@@ -1,7 +1,9 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { enhance } from '$app/forms';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type DocumentItem = {
     id: string;
@@ -17,6 +19,7 @@
   export let data: { documents: DocumentItem[] };
 
   let newDocSlug = 'about';
+  let feedbackMessage = '';
   const preferredDocSlugOrder = ['about', 'sop', 'handbook'];
   $: documentBuckets = Array.from(
     data.documents.reduce((acc, doc) => {
@@ -33,6 +36,22 @@
     if (bIndex === -1) return -1;
     return aIndex - bIndex;
   });
+
+  const withFeedback: SubmitFunction = () => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Document changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That document change could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -54,7 +73,11 @@
       <p>{data.documents.length} docs</p>
     </header>
 
-    <form method="POST" action="?/create_document" use:enhance class="add-row docs-form">
+    {#if feedbackMessage}
+      <p class="feedback-banner">{feedbackMessage}</p>
+    {/if}
+
+    <form method="POST" action="?/create_document" use:enhance={withFeedback} class="add-row docs-form">
       <select name="slug" bind:value={newDocSlug} required>
         <option value="about">About</option>
         <option value="sop">SOP</option>
@@ -89,7 +112,7 @@
             {#each docs as doc}
               <details class="edit-doc">
                 <summary>{doc.title}</summary>
-                <form method="POST" action="?/update_document" use:enhance class="add-row docs-form">
+                <form method="POST" action="?/update_document" use:enhance={withFeedback} class="add-row docs-form">
                   <input type="hidden" name="id" value={doc.id} />
                   <input name="slug" value={doc.slug} required />
                   <input name="title" value={doc.title} required />
@@ -105,7 +128,7 @@
                     <button type="submit">Save</button>
                   </div>
                 </form>
-                <form method="POST" action="?/delete_document" use:enhance class="inline delete-row">
+                <form method="POST" action="?/delete_document" use:enhance={withFeedback} class="inline delete-row">
                   <input type="hidden" name="id" value={doc.id} />
                   <button type="submit" class="icon-btn danger" aria-label="Delete document">X</button>
                 </form>
@@ -181,6 +204,15 @@
 
   .docs-form {
     align-items: flex-start;
+  }
+
+  .feedback-banner {
+    margin: 0 0 0.8rem;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
   }
 
   .docs-form textarea {

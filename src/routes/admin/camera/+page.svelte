@@ -1,7 +1,9 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { enhance } from '$app/forms';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type CameraEvent = {
     id: string;
@@ -31,6 +33,7 @@
   };
 
   let feedPlaying: Record<string, boolean> = {};
+  let feedbackMessage = '';
 
   const fixedCameras = [
     { slot: 'walkin', title: 'Walkin' },
@@ -82,6 +85,22 @@
   function isPlaying(id: string, active: number) {
     return feedPlaying[id] ?? active === 1;
   }
+
+  const withFeedback: SubmitFunction = () => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Camera activity updated.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That camera action could not be completed.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -92,10 +111,14 @@
 
   <nav class="subnav">
     <a href="/admin">Back to Dashboard</a>
-    <form method="POST" action="?/clear_events" use:enhance>
+    <form method="POST" action="?/clear_events" use:enhance={withFeedback}>
       <button type="submit">Clear Clips</button>
     </form>
   </nav>
+
+  {#if feedbackMessage}
+    <p class="feedback-banner">{feedbackMessage}</p>
+  {/if}
 
   <section class="feed-grid">
     {#each cameraCards as camera}
@@ -156,7 +179,7 @@
                       <a href={event.clip_url} target="_blank" rel="noreferrer">Open</a>
                       <a href={event.clip_url} download>Download</a>
                     {/if}
-                    <form method="POST" action="?/delete_event" use:enhance>
+                    <form method="POST" action="?/delete_event" use:enhance={withFeedback}>
                       <input type="hidden" name="id" value={event.id} />
                       <button type="submit" class="danger">Delete</button>
                     </form>
@@ -207,6 +230,15 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008) 42%, rgba(255, 255, 255, 0)),
       color-mix(in srgb, var(--color-surface) 95%, black 5%);
     padding: 1rem;
+  }
+
+  .feedback-banner {
+    margin: 0 0 0.9rem;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
   }
 
   .feed-card::before {

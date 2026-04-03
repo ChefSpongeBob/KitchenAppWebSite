@@ -1,7 +1,9 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { enhance } from '$app/forms';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import type { SubmitFunction } from '@sveltejs/kit';
   import { recipeCategories } from '$lib/assets/recipeCategories';
 
   type Recipe = {
@@ -15,6 +17,7 @@
   export let data: { recipes: Recipe[] };
 
   const defaultRecipeCategories = [...recipeCategories];
+  let feedbackMessage = '';
   $: recipeCategoryOptions = Array.from(
     new Set([
       ...defaultRecipeCategories,
@@ -25,6 +28,22 @@
     category,
     recipes: data.recipes.filter((recipe) => recipe.category === category)
   }));
+
+  const withFeedback: SubmitFunction = () => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Recipe changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That recipe change could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -46,7 +65,11 @@
       <p>{data.recipes.length} total recipes</p>
     </header>
 
-    <form method="POST" action="?/create_recipe" use:enhance class="add-row recipe-add">
+    {#if feedbackMessage}
+      <p class="feedback-banner">{feedbackMessage}</p>
+    {/if}
+
+    <form method="POST" action="?/create_recipe" use:enhance={withFeedback} class="add-row recipe-add">
       <select name="category" required>
         <option value="">Select Category</option>
         {#each recipeCategoryOptions as category}
@@ -82,7 +105,7 @@
                   <tr>
                     <td>{recipe.title}</td>
                     <td>
-                      <form method="POST" action="?/delete_recipe" use:enhance class="inline">
+                      <form method="POST" action="?/delete_recipe" use:enhance={withFeedback} class="inline">
                         <input type="hidden" name="id" value={recipe.id} />
                         <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
                       </form>
@@ -163,6 +186,15 @@
   .recipe-add input,
   .recipe-add select {
     width: 100%;
+  }
+
+  .feedback-banner {
+    margin: 0 0 0.8rem;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
   }
 
   .recipe-tabs {
