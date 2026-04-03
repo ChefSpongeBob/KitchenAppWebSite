@@ -3,6 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type Item = {
@@ -85,6 +86,9 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
+        pushToast('List changes saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That list change could not be saved.', 'error');
       }
       feedbackMessage =
         result.type === 'success'

@@ -3,6 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type Todo = {
@@ -61,6 +62,9 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
+        pushToast('Admin changes saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That action could not be completed.', 'error');
       }
       adminMessage =
         result.type === 'success'

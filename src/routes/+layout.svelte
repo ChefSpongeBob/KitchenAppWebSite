@@ -4,6 +4,7 @@
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
   import { primaryNav, type NavItem } from "$lib/assets/navigation";
+  import ToastStack from "$lib/components/ui/ToastStack.svelte";
 
   export let data: { user: { id: string; role: string } | null };
 
@@ -111,6 +112,7 @@
 
 <!-- ===== App Shell ===== -->
 <div class="app-shell">
+  <ToastStack />
   <main class="app-content">
     <slot />
   </main>
