@@ -95,8 +95,8 @@
 
   function isOnline(ts?: number) {
     if (!ts) return false;
-    const fiveMinutes = 5 * 60 * 1000;
-    return Date.now() - ts < fiveMinutes;
+    const staleThresholdMs = 6 * 60 * 1000;
+    return Date.now() - ts < staleThresholdMs;
   }
 
   $: nodeIds = (() => {
