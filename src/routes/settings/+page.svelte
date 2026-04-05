@@ -4,6 +4,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
+  import { pushToast } from '$lib/client/toasts';
 
   type SettingsState = Record<string, string | boolean>;
   export let data: { display_name?: string; email?: string; email_updates?: boolean };
@@ -57,11 +58,11 @@
     });
 
     if (!res.ok) {
-      alert("Settings saved locally, but profile failed to save to server.");
+      pushToast("Settings saved locally, but the profile could not be updated on the server.", "error");
       return;
     }
 
-    alert("Settings saved!");
+    pushToast("Settings saved.", "success");
   }
 </script>
 
