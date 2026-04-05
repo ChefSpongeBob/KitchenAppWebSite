@@ -12,6 +12,7 @@ import {
   deleteWhiteboard,
   denyUser,
   loadAdminAnnouncement,
+  loadAdminEmployeeSpotlight,
   loadAdminNodeNames,
   loadAdminTodos,
   loadAdminWhiteboardIdeas,
@@ -19,6 +20,7 @@ import {
   makeUserAdmin,
   requireAdmin,
   saveAnnouncement,
+  saveEmployeeSpotlight,
   toggleSpecialsAccess,
   usersHasIsActiveColumn
 } from '$lib/server/admin';
@@ -34,6 +36,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       nodeNames: [],
       whiteboardIdeas: [],
       announcement: { content: '', updatedAt: 0 },
+      employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
       summary: {
         pendingUsers: 0,
         openTodos: 0,
@@ -45,12 +48,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   await cleanupExpiredRejectedWhiteboardIdeas(db);
 
-  const [todos, users, nodeNames, whiteboardIdeas, announcement, hasIsActive] = await Promise.all([
+  const [todos, users, nodeNames, whiteboardIdeas, announcement, employeeSpotlight, hasIsActive] = await Promise.all([
     loadAdminTodos(db),
     loadAdminAssignableUsers(db),
     loadAdminNodeNames(db),
     loadAdminWhiteboardIdeas(db),
     loadAdminAnnouncement(db),
+    loadAdminEmployeeSpotlight(db),
     usersHasIsActiveColumn(db)
   ]);
 
@@ -68,6 +72,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     nodeNames,
     whiteboardIdeas,
     announcement,
+    employeeSpotlight,
     summary: {
       pendingUsers,
       openTodos: todos.filter((todo) => !todo.completed_at).length,
@@ -86,6 +91,7 @@ export const actions: Actions = {
   reject_whiteboard: ({ request, locals }) => import('$lib/server/admin').then(({ rejectWhiteboard }) => rejectWhiteboard(request, locals)),
   delete_whiteboard: ({ request, locals }) => deleteWhiteboard(request, locals),
   save_announcement: ({ request, locals }) => saveAnnouncement(request, locals),
+  save_employee_spotlight: ({ request, locals }) => saveEmployeeSpotlight(request, locals),
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
   approve_user: ({ request, locals }) => approveUser(request, locals),
   deny_user: ({ request, locals }) => denyUser(request, locals),

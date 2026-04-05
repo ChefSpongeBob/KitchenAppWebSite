@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { ensureAnnouncementsSchema, loadHomepageAnnouncement } from '$lib/server/announcements';
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
+import { ensureEmployeeSpotlightSchema, loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
 import { isEmailConfigured, sendApprovalEmail, sendInviteEmail } from '$lib/server/email';
 
@@ -553,6 +554,11 @@ export async function loadAdminAnnouncement(db: D1) {
   return loadHomepageAnnouncement(db);
 }
 
+export async function loadAdminEmployeeSpotlight(db: D1) {
+  await ensureEmployeeSpotlightSchema(db);
+  return loadEmployeeSpotlight(db);
+}
+
 export async function addListItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -1041,6 +1047,36 @@ export async function saveAnnouncement(request: Request, locals: App.Locals) {
       `
     )
     .bind(content, locals.userId ?? null, now)
+    .run();
+
+  return { success: true };
+}
+
+export async function saveEmployeeSpotlight(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  await ensureEmployeeSpotlightSchema(db);
+
+  const formData = await request.formData();
+  const employeeName = String(formData.get('employee_name') ?? '').trim();
+  const shoutout = String(formData.get('shoutout') ?? '').trim();
+  const now = Math.floor(Date.now() / 1000);
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_spotlight (id, employee_name, shoutout, updated_by, updated_at)
+      VALUES ('homepage', ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        employee_name = excluded.employee_name,
+        shoutout = excluded.shoutout,
+        updated_by = excluded.updated_by,
+        updated_at = excluded.updated_at
+      `
+    )
+    .bind(employeeName, shoutout, locals.userId ?? null, now)
     .run();
 
   return { success: true };

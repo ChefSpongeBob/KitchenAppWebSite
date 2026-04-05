@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { loadHomepageAnnouncement } from '$lib/server/announcements';
 import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
+import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 
 type HomeTask = {
   id: string;
@@ -38,6 +39,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       isAdmin,
       userName: 'Team',
       announcement: { content: '', updatedAt: 0 },
+      employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
       dailySpecials: [],
       todayTasks: [],
       todayMeta: { assignedCount: 0, unassignedCount: 0 },
@@ -51,6 +53,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   const reviewEnabledPromise = hasTable(db, 'whiteboard_review');
   const nodeTablePromise = hasTable(db, 'sensor_nodes');
   const announcementPromise = loadHomepageAnnouncement(db);
+  const employeeSpotlightPromise = loadEmployeeSpotlight(db);
   const dailySpecialsPromise = loadDailySpecials(db);
   const userPromise = locals.userId
     ? db
@@ -96,6 +99,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     reviewEnabled,
     nodeTable,
     announcement,
+    employeeSpotlight,
     dailySpecials,
     user,
     taskResult,
@@ -104,6 +108,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     reviewEnabledPromise,
     nodeTablePromise,
     announcementPromise,
+    employeeSpotlightPromise,
     dailySpecialsPromise,
     userPromise,
     todayTasksPromise,
@@ -177,6 +182,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     isAdmin,
     userName,
     announcement,
+    employeeSpotlight,
     dailySpecials,
     todayTasks,
     todayMeta: { assignedCount, unassignedCount },

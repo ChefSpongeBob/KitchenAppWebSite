@@ -22,11 +22,17 @@
     content: string;
     updatedAt: number;
   };
+  type EmployeeSpotlight = {
+    employeeName: string;
+    shoutout: string;
+    updatedAt: number;
+  };
 
   export let data: {
     isAdmin?: boolean;
     userName?: string;
     announcement?: { content: string; updatedAt: number };
+    employeeSpotlight?: EmployeeSpotlight;
     dailySpecials?: DailySpecial[];
     todayTasks?: HomeTask[];
     todayMeta?: { assignedCount: number; unassignedCount: number };
@@ -43,6 +49,7 @@
   let topGreeting = '';
   let userName = data.userName ?? 'Team';
   let announcement = data.announcement ?? { content: '', updatedAt: 0 };
+  let employeeSpotlight = data.employeeSpotlight ?? { employeeName: '', shoutout: '', updatedAt: 0 };
   let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
   let todayTasks: HomeTask[] = data.todayTasks ?? [];
   let topIdeas: Idea[] = data.topIdeas ?? [];
@@ -232,6 +239,29 @@
     </a>
 
     <div
+      class="tile employee-card"
+      style="transform: translate({px * 3.5}px, {py * 3.5}px);"
+      in:fly={{ y: 20, duration: 545 }}
+    >
+      <div class="tile-head employee-head">
+        <div class="employee-title">
+          <img src="/fishsvg.svg" alt="" aria-hidden="true" class="fish-icon" />
+          <span class="tile-label employee-label">Employee Of The Day</span>
+        </div>
+      </div>
+      {#if employeeSpotlight.employeeName}
+        <div class="employee-copy">
+          <strong>{employeeSpotlight.employeeName}</strong>
+          {#if employeeSpotlight.shoutout}
+            <p>{employeeSpotlight.shoutout}</p>
+          {/if}
+        </div>
+      {:else}
+        <small class="employee-empty">No spotlight set yet.</small>
+      {/if}
+    </div>
+
+    <div
       class="tile temps"
       style="transform: translate({px * 4}px, {py * 4}px);"
       in:fly={{ y: 20, duration: 550 }}
@@ -400,6 +430,50 @@
     color: inherit;
     gap: 0.55rem;
     min-height: 0;
+  }
+  .employee-card {
+    gap: 0.6rem;
+    min-height: 0;
+  }
+  .employee-head {
+    justify-content: flex-start;
+  }
+  .employee-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .employee-label {
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--color-text);
+  }
+  .fish-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    object-fit: contain;
+    filter:
+      brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
+    opacity: 0.96;
+    flex: 0 0 auto;
+  }
+  .employee-copy {
+    display: grid;
+    gap: 0.28rem;
+  }
+  .employee-copy strong {
+    font-size: 0.98rem;
+    color: var(--color-text);
+  }
+  .employee-copy p,
+  .employee-empty {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
   }
   .special-row {
     display: grid;

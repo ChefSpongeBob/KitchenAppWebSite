@@ -40,12 +40,19 @@
     updatedAt: number;
   };
 
+  type EmployeeSpotlight = {
+    employeeName: string;
+    shoutout: string;
+    updatedAt: number;
+  };
+
   export let data: {
     todos: Todo[];
     users: UserOption[];
     nodeNames: NodeName[];
     whiteboardIdeas: WhiteboardIdea[];
     announcement: Announcement;
+    employeeSpotlight: EmployeeSpotlight;
     summary: {
       pendingUsers: number;
       openTodos: number;
@@ -148,6 +155,7 @@
     <a href="#todos">Todo</a>
     <a href="#whiteboard">Whiteboard</a>
     <a href="#announcement">Announcement</a>
+    <a href="#employee-spotlight">Employee</a>
     <a href="#nodes">Node Names</a>
   </nav>
 
@@ -267,6 +275,30 @@
           placeholder="Write the message shown on the homepage..."
         >{data.announcement.content}</textarea>
         <button type="submit">Save Announcement</button>
+      </form>
+    </details>
+
+    <details class="panel" id="employee-spotlight">
+      <summary>
+        <div>
+          <span class="panel-kicker">Homepage</span>
+          <h2>Employee Of The Day</h2>
+        </div>
+        <span>{data.employeeSpotlight.employeeName ? 'Live' : 'Empty'}</span>
+      </summary>
+
+      <form method="POST" action="?/save_employee_spotlight" use:enhance={withAdminFeedback} class="add-row docs-form">
+        <input
+          name="employee_name"
+          placeholder="Employee name"
+          value={data.employeeSpotlight.employeeName}
+        />
+        <textarea
+          name="shoutout"
+          rows="4"
+          placeholder="Add the shoutout shown on the homepage..."
+        >{data.employeeSpotlight.shoutout}</textarea>
+        <button type="submit">Save Employee Spotlight</button>
       </form>
     </details>
 
