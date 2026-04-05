@@ -14,10 +14,10 @@
 </script>
 
 <Layout>
-  <PageHeader title="Orders" subtitle="Select an order workflow" />
+  <PageHeader title="Orders" />
   {#each sections as section}
     <a href={section.href} class="card-link">
-      <DashboardCard title={section.title} description={section.description ?? ''} />
+      <DashboardCard title={section.title} />
     </a>
   {/each}
 </Layout>

@@ -226,10 +226,9 @@
       in:fly={{ y: 20, duration: 540 }}
     >
       <div class="tile-head">
-        <span class="tile-label">Secret Rolls & Menu</span>
+        <span class="tile-label menu-label">Main &amp; Secret Menu</span>
         <small>pdfs</small>
       </div>
-      <p class="menu-copy">Open the menu sheets and secret roll references.</p>
     </a>
 
     <div
@@ -316,23 +315,20 @@
       <small class="section-muted">Tap a card to continue</small>
     </div>
     <a href="/lists" class="card-link">
-      <DashboardCard title="Lists" description="Prep lists, inventory, and orders" />
+      <DashboardCard title="Lists" />
     </a>
     <a href="/todo" class="card-link">
-      <DashboardCard title="ToDos" description="Open current tasks" />
+      <DashboardCard title="ToDos" />
     </a>
     <a href="/whiteboard" class="card-link">
-      <DashboardCard title="Whiteboard" description="Notes and ideas" />
+      <DashboardCard title="Whiteboard" />
     </a>
     <a href="/temper" class="card-link">
-      <DashboardCard title="Temps" description="Temperature logs" />
+      <DashboardCard title="Temps" />
     </a>
     {#if isAdmin}
       <a href="/meeting-notes" class="card-link">
-        <DashboardCard
-          title="Meeting Notes"
-          description="Admin notes, follow-ups, and meeting records"
-        />
+        <DashboardCard title="Meeting Notes" />
       </a>
     {/if}
   </section>
@@ -405,12 +401,6 @@
     gap: 0.55rem;
     min-height: 0;
   }
-  .menu-copy {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
-    line-height: 1.4;
-  }
   .special-row {
     display: grid;
     grid-template-columns: 4.8rem 1fr;
@@ -463,6 +453,14 @@
   }
   .mini-graph { width: 100%; height: 40px; margin-top: 4px; overflow: hidden; }
   .tile-label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); }
+  .menu-label {
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--color-text);
+  }
   .idea { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-muted); }
   .today-area { margin: 1rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background:
       linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 35%),

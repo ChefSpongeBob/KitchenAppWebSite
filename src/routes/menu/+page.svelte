@@ -3,25 +3,18 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
+  import ImagePageStack from '$lib/components/ui/ImagePageStack.svelte';
 
   const menuPdfs = [
     {
       title: 'Secret Menu',
-      description: 'Off-menu and specialty roll reference.',
-      href: '/menus/secret-rolls.pdf',
-      file: 'secret-rolls.pdf'
+      pages: ['/menus/secret-menu-page-1.jpg', '/menus/secret-menu-page-2.jpg'],
+      file: 'secret-menu-pages'
     },
     {
       title: 'Main Menu',
-      description: 'Standard guest-facing menu PDF.',
       href: '/menus/main-menu.pdf',
       file: 'main-menu.pdf'
-    },
-    {
-      title: 'Seasonal / Limited',
-      description: 'Rotating inserts, promos, or temporary menus.',
-      href: '/menus/seasonal-menu.pdf',
-      file: 'seasonal-menu.pdf'
     }
   ];
 
@@ -33,10 +26,7 @@
 </script>
 
 <Layout>
-  <PageHeader
-    title="Secret Rolls & Menu"
-    subtitle="Menu sheets and roll references."
-  />
+  <PageHeader title="Menu" />
 
   <section class="grid">
     {#each menuPdfs as item}
@@ -47,7 +37,7 @@
           class:active={activeMenu?.href === item.href}
           on:click={() => toggleMenu(item)}
         >
-          <DashboardCard title={item.title} description={item.description}>
+          <DashboardCard title={item.title}>
             <div class="card-copy">
               <span class="state-pill">{activeMenu?.href === item.href ? 'Close' : 'Open'}</span>
             </div>
@@ -66,7 +56,11 @@
         </div>
       </div>
       <div class="document-stage">
-        <PdfPageStack src={activeMenu.href} title={activeMenu.title} />
+        {#if 'pages' in activeMenu}
+          <ImagePageStack pages={activeMenu.pages} title={activeMenu.title} />
+        {:else}
+          <PdfPageStack src={activeMenu.href} title={activeMenu.title} />
+        {/if}
       </div>
     </section>
   {/if}
@@ -80,8 +74,7 @@
   }
 
   .card-copy {
-    display: grid;
-    gap: 0.45rem;
+    display: block;
   }
 
   .state-pill {

@@ -14,10 +14,10 @@
 </script>
 
 <Layout>
-  <PageHeader title="Prep Lists" subtitle="Select a prep list" />
+  <PageHeader title="Prep Lists" />
   {#each sections as section}
     <a href={section.href} class="card-link">
-      <DashboardCard title={section.title} description={section.description ?? ''} />
+      <DashboardCard title={section.title} />
     </a>
   {/each}
 </Layout>

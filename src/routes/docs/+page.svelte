@@ -26,15 +26,13 @@
       id: 'doc-menu',
       href: '/menu',
       file_url: '/menus/main-menu.pdf',
-      title: 'Menu',
-      description: 'Docs / Guest Facing',
-      content: 'Main menu, secret rolls, and rotating menu sheets.'
+      title: 'Menu'
     }
   ];
 </script>
 
 <Layout>
-  <PageHeader title="Documents" subtitle="Handbook, SOPs, and general docs." />
+  <PageHeader title="Documents" />
 
   {#if docs.length === 0}
     <p class="empty">No documents available.</p>
@@ -43,9 +41,7 @@
       {#each extraDocs as doc}
         <div class="doc-card">
           <a href={doc.href} class="card-link">
-            <DashboardCard title={doc.title} description={doc.description}>
-              <p>{doc.content}</p>
-            </DashboardCard>
+            <DashboardCard title={doc.title} />
           </a>
           <div class="doc-actions">
             <a href={doc.href}>View Menus</a>

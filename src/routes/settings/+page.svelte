@@ -18,12 +18,12 @@
 
   // Cards: keep your style, add a Logout card
   const cards: Array<Record<string, any>> = [
-    { id: 1, title: "Username", desc: "Your display name in the app.", type: "text", key: "username", placeholder: "Enter username" },
-    { id: 2, title: "Email", desc: "Sign-in and contact email.", type: "email", key: "email", placeholder: "Enter email" },
-    { id: 3, title: "Email Notifications", desc: "Receive emails for updates and alerts.", type: "checkbox", key: "emailNotifications" },
-    { id: 4, title: "Dark Mode", desc: "Toggle dark theme across the app.", type: "checkbox", key: "darkMode" },
-    { id: 5, title: "Language", desc: "Select your preferred language.", type: "select", key: "language", options: ["en", "es", "fr"] },
-    { id: 6, title: "Logout", desc: "Sign out of this device.", type: "logout" }
+    { id: 1, title: "Username", desc: "", type: "text", key: "username", placeholder: "Enter username" },
+    { id: 2, title: "Email", desc: "", type: "email", key: "email", placeholder: "Enter email" },
+    { id: 3, title: "Email Notifications", desc: "", type: "checkbox", key: "emailNotifications" },
+    { id: 4, title: "Dark Mode", desc: "", type: "checkbox", key: "darkMode" },
+    { id: 5, title: "Language", desc: "", type: "select", key: "language", options: ["en", "es", "fr"] },
+    { id: 6, title: "Logout", desc: "", type: "logout" }
   ];
 
   onMount(() => {
@@ -214,7 +214,9 @@
         in:fade={{ delay: index * 80, duration: 180 }}
       >
         <h3>{card.title}</h3>
-        <p>{card.desc}</p>
+        {#if card.desc}
+          <p>{card.desc}</p>
+        {/if}
 
         {#if card.type === "text"}
           <input type="text" bind:value={settings[card.key] as string} placeholder={card.placeholder} />
