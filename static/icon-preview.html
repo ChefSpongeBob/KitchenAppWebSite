@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dave's Sushi App Icon</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        url('./sushi-pattern.svg') center/220px auto repeat,
+        radial-gradient(circle at top, rgba(195, 32, 43, 0.16), transparent 38%),
+        radial-gradient(circle at bottom, rgba(249, 115, 22, 0.08), transparent 34%),
+        linear-gradient(180deg, #140e0b, #0b0706);
+      background-blend-mode: soft-light, normal, normal, normal;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+    }
+
+    .frame {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+
+    .frame::before {
+      content: '';
+      position: absolute;
+      inset: 7%;
+      border-radius: 28%;
+      border: 1px solid rgba(248, 241, 234, 0.12);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 18px 32px rgba(0, 0, 0, 0.24);
+    }
+
+    img {
+      width: 76%;
+      height: auto;
+      display: block;
+      filter:
+        brightness(0) saturate(100%) invert(92%) sepia(23%) saturate(189%) hue-rotate(327deg) brightness(109%) contrast(93%)
+        drop-shadow(0 10px 24px rgba(0, 0, 0, 0.28));
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <img src="./daves-sushi-logo.svg" alt="" />
+  </div>
+</body>
+</html>

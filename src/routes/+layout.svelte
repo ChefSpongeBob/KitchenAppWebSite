@@ -39,9 +39,10 @@
 </script>
 
 <svelte:head>
+  <link rel="icon" type="image/svg+xml" href="/daves-sushi-logo.svg" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-  <link rel="icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
   <link
     href="https://fonts.googleapis.com/icon?family=Material+Icons"
@@ -54,13 +55,12 @@
     rel="stylesheet"
   />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#121315" />
+  <meta name="theme-color" content="#0b0706" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Kitchen" />
+  <meta name="apple-mobile-web-app-title" content="Dave's Sushi" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-touch-fullscreen" content="yes" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </svelte:head>
 
 <!-- ===== Hamburger ===== -->

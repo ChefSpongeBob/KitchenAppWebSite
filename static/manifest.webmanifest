@@ -1,14 +1,14 @@
 {
-  "name": "Kitchen Software",
-  "short_name": "Kitchen",
+  "name": "Dave's Sushi",
+  "short_name": "Dave's Sushi",
   "id": "/",
-  "description": "Kitchen operations dashboard",
+  "description": "Dave's Sushi operations hub",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],
-  "background_color": "#121315",
-  "theme_color": "#121315",
+  "background_color": "#0b0706",
+  "theme_color": "#0b0706",
   "orientation": "portrait",
   "icons": [
     {
