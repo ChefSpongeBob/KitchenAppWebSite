@@ -46,9 +46,6 @@
               <p>{doc.description}</p>
             </DashboardCard>
           </a>
-          <div class="doc-actions">
-            <a href={doc.href}>View Menus</a>
-          </div>
         </div>
       {/each}
 
@@ -61,12 +58,6 @@
               {/if}
             </DashboardCard>
           </a>
-          {#if d.file_url}
-            <div class="doc-actions">
-              <a href={d.file_url} target="_blank" rel="noreferrer">Open File</a>
-              <a href={d.file_url} download>Download</a>
-            </div>
-          {/if}
         </div>
       {/each}
     </section>
@@ -89,26 +80,6 @@
   .doc-card {
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
-  }
-
-  .doc-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .doc-actions a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.42rem 0.7rem;
-    border-radius: 10px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
-    color: var(--color-primary-contrast);
-    text-decoration: none;
-    font-size: 0.78rem;
   }
 
   p {

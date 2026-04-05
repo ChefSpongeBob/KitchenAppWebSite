@@ -20,8 +20,8 @@
 
   let activeMenu: (typeof menuPdfs)[number] | null = null;
 
-  function toggleMenu(item: (typeof menuPdfs)[number]) {
-    activeMenu = activeMenu?.href === item.href ? null : item;
+  function openMenu(item: (typeof menuPdfs)[number]) {
+    activeMenu = item;
   }
 </script>
 
@@ -34,14 +34,10 @@
         <button
           type="button"
           class="menu-select"
-          class:active={activeMenu?.href === item.href}
-          on:click={() => toggleMenu(item)}
+          class:active={activeMenu?.title === item.title}
+          on:click={() => openMenu(item)}
         >
-          <DashboardCard title={item.title}>
-            <div class="card-copy">
-              <span class="state-pill">{activeMenu?.href === item.href ? 'Close' : 'Open'}</span>
-            </div>
-          </DashboardCard>
+          <DashboardCard title={item.title} />
         </button>
       </div>
     {/each}
@@ -71,24 +67,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
-  }
-
-  .card-copy {
-    display: block;
-  }
-
-  .state-pill {
-    display: inline-flex;
-    width: fit-content;
-    align-items: center;
-    justify-content: center;
-    padding: 0.4rem 0.72rem;
-    border-radius: 999px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.18), rgba(195, 32, 43, 0.06));
-    color: var(--color-primary-contrast);
-    font-size: 0.76rem;
-    font-weight: var(--weight-medium);
   }
 
   .doc-card {
