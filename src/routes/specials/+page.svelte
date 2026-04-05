@@ -2,6 +2,10 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type Special = {
     category: 'roll' | 'nigiri' | 'sashimi' | 'kitchen';
@@ -11,7 +15,6 @@
   };
 
   export let data: { specials?: Special[]; canEdit?: boolean };
-  export let form: { success?: boolean; error?: string } | undefined;
 
   const specials = data.specials ?? [];
   const canEdit = data.canEdit ?? false;
@@ -25,6 +28,18 @@
       minute: '2-digit'
     });
   }
+
+  const withSpecialsFeedback: SubmitFunction = () => {
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+        pushToast('Daily specials saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'Those daily specials could not be saved.', 'error');
+      }
+    };
+  };
 </script>
 
 <Layout>
@@ -65,7 +80,7 @@
       title="Edit Specials"
       subtitle="Update the published specials for the service day."
     />
-    <form method="POST" action="?/save_specials" class="editor">
+    <form method="POST" action="?/save_specials" use:enhance={withSpecialsFeedback} class="editor">
       <section class="grid">
         {#each specials as special}
           <DashboardCard title={special.label} description={`Updated ${formatUpdatedAt(special.updatedAt)}`}>
@@ -81,12 +96,6 @@
         <button type="submit">Save Daily Specials</button>
       </div>
     </form>
-  {/if}
-
-  {#if form?.error}
-    <p class="status error">{form.error}</p>
-  {:else if form?.success}
-    <p class="status success">Daily specials saved.</p>
   {/if}
 </Layout>
 
@@ -184,21 +193,12 @@
     gap: 0.45rem;
   }
 
-  .special-copy p,
-  .status {
+  .special-copy p {
     margin: 0;
   }
 
   .muted {
     color: var(--color-text-muted);
-  }
-
-  .success {
-    color: #9fd7af;
-  }
-
-  .error {
-    color: #fca5a5;
   }
 
   @media (max-width: 760px) {

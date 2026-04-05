@@ -2,6 +2,10 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type MeetingNote = {
     id: string;
@@ -15,16 +19,6 @@
   };
 
   export let data: { notes?: MeetingNote[] };
-  export let form:
-    | {
-        createError?: string;
-        updateError?: string;
-        deleteError?: string;
-        createSuccess?: boolean;
-        updateSuccess?: boolean;
-        deleteSuccess?: boolean;
-      }
-    | undefined;
 
   const notes = data.notes ?? [];
 
@@ -36,6 +30,26 @@
       minute: '2-digit'
     });
   }
+
+  const withMeetingNoteFeedback: SubmitFunction = () => {
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+        if (result.data?.createSuccess) pushToast('Meeting note saved.', 'success');
+        else if (result.data?.updateSuccess) pushToast('Meeting note updated.', 'success');
+        else if (result.data?.deleteSuccess) pushToast('Meeting note deleted.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(
+          result.data?.createError ??
+            result.data?.updateError ??
+            result.data?.deleteError ??
+            'That meeting note change could not be saved.',
+          'error'
+        );
+      }
+    };
+  };
 </script>
 
 <Layout>
@@ -46,7 +60,7 @@
 
   <section class="stack">
     <DashboardCard title="Add Note" description="Write a note, save it, and edit or remove it later.">
-      <form method="POST" action="?/create_note" class="composer">
+      <form method="POST" action="?/create_note" use:enhance={withMeetingNoteFeedback} class="composer">
         <textarea
           name="content"
           rows="7"
@@ -57,11 +71,6 @@
           <button type="submit">Save Note</button>
         </div>
       </form>
-      {#if form?.createError}
-        <p class="status error">{form.createError}</p>
-      {:else if form?.createSuccess}
-        <p class="status success">Meeting note saved.</p>
-      {/if}
     </DashboardCard>
 
     <section class="notes-grid">
@@ -74,14 +83,14 @@
             description={`Updated ${formatStamp(note.updatedAt)}`}
           >
             {#if note.canEdit}
-              <form method="POST" action="?/update_note" class="note-form">
+              <form method="POST" action="?/update_note" use:enhance={withMeetingNoteFeedback} class="note-form">
                 <input type="hidden" name="id" value={note.id} />
                 <textarea name="content" rows="8" required>{note.content}</textarea>
                 <div class="actions split">
                   <button type="submit">Save Changes</button>
                 </div>
               </form>
-              <form method="POST" action="?/delete_note" class="delete-form">
+              <form method="POST" action="?/delete_note" use:enhance={withMeetingNoteFeedback} class="delete-form">
                 <input type="hidden" name="id" value={note.id} />
                 <button type="submit" class="danger">Delete</button>
               </form>
@@ -96,18 +105,6 @@
         {/each}
       {/if}
     </section>
-
-    {#if form?.updateError}
-      <p class="status error">{form.updateError}</p>
-    {:else if form?.updateSuccess}
-      <p class="status success">Meeting note updated.</p>
-    {/if}
-
-    {#if form?.deleteError}
-      <p class="status error">{form.deleteError}</p>
-    {:else if form?.deleteSuccess}
-      <p class="status success">Meeting note deleted.</p>
-    {/if}
   </section>
 </Layout>
 
@@ -182,19 +179,6 @@
 
   .note-body p {
     margin: 0;
-  }
-
-  .status {
-    margin: 0;
-    font-size: 0.92rem;
-  }
-
-  .success {
-    color: #9fd7af;
-  }
-
-  .error {
-    color: #fca5a5;
   }
 
   @media (max-width: 760px) {

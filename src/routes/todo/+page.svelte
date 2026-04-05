@@ -2,6 +2,10 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type Todo = {
     id: string;
@@ -38,6 +42,18 @@
       : '';
     return `${description}\n\nAssigned to: ${assigned}${completedBy}${completedAt}`;
   }
+
+  const withTodoFeedback: SubmitFunction = () => {
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+        pushToast('Todo completed.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That todo could not be updated.', 'error');
+      }
+    };
+  };
 </script>
 
 <Layout>
@@ -67,7 +83,7 @@
               description={expandedId === todo.id ? expandedText(todo) : ''}
             />
           </button>
-          <form method="POST" action="?/complete">
+          <form method="POST" action="?/complete" use:enhance={withTodoFeedback}>
             <input type="hidden" name="id" value={todo.id} />
             <button class="complete-button" type="submit">Complete</button>
           </form>

@@ -1,14 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import { pushToast } from '$lib/client/toasts';
 
   type Idea = { id: string; text: string; votes: number };
   type Offset = { x: number; y: number; r: number };
   type Motion = { floatDur: number; pulseDur: number; delay: number };
 
   let ideas: Idea[] = [];
-  let submitNote = '';
-  let voteNote = '';
 
   let newIdea = '';
   let offsets: Record<string, Offset> = {};
@@ -43,24 +42,27 @@
   }
 
   async function upvote(id: string) {
-    voteNote = '';
     const res = await fetch('/api/whiteboard', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'upvote', id })
     });
     if (res.status === 409) {
-      voteNote = 'You already voted on that idea.';
+      pushToast('You already voted on that idea.', 'info');
       return;
     }
     if (res.status === 401) {
-      voteNote = 'Login required to vote.';
+      pushToast('Login required to vote.', 'error');
       return;
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      pushToast('That vote could not be saved.', 'error');
+      return;
+    }
     const updated = (await res.json()) as { id: string; content: string; votes: number } | null;
     if (!updated) return;
     ideas = ideas.map((i) => (i.id === id ? { ...i, votes: updated.votes } : i));
+    pushToast('Vote saved.', 'success');
   }
 
   async function addIdea() {
@@ -71,15 +73,18 @@
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'add', content: text })
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      pushToast('That idea could not be submitted.', 'error');
+      return;
+    }
     const created = (await res.json()) as { id: string; content: string; votes: number; status: 'approved' | 'pending' };
     if (created.status === 'approved') {
       ideas = [{ id: created.id, text: created.content, votes: created.votes }, ...ideas];
       offsets[created.id] = randomOffset();
       motions[created.id] = randomMotion();
-      submitNote = 'Idea published.';
+      pushToast('Idea published.', 'success');
     } else {
-      submitNote = 'Idea submitted for admin approval.';
+      pushToast('Idea submitted for admin approval.', 'success');
       await loadIdeas();
     }
     newIdea = '';
@@ -101,12 +106,6 @@
     />
     <button on:click={addIdea}>Add</button>
   </div>
-  {#if submitNote}
-    <p class="submit-note">{submitNote}</p>
-  {/if}
-  {#if voteNote}
-    <p class="submit-note">{voteNote}</p>
-  {/if}
 
   <section class="board">
     {#each ideas as idea}
@@ -179,14 +178,6 @@
     border-radius: 12px;
     cursor: pointer;
   }
-
-  .submit-note {
-    margin: 0;
-    padding-left: 0.2rem;
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
-  }
-
   .board {
     display: flex;
     flex-wrap: wrap;

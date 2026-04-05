@@ -1,6 +1,10 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type PreplistItem = {
     id: string;
@@ -53,6 +57,20 @@
       [id]: value
     };
   }
+
+  const withPrepFeedback =
+    (successMessage: string, errorMessage: string): SubmitFunction =>
+    () => {
+      return async ({ result }) => {
+        await applyAction(result);
+        if (result.type === 'success') {
+          await invalidateAll();
+          pushToast(successMessage, 'success');
+        } else if (result.type === 'failure') {
+          pushToast(result.data?.error ?? errorMessage, 'error');
+        }
+      };
+    };
 </script>
 
 <Layout>
@@ -70,7 +88,13 @@
         <span>Par</span>
       </div>
 
-      <form id="prep-batch-form" method="POST" action="?/submit_prep_counts" class="batch-form">
+      <form
+        id="prep-batch-form"
+        method="POST"
+        action="?/submit_prep_counts"
+        use:enhance={withPrepFeedback('Prep list saved.', 'That prep change could not be saved.')}
+        class="batch-form"
+      >
         {#each items as item}
           <div class="sheet-row" class:done={isDone(item)}>
             <button
@@ -122,7 +146,11 @@
       </form>
 
       <div class="actions-row reset-row">
-        <form method="POST" action="?/new_prep_list">
+        <form
+          method="POST"
+          action="?/new_prep_list"
+          use:enhance={withPrepFeedback('Prep list reset.', 'That prep list could not be reset.')}
+        >
           <button type="submit" class="submit-btn subtle-btn">{resetLabel}</button>
         </form>
       </div>
@@ -130,7 +158,12 @@
       {#if isAdmin}
         <details class="admin-par">
           <summary>{adminSummaryLabel}</summary>
-          <form method="POST" action="?/save_par_levels" class="admin-par-form">
+          <form
+            method="POST"
+            action="?/save_par_levels"
+            use:enhance={withPrepFeedback('Par levels saved.', 'Those par levels could not be saved.')}
+            class="admin-par-form"
+          >
             {#each items as item}
               <label class="par-edit-row" for={`par-${item.id}`}>
                 <span>{item.content}</span>

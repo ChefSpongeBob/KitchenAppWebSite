@@ -1,6 +1,10 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
+  import type { SubmitFunction } from '@sveltejs/kit';
 
   type ChecklistItem = {
     id: string;
@@ -14,6 +18,20 @@
   export let items: ChecklistItem[] = [];
 
   const isDone = (item: ChecklistItem) => Number(item.is_checked) === 1;
+
+  const withChecklistFeedback =
+    (successMessage: string, errorMessage: string): SubmitFunction =>
+    () => {
+      return async ({ result }) => {
+        await applyAction(result);
+        if (result.type === 'success') {
+          await invalidateAll();
+          pushToast(successMessage, 'success');
+        } else if (result.type === 'failure') {
+          pushToast(result.data?.error ?? errorMessage, 'error');
+        }
+      };
+    };
 </script>
 
 <Layout>
@@ -31,7 +49,11 @@
       <div class="sheet-list">
         {#each items as item}
           <div class="sheet-row" class:done={isDone(item)}>
-            <form method="POST" action="?/toggle_checked">
+            <form
+              method="POST"
+              action="?/toggle_checked"
+              use:enhance={withChecklistFeedback('Checklist updated.', 'That checklist change could not be saved.')}
+            >
               <input type="hidden" name="id" value={item.id} />
               <input type="hidden" name={`is_checked_${item.id}`} value={isDone(item) ? 0 : 1} />
               <button
@@ -52,7 +74,11 @@
       </div>
 
       <div class="actions-row">
-        <form method="POST" action="?/reset_checklist">
+        <form
+          method="POST"
+          action="?/reset_checklist"
+          use:enhance={withChecklistFeedback('Checklist reset.', 'That checklist could not be reset.')}
+        >
           <button type="submit" class="submit-btn subtle-btn">{resetLabel}</button>
         </form>
       </div>
