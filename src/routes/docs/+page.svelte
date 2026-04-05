@@ -26,7 +26,8 @@
       id: 'doc-menu',
       href: '/menu',
       file_url: '/menus/main-menu.pdf',
-      title: 'Menu'
+      title: 'Menu',
+      description: 'Main menu and secret menu.'
     }
   ];
 </script>
@@ -41,7 +42,9 @@
       {#each extraDocs as doc}
         <div class="doc-card">
           <a href={doc.href} class="card-link">
-            <DashboardCard title={doc.title} />
+            <DashboardCard title={doc.title}>
+              <p>{doc.description}</p>
+            </DashboardCard>
           </a>
           <div class="doc-actions">
             <a href={doc.href}>View Menus</a>
@@ -52,7 +55,7 @@
       {#each docs as d}
         <div class="doc-card">
           <a href={getDocHref(d)} class="card-link">
-            <DashboardCard title={d.title} description={`${d.section} / ${d.category}`}>
+            <DashboardCard title={d.title}>
               {#if d.content}
                 <p>{d.content}</p>
               {/if}
