@@ -1,0 +1,730 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 3 /Kids [6 0 R 8 0 R 10 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 3595 >>
+stream
+BT
+/F2 28 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 46 746 Tm
+(Dave's Sushi App Map) Tj
+ET
+BT
+/F1 11 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 708 Tm
+(This guide is a technical walk-through of the live app. It explains what each major area) Tj
+ET
+BT
+/F1 11 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 694 Tm
+(does, how staff should use it, and how the operational pieces connect day to day.) Tj
+ET
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 674 Tm
+(High-Level Layout) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 646 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 646 Tm
+(Home) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 631 Tm
+(Primary launch point into lists, documents, menu, temperatures, recipes, and admin) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 617 Tm
+(tools.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 600 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 600 Tm
+(Lists) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 585 Tm
+(Operational core containing checklists, prep lists, orders, and inventory flows.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 568 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 568 Tm
+(Documents) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 553 Tm
+(Reference area for the handbook, SOP material, and app information.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 536 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 536 Tm
+(Menu) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 521 Tm
+(In-app viewer for the main menu and secret menu with mobile-friendly zoom.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 504 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 504 Tm
+(Temper) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 489 Tm
+(Live sensor page showing the latest node readings and warning states.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 472 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 472 Tm
+(Whiteboard / Notes) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 457 Tm
+(Shared communication surfaces for ideas, updates, and meeting-style notes.) Tj
+ET
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 440 Tm
+(Operational Pages) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 412 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 412 Tm
+(Check Lists) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 397 Tm
+(Shift-based completion lists for kitchen, sushi, and prep workflows.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 380 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 380 Tm
+(Prep Lists) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 365 Tm
+(Flexible text entry lists for exact working notes such as cut 1, 1/3 pan, or ask) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 351 Tm
+(kitchen.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 334 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 334 Tm
+(Orders) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 319 Tm
+(Supplier-facing ordering references with predictable quantity-style entry.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 302 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 302 Tm
+(Inventory) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 287 Tm
+(Area-based stock lists for more structured count tracking.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 270 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 270 Tm
+(Recipes) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 255 Tm
+(Recipe reference area for repeatable kitchen standards.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 238 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 238 Tm
+(Specials) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 223 Tm
+(Special-item and service-facing content without altering the main menu.) Tj
+ET
+1 w
+0.82 0.75 0.72 RG
+46 32 m
+566 32 l
+S
+BT
+/F1 9 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 18 Tm
+(Dave's Sushi App Guide - Page 1) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 3395 >>
+stream
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 746 Tm
+(Documents And Visual References) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 718 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 718 Tm
+(Handbook / SOP) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 703 Tm
+(Long-form operational references rendered directly in the app with zoom support.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 686 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 686 Tm
+(Menus) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 671 Tm
+(Main and secret menu sheets available in-app without leaving the system.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 654 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 654 Tm
+(About) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 639 Tm
+(General app overview and guide material intended for orientation and reference.) Tj
+ET
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 622 Tm
+(Temperature Monitoring Flow) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 594 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 594 Tm
+(1. Sensor Nodes) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 579 Tm
+(ESP8266-based nodes collect DHT22 readings and forward them to the gateway over) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 565 Tm
+(ESP-NOW.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 548 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 548 Tm
+(2. Gateway) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 533 Tm
+(The gateway receives node packets, batches recent readings, and posts them to the) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 519 Tm
+(ingest route.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 502 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 502 Tm
+(3. Temper Page) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 487 Tm
+(The app converts readings into live tiles with warning and stale handling for quick) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 473 Tm
+(checks.) Tj
+ET
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 456 Tm
+(Admin Controls) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 428 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 428 Tm
+(Admin / Users) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 413 Tm
+(Invite and access management for the team.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 396 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 396 Tm
+(Admin / Lists) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 381 Tm
+(Maintenance for list structure, par values, references, and item content.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 364 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 364 Tm
+(Admin / Documents) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 349 Tm
+(Document metadata and file references for About, SOP, and Handbook content.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 332 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 332 Tm
+(Admin / Recipes) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 317 Tm
+(Recipe maintenance for structured recipe content.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 300 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 300 Tm
+(Admin / Camera) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 285 Tm
+(Camera-source and capture administration.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 268 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 268 Tm
+(Admin Dashboard) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 253 Tm
+(Moderation and oversight actions for operational review.) Tj
+ET
+1 w
+0.82 0.75 0.72 RG
+46 32 m
+566 32 l
+S
+BT
+/F1 9 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 18 Tm
+(Dave's Sushi App Guide - Page 2) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 2198 >>
+stream
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 746 Tm
+(How Staff Should Move Through The App) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 718 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 718 Tm
+(Start On Home) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 703 Tm
+(Use Home as the jump board instead of browsing around. It exists to reduce hunting.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 686 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 686 Tm
+(Open The Correct List) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 671 Tm
+(Choose the correct checklist, prep list, order sheet, or inventory sheet for the task) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 657 Tm
+(being performed.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 640 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 640 Tm
+(Use Documents As Reference) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 625 Tm
+(Menus, SOPs, the handbook, and this guide are meant for quick lookup rather than active) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 611 Tm
+(data entry.) Tj
+ET
+BT
+/F2 12 Tf
+0.76 0.13 0.17 rg
+1 0 0 1 56 594 Tm
+(-) Tj
+ET
+BT
+/F2 11 Tf
+0 0 0 rg
+1 0 0 1 74 594 Tm
+(Use Notes For Communication) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 579 Tm
+(When information does not belong inside a list item, place it in the communication) Tj
+ET
+BT
+/F1 10.8 Tf
+0 0 0 rg
+1 0 0 1 74 565 Tm
+(surfaces instead of burying it.) Tj
+ET
+BT
+/F2 18 Tf
+0 0 0 rg
+1 0 0 1 46 548 Tm
+(What The App Is Best At) Tj
+ET
+BT
+/F1 11 Tf
+0.13 0.10 0.09 rg
+1 0 0 1 46 520 Tm
+(The system is strongest when it is used as a single operating surface for repeatable daily) Tj
+ET
+BT
+/F1 11 Tf
+0.13 0.10 0.09 rg
+1 0 0 1 46 506 Tm
+(work: prep tracking, list completion, reference access, temperature visibility, and team) Tj
+ET
+BT
+/F1 11 Tf
+0.13 0.10 0.09 rg
+1 0 0 1 46 492 Tm
+(coordination.) Tj
+ET
+BT
+/F1 11 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 472 Tm
+(This guide intentionally omits internal security and infrastructure details. It is meant) Tj
+ET
+BT
+/F1 11 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 458 Tm
+(to explain function and workflow, not sensitive implementation internals.) Tj
+ET
+1 w
+0.82 0.75 0.72 RG
+46 32 m
+566 32 l
+S
+BT
+/F1 9 Tf
+0.38 0.33 0.31 rg
+1 0 0 1 46 18 Tm
+(Dave's Sushi App Guide - Page 3) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000128 00000 n 
+0000000198 00000 n 
+0000000273 00000 n 
+0000003920 00000 n 
+0000004056 00000 n 
+0000007503 00000 n 
+0000007639 00000 n 
+0000009889 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+10026
+%%EOF

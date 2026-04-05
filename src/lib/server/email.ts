@@ -217,3 +217,48 @@ export async function sendApprovalEmail({
     idempotencyKey: `approval/${userEmail.toLowerCase()}`
   });
 }
+
+export async function sendPasswordResetEmail({
+  env,
+  origin,
+  userEmail,
+  displayName,
+  resetToken
+}: {
+  env?: EmailEnv | null;
+  origin: string;
+  userEmail: string;
+  displayName?: string | null;
+  resetToken: string;
+}) {
+  const baseUrl = getAppBaseUrl(origin, env);
+  const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
+  const safeName = escapeHtml(displayName?.trim() || 'there');
+  const safeResetUrl = escapeHtml(resetUrl);
+
+  return sendTransactionalEmail({
+    env,
+    to: userEmail,
+    subject: 'Reset your KitchenApp password',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
+        <h2 style="margin-bottom: 0.5rem;">Reset your password</h2>
+        <p>Hi ${safeName},</p>
+        <p>Use the link below to set a new password for your KitchenApp account.</p>
+        <p>
+          <a href="${safeResetUrl}">${safeResetUrl}</a>
+        </p>
+        <p>This link expires in 2 hours.</p>
+      </div>
+    `,
+    text: [
+      `Hi ${displayName?.trim() || 'there'},`,
+      '',
+      'Use this link to reset your KitchenApp password:',
+      resetUrl,
+      '',
+      'This link expires in 2 hours.'
+    ].join('\n'),
+    idempotencyKey: `password-reset/${resetToken.slice(0, 24)}`
+  });
+}

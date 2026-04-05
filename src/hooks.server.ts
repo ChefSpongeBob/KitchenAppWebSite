@@ -28,6 +28,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isAuthRoute =
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||
+		pathname.startsWith('/forgot-password') ||
+		pathname.startsWith('/reset-password') ||
 		pathname.startsWith('/logout');
 	const resolveWithNoStore = async () => {
 		const response = await resolve(event);

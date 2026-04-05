@@ -37,7 +37,13 @@
 		<p class="error">Your session could not be restored. Please sign in again.</p>
 	{:else if $page.url.searchParams.get('registered') === 'success'}
 		<p class="notice">Account created. You can sign in now.</p>
+	{:else if $page.url.searchParams.get('reset') === 'success'}
+		<p class="notice">Password reset. You can sign in now.</p>
 	{/if}
+
+	<p>
+		<a href="/forgot-password">Forgot password?</a>
+	</p>
 
 	<p>
 		No account?
