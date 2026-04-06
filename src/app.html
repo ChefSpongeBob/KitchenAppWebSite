@@ -2,6 +2,9 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
+		<script>
+			window.__bootStartedAt = Date.now();
+		</script>
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -39,7 +42,14 @@
 				color: #f8f1ea;
 				overflow: hidden;
 				pointer-events: none;
-				animation: splash-fade 0.55s ease 1.2s forwards;
+				opacity: 1;
+				visibility: visible;
+				transition: opacity 0.55s ease, visibility 0.55s ease;
+			}
+
+			body.boot-ready .boot-splash {
+				opacity: 0;
+				visibility: hidden;
 			}
 
 			.boot-splash::before,
@@ -215,12 +225,6 @@
 				}
 			}
 
-			@keyframes splash-fade {
-				to {
-					opacity: 0;
-					visibility: hidden;
-				}
-			}
 		</style>
 		%sveltekit.head%
 	</head>
@@ -241,5 +245,24 @@
 			</div>
 			<div style="display: contents">%sveltekit.body%</div>
 		</div>
+		<script>
+			(function () {
+				const MIN_SPLASH_MS = 1800;
+				const markReady = () => {
+					const startedAt = window.__bootStartedAt || Date.now();
+					const elapsed = Date.now() - startedAt;
+					const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+					window.setTimeout(() => {
+						document.body.classList.add('boot-ready');
+					}, remaining);
+				};
+
+				if (document.readyState === 'complete') {
+					markReady();
+				} else {
+					window.addEventListener('load', markReady, { once: true });
+				}
+			})();
+		</script>
 	</body>
 </html>

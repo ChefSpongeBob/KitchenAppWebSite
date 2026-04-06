@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Dave's Sushi">
+  <rect width="64" height="64" rx="14" fill="#0b0706"/>
+  <path d="M10 10h44v44H10z" fill="none"/>
+  <g opacity="0.22">
+    <path d="M0 18c10-7 22-7 32 0s22 7 32 0v4c-10 7-22 7-32 0S10 15 0 22z" fill="#c3202b"/>
+  </g>
+  <g transform="translate(7 8)">
+    <g transform="translate(7 24)">
+      <circle cx="4" cy="9" r="3.4" fill="none" stroke="#f7f3ed" stroke-width="1.7"/>
+      <circle cx="11.5" cy="5.2" r="3.6" fill="none" stroke="#f7f3ed" stroke-width="1.7"/>
+      <circle cx="19.2" cy="9.5" r="3.3" fill="none" stroke="#f7f3ed" stroke-width="1.7"/>
+      <circle cx="27" cy="4.8" r="3.5" fill="none" stroke="#f7f3ed" stroke-width="1.7"/>
+      <circle cx="34.8" cy="9.2" r="3.2" fill="none" stroke="#f7f3ed" stroke-width="1.7"/>
+    </g>
+    <g transform="rotate(-26 20 20)">
+      <path d="M10 13h27.5c2.7 0 4.8 2.2 4.8 4.8S40.2 22.6 37.5 22.6H10z" fill="#f7f3ed"/>
+      <path d="M37 13.4l8.8-3.4-3.4 8.9z" fill="#f7f3ed"/>
+      <rect x="5" y="14.5" width="6.4" height="6.6" rx="2.1" fill="#8f5a44"/>
+    </g>
+  </g>
+</svg>
