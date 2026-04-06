@@ -2,6 +2,7 @@ import { fail, type Actions } from '@sveltejs/kit';
 import { sendPasswordResetEmail } from '$lib/server/email';
 import {
   createPasswordResetRecord,
+  deletePasswordResetRecordById,
   ensurePasswordResetSchema,
   findUserByEmail,
   generatePasswordResetToken,
@@ -41,7 +42,7 @@ export const actions: Actions = {
       }
     })();
 
-    await createPasswordResetRecord({
+    const resetRecord = await createPasswordResetRecord({
       db,
       userId: user.id,
       email: user.email,
@@ -49,13 +50,20 @@ export const actions: Actions = {
       requestedIp
     });
 
-    await sendPasswordResetEmail({
+    const emailResult = await sendPasswordResetEmail({
       env: platform?.env,
       origin: url.origin,
       userEmail: user.email,
       displayName: user.display_name,
       resetToken: token
     });
+
+    if (!emailResult.sent) {
+      await deletePasswordResetRecordById(db, resetRecord.id);
+      return fail(503, {
+        error: emailResult.reason ?? 'Reset email could not be sent right now. Please try again.'
+      });
+    }
 
     return genericResetRequestSuccess();
   }

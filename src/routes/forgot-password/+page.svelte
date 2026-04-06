@@ -10,6 +10,8 @@
 
   <section class="auth-shell">
     <form method="POST" class="auth-card">
+      <p class="auth-copy">Enter the email on your account and we’ll send you a password reset link.</p>
+
       <div class="field">
         <label for="reset-email">Email</label>
         <input
@@ -24,14 +26,14 @@
       </div>
 
       <button type="submit" class="submit">Send Reset Link</button>
+
+      {#if form?.error}
+        <p class="error">{form.error}</p>
+      {:else if form?.notice}
+        <p class="notice">{form.notice}</p>
+      {/if}
     </form>
   </section>
-
-  {#if form?.error}
-    <p class="error">{form.error}</p>
-  {:else if form?.notice}
-    <p class="notice">{form.notice}</p>
-  {/if}
 
   <p><a href="/login">Back to login</a></p>
 </Layout>
@@ -61,6 +63,12 @@
   .field {
     display: grid;
     gap: 0.35rem;
+  }
+
+  .auth-copy {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.5;
   }
 
   label {
@@ -98,9 +106,11 @@
 
   .notice {
     color: var(--color-text-muted);
+    margin: 0;
   }
 
   .error {
     color: #ff8d92;
+    margin: 0;
   }
 </style>

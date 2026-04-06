@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { hasColumn } from '$lib/server/dbSchema';
 
 const RESET_TOKEN_TTL_SECONDS = 2 * 60 * 60;
+const RESET_RECORD_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 
 export async function ensurePasswordResetSchema(db: App.Platform['env']['DB']) {
   await db
@@ -119,6 +120,11 @@ export async function createPasswordResetRecord({
   const expiresAt = getPasswordResetExpiry(now);
 
   await db
+    .prepare(`DELETE FROM password_resets WHERE expires_at < ? OR COALESCE(used_at, 0) < ?`)
+    .bind(now, now - RESET_RECORD_RETENTION_SECONDS)
+    .run();
+
+  await db
     .prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL`)
     .bind(now, userId)
     .run();
@@ -135,7 +141,27 @@ export async function createPasswordResetRecord({
     .bind(crypto.randomUUID(), userId, email, tokenHash, now, expiresAt, requestedIp ?? null)
     .run();
 
-  return { now, expiresAt };
+  const record = await db
+    .prepare(
+      `
+      SELECT id
+      FROM password_resets
+      WHERE token_hash = ?
+      LIMIT 1
+    `
+    )
+    .bind(tokenHash)
+    .first<{ id: string }>();
+
+  return { id: record?.id ?? null, now, expiresAt };
+}
+
+export async function deletePasswordResetRecordById(
+  db: App.Platform['env']['DB'],
+  resetId: string | null | undefined
+) {
+  if (!resetId) return;
+  await db.prepare(`DELETE FROM password_resets WHERE id = ?`).bind(resetId).run();
 }
 
 export async function findValidPasswordResetByTokenHash(

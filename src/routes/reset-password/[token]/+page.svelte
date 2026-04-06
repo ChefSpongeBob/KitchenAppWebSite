@@ -19,6 +19,8 @@
           <p class="target-email">{data.email}</p>
         {/if}
 
+        <p class="auth-copy">Set a new password for this account. Once saved, any active sign-ins will need to log in again.</p>
+
         <div class="field">
           <label for="reset-password">New Password</label>
           <div class="password-row">
@@ -44,15 +46,15 @@
         </div>
 
         <button type="submit" class="submit">Save New Password</button>
+
+        {#if form?.error}
+          <p class="error">{form.error}</p>
+        {/if}
       </form>
     </section>
   {:else}
     <p class="error">This reset link is invalid or expired.</p>
     <p><a href="/forgot-password">Request a new reset link</a></p>
-  {/if}
-
-  {#if form?.error}
-    <p class="error">{form.error}</p>
   {/if}
 </Layout>
 
@@ -81,6 +83,12 @@
   .field {
     display: grid;
     gap: 0.35rem;
+  }
+
+  .auth-copy {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.5;
   }
 
   label {

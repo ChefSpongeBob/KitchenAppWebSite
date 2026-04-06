@@ -69,7 +69,10 @@ export const actions: Actions = {
         .bind(now, reset.user_id),
       db
         .prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
-        .bind(now, reset.user_id)
+        .bind(now, reset.user_id),
+      db
+        .prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
+        .bind(now, now, reset.user_id)
     ]);
 
     throw redirect(303, '/login?reset=success');
