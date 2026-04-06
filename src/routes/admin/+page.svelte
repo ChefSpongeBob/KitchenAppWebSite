@@ -84,6 +84,11 @@
 
   const editorLinks = [
     {
+      href: '/admin/schedule',
+      title: 'Schedule',
+      description: 'Build and post weekly shifts.'
+    },
+    {
       href: '/admin/users',
       title: 'Users',
       description: 'Approve, deny, and manage staff access.'

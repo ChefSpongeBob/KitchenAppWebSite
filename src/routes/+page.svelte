@@ -3,6 +3,7 @@
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import TempGraph from '$lib/components/ui/TempGraph.svelte';
   import { startVisiblePolling } from '$lib/client/polling';
+  import { formatScheduleTimeLabel } from '$lib/assets/schedule';
   import { fly, fade } from 'svelte/transition';
   import { onMount } from 'svelte';
 
@@ -27,6 +28,15 @@
     shoutout: string;
     updatedAt: number;
   };
+  type TodayShift = {
+    id: string;
+    department: string;
+    role: string;
+    detail: string;
+    startTime: string;
+    endLabel: string;
+    notes: string;
+  };
 
   export let data: {
     isAdmin?: boolean;
@@ -35,6 +45,7 @@
     employeeSpotlight?: EmployeeSpotlight;
     dailySpecials?: DailySpecial[];
     todayTasks?: HomeTask[];
+    todaySchedule?: TodayShift[];
     todayMeta?: { assignedCount: number; unassignedCount: number };
     topIdeas?: Idea[];
     nodeTemps?: NodeTemp[];
@@ -52,6 +63,7 @@
   let employeeSpotlight = data.employeeSpotlight ?? { employeeName: '', shoutout: '', updatedAt: 0 };
   let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
   let todayTasks: HomeTask[] = data.todayTasks ?? [];
+  let todaySchedule: TodayShift[] = data.todaySchedule ?? [];
   let topIdeas: Idea[] = data.topIdeas ?? [];
   let nodeTemps: NodeTemp[] = data.nodeTemps ?? [];
   let todayMeta = data.todayMeta ?? { assignedCount: 0, unassignedCount: 0 };
@@ -189,6 +201,25 @@
           <span class="time">{time}</span>
         </div>
         <div class="announcement-block">
+          <span class="tile-label">Today's Shift</span>
+          {#if todaySchedule.length === 0}
+            <p class="shift-empty">No shift posted today.</p>
+          {:else}
+            <div class="shift-summary-list">
+              {#each todaySchedule as shift}
+                <div class="shift-summary-row">
+                  <strong>{shift.department} | {shift.role}</strong>
+                  <span>
+                    {#if shift.detail}{shift.detail} | {/if}{formatScheduleTimeLabel(shift.startTime)}{#if shift.endLabel} - {shift.endLabel}{/if}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </div>
+      <div class="shift-summary">
+        <div class="announcement-copy">
           <span class="tile-label">Announcements</span>
           {#if announcement.content}
             <p>{announcement.content}</p>
@@ -414,6 +445,38 @@
   }
   .announcement-empty {
     opacity: 0.85;
+  }
+  .announcement-copy {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .shift-summary {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.9rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  }
+  .shift-summary-list {
+    display: grid;
+    gap: 0.32rem;
+  }
+  .shift-summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: start;
+    font-size: 0.8rem;
+  }
+  .shift-summary-row strong {
+    color: var(--color-text);
+    font-size: 0.8rem;
+  }
+  .shift-summary-row span,
+  .shift-empty {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.4;
   }
   .specials-list {
     display: grid;
@@ -645,6 +708,10 @@
     }
     .today-list small {
       margin-left: 0;
+    }
+    .shift-summary-row {
+      flex-direction: column;
+      gap: 0.12rem;
     }
     .dashboard {
       gap: 0.85rem;

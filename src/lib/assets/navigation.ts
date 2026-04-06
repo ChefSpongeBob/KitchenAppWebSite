@@ -6,6 +6,7 @@ export type NavItem = {
 
 export const primaryNav: NavItem[] = [
   { label: 'Home', route: '/', icon: 'home' },
+  { label: 'Schedule', route: '/schedule', icon: 'calendar_month' },
   { label: 'Lists', route: '/lists', icon: 'checklist' },
   { label: 'Recipes', route: '/recipes', icon: 'restaurant' },
   { label: 'Todo', route: '/todo', icon: 'task_alt' },

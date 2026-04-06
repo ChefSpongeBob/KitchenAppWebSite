@@ -1,0 +1,989 @@
+<script lang="ts">
+  import Layout from '$lib/components/ui/Layout.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
+  import { applyAction, enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
+  import { pushToast } from '$lib/client/toasts';
+  import {
+    scheduleDepartments,
+    scheduleRolesByDepartment,
+    scheduleEndLabels,
+    scheduleDetailOptionsFor,
+    formatScheduleTimeLabel,
+    type ScheduleDepartment
+  } from '$lib/assets/schedule';
+  import type { SubmitFunction } from '@sveltejs/kit';
+
+  type UserOption = {
+    id: string;
+    displayName: string | null;
+    email: string;
+  };
+
+  type Shift = {
+    id: string;
+    shiftDate: string;
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    department: string;
+    role: string;
+    detail: string;
+    startTime: string;
+    endLabel: string;
+    notes: string;
+  };
+
+  type Day = {
+    date: string;
+    label: string;
+    shifts: Shift[];
+  };
+
+  type DraftShift = {
+    clientId: string;
+    shiftDate: string;
+    userId: string;
+    department: ScheduleDepartment;
+    role: string;
+    detail: string;
+    startTime: string;
+    endLabel: string;
+    notes: string;
+    isEditing: boolean;
+  };
+
+  type EmployeeRow = {
+    userId: string;
+    cells: Array<{
+      date: string;
+      label: string;
+      shifts: DraftShift[];
+    }>;
+  };
+
+  export let data: {
+    weekStart: string;
+    prevWeekStart: string;
+    nextWeekStart: string;
+    users: UserOption[];
+    week: { status: 'draft' | 'published'; publishedAt: number | null } | null;
+    days: Day[];
+  };
+
+  let feedbackMessage = '';
+  let selectedEmployeeId = '';
+  let selectedSection: 'All' | ScheduleDepartment = 'All';
+  const defaultDepartment: ScheduleDepartment = 'FOH';
+
+  function normalizeDepartment(value: string): ScheduleDepartment {
+    return (scheduleDepartments.includes(value as ScheduleDepartment)
+      ? value
+      : defaultDepartment) as ScheduleDepartment;
+  }
+
+  function rolesFor(department: ScheduleDepartment) {
+    return scheduleRolesByDepartment[department] as readonly string[];
+  }
+
+  function createShift(userId: string, shiftDate: string): DraftShift {
+    const startingDepartment = selectedSection === 'All' ? defaultDepartment : selectedSection;
+    return {
+      clientId: crypto.randomUUID(),
+      shiftDate,
+      userId,
+      department: startingDepartment,
+      role: rolesFor(startingDepartment)[0],
+      detail: '',
+      startTime: '',
+      endLabel: '',
+      notes: '',
+      isEditing: true
+    };
+  }
+
+  const initialVisibleUserIds = Array.from(
+    new Set(
+      data.days.flatMap((day) =>
+        day.shifts.map((shift) => shift.userId).filter((userId) => userId.length > 0)
+      )
+    )
+  );
+
+  function draftFromShift(shift: Shift): DraftShift {
+    const department = normalizeDepartment(shift.department);
+    const roles = rolesFor(department);
+    return {
+      clientId: shift.id,
+      shiftDate: shift.shiftDate,
+      userId: shift.userId,
+      department,
+      role: roles.includes(shift.role) ? shift.role : roles[0],
+      detail: shift.detail,
+      startTime: shift.startTime,
+      endLabel: shift.endLabel,
+      notes: shift.notes,
+      isEditing: false
+    };
+  }
+
+  function buildRow(userId: string): EmployeeRow {
+    return {
+      userId,
+      cells: data.days.map((day) => ({
+        date: day.date,
+        label: day.label,
+        shifts: day.shifts
+          .filter((shift) => shift.userId === userId)
+          .map((shift) => draftFromShift(shift))
+      }))
+    };
+  }
+
+  let employeeRows: EmployeeRow[] = initialVisibleUserIds.map((userId) => buildRow(userId));
+  const initialWeekPayload = JSON.stringify(
+    employeeRows.flatMap((row) =>
+      row.cells.flatMap((cell) =>
+        cell.shifts.map((shift) => ({
+          shiftDate: cell.date,
+          userId: row.userId,
+          department: shift.department,
+          role: shift.role,
+          detail: shift.detail,
+          startTime: shift.startTime,
+          endLabel: shift.endLabel,
+          notes: shift.notes
+        }))
+      )
+    )
+  );
+
+  $: visibleUserIds = employeeRows.map((row) => row.userId);
+  $: availableUsers = data.users.filter((user) => !visibleUserIds.includes(user.id));
+  $: weekPayload = JSON.stringify(
+    employeeRows.flatMap((row) =>
+      row.cells.flatMap((cell) =>
+        cell.shifts.map((shift) => ({
+          shiftDate: cell.date,
+          userId: row.userId,
+          department: shift.department,
+          role: shift.role,
+          detail: shift.detail,
+          startTime: shift.startTime,
+          endLabel: shift.endLabel,
+          notes: shift.notes
+        }))
+      )
+    )
+  );
+  $: hasUnsavedChanges = weekPayload !== initialWeekPayload;
+  $: scheduleStateLabel =
+    data.week?.status === 'published' && !hasUnsavedChanges
+      ? 'Published Schedule'
+      : hasUnsavedChanges
+        ? 'Unsaved Draft'
+        : 'Saved Draft';
+  $: allShifts = employeeRows.flatMap((row) =>
+    row.cells.flatMap((cell) =>
+      cell.shifts.map((shift) => ({
+        ...shift,
+        shiftDate: cell.date,
+        userId: row.userId
+      }))
+    )
+  );
+  $: visibleShiftCount =
+    selectedSection === 'All'
+      ? allShifts.length
+      : allShifts.filter((shift) => shift.department === selectedSection).length;
+  $: totalsByDay = data.days.map((day) => {
+    const dayShifts = allShifts.filter((shift) => shift.shiftDate === day.date);
+    const visibleDayShifts =
+      selectedSection === 'All'
+        ? dayShifts
+        : dayShifts.filter((shift) => shift.department === selectedSection);
+    return {
+      date: day.date,
+      total: visibleDayShifts.length,
+      foh: dayShifts.filter((shift) => shift.department === 'FOH').length,
+      sushi: dayShifts.filter((shift) => shift.department === 'Sushi').length,
+      kitchen: dayShifts.filter((shift) => shift.department === 'Kitchen').length
+    };
+  });
+  $: weekRangeLabel = (() => {
+    if (data.days.length === 0) return data.weekStart;
+    const start = new Date(`${data.days[0].date}T00:00:00`);
+    const end = new Date(`${data.days[data.days.length - 1].date}T00:00:00`);
+    const mm = String(start.getMonth() + 1).padStart(2, '0');
+    const startDay = String(start.getDate()).padStart(2, '0');
+    const endMonth = String(end.getMonth() + 1).padStart(2, '0');
+    const endDay = String(end.getDate()).padStart(2, '0');
+    const yy = String(end.getFullYear()).slice(-2);
+    return start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
+      ? `${mm}/${startDay}-${endDay}/${yy}`
+      : `${mm}/${startDay}-${endMonth}/${endDay}/${yy}`;
+  })();
+
+  const withFeedback: SubmitFunction = () => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+        pushToast('Schedule updated.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That schedule change could not be saved.', 'error');
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Schedule updated.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That schedule change could not be saved.'
+            : '';
+    };
+  };
+
+  function employeeName(userId: string) {
+    const user = data.users.find((entry) => entry.id === userId);
+    return user ? user.displayName ?? user.email : 'Unknown user';
+  }
+
+  function visibleShifts(cell: EmployeeRow['cells'][number]) {
+    return selectedSection === 'All'
+      ? cell.shifts
+      : cell.shifts.filter((shift) => shift.department === selectedSection);
+  }
+
+  function addEmployeeRow() {
+    if (!selectedEmployeeId || visibleUserIds.includes(selectedEmployeeId)) return;
+    employeeRows = [...employeeRows, buildRow(selectedEmployeeId)];
+    selectedEmployeeId = '';
+  }
+
+  function removeEmployeeRow(userId: string) {
+    employeeRows = employeeRows.filter((row) => row.userId !== userId);
+  }
+
+  function addShift(rowIndex: number, cellIndex: number) {
+    const newShiftId = crypto.randomUUID();
+    employeeRows = employeeRows.map((row, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return row;
+      return {
+        ...row,
+        cells: row.cells.map((cell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return cell;
+          return {
+            ...cell,
+            shifts: [...cell.shifts, { ...createShift(row.userId, cell.date), clientId: newShiftId }]
+          };
+        })
+      };
+    });
+  }
+
+  function removeShift(rowIndex: number, cellIndex: number, clientId: string) {
+    employeeRows = employeeRows.map((row, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return row;
+      return {
+        ...row,
+        cells: row.cells.map((cell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return cell;
+          return {
+            ...cell,
+            shifts: cell.shifts.filter((shift) => shift.clientId !== clientId)
+          };
+        })
+      };
+    });
+  }
+
+  function updateDepartment(shift: DraftShift, value: string) {
+    const department = normalizeDepartment(value);
+    const roles = rolesFor(department);
+    shift.department = department;
+    if (!roles.includes(shift.role)) {
+      shift.role = roles[0];
+    }
+    employeeRows = [...employeeRows];
+  }
+
+  function toggleShiftCard(rowIndex: number, cellIndex: number, clientId: string) {
+    employeeRows = employeeRows.map((row, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return row;
+      return {
+        ...row,
+        cells: row.cells.map((cell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return cell;
+          return {
+            ...cell,
+            shifts: cell.shifts.map((shift) =>
+              shift.clientId === clientId ? { ...shift, isEditing: !shift.isEditing } : shift
+            )
+          };
+        })
+      };
+    });
+  }
+
+  function isExpanded(shift: DraftShift) {
+    return shift.isEditing;
+  }
+
+  function shiftSummary(shift: DraftShift) {
+    const pieces = [shift.department, shift.role];
+    if (shift.detail) pieces.push(shift.detail);
+    const time = shift.startTime
+      ? `${formatScheduleTimeLabel(shift.startTime)}${shift.endLabel ? ` - ${shift.endLabel}` : ''}`
+      : shift.endLabel || 'Time not set';
+    return { title: pieces.join(' | '), time };
+  }
+
+  function parseTimeValue(value: string) {
+    const match = /^(\d{2}):(\d{2})$/.exec(value);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+
+  function shiftHours(shift: DraftShift) {
+    const start = parseTimeValue(shift.startTime);
+    const end = parseTimeValue(shift.endLabel);
+    if (start === null || end === null) return null;
+    let diff = end - start;
+    if (diff < 0) diff += 24 * 60;
+    return diff / 60;
+  }
+
+  function formatHours(value: number) {
+    const rounded = Math.round(value * 100) / 100;
+    return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2).replace(/0$/, '');
+  }
+
+  $: totalScheduledHours = allShifts.reduce((sum, shift) => {
+    const hours = shiftHours(shift);
+    return hours === null ? sum : sum + hours;
+  }, 0);
+
+  function collapseShift(rowIndex: number, cellIndex: number, clientId: string) {
+    employeeRows = employeeRows.map((row, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return row;
+      return {
+        ...row,
+        cells: row.cells.map((cell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return cell;
+          return {
+            ...cell,
+            shifts: cell.shifts.map((shift) =>
+              shift.clientId === clientId ? { ...shift, isEditing: false } : shift
+            )
+          };
+        })
+      };
+    });
+  }
+</script>
+
+<Layout padded={false}>
+  <div class="schedule-shell">
+    <PageHeader title="Admin Schedule" subtitle="Build the whole week in one schedule sheet." />
+
+    <nav class="subnav">
+      <a href="/admin">Back to Dashboard</a>
+      <a href={`?week=${data.prevWeekStart}`}>Previous Week</a>
+      <a href={`?week=${data.nextWeekStart}`}>Next Week</a>
+    </nav>
+
+    <section class="week-shell">
+      <header class="week-head">
+        <div>
+          <span class="eyebrow">Week Of</span>
+          <h2>{weekRangeLabel}</h2>
+        </div>
+        <div class="week-actions">
+          <label class="section-filter">
+            <span>Section</span>
+            <select bind:value={selectedSection}>
+              <option value="All">All</option>
+              {#each scheduleDepartments as department}
+                <option value={department}>{department}</option>
+              {/each}
+            </select>
+          </label>
+          <span class="status-pill">{visibleShiftCount} visible shifts</span>
+          <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
+            {scheduleStateLabel}
+          </span>
+          <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
+            <input type="hidden" name="week_start" value={data.weekStart} />
+            <button type="submit" class="muted-btn">Copy Last Week</button>
+          </form>
+          <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
+            <input type="hidden" name="week_start" value={data.weekStart} />
+            <button type="submit">Publish</button>
+          </form>
+          <form method="POST" action="?/mark_draft" use:enhance={withFeedback}>
+            <input type="hidden" name="week_start" value={data.weekStart} />
+            <button type="submit" class="muted-btn">Unpublish</button>
+          </form>
+        </div>
+      </header>
+
+      {#if feedbackMessage}
+        <p class="feedback-banner">{feedbackMessage}</p>
+      {/if}
+
+      <form method="GET" class="week-picker">
+        <label for="week-start">Jump to week</label>
+        <input id="week-start" type="date" name="week" value={data.weekStart} />
+        <button type="submit">Go</button>
+      </form>
+    </section>
+
+    <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell">
+      <input type="hidden" name="week_start" value={data.weekStart} />
+      <input type="hidden" name="payload" value={weekPayload} />
+
+        <div class="planner-head">
+          <div>
+            <span class="eyebrow">Week Builder</span>
+            <h2>Team Schedule</h2>
+          </div>
+          <span class="planner-hours">Tracked Hours: {formatHours(totalScheduledHours)}</span>
+          <button type="submit">Save Draft</button>
+        </div>
+
+      <div class="grid-scroll">
+        <section class="schedule-grid" aria-label="Weekly schedule editor">
+          <div class="corner-cell">
+            <div class="corner-stack">
+              <strong>Employees</strong>
+              <div class="corner-actions">
+                <select bind:value={selectedEmployeeId}>
+                  <option value="">Add employee</option>
+                  {#each availableUsers as user}
+                    <option value={user.id}>{user.displayName ?? user.email}</option>
+                  {/each}
+                </select>
+                <button type="button" class="add-employee-btn" on:click={addEmployeeRow}>Add</button>
+              </div>
+            </div>
+          </div>
+
+          {#each data.days as day, dayIndex}
+            <div class="day-header">
+              <strong>{day.label}</strong>
+              {#if totalsByDay[dayIndex]}
+                <span>{totalsByDay[dayIndex].total} shifts</span>
+                <small>FOH {totalsByDay[dayIndex].foh} | Sushi {totalsByDay[dayIndex].sushi} | Kitchen {totalsByDay[dayIndex].kitchen}</small>
+              {/if}
+            </div>
+          {/each}
+
+          {#if employeeRows.length === 0}
+            <div class="employee-cell empty-employee-cell">
+              <strong>No employees added</strong>
+            </div>
+            <div class="empty-grid-note" style={`grid-column: span ${data.days.length};`}>
+              Add employees from the top-left selector to start building the schedule.
+            </div>
+          {/if}
+
+          {#each employeeRows as row, rowIndex (row.userId)}
+            <div class="employee-cell">
+              <div class="employee-stack">
+                <strong>{employeeName(row.userId)}</strong>
+                <button type="button" class="remove-row-btn" on:click={() => removeEmployeeRow(row.userId)}>
+                  Remove Employee
+                </button>
+              </div>
+            </div>
+
+            {#each row.cells as cell, cellIndex (cell.date)}
+              <div class="shift-cell">
+                <div class="cell-body">
+                  {#each visibleShifts(cell) as shift (shift.clientId)}
+                    <div class:open={isExpanded(shift)} class="shift-card">
+                      <button
+                        type="button"
+                        class="shift-card-top shift-toggle"
+                        on:click={() => toggleShiftCard(rowIndex, cellIndex, shift.clientId)}
+                        aria-expanded={isExpanded(shift)}
+                      >
+                        <div class="shift-preview">
+                          <strong>{shiftSummary(shift).title}</strong>
+                          <span>{shiftSummary(shift).time}</span>
+                        </div>
+                        <span class="toggle-text">{isExpanded(shift) ? 'Collapse' : 'Edit'}</span>
+                      </button>
+
+                      {#if isExpanded(shift)}
+                        <div class="shift-editor">
+                          <div class="input-grid two">
+                            <label>
+                              <span>Department</span>
+                              <select
+                                bind:value={shift.department}
+                                on:change={(event) => updateDepartment(shift, (event.currentTarget as HTMLSelectElement).value)}
+                              >
+                                {#each scheduleDepartments as department}
+                                  <option value={department}>{department}</option>
+                                {/each}
+                              </select>
+                            </label>
+
+                            <label>
+                              <span>Role</span>
+                              <select bind:value={shift.role}>
+                                {#each scheduleRolesByDepartment[shift.department] as role}
+                                  <option value={role}>{role}</option>
+                                {/each}
+                              </select>
+                            </label>
+                          </div>
+
+                          <div class="input-grid two">
+                            <label>
+                              <span>Start</span>
+                              <ScheduleTimeSelect bind:value={shift.startTime} />
+                            </label>
+
+                            <label class="end-group">
+                              <span>End</span>
+                              <ScheduleTimeSelect
+                                bind:value={shift.endLabel}
+                                includeSpecialOptions={[...scheduleEndLabels]}
+                                specialPlaceholder="Timed End"
+                              />
+                            </label>
+                          </div>
+
+                          <label>
+                            <span>Location / Detail</span>
+                            <select bind:value={shift.detail}>
+                              <option value="">Select detail</option>
+                              {#each scheduleDetailOptionsFor(shift.department, shift.role) as detail}
+                                <option value={detail}>{detail}</option>
+                              {/each}
+                            </select>
+                          </label>
+
+                          <label>
+                            <span>Notes</span>
+                            <input bind:value={shift.notes} placeholder="Optional notes" />
+                          </label>
+
+                          <div class="editor-actions">
+                            <button
+                              type="button"
+                              class="create-shift-btn"
+                              on:click={() => collapseShift(rowIndex, cellIndex, shift.clientId)}
+                            >
+                              Create Shift
+                            </button>
+                            <button
+                              type="button"
+                              class="remove-btn inline-remove"
+                              aria-label="Remove shift"
+                              on:click={() => removeShift(rowIndex, cellIndex, shift.clientId)}
+                            >
+                              Remove Shift
+                            </button>
+                          </div>
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+
+                <button type="button" class="add-btn" on:click={() => addShift(rowIndex, cellIndex)}>
+                  Add Shift
+                </button>
+              </div>
+            {/each}
+          {/each}
+        </section>
+      </div>
+
+    </form>
+  </div>
+</Layout>
+
+<style>
+  .schedule-shell {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .subnav,
+  .week-actions,
+  .planner-head {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .subnav {
+    margin: -0.35rem 0 0.2rem;
+    padding-inline: clamp(0.75rem, 2.6vw, var(--space-4));
+  }
+
+  .subnav a {
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem;
+    background: rgba(255,255,255,0.03);
+  }
+
+  .week-shell,
+  .planner-shell {
+    margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+  }
+
+  .week-shell {
+    padding: 1rem;
+  }
+
+  .planner-shell {
+    overflow: hidden;
+  }
+
+  .week-head,
+  .planner-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .eyebrow,
+  .week-picker label,
+  .shift-card label span {
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+  }
+
+  .section-filter {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 8.5rem;
+  }
+
+  .section-filter span {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .week-head h2,
+  .planner-head h2 {
+    margin: 0.18rem 0 0;
+  }
+
+  .week-picker {
+    display: grid;
+    grid-template-columns: auto minmax(160px, 220px) auto;
+    gap: 0.6rem;
+    align-items: center;
+    margin-top: 0.9rem;
+  }
+
+  .feedback-banner {
+    margin: 0.8rem 0 0;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(22, 163, 74, 0.22);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    color: #bbf7d0;
+  }
+
+  .status-pill {
+    color: var(--color-text-muted);
+    padding: 0.2rem 0;
+    font-size: 0.82rem;
+    background: transparent;
+    border: 0;
+  }
+
+  .status-pill.published {
+    color: #bbf7d0;
+  }
+
+  .planner-head {
+    padding: 1rem 1rem 0.85rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .planner-hours {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    padding-top: 0.3rem;
+  }
+
+  .grid-scroll {
+    overflow-x: auto;
+  }
+
+  .schedule-grid {
+    display: grid;
+    grid-template-columns: 220px repeat(7, minmax(240px, 1fr));
+    min-width: max-content;
+  }
+
+  .corner-cell,
+  .day-header,
+  .employee-cell,
+  .shift-cell {
+    border-right: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .corner-cell,
+  .day-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: color-mix(in srgb, var(--color-surface) 95%, black 5%);
+  }
+
+  .corner-cell {
+    left: 0;
+    z-index: 4;
+    padding: 0.85rem 0.95rem;
+  }
+
+  .corner-stack {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .corner-stack strong {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+  }
+
+  .corner-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.45rem;
+  }
+
+  .day-header {
+    padding: 0.85rem 0.9rem;
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .day-header span,
+  .day-header small {
+    color: var(--color-text-muted);
+  }
+
+  .day-header span {
+    font-size: 0.76rem;
+  }
+
+  .day-header small {
+    font-size: 0.7rem;
+    line-height: 1.35;
+  }
+
+  .employee-cell {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    padding: 0.9rem;
+    display: flex;
+    align-items: start;
+  }
+
+  .employee-stack {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .employee-cell strong,
+  .day-header strong {
+    font-size: 0.88rem;
+  }
+
+  .empty-employee-cell,
+  .empty-grid-note {
+    position: static;
+    background: rgba(255,255,255,0.02);
+  }
+
+  .empty-grid-note {
+    padding: 0.9rem;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+  }
+
+  .shift-cell {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.7rem;
+    align-content: start;
+    min-height: 170px;
+  }
+
+  .cell-body {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .shift-card {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.55rem;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.025);
+  }
+
+  .shift-card.open {
+    gap: 0.55rem;
+    padding: 0.7rem;
+  }
+
+  .shift-card-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    align-items: start;
+  }
+
+  .shift-toggle {
+    width: 100%;
+    text-align: left;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: var(--color-text);
+    min-height: 0;
+    padding: 0.55rem 0.6rem;
+  }
+
+  .shift-preview {
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .shift-preview strong {
+    font-size: 0.82rem;
+  }
+
+  .shift-preview span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+  }
+
+  .toggle-text {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .shift-editor {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .editor-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
+  .input-grid {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .input-grid.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shift-card label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  input,
+  select {
+    width: 100%;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 0.42rem 0.56rem;
+    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    color: var(--color-text);
+    font-size: 0.8rem;
+  }
+
+  button {
+    border: 1px solid rgba(195, 32, 43, 0.22);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
+    min-height: 2.3rem;
+    padding: 0.5rem 0.76rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+
+  .muted-btn,
+  .add-btn,
+  .remove-btn,
+  .add-employee-btn,
+  .remove-row-btn {
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+  }
+
+  .add-btn {
+    width: 100%;
+  }
+
+  .remove-btn,
+  .remove-row-btn {
+    color: #ffb6b6;
+    border-color: rgba(239, 68, 68, 0.24);
+    background: rgba(120, 12, 18, 0.14);
+  }
+
+  .inline-remove {
+    width: auto;
+    flex: 1 1 8rem;
+  }
+
+  .create-shift-btn {
+    border-color: rgba(22, 163, 74, 0.25);
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.22), rgba(22, 163, 74, 0.08));
+    color: #dcfce7;
+    flex: 1 1 8rem;
+  }
+
+  .remove-btn {
+    min-height: 1.9rem;
+    padding-inline: 0.6rem;
+  }
+
+  @media (max-width: 960px) {
+    .week-picker,
+    .input-grid.two {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

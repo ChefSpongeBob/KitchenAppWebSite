@@ -3,6 +3,7 @@ import { loadHomepageAnnouncement } from '$lib/server/announcements';
 import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
+import { loadTodayShifts } from '$lib/server/schedules';
 
 type HomeTask = {
   id: string;
@@ -30,6 +31,16 @@ type NodeNameRow = {
   name: string;
 };
 
+type TodayShift = {
+  id: string;
+  department: string;
+  role: string;
+  detail: string;
+  startTime: string;
+  endLabel: string;
+  notes: string;
+};
+
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   const isAdmin = locals.userRole === 'admin';
@@ -42,6 +53,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
       dailySpecials: [],
       todayTasks: [],
+      todaySchedule: [],
       todayMeta: { assignedCount: 0, unassignedCount: 0 },
       topIdeas: [],
       nodeTemps: [],
@@ -84,6 +96,10 @@ export const load: PageServerLoad = async ({ locals }) => {
         .bind(locals.userId, locals.userId)
         .all<HomeTask>()
     : Promise.resolve({ results: [] as HomeTask[] });
+  const todaySchedulePromise =
+    locals.userId && db
+      ? loadTodayShifts(db, locals.userId)
+      : Promise.resolve([] as TodayShift[]);
   const tempsPromise = db
     .prepare(
       `
@@ -103,6 +119,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     dailySpecials,
     user,
     taskResult,
+    todaySchedule,
     tempsResult
   ] = await Promise.all([
     reviewEnabledPromise,
@@ -112,6 +129,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     dailySpecialsPromise,
     userPromise,
     todayTasksPromise,
+    todaySchedulePromise,
     tempsPromise
   ]);
 
@@ -185,6 +203,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     employeeSpotlight,
     dailySpecials,
     todayTasks,
+    todaySchedule,
     todayMeta: { assignedCount, unassignedCount },
     topIdeas: (topIdeasResult.results ?? []).map((r) => ({ text: r.content, votes: r.votes })),
     nodeTemps: nodeTemps.map((r) => ({
