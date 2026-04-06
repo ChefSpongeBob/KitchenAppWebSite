@@ -1,8 +1,9 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, url }) => {
   const db = locals.DB;
-  if (!db) return { recipes: [], category: params.category };
+  const query = url.searchParams.get('q')?.trim() ?? '';
+  if (!db) return { recipes: [], category: params.category, query };
 
   const { results } = await db.prepare(`
     SELECT id, title, ingredients, instructions, created_at
@@ -11,5 +12,5 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     ORDER BY title COLLATE NOCASE ASC
   `).bind(params.category).all();
 
-  return { recipes: results ?? [], category: params.category };
+  return { recipes: results ?? [], category: params.category, query };
 };

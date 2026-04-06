@@ -2,6 +2,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
+  import { goto } from '$app/navigation';
 
   type Recipe = {
     id: string;
@@ -10,9 +11,10 @@
     instructions: string;
   };
 
-  export let data: { recipes?: Recipe[]; category?: string };
+  export let data: { recipes?: Recipe[]; category?: string; query?: string };
   let recipes: Recipe[] = data.recipes ?? [];
   let category = data.category ?? '';
+  let search = data.query ?? '';
 
   function normalizeBreaks(text: string): string {
     return (text ?? '').replace(/\\n/g, '\n');
@@ -90,13 +92,43 @@
 
     return 'paragraph';
   }
+
+  $: normalizedSearch = search.trim().toLowerCase();
+  $: visibleRecipes =
+    normalizedSearch.length < 2
+      ? recipes
+      : recipes.filter((recipe) => recipe.title.toLowerCase().includes(normalizedSearch));
+
+  async function syncSearch(value: string) {
+    const next = value.trim();
+    await goto(
+      next
+        ? `/recipes/${category}?q=${encodeURIComponent(next)}`
+        : `/recipes/${category}`,
+      {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true
+      }
+    );
+  }
 </script>
 
 <PageHeader title={`Recipes: ${category}`} subtitle="Browse recipes in this category" />
 
-{#if recipes.length > 0}
+<section class="search">
+  <input
+    type="search"
+    placeholder="Search recipe by title..."
+    bind:value={search}
+    on:input={(event) => syncSearch((event.currentTarget as HTMLInputElement).value)}
+    aria-label="Search recipe by title"
+  />
+</section>
+
+{#if visibleRecipes.length > 0}
   <section class="grid">
-    {#each recipes as r, index}
+    {#each visibleRecipes as r, index}
       <div in:fade={{ delay: index * 80, duration: 180 }}>
         <details class="recipe-details">
           <summary>{r.title}</summary>
@@ -144,10 +176,30 @@
     {/each}
   </section>
 {:else}
-  <p>No recipes found for this category.</p>
+  <p class="search-empty">
+    {#if normalizedSearch.length >= 2}
+      No recipes found for this search.
+    {:else}
+      No recipes found for this category.
+    {/if}
+  </p>
 {/if}
 
 <style>
+  .search {
+    margin: 0.35rem 0 0.8rem;
+  }
+
+  .search input {
+    width: 100%;
+    max-width: 560px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 0.5rem 0.65rem;
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -216,7 +268,17 @@
     margin: 0.7rem 0;
   }
 
+  .search-empty {
+    margin: 0.45rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.86rem;
+  }
+
   @media (max-width: 760px) {
+    .search {
+      margin-top: 0.2rem;
+    }
+
     .grid {
       grid-template-columns: 1fr;
       gap: 0.75rem;

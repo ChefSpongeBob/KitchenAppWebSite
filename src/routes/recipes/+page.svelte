@@ -11,12 +11,12 @@
     category: string;
   };
 
-  export let data: { categories?: string[]; recipeIndex?: RecipeIndexItem[] };
+  export let data: { categories?: string[]; recipeIndex?: RecipeIndexItem[]; query?: string };
   const categories = (data.categories?.length ? data.categories : [...recipeCategories]).map((c) =>
     c.trim().toLowerCase()
   );
   const recipeIndex = data.recipeIndex ?? [];
-  let search = '';
+  let search = data.query ?? '';
   $: normalizedSearch = search.trim().toLowerCase();
   $: searchResults =
     normalizedSearch.length < 2
@@ -24,6 +24,20 @@
       : recipeIndex
           .filter((r) => r.title.toLowerCase().includes(normalizedSearch))
           .slice(0, 12);
+
+  function recipeCategoryHref(category: string) {
+    const query = normalizedSearch.length >= 2 ? `?q=${encodeURIComponent(search.trim())}` : '';
+    return `/recipes/${category}${query}`;
+  }
+
+  async function syncSearch(value: string) {
+    const next = value.trim();
+    await goto(next ? `/recipes?q=${encodeURIComponent(next)}` : '/recipes', {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true
+    });
+  }
 </script>
 
 <PageHeader title="Recipes" subtitle="Browse by category" />
@@ -33,13 +47,14 @@
     type="search"
     placeholder="Search recipe by title..."
     bind:value={search}
+    on:input={(event) => syncSearch((event.currentTarget as HTMLInputElement).value)}
     aria-label="Search recipe by title"
   />
   {#if normalizedSearch.length >= 2}
     {#if searchResults.length > 0}
       <div class="search-results">
         {#each searchResults as recipe}
-          <a href={`/recipes/${recipe.category}`} class="result-link">
+          <a href={`/recipes/${recipe.category}?q=${encodeURIComponent(search.trim())}`} class="result-link">
             <strong>{recipe.title}</strong>
             <small>{recipe.category}</small>
           </a>
@@ -57,7 +72,7 @@
     <button
       type="button"
       class="category-wrapper"
-      on:click={() => goto(`/recipes/${c}`)}
+      on:click={() => goto(recipeCategoryHref(c))}
       in:fade={{ delay: index * 80, duration: 180 }}
     >
       <DashboardCard title={c} description={`View recipes in ${c}`} />

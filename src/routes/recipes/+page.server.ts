@@ -1,10 +1,11 @@
 import type { PageServerLoad } from './$types';
 import { recipeCategories } from '$lib/assets/recipeCategories';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
   const db = locals.DB;
+  const query = url.searchParams.get('q')?.trim() ?? '';
   if (!db) {
-    return { categories: [...recipeCategories], recipeIndex: [] };
+    return { categories: [...recipeCategories], recipeIndex: [], query };
   }
 
   const { results: categories } = await db.prepare(
@@ -28,6 +29,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   return {
     categories: merged,
-    recipeIndex: recipeRows ?? []
+    recipeIndex: recipeRows ?? [],
+    query
   };
 };
