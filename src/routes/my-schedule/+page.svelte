@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
   import { formatScheduleTimeLabel } from '$lib/assets/schedule';
 
   export let data: {
@@ -70,7 +71,9 @@
           </header>
 
           {#if day.shifts.length === 0}
-            <p class="empty-note">You are not scheduled.</p>
+            <div class="empty-state">
+              <SchoolOfFish label="You are not scheduled." />
+            </div>
           {:else}
             <div class="shift-list">
               {#each day.shifts as shift}
@@ -134,7 +137,6 @@
 
   .eyebrow,
   .day-head small,
-  .empty-note,
   .shift-detail,
   .shift-notes,
   .week-banner > span {
@@ -170,6 +172,12 @@
     gap: 0.8rem;
   }
 
+  .empty-state {
+    display: grid;
+    justify-items: start;
+    align-content: start;
+  }
+
   .shift-list {
     display: grid;
     gap: 0.65rem;
@@ -191,8 +199,7 @@
 
   .shift-time,
   .shift-detail,
-  .shift-notes,
-  .empty-note {
+  .shift-notes {
     margin: 0;
     line-height: 1.45;
   }

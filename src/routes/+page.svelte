@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
   import TempGraph from '$lib/components/ui/TempGraph.svelte';
   import { startVisiblePolling } from '$lib/client/polling';
   import { formatScheduleTimeLabel } from '$lib/assets/schedule';
@@ -201,9 +202,14 @@
           <span class="time">{time}</span>
         </div>
         <div class="announcement-block">
-          <span class="tile-label">Today's Shift</span>
+          <div class="shift-title-row">
+            <span class="tile-label">Today's Shift</span>
+            <img src="/fishsvg.svg" alt="" aria-hidden="true" class="shift-fish-icon" />
+          </div>
           {#if todaySchedule.length === 0}
-            <p class="shift-empty">No shift posted today.</p>
+            <div class="shift-empty-state">
+              <SchoolOfFish label="No shift posted today." />
+            </div>
           {:else}
             <div class="shift-summary-list">
               {#each todaySchedule as shift}
@@ -437,7 +443,22 @@
     padding-left: 0.85rem;
     border-left: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
   }
-  .announcement-block p {
+  .shift-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .shift-fish-icon {
+    width: 1.9rem;
+    height: 1.9rem;
+    object-fit: contain;
+    filter:
+      brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
+    opacity: 0.96;
+    flex: 0 0 auto;
+  }
+  .announcement-block :global(p) {
     margin: 0;
     color: var(--color-text-muted);
     font-size: 0.84rem;
@@ -472,11 +493,14 @@
     color: var(--color-text);
     font-size: 0.8rem;
   }
-  .shift-summary-row span,
-  .shift-empty {
+  .shift-summary-row span {
     margin: 0;
     color: var(--color-text-muted);
     line-height: 1.4;
+  }
+  .shift-empty-state {
+    display: grid;
+    justify-items: start;
   }
   .specials-list {
     display: grid;
