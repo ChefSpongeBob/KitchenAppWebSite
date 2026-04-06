@@ -62,6 +62,7 @@
       id: source?.id ?? `static-${camera.slot}`,
       camera_id: source?.camera_id ?? camera.slot,
       live_url: source?.live_url ?? null,
+      latest_clip_url: latestEvent?.clip_url ?? null,
       preview_image_url: latestEvent?.image_url ?? source?.preview_image_url ?? null,
       download_url: latestEvent?.clip_url ?? latestEvent?.image_url ?? source?.preview_image_url ?? null,
       is_active: source?.is_active ?? 0,
@@ -140,6 +141,15 @@
         <div class="feed-stage">
           {#if isPlaying(camera.id, camera.is_active) && camera.live_url}
             <iframe title={camera.title} src={camera.live_url} loading="lazy" scrolling="no"></iframe>
+          {:else if camera.latest_clip_url}
+            <video
+              src={camera.latest_clip_url}
+              controls
+              preload="metadata"
+              playsinline
+            >
+              <track kind="captions" />
+            </video>
           {:else if camera.preview_image_url}
             <img src={camera.preview_image_url} alt={`${camera.title} preview`} />
           {:else}
@@ -174,7 +184,26 @@
                   <div class="clip-main">
                     <strong>{event.event_type}</strong>
                     <span>{formatTimestamp(event.created_at)}</span>
+                    {#if event.clip_duration_seconds}
+                      <small>{event.clip_duration_seconds}s clip</small>
+                    {/if}
                   </div>
+                  {#if event.clip_url}
+                    <div class="clip-preview">
+                      <video
+                        src={event.clip_url}
+                        controls
+                        preload="metadata"
+                        playsinline
+                      >
+                        <track kind="captions" />
+                      </video>
+                    </div>
+                  {:else if event.image_url}
+                    <div class="clip-preview still-preview">
+                      <img src={event.image_url} alt={`${event.event_type} still`} loading="lazy" />
+                    </div>
+                  {/if}
                   <div class="clip-actions">
                     {#if event.image_url}
                       <a href={event.image_url} target="_blank" rel="noreferrer">Still</a>
@@ -292,11 +321,13 @@
   }
 
   .feed-stage iframe,
-  .feed-stage img {
+  .feed-stage img,
+  .feed-stage video {
     width: 100%;
     height: 100%;
     border: 0;
     object-fit: cover;
+    background: #000;
   }
 
   .feed-placeholder {
@@ -392,6 +423,34 @@
     gap: 0.18rem;
   }
 
+  .clip-main small {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+  }
+
+  .clip-preview {
+    width: min(100%, 380px);
+    aspect-ratio: 16 / 9;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.28);
+    flex: 0 0 auto;
+  }
+
+  .clip-preview video,
+  .clip-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: #000;
+  }
+
+  .still-preview img {
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.38);
+  }
+
   .clip-actions {
     display: flex;
     gap: 0.5rem;
@@ -430,6 +489,10 @@
     .clip-card {
       flex-direction: column;
       align-items: start;
+    }
+
+    .clip-preview {
+      width: 100%;
     }
   }
 </style>
