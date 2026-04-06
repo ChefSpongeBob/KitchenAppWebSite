@@ -14,15 +14,29 @@
   let recipes: Recipe[] = data.recipes ?? [];
   let category = data.category ?? '';
 
-  function splitToBullets(text: string): string[] {
-    return text
-      .split(/\n|,/)
+  function normalizeBreaks(text: string): string {
+    return (text ?? '').replace(/\\n/g, '\n');
+  }
+
+  function splitToLines(text: string): string[] {
+    return normalizeBreaks(text)
+      .split(/\r?\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  function splitIngredients(text: string): string[] {
+    const lines = splitToLines(text);
+    if (lines.length > 1) return lines;
+
+    return (text ?? '')
+      .split(',')
       .map((line) => line.trim())
       .filter(Boolean);
   }
 
   function parseInstructionSections(raw: string): { materials: string[]; instruction: string[] } {
-    const normalized = raw ?? '';
+    const normalized = normalizeBreaks(raw ?? '');
     const materialsMatch = normalized.match(
       /(?:Materials needed|Procedure):\s*([\s\S]*?)(?:\n\s*Instruction:\s*|$)/i
     );
@@ -32,13 +46,49 @@
     const instructionRaw = instructionMatch?.[1]?.trim() ?? normalized.trim();
 
     return {
-      materials: splitToBullets(materialsRaw),
-      instruction: splitToBullets(instructionRaw)
+      materials: splitToLines(materialsRaw),
+      instruction: splitToLines(instructionRaw)
     };
   }
 
   function parseIngredients(raw: string): string[] {
-    return splitToBullets(raw ?? '');
+    return splitIngredients(raw ?? '');
+  }
+
+  function parseIngredientSections(raw: string): Array<{ heading: string | null; items: string[] }> {
+    const normalized = normalizeBreaks(raw ?? '').trim();
+    if (!normalized) return [];
+
+    const blocks = normalized
+      .split(/\r?\n\s*\r?\n+/)
+      .map((block) =>
+        block
+          .split(/\r?\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+      )
+      .filter((block) => block.length > 0);
+
+    if (blocks.length <= 1) {
+      return [{ heading: null, items: splitIngredients(normalized) }];
+    }
+
+    return blocks.map((block) => {
+      const [first, ...rest] = block;
+      if (rest.length === 0) {
+        return { heading: null, items: block };
+      }
+
+      return { heading: first, items: rest };
+    });
+  }
+
+  function classifyInstructionLine(line: string): 'heading' | 'paragraph' {
+    if (/^(quick tip|veg stock procedure|chicken stock procedure|final cook procedure)$/i.test(line)) {
+      return 'heading';
+    }
+
+    return 'paragraph';
   }
 </script>
 
@@ -50,14 +100,19 @@
       <div in:fade={{ delay: index * 80, duration: 180 }}>
         <details class="recipe-details">
           <summary>{r.title}</summary>
-          <DashboardCard title={r.title} description={r.ingredients}>
+          <DashboardCard title={r.title}>
             <div class="recipe-body">
               <h4>Ingredients</h4>
-              <ul>
-                {#each parseIngredients(r.ingredients) as item}
-                  <li>{item}</li>
-                {/each}
-              </ul>
+              {#each parseIngredientSections(r.ingredients) as section}
+                {#if section.heading}
+                  <h5>{section.heading}</h5>
+                {/if}
+                <ul>
+                  {#each section.items as item}
+                    <li>{item}</li>
+                  {/each}
+                </ul>
+              {/each}
 
               <h4>Materials needed</h4>
               <ul>
@@ -73,11 +128,15 @@
               <hr class="section-divider" />
 
               <h4>Instruction</h4>
-              <ul>
+              <div class="instruction-flow">
                 {#each parseInstructionSections(r.instructions).instruction as step}
-                  <li>{step}</li>
+                  {#if classifyInstructionLine(step) === 'heading'}
+                    <h5>{step}</h5>
+                  {:else}
+                    <p>{step}</p>
+                  {/if}
                 {/each}
-              </ul>
+              </div>
             </div>
           </DashboardCard>
         </details>
@@ -130,6 +189,25 @@
 
   .recipe-body li {
     margin: 0.15rem 0;
+  }
+
+  .instruction-flow {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .instruction-flow h5 {
+    margin: 0.45rem 0 0;
+    font-size: 0.84rem;
+    color: var(--color-text);
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.02em;
+  }
+
+  .instruction-flow p {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.55;
   }
 
   .section-divider {

@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     SELECT id, title, ingredients, instructions, created_at
     FROM recipes
     WHERE category = ?
-    ORDER BY created_at DESC
+    ORDER BY title COLLATE NOCASE ASC
   `).bind(params.category).all();
 
   return { recipes: results ?? [], category: params.category };

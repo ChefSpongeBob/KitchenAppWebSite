@@ -22,7 +22,9 @@ export const load: PageServerLoad = async ({ locals }) => {
     .all<{ id: number; title: string; category: string }>();
 
   const dbCategories = (categories?.map((c) => String(c.category || '').trim().toLowerCase()) ?? []).filter(Boolean);
-  const merged = Array.from(new Set([...recipeCategories, ...dbCategories]));
+  const merged = Array.from(new Set([...recipeCategories, ...dbCategories])).sort((a, b) =>
+    a.localeCompare(b)
+  );
 
   return {
     categories: merged,
