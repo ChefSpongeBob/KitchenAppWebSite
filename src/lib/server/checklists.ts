@@ -19,6 +19,13 @@ type ChecklistPageOptions = {
   subtitle: string;
   resetLabel: string;
   defaults: DefaultItem[];
+  infoCardTitle?: string;
+  infoCardIntro?: string;
+  infoCardSections?: Array<{
+    title: string;
+    lines: string[];
+  }>;
+  replaceDefaults?: boolean;
 };
 
 async function getSection(db: DB, slug: string) {
@@ -52,6 +59,44 @@ async function seedDefaultsIfMissing(db: DB, sectionId: string, defaults: Defaul
   }
 }
 
+async function replaceDefaults(db: DB, sectionId: string, defaults: DefaultItem[]) {
+  const rows = await db
+    .prepare(
+      `
+      SELECT id, content
+      FROM checklist_items
+      WHERE section_id = ?
+      ORDER BY sort_order ASC, created_at ASC
+      `
+    )
+    .bind(sectionId)
+    .all<{ id: string; content: string }>();
+
+  const existing = rows.results ?? [];
+  const matchesDefaults =
+    existing.length === defaults.length &&
+    existing.every((item, index) => item.content.trim() === defaults[index]?.content.trim());
+
+  if (matchesDefaults) return;
+
+  await db.prepare(`DELETE FROM checklist_items WHERE section_id = ?`).bind(sectionId).run();
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const [index, item] of defaults.entries()) {
+    await db
+      .prepare(
+        `
+        INSERT INTO checklist_items (
+          id, section_id, content, sort_order, is_checked, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, 0, ?, ?)
+        `
+      )
+      .bind(crypto.randomUUID(), sectionId, item.content, index, now, now)
+      .run();
+  }
+}
+
 export function createChecklistPage(sectionSlug: string, pageTitle: string, options: ChecklistPageOptions) {
   const load = async ({ locals }: { locals: ChecklistLocals }) => {
     const db = locals.DB;
@@ -60,6 +105,9 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         title: pageTitle,
         subtitle: options.subtitle,
         resetLabel: options.resetLabel,
+        infoCardTitle: options.infoCardTitle ?? '',
+        infoCardIntro: options.infoCardIntro ?? '',
+        infoCardSections: options.infoCardSections ?? [],
         items: []
       };
     }
@@ -70,11 +118,18 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         title: pageTitle,
         subtitle: options.subtitle,
         resetLabel: options.resetLabel,
+        infoCardTitle: options.infoCardTitle ?? '',
+        infoCardIntro: options.infoCardIntro ?? '',
+        infoCardSections: options.infoCardSections ?? [],
         items: []
       };
     }
 
-    await seedDefaultsIfMissing(db, section.id, options.defaults);
+    if (options.replaceDefaults) {
+      await replaceDefaults(db, section.id, options.defaults);
+    } else {
+      await seedDefaultsIfMissing(db, section.id, options.defaults);
+    }
 
     const items = await db
       .prepare(
@@ -92,6 +147,9 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       title: pageTitle,
       subtitle: options.subtitle,
       resetLabel: options.resetLabel,
+      infoCardTitle: options.infoCardTitle ?? '',
+      infoCardIntro: options.infoCardIntro ?? '',
+      infoCardSections: options.infoCardSections ?? [],
       items: items.results ?? []
     };
   };

@@ -16,6 +16,9 @@
   export let subtitle = 'Work through the checklist and reset when needed.';
   export let resetLabel = 'Reset Checklist';
   export let items: ChecklistItem[] = [];
+  export let infoCardTitle = '';
+  export let infoCardIntro = '';
+  export let infoCardSections: Array<{ title: string; lines: string[] }> = [];
 
   const isDone = (item: ChecklistItem) => Number(item.is_checked) === 1;
 
@@ -81,6 +84,34 @@
         >
           <button type="submit" class="submit-btn subtle-btn">{resetLabel}</button>
         </form>
+      </div>
+    </section>
+  {/if}
+
+  {#if infoCardTitle && infoCardSections.length > 0}
+    <section class="info-card">
+      <div class="info-head">
+        <h2>{infoCardTitle}</h2>
+        {#if infoCardIntro}
+          <p>{infoCardIntro}</p>
+        {/if}
+      </div>
+
+      <div class="info-grid">
+        {#each infoCardSections as section}
+          <article class="info-day">
+            <strong>{section.title}</strong>
+            {#if section.lines.length === 0}
+              <p>None</p>
+            {:else}
+              <ul>
+                {#each section.lines as line}
+                  <li>{line}</li>
+                {/each}
+              </ul>
+            {/if}
+          </article>
+        {/each}
       </div>
     </section>
   {/if}
@@ -204,6 +235,68 @@
     color: var(--color-text-muted);
   }
 
+  .info-card {
+    margin-top: 1.35rem;
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
+      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.14);
+  }
+
+  .info-head {
+    display: grid;
+    gap: 0.2rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .info-head h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .info-head p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+  }
+
+  .info-grid {
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+
+  .info-day {
+    padding: 0.8rem 0.85rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.025);
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .info-day strong {
+    color: var(--color-text);
+    font-size: 0.9rem;
+  }
+
+  .info-day p,
+  .info-day ul {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .info-day ul {
+    padding-left: 1rem;
+    display: grid;
+    gap: 0.3rem;
+  }
+
   @media (max-width: 760px) {
     .sheet-header {
       display: none;
@@ -219,6 +312,10 @@
     .actions-row form,
     .actions-row button {
       width: 100%;
+    }
+
+    .info-card {
+      padding: 0.9rem;
     }
   }
 </style>
