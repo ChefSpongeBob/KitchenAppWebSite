@@ -178,7 +178,7 @@
 
 <Layout>
   <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
-    <h1>{topGreeting}, {userName}</h1>
+    <h1>{topGreeting}</h1>
     <p class="header-sub">Here's what's happening today</p>
     <img class="divider" src="/knife-divider.svg" alt="" aria-hidden="true" />
   </section>
@@ -208,7 +208,7 @@
           </div>
           {#if todaySchedule.length === 0}
             <div class="shift-empty-state">
-              <SchoolOfFish label="No shift posted today." />
+              <SchoolOfFish label="Have a good day!" />
             </div>
           {:else}
             <div class="shift-summary-list">
