@@ -589,24 +589,26 @@
           <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
             {scheduleStateLabel}
           </span>
-          <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
-            <input type="hidden" name="week_start" value={data.weekStart} />
-            <button
-              type="submit"
-              class="muted-btn"
-              class:autofill-preferred={data.settings.autofillNewWeeks}
-            >
-              {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
-            </button>
-          </form>
-          <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
-            <input type="hidden" name="week_start" value={data.weekStart} />
-            <button type="submit">Publish</button>
-          </form>
-          <form method="POST" action="?/mark_draft" use:enhance={withFeedback}>
-            <input type="hidden" name="week_start" value={data.weekStart} />
-            <button type="submit" class="muted-btn">Unpublish</button>
-          </form>
+          <details class="action-menu">
+            <summary class="menu-trigger">Schedule Actions</summary>
+            <div class="menu-panel">
+              <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
+                <input type="hidden" name="week_start" value={data.weekStart} />
+                <button
+                  type="submit"
+                  class="menu-item"
+                  class:autofill-preferred={data.settings.autofillNewWeeks}
+                >
+                  {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
+                </button>
+              </form>
+              <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
+              <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
+                <input type="hidden" name="week_start" value={data.weekStart} />
+                <button type="submit" class="menu-item menu-item-primary">Publish</button>
+              </form>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -1057,6 +1059,79 @@
     color: #bbf7d0;
   }
 
+  .action-menu {
+    position: relative;
+  }
+
+  .menu-trigger {
+    list-style: none;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+    min-height: 2.3rem;
+    padding: 0.5rem 0.76rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .menu-trigger::-webkit-details-marker {
+    display: none;
+  }
+
+  .menu-trigger::after {
+    content: '▾';
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.4rem);
+    min-width: 13.5rem;
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.45rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
+      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.3);
+    z-index: 12;
+  }
+
+  .menu-panel form {
+    display: block;
+  }
+
+  .menu-item {
+    width: 100%;
+    justify-content: flex-start;
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .menu-item-primary {
+    border-color: rgba(195, 32, 43, 0.22);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
+  }
+
+  .menu-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.3rem;
+    padding: 0.5rem 0.76rem;
+    border-radius: 10px;
+  }
+
   .planner-head {
     padding: 1rem 1rem 0.85rem;
     border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -1425,7 +1500,6 @@
     opacity: 0.55;
   }
 
-  .muted-btn,
   .add-btn,
   .remove-btn,
   .add-employee-btn,
@@ -1435,7 +1509,7 @@
     color: var(--color-text);
   }
 
-  .muted-btn.autofill-preferred {
+  .menu-item.autofill-preferred {
     border-color: rgba(22, 163, 74, 0.25);
     background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.07));
     color: #dcfce7;
@@ -1487,6 +1561,11 @@
     .request-actions {
       min-width: 0;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .menu-panel {
+      left: 0;
+      right: auto;
     }
   }
 

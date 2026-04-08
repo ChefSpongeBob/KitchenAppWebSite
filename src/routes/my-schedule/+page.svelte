@@ -107,6 +107,16 @@
   $: offersByShiftId = new Map(data.offers.map((offer) => [offer.shiftId, offer]));
   $: openShiftOffers = data.offers.filter((offer) => offer.offeredByUserId !== data.userId);
   $: myOfferCount = data.offers.filter((offer) => offer.offeredByUserId === data.userId).length;
+  $: totalShiftCount = data.days.reduce((total, day) => total + day.shifts.length, 0);
+  $: weeklyTrackedHours = data.days.reduce(
+    (total, day) =>
+      total +
+      day.shifts.reduce((sum, shift) => {
+        const hours = shiftHours(shift.startTime, shift.endLabel);
+        return hours === null ? sum : sum + hours;
+      }, 0),
+    0
+  );
 
   function canOfferShift(shiftDate: string) {
     return shiftDate >= todayIso();
@@ -151,6 +161,26 @@
     return `Offered by ${offer.offeredByUserName ?? offer.offeredByUserEmail}`;
   }
 
+  function parseTimeValue(value: string) {
+    const match = /^(\d{2}):(\d{2})$/.exec(value);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+
+  function shiftHours(startTime: string, endLabel: string) {
+    const start = parseTimeValue(startTime);
+    const end = parseTimeValue(endLabel);
+    if (start === null || end === null) return null;
+    let diff = end - start;
+    if (diff < 0) diff += 24 * 60;
+    return diff / 60;
+  }
+
+  function formatHours(value: number) {
+    const rounded = Math.round(value * 100) / 100;
+    return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2).replace(/0$/, '');
+  }
+
   const withOfferFeedback: SubmitFunction = () => {
     return async ({ result }) => {
       await applyAction(result);
@@ -181,7 +211,7 @@
         <h2>{weekRangeLabel}</h2>
       </div>
       <span>
-        {data.days.reduce((total, day) => total + day.shifts.length, 0)} shifts
+        {totalShiftCount} shifts | {formatHours(weeklyTrackedHours)} hours
         {#if myOfferCount > 0} | {myOfferCount} offered{/if}
       </span>
     </section>

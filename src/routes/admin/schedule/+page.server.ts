@@ -10,7 +10,6 @@ import {
   loadScheduleSettings,
   loadScheduleShiftOffersForWeek,
   loadScheduleWeek,
-  markScheduleWeekDraft,
   publishScheduleWeek,
   saveScheduleWeekDraft
 } from '$lib/server/schedules';
@@ -63,7 +62,6 @@ export const actions: Actions = {
   save_week: ({ request, locals }) => saveScheduleWeekDraft(request, locals),
   copy_previous_week: ({ request, locals }) => copyPreviousScheduleWeek(request, locals),
   publish_week: ({ request, locals }) => publishScheduleWeek(request, locals),
-  mark_draft: ({ request, locals }) => markScheduleWeekDraft(request, locals),
   approve_offer: ({ request, locals }) => approveScheduleShiftOffer(request, locals),
   decline_offer: ({ request, locals }) => declineScheduleShiftOffer(request, locals)
 };
