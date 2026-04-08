@@ -986,7 +986,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
     .bind(now, locals.userId, offer.week_id)
     .run();
 
-  return { success: true };
+  return { success: true, message: 'Shift request approved.' };
 }
 
 export async function declineScheduleShiftOffer(request: Request, locals: App.Locals) {
@@ -1010,7 +1010,7 @@ export async function declineScheduleShiftOffer(request: Request, locals: App.Lo
     .bind(Math.floor(Date.now() / 1000), shiftId)
     .run();
 
-  return { success: true };
+  return { success: true, message: 'Shift request declined.' };
 }
 
 export async function saveScheduleShift(request: Request, locals: App.Locals) {

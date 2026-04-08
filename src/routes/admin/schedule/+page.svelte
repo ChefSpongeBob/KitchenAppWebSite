@@ -43,6 +43,31 @@
     shifts: Shift[];
   };
 
+  type ShiftOffer = {
+    id: string;
+    shiftId: string;
+    shiftDate: string;
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    department: string;
+    role: string;
+    detail: string;
+    startTime: string;
+    endLabel: string;
+    notes: string;
+    offeredByUserId: string;
+    offeredByUserName: string | null;
+    offeredByUserEmail: string;
+    targetUserId: string | null;
+    targetUserName: string | null;
+    targetUserEmail: string | null;
+    requestedByUserId: string | null;
+    requestedByUserName: string | null;
+    requestedByUserEmail: string | null;
+    managerNote: string;
+  };
+
   type DraftShift = {
     clientId: string;
     shiftDate: string;
@@ -72,6 +97,7 @@
     users: UserOption[];
     week: { status: 'draft' | 'published'; publishedAt: number | null } | null;
     days: Day[];
+    offers: ShiftOffer[];
   };
 
   let selectedEmployeeId = '';
@@ -175,6 +201,7 @@
 
   $: visibleUserIds = employeeRows.map((row) => row.userId);
   $: availableUsers = data.users.filter((user) => !visibleUserIds.includes(user.id));
+  $: pendingOffers = data.offers.filter((offer) => offer.requestedByUserId);
   $: weekPayload = JSON.stringify(
     employeeRows.flatMap((row) =>
       row.cells.flatMap((cell) =>
@@ -402,6 +429,14 @@
     return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2).replace(/0$/, '');
   }
 
+  function scheduleDateLabel(value: string) {
+    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+
   $: totalScheduledHours = allShifts.reduce((sum, shift) => {
     const hours = shiftHours(shift);
     return hours === null ? sum : sum + hours;
@@ -475,6 +510,58 @@
         <input id="week-start" type="date" name="week" value={data.weekStart} />
         <button type="submit">Go</button>
       </form>
+    </section>
+
+    <section class="requests-shell" aria-label="Shift requests">
+      <header class="requests-head">
+        <div>
+          <span class="eyebrow">Shift Requests</span>
+          <h2>Pending Approvals</h2>
+        </div>
+        <span class="status-pill">{pendingOffers.length} pending</span>
+      </header>
+
+      {#if pendingOffers.length === 0}
+        <p class="requests-empty">No one is waiting on a pickup approval right now.</p>
+      {:else}
+        <div class="request-list">
+          {#each pendingOffers as offer}
+            <article class="request-card">
+              <div class="request-main">
+                <strong>{offer.department} | {offer.role}</strong>
+                <p class="request-time">
+                  {scheduleDateLabel(offer.shiftDate)} | {formatScheduleTimeLabel(offer.startTime)}{#if offer.endLabel} - {offer.endLabel}{/if}
+                </p>
+                {#if offer.detail}
+                  <p class="request-detail">{offer.detail}</p>
+                {/if}
+                <p class="request-meta">
+                  Offered by {offer.offeredByUserName ?? offer.offeredByUserEmail}
+                </p>
+                <p class="request-meta">
+                  Requested by {offer.requestedByUserName ?? offer.requestedByUserEmail}
+                </p>
+                {#if offer.targetUserId}
+                  <p class="request-meta">
+                    Directed to {offer.targetUserName ?? offer.targetUserEmail}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="request-actions">
+                <form method="POST" action="?/approve_offer" use:enhance={withFeedback}>
+                  <input type="hidden" name="shift_id" value={offer.shiftId} />
+                  <button type="submit" class="create-shift-btn">Approve</button>
+                </form>
+                <form method="POST" action="?/decline_offer" use:enhance={withFeedback}>
+                  <input type="hidden" name="shift_id" value={offer.shiftId} />
+                  <button type="submit" class="remove-btn request-decline-btn">Decline</button>
+                </form>
+              </div>
+            </article>
+          {/each}
+        </div>
+      {/if}
     </section>
 
     <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell">
@@ -750,6 +837,7 @@
   }
 
   .week-shell,
+  .requests-shell,
   .planner-shell {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
     border: 1px solid rgba(255,255,255,0.08);
@@ -764,11 +852,18 @@
     padding: 1rem;
   }
 
+  .requests-shell {
+    padding: 1rem;
+    display: grid;
+    gap: 0.9rem;
+  }
+
   .planner-shell {
     overflow: hidden;
   }
 
   .week-head,
+  .requests-head,
   .planner-head {
     display: flex;
     justify-content: space-between;
@@ -797,6 +892,7 @@
   }
 
   .week-head h2,
+  .requests-head h2,
   .planner-head h2 {
     margin: 0.18rem 0 0;
   }
@@ -830,6 +926,54 @@
     color: var(--color-text-muted);
     font-size: 0.82rem;
     padding-top: 0.3rem;
+  }
+
+  .request-list {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .request-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 0.85rem;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.025);
+  }
+
+  .request-main {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .request-time,
+  .request-detail,
+  .request-meta,
+  .requests-empty {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.45;
+  }
+
+  .request-actions {
+    display: grid;
+    gap: 0.45rem;
+    align-content: start;
+    min-width: 8rem;
+  }
+
+  .request-actions form {
+    display: block;
+  }
+
+  .request-actions button {
+    width: 100%;
+  }
+
+  .request-decline-btn {
+    min-height: 2.3rem;
   }
 
   .mobile-team-overlay,
@@ -1124,6 +1268,15 @@
     .week-picker,
     .input-grid.two {
       grid-template-columns: 1fr;
+    }
+
+    .request-card {
+      flex-direction: column;
+    }
+
+    .request-actions {
+      min-width: 0;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
