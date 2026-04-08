@@ -76,6 +76,7 @@
 
   let selectedEmployeeId = '';
   let selectedSection: 'All' | ScheduleDepartment = 'All';
+  let mobileTeamPanelOpen = false;
   const defaultDepartment: ScheduleDepartment = 'FOH';
 
   function normalizeDepartment(value: string): ScheduleDepartment {
@@ -246,6 +247,14 @@
     return user ? user.displayName ?? user.email : 'Unknown user';
   }
 
+  function compactEmployeeName(userId: string) {
+    const label = employeeName(userId).trim();
+    const [first, second] = label.split(/\s+/);
+    if (!first) return label;
+    if (!second) return first.length > 12 ? `${first.slice(0, 12)}…` : first;
+    return `${first} ${second[0]}.`;
+  }
+
   function approvedDepartmentLabel(userId: string) {
     const departments = approvedDepartmentsForUser(userId);
     return departments.length > 0 ? departments.join(', ') : 'No approved departments';
@@ -286,6 +295,7 @@
     if (!selectedEmployeeId || visibleUserIds.includes(selectedEmployeeId)) return;
     employeeRows = [...employeeRows, buildRow(selectedEmployeeId)];
     selectedEmployeeId = '';
+    mobileTeamPanelOpen = false;
   }
 
   function removeEmployeeRow(userId: string) {
@@ -480,11 +490,63 @@
           <button type="submit">Save Draft</button>
         </div>
 
+      {#if mobileTeamPanelOpen}
+        <button
+          type="button"
+          class="mobile-team-overlay"
+          aria-label="Close team panel"
+          on:click={() => (mobileTeamPanelOpen = false)}
+        ></button>
+      {/if}
+
+      <aside class:open={mobileTeamPanelOpen} class="mobile-team-panel" aria-label="Team panel">
+        <div class="mobile-team-head">
+          <div>
+            <span class="eyebrow">Team</span>
+            <strong>Employee Controls</strong>
+          </div>
+          <button type="button" class="close-panel-btn" on:click={() => (mobileTeamPanelOpen = false)}>
+            Close
+          </button>
+        </div>
+
+        <div class="mobile-team-add">
+          <select bind:value={selectedEmployeeId}>
+            <option value="">Add employee</option>
+            {#each availableUsers as user}
+              <option value={user.id}>{user.displayName ?? user.email}</option>
+            {/each}
+          </select>
+          <button type="button" class="add-employee-btn" on:click={addEmployeeRow}>Add Employee</button>
+        </div>
+
+        <div class="mobile-team-list">
+          {#if employeeRows.length === 0}
+            <p class="mobile-team-empty">No employees added yet.</p>
+          {:else}
+            {#each employeeRows as row (row.userId)}
+              <div class="mobile-team-item">
+                <div class="mobile-team-copy">
+                  <strong>{employeeName(row.userId)}</strong>
+                  <span>{approvedDepartmentLabel(row.userId)}</span>
+                </div>
+                <button type="button" class="remove-row-btn" on:click={() => removeEmployeeRow(row.userId)}>
+                  Remove
+                </button>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </aside>
+
       <div class="grid-scroll">
         <section class="schedule-grid" aria-label="Weekly schedule editor">
           <div class="corner-cell">
             <div class="corner-stack">
               <strong>Employees</strong>
+              <button type="button" class="open-panel-btn" on:click={() => (mobileTeamPanelOpen = true)}>
+                Add Employee
+              </button>
               <div class="corner-actions">
                 <select bind:value={selectedEmployeeId}>
                   <option value="">Add employee</option>
@@ -523,6 +585,7 @@
             <div class="employee-cell">
               <div class="employee-stack">
                 <strong>{employeeName(row.userId)}</strong>
+                <span class="employee-name-compact">{compactEmployeeName(row.userId)}</span>
                 <span class="employee-departments">{approvedDepartmentLabel(row.userId)}</span>
                 <button type="button" class="remove-row-btn" on:click={() => removeEmployeeRow(row.userId)}>
                   <span class="desktop-label">Remove Employee</span>
@@ -769,6 +832,10 @@
     padding-top: 0.3rem;
   }
 
+  .mobile-team-overlay,
+  .mobile-team-panel {
+    display: none;
+  }
 
   .grid-scroll {
     overflow-x: auto;
@@ -818,6 +885,11 @@
     display: none;
   }
 
+  .open-panel-btn,
+  .close-panel-btn {
+    display: none;
+  }
+
   .corner-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -857,6 +929,10 @@
   .employee-stack {
     display: grid;
     gap: 0.5rem;
+  }
+
+  .employee-name-compact {
+    display: none;
   }
 
   .employee-departments {
@@ -1053,7 +1129,7 @@
 
   @media (max-width: 760px) {
     .schedule-grid {
-      grid-template-columns: 148px repeat(7, minmax(260px, 1fr));
+      grid-template-columns: 92px repeat(7, minmax(260px, 1fr));
     }
 
     .corner-cell,
@@ -1069,14 +1145,125 @@
       font-size: 0.68rem;
     }
 
+    .open-panel-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 2rem;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.72rem;
+      border-color: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: var(--color-text);
+    }
+
     .corner-actions {
-      grid-template-columns: minmax(0, 1fr) 2.2rem;
+      display: none;
+    }
+
+    .mobile-team-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 5, 7, 0.62);
+      border: 0;
+      padding: 0;
+      z-index: 19;
+    }
+
+    .mobile-team-panel {
+      display: grid;
+      gap: 0.75rem;
+      position: fixed;
+      top: calc(1rem + var(--safe-top));
+      left: calc(0.75rem + var(--safe-left));
+      bottom: calc(1rem + var(--safe-bottom));
+      width: min(20rem, calc(100vw - 1.5rem - var(--safe-left) - var(--safe-right)));
+      padding: 0.9rem;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-lg);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
+        color-mix(in srgb, var(--color-surface) 95%, black 5%);
+      box-shadow: 0 18px 48px rgba(4, 5, 7, 0.35);
+      transform: translateX(calc(-100% - 1rem));
+      transition: transform 180ms ease;
+      z-index: 20;
+      overflow-y: auto;
+    }
+
+    .mobile-team-panel.open {
+      transform: translateX(0);
+    }
+
+    .mobile-team-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .mobile-team-head strong {
+      display: block;
+      margin-top: 0.18rem;
+      font-size: 1rem;
+    }
+
+    .close-panel-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2rem;
+      padding: 0.42rem 0.8rem;
+      font-size: 0.76rem;
+      border-color: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: var(--color-text);
+    }
+
+    .mobile-team-add {
+      display: grid;
       gap: 0.35rem;
     }
 
-    .corner-actions select,
-    .add-employee-btn,
-    .remove-row-btn {
+    .mobile-team-list {
+      display: grid;
+      gap: 0.55rem;
+      align-content: start;
+    }
+
+    .mobile-team-item {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.7rem;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.025);
+    }
+
+    .mobile-team-copy {
+      display: grid;
+      gap: 0.22rem;
+      min-width: 0;
+    }
+
+    .mobile-team-copy strong {
+      font-size: 0.84rem;
+    }
+
+    .mobile-team-copy span,
+    .mobile-team-empty {
+      color: var(--color-text-muted);
+      font-size: 0.74rem;
+      line-height: 1.4;
+    }
+
+    .mobile-team-add select,
+    .mobile-team-add .add-employee-btn,
+    .mobile-team-item .remove-row-btn {
       min-height: 2rem;
       font-size: 0.72rem;
     }
@@ -1090,7 +1277,23 @@
       font-size: 0.8rem;
     }
 
+    .employee-cell strong {
+      display: none;
+    }
+
+    .employee-name-compact {
+      display: block;
+      font-size: 0.76rem;
+      line-height: 1.25;
+      color: var(--color-text);
+      word-break: break-word;
+    }
+
     .employee-departments {
+      display: none;
+    }
+
+    .employee-cell .remove-row-btn {
       display: none;
     }
 
