@@ -238,6 +238,28 @@
     selectedSection === 'All'
       ? allShifts.length
       : allShifts.filter((shift) => shift.department === selectedSection).length;
+  $: visibleScheduledHours = allShifts.reduce((sum, shift) => {
+    if (selectedSection !== 'All' && shift.department !== selectedSection) return sum;
+    const hours = shiftHours(shift);
+    return hours === null ? sum : sum + hours;
+  }, 0);
+  $: departmentHourTotals = {
+    FOH: allShifts.reduce((sum, shift) => {
+      if (shift.department !== 'FOH') return sum;
+      const hours = shiftHours(shift);
+      return hours === null ? sum : sum + hours;
+    }, 0),
+    Sushi: allShifts.reduce((sum, shift) => {
+      if (shift.department !== 'Sushi') return sum;
+      const hours = shiftHours(shift);
+      return hours === null ? sum : sum + hours;
+    }, 0),
+    Kitchen: allShifts.reduce((sum, shift) => {
+      if (shift.department !== 'Kitchen') return sum;
+      const hours = shiftHours(shift);
+      return hours === null ? sum : sum + hours;
+    }, 0)
+  };
   $: totalsByDay = data.days.map((day) => {
     const dayShifts = allShifts.filter((shift) => shift.shiftDate === day.date);
     const visibleDayShifts =
@@ -429,6 +451,15 @@
     return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2).replace(/0$/, '');
   }
 
+  function employeeHours(userId: string) {
+    return allShifts.reduce((sum, shift) => {
+      if (shift.userId !== userId) return sum;
+      if (selectedSection !== 'All' && shift.department !== selectedSection) return sum;
+      const hours = shiftHours(shift);
+      return hours === null ? sum : sum + hours;
+    }, 0);
+  }
+
   function scheduleDateLabel(value: string) {
     return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
       weekday: 'short',
@@ -573,7 +604,18 @@
             <span class="eyebrow">Week Builder</span>
             <h2>Team Schedule</h2>
           </div>
-          <span class="planner-hours">Tracked Hours: {formatHours(totalScheduledHours)}</span>
+          <div class="planner-hours-shell">
+            <span class="planner-hours">
+              {selectedSection === 'All'
+                ? `Tracked Hours: ${formatHours(totalScheduledHours)}`
+                : `${selectedSection} Hours: ${formatHours(visibleScheduledHours)}`}
+            </span>
+            <div class="hours-breakdown">
+              <span class="hours-chip">FOH {formatHours(departmentHourTotals.FOH)}</span>
+              <span class="hours-chip">Sushi {formatHours(departmentHourTotals.Sushi)}</span>
+              <span class="hours-chip">Kitchen {formatHours(departmentHourTotals.Kitchen)}</span>
+            </div>
+          </div>
           <button type="submit">Save Draft</button>
         </div>
 
@@ -674,6 +716,9 @@
                 <strong>{employeeName(row.userId)}</strong>
                 <span class="employee-name-compact">{compactEmployeeName(row.userId)}</span>
                 <span class="employee-departments">{approvedDepartmentLabel(row.userId)}</span>
+                <span class="employee-hours">
+                  Hours: {formatHours(employeeHours(row.userId))}
+                </span>
                 <button type="button" class="remove-row-btn" on:click={() => removeEmployeeRow(row.userId)}>
                   <span class="desktop-label">Remove Employee</span>
                   <span class="mobile-label">Remove</span>
@@ -928,6 +973,27 @@
     padding-top: 0.3rem;
   }
 
+  .planner-hours-shell {
+    display: grid;
+    gap: 0.35rem;
+    align-content: start;
+  }
+
+  .hours-breakdown {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .hours-chip {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 0.18rem 0.55rem;
+    font-size: 0.74rem;
+    color: var(--color-text-muted);
+    background: rgba(255,255,255,0.03);
+  }
+
   .request-list {
     display: grid;
     gap: 0.7rem;
@@ -1080,6 +1146,12 @@
   }
 
   .employee-departments {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
+  .employee-hours {
     color: var(--color-text-muted);
     font-size: 0.72rem;
     line-height: 1.35;
@@ -1270,6 +1342,11 @@
       grid-template-columns: 1fr;
     }
 
+    .planner-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
     .request-card {
       flex-direction: column;
     }
@@ -1444,6 +1521,10 @@
 
     .employee-departments {
       display: none;
+    }
+
+    .employee-hours {
+      font-size: 0.68rem;
     }
 
     .employee-cell .remove-row-btn {
