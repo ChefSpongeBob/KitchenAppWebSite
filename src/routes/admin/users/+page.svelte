@@ -4,6 +4,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { scheduleDepartments, type ScheduleDepartment } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type UserOption = {
@@ -13,6 +14,7 @@
     role: string;
     is_active: number;
     can_manage_specials: number;
+    approved_departments: ScheduleDepartment[];
   };
 
   type InviteOption = {
@@ -39,10 +41,13 @@
   const formatDate = (value: number | null) =>
     value ? new Date(value * 1000).toLocaleDateString() : 'None';
 
-  let feedbackMessage = '';
+  const departmentSummary = (user: UserOption) =>
+    user.approved_departments.length > 0 ? user.approved_departments.join(', ') : 'No schedule departments';
+
+  const isDepartmentApproved = (user: UserOption, department: ScheduleDepartment) =>
+    user.approved_departments.includes(department);
 
   const withFeedback: SubmitFunction = () => {
-    feedbackMessage = '';
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
@@ -51,12 +56,6 @@
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That user change could not be saved.', 'error');
       }
-      feedbackMessage =
-        result.type === 'success'
-          ? result.data?.message ?? 'User access updated.'
-          : result.type === 'failure'
-            ? result.data?.error ?? 'That user change could not be saved.'
-            : '';
     };
   };
 </script>
@@ -98,10 +97,6 @@
         </div>
         <span>{activeInvites.length} active</span>
       </header>
-
-      {#if feedbackMessage}
-        <p class="feedback-banner">{feedbackMessage}</p>
-      {/if}
 
       {#if !data.emailConfigured}
         <p class="config-banner">
@@ -205,7 +200,30 @@
                   <dt>Role</dt>
                   <dd>{user.role}</dd>
                 </div>
+                <div>
+                  <dt>Schedule</dt>
+                  <dd>{departmentSummary(user)}</dd>
+                </div>
               </dl>
+
+              <div class="department-editor">
+                <span>Departments</span>
+                <div class="department-chips">
+                  {#each scheduleDepartments as department}
+                    <form method="POST" action="?/toggle_schedule_department" use:enhance={withFeedback}>
+                      <input type="hidden" name="user_id" value={user.id} />
+                      <input type="hidden" name="department" value={department} />
+                      <button
+                        type="submit"
+                        class="department-chip"
+                        class:department-chip-active={isDepartmentApproved(user, department)}
+                      >
+                        {department}
+                      </button>
+                    </form>
+                  {/each}
+                </div>
+              </div>
 
               <div class="actions">
                 <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
@@ -255,7 +273,30 @@
                   <dt>Specials</dt>
                   <dd>{user.role === 'admin' || user.can_manage_specials === 1 ? 'Allowed' : 'Off'}</dd>
                 </div>
+                <div>
+                  <dt>Schedule</dt>
+                  <dd>{departmentSummary(user)}</dd>
+                </div>
               </dl>
+
+              <div class="department-editor">
+                <span>Departments</span>
+                <div class="department-chips">
+                  {#each scheduleDepartments as department}
+                    <form method="POST" action="?/toggle_schedule_department" use:enhance={withFeedback}>
+                      <input type="hidden" name="user_id" value={user.id} />
+                      <input type="hidden" name="department" value={department} />
+                      <button
+                        type="submit"
+                        class="department-chip"
+                        class:department-chip-active={isDepartmentApproved(user, department)}
+                      >
+                        {department}
+                      </button>
+                    </form>
+                  {/each}
+                </div>
+              </div>
 
               <div class="actions">
                 <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
@@ -381,17 +422,10 @@
     padding: 1rem;
   }
 
-  .feedback-banner,
   .config-banner {
     margin: 0 0 0.9rem;
     padding: 0.72rem 0.9rem;
     border-radius: 12px;
-  }
-
-  .feedback-banner {
-    border: 1px solid rgba(22, 163, 74, 0.22);
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
-    color: #bbf7d0;
   }
 
   .config-banner {
@@ -467,6 +501,44 @@
     gap: 0.5rem;
     flex-wrap: wrap;
     align-items: stretch;
+  }
+
+  .department-editor {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0 0 0.9rem;
+  }
+
+  .department-editor > span {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .department-chips {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
+  .department-chips form {
+    flex: 0 0 auto;
+  }
+
+  .department-chip {
+    width: auto;
+    min-height: 2.1rem;
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-text);
+    padding-inline: 0.8rem;
+  }
+
+  .department-chip.department-chip-active {
+    border-color: rgba(22, 163, 74, 0.24);
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.22), rgba(22, 163, 74, 0.08));
+    color: #dcfce7;
   }
 
   .actions form {

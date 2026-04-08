@@ -6,9 +6,9 @@ import {
   getWeekStart,
   loadScheduleAssignableUsers,
   loadScheduleWeek,
-  saveScheduleWeekDraft,
+  markScheduleWeekDraft,
   publishScheduleWeek,
-  markScheduleWeekDraft
+  saveScheduleWeekDraft
 } from '$lib/server/schedules';
 
 export const load: PageServerLoad = async ({ locals, url }) => {

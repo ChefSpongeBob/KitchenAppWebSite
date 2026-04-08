@@ -11,6 +11,7 @@
     scheduleEndLabels,
     scheduleDetailOptionsFor,
     formatScheduleTimeLabel,
+    formatScheduleWeekRange,
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
@@ -19,6 +20,7 @@
     id: string;
     displayName: string | null;
     email: string;
+    approvedDepartments: ScheduleDepartment[];
   };
 
   type Shift = {
@@ -72,7 +74,6 @@
     days: Day[];
   };
 
-  let feedbackMessage = '';
   let selectedEmployeeId = '';
   let selectedSection: 'All' | ScheduleDepartment = 'All';
   const defaultDepartment: ScheduleDepartment = 'FOH';
@@ -83,12 +84,24 @@
       : defaultDepartment) as ScheduleDepartment;
   }
 
+  function userOption(userId: string) {
+    return data.users.find((entry) => entry.id === userId) ?? null;
+  }
+
+  function approvedDepartmentsForUser(userId: string) {
+    return userOption(userId)?.approvedDepartments ?? [];
+  }
+
   function rolesFor(department: ScheduleDepartment) {
     return scheduleRolesByDepartment[department] as readonly string[];
   }
 
   function createShift(userId: string, shiftDate: string): DraftShift {
-    const startingDepartment = selectedSection === 'All' ? defaultDepartment : selectedSection;
+    const approvedDepartments = approvedDepartmentsForUser(userId);
+    const startingDepartment =
+      selectedSection !== 'All' && approvedDepartments.includes(selectedSection)
+        ? selectedSection
+        : approvedDepartments[0] ?? defaultDepartment;
     return {
       clientId: crypto.randomUUID(),
       shiftDate,
@@ -211,42 +224,56 @@
       kitchen: dayShifts.filter((shift) => shift.department === 'Kitchen').length
     };
   });
-  $: weekRangeLabel = (() => {
-    if (data.days.length === 0) return data.weekStart;
-    const start = new Date(`${data.days[0].date}T00:00:00`);
-    const end = new Date(`${data.days[data.days.length - 1].date}T00:00:00`);
-    const mm = String(start.getMonth() + 1).padStart(2, '0');
-    const startDay = String(start.getDate()).padStart(2, '0');
-    const endMonth = String(end.getMonth() + 1).padStart(2, '0');
-    const endDay = String(end.getDate()).padStart(2, '0');
-    const yy = String(end.getFullYear()).slice(-2);
-    return start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
-      ? `${mm}/${startDay}-${endDay}/${yy}`
-      : `${mm}/${startDay}-${endMonth}/${endDay}/${yy}`;
-  })();
+  $: weekRangeLabel = formatScheduleWeekRange(
+    data.days.map((day) => day.date),
+    data.weekStart
+  );
 
   const withFeedback: SubmitFunction = () => {
-    feedbackMessage = '';
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Schedule updated.', 'success');
+        pushToast(result.data?.message ?? 'Schedule updated.', 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That schedule change could not be saved.', 'error');
       }
-      feedbackMessage =
-        result.type === 'success'
-          ? 'Schedule updated.'
-          : result.type === 'failure'
-            ? result.data?.error ?? 'That schedule change could not be saved.'
-            : '';
     };
   };
 
   function employeeName(userId: string) {
-    const user = data.users.find((entry) => entry.id === userId);
+    const user = userOption(userId);
     return user ? user.displayName ?? user.email : 'Unknown user';
+  }
+
+  function approvedDepartmentLabel(userId: string) {
+    const departments = approvedDepartmentsForUser(userId);
+    return departments.length > 0 ? departments.join(', ') : 'No approved departments';
+  }
+
+  function canAddShift(userId: string) {
+    return approvedDepartmentsForUser(userId).length > 0;
+  }
+
+  function departmentOptionsForUser(userId: string, currentDepartment: ScheduleDepartment) {
+    const approvedDepartments = approvedDepartmentsForUser(userId);
+    if (approvedDepartments.includes(currentDepartment)) {
+      return approvedDepartments.map((department) => ({
+        value: department,
+        label: department
+      }));
+    }
+
+    return [
+      {
+        value: currentDepartment,
+        label: `${currentDepartment} (Not Approved)`
+      },
+      ...approvedDepartments.map((department) => ({
+        value: department,
+        label: department
+      }))
+    ];
   }
 
   function visibleShifts(cell: EmployeeRow['cells'][number]) {
@@ -298,10 +325,16 @@
     });
   }
 
-  function updateDepartment(shift: DraftShift, value: string) {
+  function updateDepartment(shift: DraftShift, userId: string, value: string) {
     const department = normalizeDepartment(value);
-    const roles = rolesFor(department);
-    shift.department = department;
+    const availableDepartments = departmentOptionsForUser(userId, shift.department).map(
+      (option) => option.value
+    );
+    const nextDepartment = availableDepartments.includes(department)
+      ? department
+      : availableDepartments[0] ?? shift.department;
+    const roles = rolesFor(nextDepartment);
+    shift.department = nextDepartment;
     if (!roles.includes(shift.role)) {
       shift.role = roles[0];
     }
@@ -363,7 +396,6 @@
     const hours = shiftHours(shift);
     return hours === null ? sum : sum + hours;
   }, 0);
-
   function collapseShift(rowIndex: number, cellIndex: number, clientId: string) {
     employeeRows = employeeRows.map((row, currentRowIndex) => {
       if (currentRowIndex !== rowIndex) return row;
@@ -428,10 +460,6 @@
         </div>
       </header>
 
-      {#if feedbackMessage}
-        <p class="feedback-banner">{feedbackMessage}</p>
-      {/if}
-
       <form method="GET" class="week-picker">
         <label for="week-start">Jump to week</label>
         <input id="week-start" type="date" name="week" value={data.weekStart} />
@@ -464,7 +492,10 @@
                     <option value={user.id}>{user.displayName ?? user.email}</option>
                   {/each}
                 </select>
-                <button type="button" class="add-employee-btn" on:click={addEmployeeRow}>Add</button>
+                <button type="button" class="add-employee-btn" on:click={addEmployeeRow}>
+                  <span class="desktop-label">Add</span>
+                  <span class="mobile-label">+</span>
+                </button>
               </div>
             </div>
           </div>
@@ -492,8 +523,10 @@
             <div class="employee-cell">
               <div class="employee-stack">
                 <strong>{employeeName(row.userId)}</strong>
+                <span class="employee-departments">{approvedDepartmentLabel(row.userId)}</span>
                 <button type="button" class="remove-row-btn" on:click={() => removeEmployeeRow(row.userId)}>
-                  Remove Employee
+                  <span class="desktop-label">Remove Employee</span>
+                  <span class="mobile-label">Remove</span>
                 </button>
               </div>
             </div>
@@ -523,10 +556,15 @@
                               <span>Department</span>
                               <select
                                 bind:value={shift.department}
-                                on:change={(event) => updateDepartment(shift, (event.currentTarget as HTMLSelectElement).value)}
+                                on:change={(event) =>
+                                  updateDepartment(
+                                    shift,
+                                    row.userId,
+                                    (event.currentTarget as HTMLSelectElement).value
+                                  )}
                               >
-                                {#each scheduleDepartments as department}
-                                  <option value={department}>{department}</option>
+                                {#each departmentOptionsForUser(row.userId, shift.department) as option}
+                                  <option value={option.value}>{option.label}</option>
                                 {/each}
                               </select>
                             </label>
@@ -567,6 +605,12 @@
                             </select>
                           </label>
 
+                          {#if !approvedDepartmentsForUser(row.userId).includes(shift.department)}
+                            <p class="shift-warning">
+                              {employeeName(row.userId)} is not approved for {shift.department}.
+                            </p>
+                          {/if}
+
                           <label>
                             <span>Notes</span>
                             <input bind:value={shift.notes} placeholder="Optional notes" />
@@ -595,7 +639,13 @@
                   {/each}
                 </div>
 
-                <button type="button" class="add-btn" on:click={() => addShift(rowIndex, cellIndex)}>
+                <button
+                  type="button"
+                  class="add-btn"
+                  on:click={() => addShift(rowIndex, cellIndex)}
+                  disabled={!canAddShift(row.userId)}
+                  title={!canAddShift(row.userId) ? 'This employee has no approved schedule departments.' : undefined}
+                >
                   Add Shift
                 </button>
               </div>
@@ -696,15 +746,6 @@
     margin-top: 0.9rem;
   }
 
-  .feedback-banner {
-    margin: 0.8rem 0 0;
-    padding: 0.72rem 0.9rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
-    border-radius: 12px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
-    color: #bbf7d0;
-  }
-
   .status-pill {
     color: var(--color-text-muted);
     padding: 0.2rem 0;
@@ -727,6 +768,7 @@
     font-size: 0.82rem;
     padding-top: 0.3rem;
   }
+
 
   .grid-scroll {
     overflow-x: auto;
@@ -772,6 +814,10 @@
     color: var(--color-text-muted);
   }
 
+  .mobile-label {
+    display: none;
+  }
+
   .corner-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -811,6 +857,12 @@
   .employee-stack {
     display: grid;
     gap: 0.5rem;
+  }
+
+  .employee-departments {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
   }
 
   .employee-cell strong,
@@ -920,6 +972,13 @@
     gap: 0.25rem;
   }
 
+  .shift-warning {
+    margin: 0;
+    color: #fcd34d;
+    font-size: 0.74rem;
+    line-height: 1.4;
+  }
+
   input,
   select {
     width: 100%;
@@ -940,6 +999,11 @@
     padding: 0.5rem 0.76rem;
     cursor: pointer;
     font-size: 0.78rem;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 
   .muted-btn,
@@ -984,6 +1048,58 @@
     .week-picker,
     .input-grid.two {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .schedule-grid {
+      grid-template-columns: 148px repeat(7, minmax(260px, 1fr));
+    }
+
+    .corner-cell,
+    .employee-cell {
+      padding: 0.65rem;
+    }
+
+    .corner-stack {
+      gap: 0.35rem;
+    }
+
+    .corner-stack strong {
+      font-size: 0.68rem;
+    }
+
+    .corner-actions {
+      grid-template-columns: minmax(0, 1fr) 2.2rem;
+      gap: 0.35rem;
+    }
+
+    .corner-actions select,
+    .add-employee-btn,
+    .remove-row-btn {
+      min-height: 2rem;
+      font-size: 0.72rem;
+    }
+
+    .employee-stack {
+      gap: 0.35rem;
+    }
+
+    .employee-cell strong,
+    .day-header strong {
+      font-size: 0.8rem;
+    }
+
+    .employee-departments {
+      display: none;
+    }
+
+    .desktop-label {
+      display: none;
+    }
+
+    .mobile-label {
+      display: inline;
     }
   }
 </style>

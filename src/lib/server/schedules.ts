@@ -1,5 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import {
+  scheduleDepartments,
   isValidScheduleDepartment,
   isValidScheduleRole,
   type ScheduleDepartment
@@ -31,6 +32,41 @@ export type ScheduleShift = {
   sortOrder: number;
 };
 
+export type ScheduleShiftOffer = {
+  id: string;
+  shiftId: string;
+  weekId: string;
+  shiftDate: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string;
+  department: string;
+  role: string;
+  detail: string;
+  startTime: string;
+  endLabel: string;
+  notes: string;
+  offeredByUserId: string;
+  offeredByUserName: string | null;
+  offeredByUserEmail: string;
+  targetUserId: string | null;
+  targetUserName: string | null;
+  targetUserEmail: string | null;
+  requestedByUserId: string | null;
+  requestedByUserName: string | null;
+  requestedByUserEmail: string | null;
+  managerNote: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ScheduleAssignableUser = {
+  id: string;
+  displayName: string | null;
+  email: string;
+  approvedDepartments: ScheduleDepartment[];
+};
+
 export type ScheduleDay = {
   date: string;
   label: string;
@@ -49,6 +85,154 @@ type ScheduleDraftRow = {
 };
 
 let scheduleSchemaEnsured = false;
+
+async function ensureOptionalColumn(db: DB, tableName: string, columnName: string, definition: string) {
+  try {
+    await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (message.includes('duplicate column name') || message.includes('already exists')) {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function seedInitialScheduleDepartmentApprovals(db: DB) {
+  const existing = await db
+    .prepare(`SELECT COUNT(*) AS count FROM user_schedule_departments`)
+    .first<{ count: number }>();
+  if ((existing?.count ?? 0) > 0) return;
+
+  const activeUsers = await db
+    .prepare(
+      `
+      SELECT id
+      FROM users
+      WHERE COALESCE(is_active, 1) = 1
+      `
+    )
+    .all<{ id: string }>();
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const user of activeUsers.results ?? []) {
+    for (const department of scheduleDepartments) {
+      await db
+        .prepare(
+          `
+          INSERT INTO user_schedule_departments (user_id, department, updated_at)
+          VALUES (?, ?, ?)
+          `
+        )
+        .bind(user.id, department, now)
+        .run();
+    }
+  }
+}
+
+function formatAssignableUserLabel(user: Pick<ScheduleAssignableUser, 'displayName' | 'email'>) {
+  return user.displayName ?? user.email;
+}
+
+export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: string[]) {
+  await ensureScheduleSchema(db);
+
+  const requestedUserIds = userIds ? Array.from(new Set(userIds.filter((userId) => userId.length > 0))) : null;
+  if (requestedUserIds && requestedUserIds.length === 0) {
+    return new Map<string, ScheduleDepartment[]>();
+  }
+
+  const placeholders = requestedUserIds?.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `
+      SELECT user_id, department
+      FROM user_schedule_departments
+      ${requestedUserIds ? `WHERE user_id IN (${placeholders})` : ''}
+      ORDER BY department ASC
+      `
+    )
+    .bind(...(requestedUserIds ?? []))
+    .all<{ user_id: string; department: string }>();
+
+  const approvals = new Map<string, ScheduleDepartment[]>();
+  if (requestedUserIds) {
+    for (const userId of requestedUserIds) {
+      approvals.set(userId, []);
+    }
+  }
+
+  for (const row of rows.results ?? []) {
+    if (!isValidScheduleDepartment(row.department)) continue;
+    const userApprovals = approvals.get(row.user_id) ?? [];
+    userApprovals.push(row.department);
+    approvals.set(row.user_id, userApprovals);
+  }
+
+  return approvals;
+}
+
+async function loadScheduleAssignableUsersById(db: DB, userIds: string[]) {
+  const requestedUserIds = Array.from(new Set(userIds.filter((userId) => userId.length > 0)));
+  if (requestedUserIds.length === 0) {
+    return new Map<string, ScheduleAssignableUser>();
+  }
+
+  const placeholders = requestedUserIds.map(() => '?').join(', ');
+  const [rows, approvalsByUser] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT id, display_name, email
+        FROM users
+        WHERE COALESCE(is_active, 1) = 1
+          AND id IN (${placeholders})
+        ORDER BY COALESCE(display_name, email) ASC
+        `
+      )
+      .bind(...requestedUserIds)
+      .all<{ id: string; display_name: string | null; email: string }>(),
+    loadScheduleDepartmentApprovalsByUser(db, requestedUserIds)
+  ]);
+
+  const users = new Map<string, ScheduleAssignableUser>();
+  for (const row of rows.results ?? []) {
+    users.set(row.id, {
+      id: row.id,
+      displayName: row.display_name,
+      email: row.email,
+      approvedDepartments: approvalsByUser.get(row.id) ?? []
+    });
+  }
+
+  return users;
+}
+
+type ScheduleAssignmentCandidate = {
+  userId: string;
+  department: ScheduleDepartment;
+  shiftDate?: string;
+};
+
+async function validateScheduleAssignments(db: DB, assignments: ScheduleAssignmentCandidate[]) {
+  const usersById = await loadScheduleAssignableUsersById(
+    db,
+    assignments.map((assignment) => assignment.userId)
+  );
+
+  for (const assignment of assignments) {
+    const user = usersById.get(assignment.userId);
+    const dateLabel = assignment.shiftDate ? ` on ${assignment.shiftDate}` : '';
+    if (!user) {
+      return `The selected employee${dateLabel} is no longer active.`;
+    }
+    if (!user.approvedDepartments.includes(assignment.department)) {
+      return `${formatAssignableUserLabel(user)} is not approved for ${assignment.department}${dateLabel}.`;
+    }
+  }
+
+  return null;
+}
 
 function isoDate(date: Date) {
   const y = date.getFullYear();
@@ -120,8 +304,31 @@ export async function ensureScheduleSchema(db: DB) {
         FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
       )
       `
+      )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS schedule_shift_offers (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT NOT NULL UNIQUE,
+        offered_by_user_id TEXT NOT NULL,
+        target_user_id TEXT,
+        requested_by_user_id TEXT,
+        manager_note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (shift_id) REFERENCES schedule_shifts(id) ON DELETE CASCADE,
+        FOREIGN KEY (offered_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
     )
     .run();
+
+  await ensureOptionalColumn(db, 'schedule_shift_offers', 'target_user_id', 'TEXT');
 
   await db
     .prepare(
@@ -141,6 +348,20 @@ export async function ensureScheduleSchema(db: DB) {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS user_schedule_departments (
+        user_id TEXT NOT NULL,
+        department TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, department),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
       `
@@ -173,6 +394,26 @@ export async function ensureScheduleSchema(db: DB) {
       `
     )
     .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_schedule_shift_offers_week_request
+      ON schedule_shift_offers(shift_id, target_user_id, requested_by_user_id, updated_at)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_user_schedule_departments_department
+      ON user_schedule_departments(department, user_id)
+      `
+    )
+    .run();
+
+  await seedInitialScheduleDepartmentApprovals(db);
 
   scheduleSchemaEnsured = true;
 }
@@ -362,6 +603,108 @@ export async function loadTodayShifts(db: DB, userId: string, date = isoDate(new
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 }
 
+export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string) {
+  await ensureScheduleSchema(db);
+  const week = await loadScheduleWeek(db, weekStart, { publishedOnly: false });
+  if (!week.week) return [];
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        o.id,
+        o.shift_id,
+        o.offered_by_user_id,
+        o.target_user_id,
+        o.requested_by_user_id,
+        o.manager_note,
+        o.created_at,
+        o.updated_at,
+        s.week_id,
+        s.shift_date,
+        s.user_id,
+        s.department,
+        s.role,
+        s.detail,
+        s.start_time,
+        s.end_label,
+        s.notes,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        offered.display_name AS offered_by_user_name,
+        offered.email AS offered_by_user_email,
+        targeted.display_name AS target_user_name,
+        targeted.email AS target_user_email,
+        requested.display_name AS requested_by_user_name,
+        requested.email AS requested_by_user_email
+      FROM schedule_shift_offers o
+      JOIN schedule_shifts s ON s.id = o.shift_id
+      JOIN users u ON u.id = s.user_id
+      JOIN users offered ON offered.id = o.offered_by_user_id
+      LEFT JOIN users targeted ON targeted.id = o.target_user_id
+      LEFT JOIN users requested ON requested.id = o.requested_by_user_id
+      WHERE s.week_id = ?
+      ORDER BY s.shift_date ASC, s.start_time ASC, COALESCE(u.display_name, u.email) ASC
+      `
+    )
+    .bind(week.week.id)
+    .all<{
+      id: string;
+      shift_id: string;
+      offered_by_user_id: string;
+      target_user_id: string | null;
+      requested_by_user_id: string | null;
+      manager_note: string | null;
+      created_at: number;
+      updated_at: number;
+      week_id: string;
+      shift_date: string;
+      user_id: string;
+      department: string;
+      role: string;
+      detail: string | null;
+      start_time: string;
+      end_label: string | null;
+      notes: string | null;
+      user_name: string | null;
+      user_email: string;
+      offered_by_user_name: string | null;
+      offered_by_user_email: string;
+      target_user_name: string | null;
+      target_user_email: string | null;
+      requested_by_user_name: string | null;
+      requested_by_user_email: string | null;
+    }>();
+
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    shiftId: row.shift_id,
+    weekId: row.week_id,
+    shiftDate: row.shift_date,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    department: row.department,
+    role: row.role,
+    detail: row.detail ?? '',
+    startTime: row.start_time,
+    endLabel: row.end_label ?? '',
+    notes: row.notes ?? '',
+    offeredByUserId: row.offered_by_user_id,
+    offeredByUserName: row.offered_by_user_name,
+    offeredByUserEmail: row.offered_by_user_email,
+    targetUserId: row.target_user_id,
+    targetUserName: row.target_user_name,
+    targetUserEmail: row.target_user_email,
+    requestedByUserId: row.requested_by_user_id,
+    requestedByUserName: row.requested_by_user_name,
+    requestedByUserEmail: row.requested_by_user_email,
+    managerNote: row.manager_note ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  })) satisfies ScheduleShiftOffer[];
+}
+
 export async function loadScheduleAssignableUsers(db: DB) {
   await ensureScheduleSchema(db);
   const rows = await db
@@ -375,11 +718,299 @@ export async function loadScheduleAssignableUsers(db: DB) {
     )
     .all<{ id: string; display_name: string | null; email: string }>();
 
+  const approvalsByUser = await loadScheduleDepartmentApprovalsByUser(
+    db,
+    (rows.results ?? []).map((row) => row.id)
+  );
+
   return (rows.results ?? []).map((row) => ({
     id: row.id,
     displayName: row.display_name,
-    email: row.email
+    email: row.email,
+    approvedDepartments: approvalsByUser.get(row.id) ?? []
   }));
+}
+
+async function loadOwnedShift(db: DB, shiftId: string) {
+  return db
+    .prepare(
+      `
+      SELECT
+        s.id,
+        s.week_id,
+        s.shift_date,
+        s.user_id,
+        s.department,
+        s.start_time,
+        w.week_start
+      FROM schedule_shifts s
+      JOIN schedule_weeks w ON w.id = s.week_id
+      WHERE s.id = ?
+      LIMIT 1
+      `
+    )
+    .bind(shiftId)
+    .first<{
+      id: string;
+      week_id: string;
+      shift_date: string;
+      user_id: string;
+      department: string;
+      start_time: string;
+      week_start: string;
+    }>();
+}
+
+async function loadAssignableUserById(db: DB, userId: string) {
+  const users = await loadScheduleAssignableUsersById(db, [userId]);
+  return users.get(userId) ?? null;
+}
+
+export async function offerScheduleShift(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const shiftId = String(form.get('shift_id') ?? '').trim();
+  const targetUserId = String(form.get('target_user_id') ?? '').trim();
+  if (!shiftId) return fail(400, { error: 'Missing shift id.' });
+
+  const shift = await loadOwnedShift(db, shiftId);
+  if (!shift || shift.user_id !== locals.userId) {
+    return fail(404, { error: 'That shift could not be offered.' });
+  }
+
+  if (targetUserId) {
+    if (targetUserId === locals.userId) {
+      return fail(400, { error: 'You cannot offer a shift to yourself.' });
+    }
+
+    const targetUser = await loadAssignableUserById(db, targetUserId);
+    if (!targetUser) {
+      return fail(400, { error: 'That employee could not be selected.' });
+    }
+    if (!isValidScheduleDepartment(shift.department)) {
+      return fail(400, { error: 'That shift has an invalid department.' });
+    }
+    if (!targetUser.approvedDepartments.includes(shift.department)) {
+      return fail(400, {
+        error: `${formatAssignableUserLabel(targetUser)} is not approved for ${shift.department}.`
+      });
+    }
+  }
+
+  const existing = await db
+    .prepare(`SELECT id FROM schedule_shift_offers WHERE shift_id = ? LIMIT 1`)
+    .bind(shiftId)
+    .first<{ id: string }>();
+  if (existing) return fail(400, { error: 'That shift is already up for grabs.' });
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO schedule_shift_offers (
+        id, shift_id, offered_by_user_id, target_user_id, requested_by_user_id, manager_note, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, NULL, '', ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), shiftId, locals.userId, targetUserId || null, now, now)
+    .run();
+
+  return { success: true };
+}
+
+export async function cancelScheduleShiftOffer(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const shiftId = String(form.get('shift_id') ?? '').trim();
+  if (!shiftId) return fail(400, { error: 'Missing shift id.' });
+
+  const offer = await db
+    .prepare(`SELECT offered_by_user_id FROM schedule_shift_offers WHERE shift_id = ? LIMIT 1`)
+    .bind(shiftId)
+    .first<{ offered_by_user_id: string }>();
+  if (!offer || offer.offered_by_user_id !== locals.userId) {
+    return fail(404, { error: 'That shift offer could not be cancelled.' });
+  }
+
+  await db.prepare(`DELETE FROM schedule_shift_offers WHERE shift_id = ?`).bind(shiftId).run();
+  return { success: true };
+}
+
+export async function requestScheduleShiftOffer(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const shiftId = String(form.get('shift_id') ?? '').trim();
+  if (!shiftId) return fail(400, { error: 'Missing shift id.' });
+
+  const offer = await db
+    .prepare(
+      `
+      SELECT
+        o.offered_by_user_id,
+        o.target_user_id,
+        o.requested_by_user_id,
+        s.user_id,
+        s.department
+      FROM schedule_shift_offers o
+      JOIN schedule_shifts s ON s.id = o.shift_id
+      WHERE o.shift_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(shiftId)
+    .first<{
+      offered_by_user_id: string;
+      target_user_id: string | null;
+      requested_by_user_id: string | null;
+      user_id: string;
+      department: string;
+    }>();
+
+  if (!offer) return fail(404, { error: 'That shift is no longer available.' });
+  if (offer.offered_by_user_id === locals.userId || offer.user_id === locals.userId) {
+    return fail(400, { error: 'You cannot claim your own shift.' });
+  }
+  if (offer.target_user_id && offer.target_user_id !== locals.userId) {
+    return fail(400, { error: 'That shift was offered to someone else.' });
+  }
+  if (offer.requested_by_user_id && offer.requested_by_user_id !== locals.userId) {
+    return fail(400, { error: 'That shift already has a pending request.' });
+  }
+  if (!isValidScheduleDepartment(offer.department)) {
+    return fail(400, { error: 'That shift has an invalid department.' });
+  }
+
+  const requester = await loadAssignableUserById(db, locals.userId);
+  if (!requester) {
+    return fail(400, { error: 'Your account is not active for scheduling right now.' });
+  }
+  if (!requester.approvedDepartments.includes(offer.department)) {
+    return fail(400, { error: `You are not approved for ${offer.department} shifts.` });
+  }
+
+  await db
+    .prepare(`UPDATE schedule_shift_offers SET requested_by_user_id = ?, updated_at = ? WHERE shift_id = ?`)
+    .bind(locals.userId, Math.floor(Date.now() / 1000), shiftId)
+    .run();
+
+  return { success: true };
+}
+
+export async function withdrawScheduleShiftRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const shiftId = String(form.get('shift_id') ?? '').trim();
+  if (!shiftId) return fail(400, { error: 'Missing shift id.' });
+
+  const offer = await db
+    .prepare(`SELECT requested_by_user_id FROM schedule_shift_offers WHERE shift_id = ? LIMIT 1`)
+    .bind(shiftId)
+    .first<{ requested_by_user_id: string | null }>();
+  if (!offer || offer.requested_by_user_id !== locals.userId) {
+    return fail(404, { error: 'That shift request could not be withdrawn.' });
+  }
+
+  await db
+    .prepare(`UPDATE schedule_shift_offers SET requested_by_user_id = NULL, updated_at = ? WHERE shift_id = ?`)
+    .bind(Math.floor(Date.now() / 1000), shiftId)
+    .run();
+
+  return { success: true };
+}
+
+export async function approveScheduleShiftOffer(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const shiftId = String(form.get('shift_id') ?? '').trim();
+  if (!shiftId) return fail(400, { error: 'Missing shift id.' });
+
+  const offer = await db
+    .prepare(
+      `
+      SELECT o.requested_by_user_id, s.week_id, s.department
+      FROM schedule_shift_offers o
+      JOIN schedule_shifts s ON s.id = o.shift_id
+      WHERE o.shift_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(shiftId)
+    .first<{ requested_by_user_id: string | null; week_id: string; department: string }>();
+
+  if (!offer?.requested_by_user_id) {
+    return fail(400, { error: 'That shift does not have a pending taker yet.' });
+  }
+  if (!isValidScheduleDepartment(offer.department)) {
+    return fail(400, { error: 'That shift has an invalid department.' });
+  }
+
+  const requestedUser = await loadAssignableUserById(db, offer.requested_by_user_id);
+  if (!requestedUser) {
+    return fail(400, { error: 'That requested employee is no longer active.' });
+  }
+  if (!requestedUser.approvedDepartments.includes(offer.department)) {
+    return fail(400, {
+      error: `${formatAssignableUserLabel(requestedUser)} is not approved for ${offer.department}.`
+    });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(`UPDATE schedule_shifts SET user_id = ?, updated_at = ? WHERE id = ?`)
+    .bind(offer.requested_by_user_id, now, shiftId)
+    .run();
+  await db.prepare(`DELETE FROM schedule_shift_offers WHERE shift_id = ?`).bind(shiftId).run();
+  await db
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
+    .bind(now, locals.userId, offer.week_id)
+    .run();
+
+  return { success: true };
+}
+
+export async function declineScheduleShiftOffer(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const shiftId = String(form.get('shift_id') ?? '').trim();
+  if (!shiftId) return fail(400, { error: 'Missing shift id.' });
+
+  const existing = await db
+    .prepare(`SELECT id FROM schedule_shift_offers WHERE shift_id = ? AND requested_by_user_id IS NOT NULL LIMIT 1`)
+    .bind(shiftId)
+    .first<{ id: string }>();
+  if (!existing) return fail(404, { error: 'That pending request could not be found.' });
+
+  await db
+    .prepare(`UPDATE schedule_shift_offers SET requested_by_user_id = NULL, updated_at = ? WHERE shift_id = ?`)
+    .bind(Math.floor(Date.now() / 1000), shiftId)
+    .run();
+
+  return { success: true };
 }
 
 export async function saveScheduleShift(request: Request, locals: App.Locals) {
@@ -411,6 +1042,11 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
 
   if (!isValidScheduleRole(department, role)) {
     return fail(400, { error: 'Invalid role for that department.' });
+  }
+
+  const assignmentError = await validateScheduleAssignments(db, [{ userId, department, shiftDate }]);
+  if (assignmentError) {
+    return fail(400, { error: assignmentError });
   }
 
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
@@ -542,6 +1178,18 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     });
   }
 
+  const assignmentError = await validateScheduleAssignments(
+    db,
+    rows.map((row) => ({
+      userId: row.userId,
+      department: row.department as ScheduleDepartment,
+      shiftDate: row.shiftDate
+    }))
+  );
+  if (assignmentError) {
+    return fail(400, { error: assignmentError });
+  }
+
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
   const now = Math.floor(Date.now() / 1000);
 
@@ -665,6 +1313,28 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   const source = await loadScheduleWeek(db, previousWeekStart);
   if (!source.week || source.shifts.length === 0) {
     return fail(400, { error: 'No previous week schedule was found to copy.' });
+  }
+  if (source.shifts.some((shift) => !isValidScheduleDepartment(shift.department))) {
+    return fail(400, { error: 'The previous week has a shift with an invalid department.' });
+  }
+
+  const copiedAssignments = source.shifts.map((shift) => {
+      const dayOffset = Math.round(
+        (new Date(`${shift.shiftDate}T00:00:00`).getTime() -
+          new Date(`${previousWeekStart}T00:00:00`).getTime()) /
+          86400000
+      );
+
+      return {
+        userId: shift.userId,
+        department: shift.department as ScheduleDepartment,
+        shiftDate: addDays(weekStart, dayOffset)
+      };
+    });
+
+  const copyError = await validateScheduleAssignments(db, copiedAssignments);
+  if (copyError) {
+    return fail(400, { error: copyError });
   }
 
   const targetWeek = await getOrCreateScheduleWeek(db, weekStart, locals.userId);

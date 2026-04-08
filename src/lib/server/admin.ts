@@ -3,6 +3,14 @@ import { ensureAnnouncementsSchema, loadHomepageAnnouncement } from '$lib/server
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 import { ensureEmployeeSpotlightSchema, loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
+import {
+  ensureScheduleSchema,
+  loadScheduleDepartmentApprovalsByUser
+} from '$lib/server/schedules';
+import {
+  isValidScheduleDepartment,
+  type ScheduleDepartment
+} from '$lib/assets/schedule';
 import { isEmailConfigured, sendApprovalEmail, sendInviteEmail } from '$lib/server/email';
 
 type D1 = App.Platform['env']['DB'];
@@ -99,6 +107,7 @@ export type AdminUser = {
   role: string;
   is_active: number;
   can_manage_specials: number;
+  approved_departments: ScheduleDepartment[];
 };
 
 export type AdminInvite = {
@@ -352,9 +361,10 @@ export async function loadAdminTodos(db: D1) {
 
 export async function loadAdminUsers(db: D1) {
   await ensureDailySpecialsSchema(db);
+  await ensureScheduleSchema(db);
 
   const hasIsActive = await usersHasIsActiveColumn(db);
-  const users = hasIsActive
+  const result = hasIsActive
     ? await db
         .prepare(
           `
@@ -388,7 +398,16 @@ export async function loadAdminUsers(db: D1) {
         )
         .all<AdminUser>();
 
-  return users.results ?? [];
+  const users = result.results ?? [];
+  const approvalsByUser = await loadScheduleDepartmentApprovalsByUser(
+    db,
+    users.map((user) => user.id)
+  );
+
+  return users.map((user) => ({
+    ...user,
+    approved_departments: approvalsByUser.get(user.id) ?? []
+  }));
 }
 
 export async function loadAdminInvites(db: D1) {
@@ -1271,6 +1290,75 @@ export async function toggleSpecialsAccess(request: Request, locals: App.Locals)
       `
     )
     .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000))
+    .run();
+
+  return { success: true };
+}
+
+export async function toggleScheduleDepartmentApproval(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  await ensureScheduleSchema(db);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  const department = String(formData.get('department') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!isValidScheduleDepartment(department)) {
+    return fail(400, { error: 'Invalid schedule department.' });
+  }
+
+  const user = await db
+    .prepare(
+      `
+      SELECT id
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!user) {
+    return fail(404, { error: 'That user could not be found.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT department
+      FROM user_schedule_departments
+      WHERE user_id = ? AND department = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId, department)
+    .first<{ department: string }>();
+
+  if (existing) {
+    await db
+      .prepare(
+        `
+        DELETE FROM user_schedule_departments
+        WHERE user_id = ? AND department = ?
+        `
+      )
+      .bind(userId, department)
+      .run();
+
+    return { success: true };
+  }
+
+  await db
+    .prepare(
+      `
+      INSERT INTO user_schedule_departments (user_id, department, updated_at)
+      VALUES (?, ?, ?)
+      `
+    )
+    .bind(userId, department, Math.floor(Date.now() / 1000))
     .run();
 
   return { success: true };

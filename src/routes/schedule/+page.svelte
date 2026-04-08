@@ -2,12 +2,20 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleWeekColumns from '$lib/components/ui/ScheduleWeekColumns.svelte';
+  import {
+    formatScheduleWeekRange,
+    isValidScheduleDepartment,
+    scheduleDepartments,
+    type ScheduleDepartment
+  } from '$lib/assets/schedule';
 
   export let data: {
     weekStart: string;
     prevWeekStart: string;
     nextWeekStart: string;
     week: { status: 'draft' | 'published' } | null;
+    isAdmin: boolean;
+    visibleDepartments: ScheduleDepartment[];
     days: Array<{
       date: string;
       label: string;
@@ -25,6 +33,41 @@
       }>;
     }>;
   };
+
+  let selectedDepartments = [...data.visibleDepartments];
+
+  $: weekRangeLabel = formatScheduleWeekRange(
+    data.days.map((day) => day.date),
+    data.weekStart
+  );
+  $: visibleDepartmentSet = new Set(selectedDepartments);
+  $: filteredDays = data.days.map((day) => ({
+    ...day,
+    shifts: day.shifts.filter(
+      (shift) =>
+        isValidScheduleDepartment(shift.department) &&
+        visibleDepartmentSet.has(shift.department)
+    )
+  }));
+  $: viewingLabel =
+    selectedDepartments.length === scheduleDepartments.length
+      ? 'All areas'
+      : selectedDepartments.join(', ');
+
+  function showAllDepartments() {
+    selectedDepartments = [...scheduleDepartments];
+  }
+
+  function toggleDepartment(department: ScheduleDepartment) {
+    if (!data.isAdmin) return;
+    if (selectedDepartments.includes(department)) {
+      if (selectedDepartments.length === 1) return;
+      selectedDepartments = selectedDepartments.filter((entry) => entry !== department);
+      return;
+    }
+
+    selectedDepartments = [...selectedDepartments, department];
+  }
 </script>
 
 <Layout padded={false}>
@@ -40,14 +83,41 @@
     <section class="week-banner">
       <div>
         <span class="eyebrow">Week Of</span>
-        <h2>{data.weekStart}</h2>
+        <h2>{weekRangeLabel}</h2>
+        <p class="viewing-note">Viewing: {viewingLabel}</p>
       </div>
       <span class:published={data.week?.status === 'published'} class="status-pill">
-        {data.week?.status === 'published' ? 'Posted' : 'Not posted'}
+        {data.week?.status === 'published' ? 'Published Schedule' : 'Draft Schedule'}
       </span>
     </section>
 
-    <ScheduleWeekColumns days={data.days} emptyText="No shift posted." />
+    {#if data.isAdmin}
+      <section class="filter-bar" aria-label="Schedule area filters">
+        <button
+          type="button"
+          class:filter-active={selectedDepartments.length === scheduleDepartments.length}
+          class="filter-chip"
+          on:click={showAllDepartments}
+        >
+          All
+        </button>
+        {#each scheduleDepartments as department}
+          <button
+            type="button"
+            class:filter-active={selectedDepartments.includes(department)}
+            class="filter-chip"
+            on:click={() => toggleDepartment(department)}
+          >
+            {department}
+          </button>
+        {/each}
+      </section>
+    {/if}
+
+    <ScheduleWeekColumns
+      days={filteredDays}
+      emptyText="No shift posted."
+    />
   </div>
 </Layout>
 
@@ -99,18 +169,47 @@
     margin: 0.18rem 0 0;
   }
 
+  .viewing-note {
+    margin: 0.3rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
   .status-pill {
-    border: 1px solid rgba(245, 158, 11, 0.28);
-    color: #fcd34d;
-    border-radius: 999px;
-    padding: 0.25rem 0.6rem;
-    font-size: 0.78rem;
-    background: rgba(255,255,255,0.03);
+    color: var(--color-text-muted);
+    padding: 0.2rem 0;
+    font-size: 0.82rem;
+    background: transparent;
+    border: 0;
   }
 
   .status-pill.published {
-    border-color: rgba(22, 163, 74, 0.32);
     color: #bbf7d0;
+  }
+
+  .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
+    margin-top: -0.25rem;
+  }
+
+  .filter-chip {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.04);
+    color: var(--color-text-muted);
+    min-height: 2rem;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.76rem;
+    cursor: pointer;
+  }
+
+  .filter-chip.filter-active {
+    border-color: rgba(195, 32, 43, 0.22);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    color: var(--color-primary-contrast);
   }
 
 </style>

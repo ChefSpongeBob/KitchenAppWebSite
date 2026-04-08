@@ -15,24 +15,24 @@
   let confirmationText = '';
   let confirmationTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function pad2(value: number) {
-    return String(value).padStart(2, '0');
+  function pad2(nextValue: number) {
+    return String(nextValue).padStart(2, '0');
   }
 
   function wrapIndex(current: number, delta: number, length: number) {
     return (current + delta + length) % length;
   }
 
-  function syncFromValue(next: string) {
-    draftValue = next;
+  function syncFromValue(nextValue: string) {
+    draftValue = nextValue;
 
-    if (includeSpecialOptions.includes(next)) {
-      selectedSpecial = next;
+    if (includeSpecialOptions.includes(nextValue)) {
+      selectedSpecial = nextValue;
       return;
     }
 
     selectedSpecial = '';
-    const match = /^(\d{2}):(\d{2})$/.exec(next);
+    const match = /^(\d{2}):(\d{2})$/.exec(nextValue);
     if (!match) {
       selectedHour = '12';
       selectedMinute = '00';
@@ -86,6 +86,7 @@
     confirmationText = selectedSpecial
       ? `${selectedSpecial} set`
       : `${selectedHour}:${selectedMinute} ${selectedPeriod} set`;
+
     if (confirmationTimer) clearTimeout(confirmationTimer);
     confirmationTimer = setTimeout(() => {
       confirmationText = '';
@@ -118,17 +119,17 @@
   {/if}
 
   <div class:dimmed={selectedSpecial.length > 0} class="picker-panel">
-    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepHour(-1)}>⌃</button>
-    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepMinute(-1)}>⌃</button>
-    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepPeriod(-1)}>⌃</button>
+    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepHour(-1)}>^</button>
+    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepMinute(-1)}>^</button>
+    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepPeriod(-1)}>^</button>
 
     <div class="value-box">{selectedHour}</div>
     <div class="value-box">{selectedMinute}</div>
     <div class="value-box period-box">{selectedPeriod}</div>
 
-    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepHour(1)}>⌄</button>
-    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepMinute(1)}>⌄</button>
-    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepPeriod(1)}>⌄</button>
+    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepHour(1)}>v</button>
+    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepMinute(1)}>v</button>
+    <button type="button" class="arrow-btn" disabled={selectedSpecial.length > 0} on:click={() => stepPeriod(1)}>v</button>
   </div>
 
   <div class="actions">
@@ -192,7 +193,7 @@
     color: var(--color-text);
     font-size: 1rem;
     font-weight: var(--weight-semibold);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .period-box {
@@ -214,6 +215,7 @@
     min-height: 1.8rem;
     background: color-mix(in srgb, var(--color-surface) 88%, black 12%);
     color: color-mix(in srgb, var(--color-primary) 75%, white 25%);
+    font-weight: var(--weight-semibold);
   }
 
   .arrow-btn:disabled {

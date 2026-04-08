@@ -22,11 +22,62 @@
 
   export let days: Day[] = [];
   export let emptyText = 'No shifts posted.';
+
+  let viewport: HTMLDivElement | null = null;
+  let isDragging = false;
+  let dragPointerId: number | null = null;
+  let dragStartX = 0;
+  let dragStartScrollLeft = 0;
+
+  function handlePointerDown(event: PointerEvent) {
+    if (event.pointerType !== 'mouse' || !viewport) return;
+    isDragging = true;
+    dragPointerId = event.pointerId;
+    dragStartX = event.clientX;
+    dragStartScrollLeft = viewport.scrollLeft;
+    viewport.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: PointerEvent) {
+    if (!isDragging || !viewport || event.pointerId !== dragPointerId) return;
+    const deltaX = event.clientX - dragStartX;
+    viewport.scrollLeft = dragStartScrollLeft - deltaX;
+  }
+
+  function handlePointerUp(event: PointerEvent) {
+    if (!viewport || event.pointerId !== dragPointerId) return;
+    if (viewport.hasPointerCapture(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+    isDragging = false;
+    dragPointerId = null;
+  }
+
+  function shiftSortValue(shift: Shift) {
+    const match = /^(\d{2}):(\d{2})$/.exec(shift.startTime);
+    if (!match) return Number.MAX_SAFE_INTEGER;
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+
+  $: sortedDays = days.map((day) => ({
+    ...day,
+    shifts: [...day.shifts].sort((left, right) => shiftSortValue(left) - shiftSortValue(right))
+  }));
 </script>
 
-<div class="columns-shell">
+<div
+  class:dragging={isDragging}
+  class="columns-shell"
+  bind:this={viewport}
+  role="region"
+  aria-label="Weekly schedule day scroller"
+  on:pointerdown={handlePointerDown}
+  on:pointermove={handlePointerMove}
+  on:pointerup={handlePointerUp}
+  on:pointercancel={handlePointerUp}
+>
   <section class="week-columns" aria-label="Weekly schedule">
-    {#each days as day}
+    {#each sortedDays as day}
       <article class="day-column">
         <header class="day-head">
           <h2>{day.label}</h2>
@@ -67,13 +118,32 @@
     overflow-x: auto;
     padding-inline: clamp(0.75rem, 2.6vw, var(--space-4));
     padding-bottom: 1rem;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    cursor: grab;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .columns-shell::-webkit-scrollbar {
+    display: none;
+  }
+
+  .columns-shell.dragging {
+    cursor: grabbing;
+    scroll-behavior: auto;
+    user-select: none;
   }
 
   .week-columns {
     display: grid;
-    grid-template-columns: repeat(7, minmax(220px, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: min(100%, 32rem);
     gap: 0.8rem;
     min-width: max-content;
+    width: max-content;
+    margin: 0 auto;
   }
 
   .day-column {
@@ -85,6 +155,8 @@
     display: grid;
     grid-template-rows: auto 1fr;
     min-height: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
   }
 
   .day-head {

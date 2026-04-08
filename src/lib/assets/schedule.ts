@@ -52,6 +52,26 @@ export function formatScheduleTimeLabel(value: string) {
   });
 }
 
+export function formatScheduleWeekRange(dates: string[], fallback = '') {
+  if (dates.length === 0) return fallback;
+
+  const start = new Date(`${dates[0]}T00:00:00`);
+  const end = new Date(`${dates[dates.length - 1]}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return fallback || dates[0];
+  }
+
+  const startMonth = String(start.getMonth() + 1).padStart(2, '0');
+  const startDay = String(start.getDate()).padStart(2, '0');
+  const endMonth = String(end.getMonth() + 1).padStart(2, '0');
+  const endDay = String(end.getDate()).padStart(2, '0');
+  const yearSuffix = String(end.getFullYear()).slice(-2);
+
+  return start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
+    ? `${startMonth}/${startDay}-${endDay}/${yearSuffix}`
+    : `${startMonth}/${startDay}-${endMonth}/${endDay}/${yearSuffix}`;
+}
+
 export function scheduleDetailOptionsFor(department: ScheduleDepartment, role: string) {
   const departmentOptions = [...scheduleDetailOptionsByDepartment[department]];
   const roleOptions =

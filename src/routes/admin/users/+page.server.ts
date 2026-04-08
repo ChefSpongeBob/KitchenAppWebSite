@@ -10,6 +10,7 @@ import {
   makeUserAdmin,
   revokeUserInvite,
   requireAdmin,
+  toggleScheduleDepartmentApproval,
   toggleSpecialsAccess
 } from '$lib/server/admin';
 
@@ -39,5 +40,6 @@ export const actions: Actions = {
   deny_user: ({ request, locals }) => denyUser(request, locals),
   delete_user: ({ request, locals }) => deleteUser(request, locals),
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
-  toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals)
+  toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
+  toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals)
 };
