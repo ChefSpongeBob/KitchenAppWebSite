@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ScheduleAdminTabs from '$lib/components/ui/ScheduleAdminTabs.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
@@ -561,6 +562,9 @@
 <Layout padded={false}>
   <div class="schedule-shell">
     <PageHeader title="Admin Schedule" subtitle="Build the whole week in one schedule sheet." />
+    <div class="tabs-shell">
+      <ScheduleAdminTabs active="builder" />
+    </div>
 
     <nav class="subnav">
       <a href="/admin">Back to Dashboard</a>
@@ -569,68 +573,81 @@
       <a href={`?week=${data.nextWeekStart}`}>Next Week</a>
     </nav>
 
-    <section class="week-shell">
-      <header class="week-head">
-        <div>
-          <span class="eyebrow">Week Of</span>
-          <h2>{weekRangeLabel}</h2>
-        </div>
-        <div class="week-actions">
-          <label class="section-filter">
-            <span>Section</span>
-            <select bind:value={selectedSection}>
-              <option value="All">All</option>
-              {#each scheduleDepartments as department}
-                <option value={department}>{department}</option>
-              {/each}
-            </select>
-          </label>
-          <span class="status-pill">{visibleShiftCount} visible shifts</span>
-          <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
-            {scheduleStateLabel}
-          </span>
-          <details class="action-menu">
-            <summary class="menu-trigger">Schedule Actions</summary>
-            <div class="menu-panel">
-              <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
-                <input type="hidden" name="week_start" value={data.weekStart} />
-                <button
-                  type="submit"
-                  class="menu-item"
-                  class:autofill-preferred={data.settings.autofillNewWeeks}
-                >
-                  {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
-                </button>
-              </form>
-              <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
-              <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
-                <input type="hidden" name="week_start" value={data.weekStart} />
-                <button type="submit" class="menu-item menu-item-primary">Publish</button>
-              </form>
+    <section class="control-shell" aria-label="Schedule planning controls">
+      <div class="control-grid">
+        <section class="week-shell">
+          <header class="week-head">
+            <div>
+              <span class="eyebrow">Week Of</span>
+              <h2>{weekRangeLabel}</h2>
             </div>
-          </details>
-        </div>
-      </header>
+            <div class="week-actions">
+              <label class="section-filter">
+                <span>Section</span>
+                <select bind:value={selectedSection}>
+                  <option value="All">All</option>
+                  {#each scheduleDepartments as department}
+                    <option value={department}>{department}</option>
+                  {/each}
+                </select>
+              </label>
+              <details class="action-menu">
+                <summary class="menu-trigger">Schedule Actions</summary>
+                <div class="menu-panel">
+                  <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
+                    <input type="hidden" name="week_start" value={data.weekStart} />
+                    <button
+                      type="submit"
+                      class="menu-item"
+                      class:autofill-preferred={data.settings.autofillNewWeeks}
+                    >
+                      {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
+                    </button>
+                  </form>
+                  <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
+                  <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
+                    <input type="hidden" name="week_start" value={data.weekStart} />
+                    <button type="submit" class="menu-item menu-item-primary">Publish</button>
+                  </form>
+                </div>
+              </details>
+            </div>
+          </header>
 
-      <form method="GET" class="week-picker">
-        <label for="week-start">Jump to week</label>
-        <input id="week-start" type="date" name="week" value={data.weekStart} />
-        <button type="submit">Go</button>
-      </form>
-    </section>
+          <div class="week-summary-row">
+            <span class="status-pill">{visibleShiftCount} visible shifts</span>
+            <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
+              {scheduleStateLabel}
+            </span>
+          </div>
 
-    <section class="requests-shell" aria-label="Shift requests">
-      <header class="requests-head">
-        <div>
-          <span class="eyebrow">Shift Requests</span>
-          <h2>Pending Approvals</h2>
-        </div>
-        <span class="status-pill">{pendingOffers.length} pending</span>
-      </header>
+          <form method="GET" class="week-picker">
+            <label for="week-start">Jump to week</label>
+            <input id="week-start" type="date" name="week" value={data.weekStart} />
+            <button type="submit">Go</button>
+          </form>
+        </section>
 
-      {#if pendingOffers.length === 0}
-        <p class="requests-empty">No one is waiting on a pickup approval right now.</p>
-      {:else}
+        <section class="approval-shell">
+          <header class="requests-head">
+            <div>
+              <span class="eyebrow">Shift Requests</span>
+              <h2>Pending Approvals</h2>
+            </div>
+            <span class="status-pill">{pendingOffers.length} pending</span>
+          </header>
+
+          {#if pendingOffers.length === 0}
+            <p class="requests-empty">No one is waiting on a pickup approval right now.</p>
+          {:else}
+            <p class="approval-note">
+              Review requests below and approve or decline them before publishing schedule changes.
+            </p>
+          {/if}
+        </section>
+      </div>
+
+      {#if pendingOffers.length > 0}
         <div class="request-list">
           {#each pendingOffers as offer}
             <article class="request-card">
@@ -978,8 +995,7 @@
     background: rgba(255,255,255,0.03);
   }
 
-  .week-shell,
-  .requests-shell,
+  .control-shell,
   .planner-shell {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
     border: 1px solid rgba(255,255,255,0.08);
@@ -990,18 +1006,27 @@
     box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
   }
 
-  .week-shell {
-    padding: 1rem;
-  }
-
-  .requests-shell {
+  .control-shell {
     padding: 1rem;
     display: grid;
     gap: 0.9rem;
   }
 
+  .week-shell,
+  .approval-shell {
+    display: grid;
+    gap: 0.8rem;
+  }
+
   .planner-shell {
     overflow: hidden;
+  }
+
+  .control-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+    gap: 1rem;
+    align-items: start;
   }
 
   .week-head,
@@ -1044,7 +1069,12 @@
     grid-template-columns: auto minmax(160px, 220px) auto;
     gap: 0.6rem;
     align-items: center;
-    margin-top: 0.9rem;
+  }
+
+  .week-summary-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
   .status-pill {
@@ -1187,7 +1217,8 @@
   .request-time,
   .request-detail,
   .request-meta,
-  .requests-empty {
+  .requests-empty,
+  .approval-note {
     margin: 0;
     color: var(--color-text-muted);
     line-height: 1.45;
@@ -1544,6 +1575,10 @@
   }
 
   @media (max-width: 960px) {
+    .control-grid {
+      grid-template-columns: 1fr;
+    }
+
     .week-picker,
     .input-grid.two {
       grid-template-columns: 1fr;

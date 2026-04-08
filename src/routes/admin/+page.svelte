@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ScheduleAdminTabs from '$lib/components/ui/ScheduleAdminTabs.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -126,6 +127,7 @@
     title="Admin Dashboard"
     subtitle="Handle approvals and updates from one admin page."
   />
+  <ScheduleAdminTabs active="overview" />
 
   <section class="hero-grid" aria-label="Admin overview">
     <article class="hero-card">
