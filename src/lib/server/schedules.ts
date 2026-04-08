@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import {
   scheduleDepartments,
   isValidScheduleDepartment,
-  isValidScheduleRole,
+  scheduleRolesByDepartment,
   type ScheduleDepartment
 } from '$lib/assets/schedule';
 
@@ -67,6 +67,20 @@ export type ScheduleAssignableUser = {
   approvedDepartments: ScheduleDepartment[];
 };
 
+export type ScheduleRoleOptionsByDepartment = Record<ScheduleDepartment, string[]>;
+
+export type ScheduleSettings = {
+  autofillNewWeeks: boolean;
+  roleOptionsByDepartment: ScheduleRoleOptionsByDepartment;
+};
+
+export type ScheduleRoleDefinition = {
+  id: string;
+  department: ScheduleDepartment;
+  roleName: string;
+  sortOrder: number;
+};
+
 export type ScheduleDay = {
   date: string;
   label: string;
@@ -85,6 +99,39 @@ type ScheduleDraftRow = {
 };
 
 let scheduleSchemaEnsured = false;
+
+function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
+  return {
+    FOH: [...scheduleRolesByDepartment.FOH],
+    Sushi: [...scheduleRolesByDepartment.Sushi],
+    Kitchen: [...scheduleRolesByDepartment.Kitchen]
+  };
+}
+
+async function seedDefaultScheduleRoles(db: DB) {
+  const existing = await db
+    .prepare(`SELECT COUNT(*) AS count FROM schedule_role_definitions`)
+    .first<{ count: number }>();
+  if ((existing?.count ?? 0) > 0) return;
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const department of scheduleDepartments) {
+    const roles = scheduleRolesByDepartment[department];
+    for (const [index, roleName] of roles.entries()) {
+      await db
+        .prepare(
+          `
+          INSERT INTO schedule_role_definitions (
+            id, department, role_name, sort_order, is_active, created_at, updated_at
+          )
+          VALUES (?, ?, ?, ?, 1, ?, ?)
+          `
+        )
+        .bind(crypto.randomUUID(), department, roleName, index, now, now)
+        .run();
+    }
+  }
+}
 
 async function ensureOptionalColumn(db: DB, tableName: string, columnName: string, definition: string) {
   try {
@@ -371,6 +418,37 @@ export async function ensureScheduleSchema(db: DB) {
   await db
     .prepare(
       `
+      CREATE TABLE IF NOT EXISTS schedule_role_definitions (
+        id TEXT PRIMARY KEY,
+        department TEXT NOT NULL,
+        role_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (department, role_name)
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS schedule_preferences (
+        id TEXT PRIMARY KEY,
+        autofill_new_weeks INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        updated_by TEXT,
+        FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
       CREATE INDEX IF NOT EXISTS idx_schedule_weeks_week_start
       ON schedule_weeks(week_start, status)
       `
@@ -413,7 +491,17 @@ export async function ensureScheduleSchema(db: DB) {
     )
     .run();
 
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_schedule_role_definitions_department
+      ON schedule_role_definitions(department, sort_order, role_name)
+      `
+    )
+    .run();
+
   await seedInitialScheduleDepartmentApprovals(db);
+  await seedDefaultScheduleRoles(db);
 
   scheduleSchemaEnsured = true;
 }
@@ -468,6 +556,94 @@ export async function getOrCreateScheduleWeek(db: DB, weekStart: string, userId?
     publishedAt: week.published_at,
     updatedAt: week.updated_at
   } satisfies ScheduleWeek;
+}
+
+export async function loadScheduleRoleOptionsByDepartment(db: DB): Promise<ScheduleRoleOptionsByDepartment> {
+  await ensureScheduleSchema(db);
+
+  const defaults = defaultRoleOptionsByDepartment();
+  const rows = await db
+    .prepare(
+      `
+      SELECT department, role_name
+      FROM schedule_role_definitions
+      WHERE is_active = 1
+      ORDER BY department ASC, sort_order ASC, role_name ASC
+      `
+    )
+    .all<{ department: string; role_name: string }>();
+
+  const configured: ScheduleRoleOptionsByDepartment = {
+    FOH: [],
+    Sushi: [],
+    Kitchen: []
+  };
+
+  for (const row of rows.results ?? []) {
+    if (!isValidScheduleDepartment(row.department)) continue;
+    configured[row.department].push(row.role_name);
+  }
+
+  return {
+    FOH: configured.FOH.length > 0 ? configured.FOH : defaults.FOH,
+    Sushi: configured.Sushi.length > 0 ? configured.Sushi : defaults.Sushi,
+    Kitchen: configured.Kitchen.length > 0 ? configured.Kitchen : defaults.Kitchen
+  };
+}
+
+export async function loadScheduleSettings(db: DB): Promise<ScheduleSettings> {
+  await ensureScheduleSchema(db);
+
+  const [roleOptionsByDepartment, preferences] = await Promise.all([
+    loadScheduleRoleOptionsByDepartment(db),
+    db
+      .prepare(
+        `
+        SELECT autofill_new_weeks
+        FROM schedule_preferences
+        WHERE id = 'default'
+        LIMIT 1
+        `
+      )
+      .first<{ autofill_new_weeks: number }>()
+  ]);
+
+  return {
+    autofillNewWeeks: (preferences?.autofill_new_weeks ?? 0) === 1,
+    roleOptionsByDepartment
+  };
+}
+
+export async function loadScheduleRoleDefinitions(db: DB): Promise<ScheduleRoleDefinition[]> {
+  await ensureScheduleSchema(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT id, department, role_name, sort_order
+      FROM schedule_role_definitions
+      WHERE is_active = 1
+      ORDER BY department ASC, sort_order ASC, role_name ASC
+      `
+    )
+    .all<{ id: string; department: string; role_name: string; sort_order: number }>();
+
+  return (rows.results ?? [])
+    .filter((row) => isValidScheduleDepartment(row.department))
+    .map((row) => ({
+      id: row.id,
+      department: row.department as ScheduleDepartment,
+      roleName: row.role_name,
+      sortOrder: row.sort_order
+    }));
+}
+
+function roleIsAllowed(
+  roleOptionsByDepartment: ScheduleRoleOptionsByDepartment,
+  department: ScheduleDepartment,
+  role: string
+) {
+  return roleOptionsByDepartment[department].includes(role);
 }
 
 export async function loadScheduleWeek(
@@ -1040,7 +1216,8 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
     return fail(400, { error: 'Invalid department.' });
   }
 
-  if (!isValidScheduleRole(department, role)) {
+  const roleOptionsByDepartment = await loadScheduleRoleOptionsByDepartment(db);
+  if (!roleIsAllowed(roleOptionsByDepartment, department, role)) {
     return fail(400, { error: 'Invalid role for that department.' });
   }
 
@@ -1138,6 +1315,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   }
 
   const rows: ScheduleDraftRow[] = [];
+  const roleOptionsByDepartment = await loadScheduleRoleOptionsByDepartment(db);
   for (const entry of parsed) {
     if (!entry || typeof entry !== 'object') continue;
     const row = entry as Record<string, unknown>;
@@ -1162,7 +1340,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
       return fail(400, { error: `Invalid department on ${shiftDate}.` });
     }
 
-    if (!isValidScheduleRole(department, role)) {
+    if (!roleIsAllowed(roleOptionsByDepartment, department, role)) {
       return fail(400, { error: `Invalid role for ${department} on ${shiftDate}.` });
     }
 
@@ -1383,4 +1561,150 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
     .run();
 
   return { success: true };
+}
+
+export async function saveScheduleAutofillPreference(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const enabled = String(form.get('autofill_new_weeks') ?? '').trim() === '1' ? 1 : 0;
+  const now = Math.floor(Date.now() / 1000);
+
+  await db
+    .prepare(
+      `
+      INSERT INTO schedule_preferences (id, autofill_new_weeks, updated_at, updated_by)
+      VALUES ('default', ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        autofill_new_weeks = excluded.autofill_new_weeks,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(enabled, now, locals.userId)
+    .run();
+
+  return { success: true, message: enabled ? 'Autofill enabled.' : 'Autofill disabled.' };
+}
+
+export async function createScheduleRoleDefinition(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const department = String(form.get('department') ?? '').trim();
+  const roleName = String(form.get('role_name') ?? '').trim();
+
+  if (!isValidScheduleDepartment(department)) {
+    return fail(400, { error: 'Invalid schedule department.' });
+  }
+  if (!roleName) {
+    return fail(400, { error: 'Role name is required.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM schedule_role_definitions
+      WHERE department = ? AND LOWER(role_name) = LOWER(?)
+      LIMIT 1
+      `
+    )
+    .bind(department, roleName)
+    .first<{ id: string }>();
+  if (existing) {
+    return fail(400, { error: 'That role already exists in this department.' });
+  }
+
+  const maxSort = await db
+    .prepare(
+      `
+      SELECT COALESCE(MAX(sort_order), -1) AS max_sort
+      FROM schedule_role_definitions
+      WHERE department = ?
+      `
+    )
+    .bind(department)
+    .first<{ max_sort: number }>();
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO schedule_role_definitions (
+        id, department, role_name, sort_order, is_active, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), department, roleName, (maxSort?.max_sort ?? -1) + 1, now, now)
+    .run();
+
+  return { success: true, message: 'Schedule role added.' };
+}
+
+export async function deleteScheduleRoleDefinition(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const roleId = String(form.get('role_id') ?? '').trim();
+  if (!roleId) return fail(400, { error: 'Missing role id.' });
+
+  const role = await db
+    .prepare(
+      `
+      SELECT id, department, role_name
+      FROM schedule_role_definitions
+      WHERE id = ?
+      LIMIT 1
+      `
+    )
+    .bind(roleId)
+    .first<{ id: string; department: string; role_name: string }>();
+
+  if (!role || !isValidScheduleDepartment(role.department)) {
+    return fail(404, { error: 'That schedule role could not be found.' });
+  }
+
+  const activeUsage = await db
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM schedule_shifts
+      WHERE department = ? AND role = ?
+      `
+    )
+    .bind(role.department, role.role_name)
+    .first<{ count: number }>();
+
+  if ((activeUsage?.count ?? 0) > 0) {
+    return fail(400, { error: 'That role is still used on the schedule. Reassign those shifts first.' });
+  }
+
+  const roleCount = await db
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM schedule_role_definitions
+      WHERE department = ? AND is_active = 1
+      `
+    )
+    .bind(role.department)
+    .first<{ count: number }>();
+
+  if ((roleCount?.count ?? 0) <= 1) {
+    return fail(400, { error: `At least one ${role.department} role must remain.` });
+  }
+
+  await db.prepare(`DELETE FROM schedule_role_definitions WHERE id = ?`).bind(roleId).run();
+  return { success: true, message: 'Schedule role deleted.' };
 }

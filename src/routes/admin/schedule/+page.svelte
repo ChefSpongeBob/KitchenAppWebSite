@@ -7,7 +7,6 @@
   import { pushToast } from '$lib/client/toasts';
   import {
     scheduleDepartments,
-    scheduleRolesByDepartment,
     scheduleEndLabels,
     scheduleDetailOptionsFor,
     formatScheduleTimeLabel,
@@ -98,6 +97,10 @@
     week: { status: 'draft' | 'published'; publishedAt: number | null } | null;
     days: Day[];
     offers: ShiftOffer[];
+    settings: {
+      autofillNewWeeks: boolean;
+      roleOptionsByDepartment: Record<ScheduleDepartment, string[]>;
+    };
   };
 
   let selectedEmployeeId = '';
@@ -120,7 +123,7 @@
   }
 
   function rolesFor(department: ScheduleDepartment) {
-    return scheduleRolesByDepartment[department] as readonly string[];
+    return data.settings.roleOptionsByDepartment[department] as readonly string[];
   }
 
   function createShift(userId: string, shiftDate: string): DraftShift {
@@ -497,6 +500,7 @@
 
     <nav class="subnav">
       <a href="/admin">Back to Dashboard</a>
+      <a href="/admin/schedule-settings">Schedule Settings</a>
       <a href={`?week=${data.prevWeekStart}`}>Previous Week</a>
       <a href={`?week=${data.nextWeekStart}`}>Next Week</a>
     </nav>
@@ -523,7 +527,13 @@
           </span>
           <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
             <input type="hidden" name="week_start" value={data.weekStart} />
-            <button type="submit" class="muted-btn">Copy Last Week</button>
+            <button
+              type="submit"
+              class="muted-btn"
+              class:autofill-preferred={data.settings.autofillNewWeeks}
+            >
+              {data.settings.autofillNewWeeks ? 'Autofill Week' : 'Copy Last Week'}
+            </button>
           </form>
           <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
             <input type="hidden" name="week_start" value={data.weekStart} />
@@ -767,7 +777,7 @@
                             <label>
                               <span>Role</span>
                               <select bind:value={shift.role}>
-                                {#each scheduleRolesByDepartment[shift.department] as role}
+                                {#each rolesFor(shift.department) as role}
                                   <option value={role}>{role}</option>
                                 {/each}
                               </select>
@@ -1306,6 +1316,12 @@
     border-color: rgba(255,255,255,0.12);
     background: rgba(255,255,255,0.06);
     color: var(--color-text);
+  }
+
+  .muted-btn.autofill-preferred {
+    border-color: rgba(22, 163, 74, 0.25);
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.07));
+    color: #dcfce7;
   }
 
   .add-btn {

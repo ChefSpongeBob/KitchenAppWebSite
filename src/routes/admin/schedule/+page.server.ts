@@ -7,6 +7,7 @@ import {
   declineScheduleShiftOffer,
   getWeekStart,
   loadScheduleAssignableUsers,
+  loadScheduleSettings,
   loadScheduleShiftOffersForWeek,
   loadScheduleWeek,
   markScheduleWeekDraft,
@@ -27,14 +28,23 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       users: [],
       week: null,
       days: [],
-      offers: []
+      offers: [],
+      settings: {
+        autofillNewWeeks: false,
+        roleOptionsByDepartment: {
+          FOH: ['Server', 'Runner', 'Host', 'FOH MGR'],
+          Sushi: ['BOH MGR', 'Roller', 'Opener', 'Sushi Prep', 'Swing'],
+          Kitchen: ['BOH MGR', 'Cook', 'Dish', 'Swing']
+        }
+      }
     };
   }
 
-  const [users, schedule, offers] = await Promise.all([
+  const [users, schedule, offers, settings] = await Promise.all([
     loadScheduleAssignableUsers(db),
     loadScheduleWeek(db, weekStart, { ensureWeek: true, userId: locals.userId ?? null }),
-    loadScheduleShiftOffersForWeek(db, weekStart)
+    loadScheduleShiftOffersForWeek(db, weekStart),
+    loadScheduleSettings(db)
   ]);
 
   return {
@@ -44,7 +54,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     users,
     week: schedule.week,
     days: schedule.days,
-    offers
+    offers,
+    settings
   };
 };
 

@@ -89,6 +89,11 @@
       description: 'Build and post weekly shifts.'
     },
     {
+      href: '/admin/schedule-settings',
+      title: 'Schedule Settings',
+      description: 'Manage roles, departments, and autofill behavior.'
+    },
+    {
       href: '/admin/users',
       title: 'Users',
       description: 'Approve, deny, and manage staff access.'
