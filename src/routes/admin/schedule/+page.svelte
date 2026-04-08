@@ -78,6 +78,7 @@
     endLabel: string;
     notes: string;
     isEditing: boolean;
+    duplicateDates: string[];
   };
 
   type EmployeeRow = {
@@ -142,7 +143,8 @@
       startTime: '',
       endLabel: '',
       notes: '',
-      isEditing: true
+      isEditing: true,
+      duplicateDates: []
     };
   }
 
@@ -167,7 +169,8 @@
       startTime: shift.startTime,
       endLabel: shift.endLabel,
       notes: shift.notes,
-      isEditing: false
+      isEditing: false,
+      duplicateDates: []
     };
   }
 
@@ -387,6 +390,33 @@
     });
   }
 
+  function toggleDuplicateDay(
+    rowIndex: number,
+    cellIndex: number,
+    clientId: string,
+    date: string
+  ) {
+    employeeRows = employeeRows.map((row, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return row;
+      return {
+        ...row,
+        cells: row.cells.map((cell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return cell;
+          return {
+            ...cell,
+            shifts: cell.shifts.map((shift) => {
+              if (shift.clientId !== clientId) return shift;
+              const duplicateDates = shift.duplicateDates.includes(date)
+                ? shift.duplicateDates.filter((entry) => entry !== date)
+                : [...shift.duplicateDates, date];
+              return { ...shift, duplicateDates };
+            })
+          };
+        })
+      };
+    });
+  }
+
   function updateDepartment(shift: DraftShift, userId: string, value: string) {
     const department = normalizeDepartment(value);
     const availableDepartments = departmentOptionsForUser(userId, shift.department).map(
@@ -476,6 +506,13 @@
     return hours === null ? sum : sum + hours;
   }, 0);
   function collapseShift(rowIndex: number, cellIndex: number, clientId: string) {
+    const row = employeeRows[rowIndex];
+    const cell = row?.cells[cellIndex];
+    const shift = cell?.shifts.find((entry) => entry.clientId === clientId);
+    if (!row || !cell || !shift) return;
+
+    const duplicateDates = shift.duplicateDates.filter((date) => date !== cell.date);
+
     employeeRows = employeeRows.map((row, currentRowIndex) => {
       if (currentRowIndex !== rowIndex) return row;
       return {
@@ -485,8 +522,35 @@
           return {
             ...cell,
             shifts: cell.shifts.map((shift) =>
-              shift.clientId === clientId ? { ...shift, isEditing: false } : shift
+              shift.clientId === clientId
+                ? { ...shift, isEditing: false, duplicateDates: [] }
+                : shift
             )
+          };
+        })
+      };
+    });
+
+    if (duplicateDates.length === 0) return;
+
+    employeeRows = employeeRows.map((rowEntry, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return rowEntry;
+      return {
+        ...rowEntry,
+        cells: rowEntry.cells.map((cellEntry) => {
+          if (!duplicateDates.includes(cellEntry.date)) return cellEntry;
+          return {
+            ...cellEntry,
+            shifts: [
+              ...cellEntry.shifts,
+              {
+                ...shift,
+                clientId: crypto.randomUUID(),
+                shiftDate: cellEntry.date,
+                isEditing: false,
+                duplicateDates: []
+              }
+            ]
           };
         })
       };
@@ -532,7 +596,7 @@
               class="muted-btn"
               class:autofill-preferred={data.settings.autofillNewWeeks}
             >
-              {data.settings.autofillNewWeeks ? 'Autofill Week' : 'Copy Last Week'}
+              {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
             </button>
           </form>
           <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
@@ -820,6 +884,27 @@
                             <span>Notes</span>
                             <input bind:value={shift.notes} placeholder="Optional notes" />
                           </label>
+
+                          <div class="duplicate-days">
+                            <span>Duplicate To</span>
+                            <div class="duplicate-day-chips">
+                              {#each data.days as day}
+                                {#if day.date !== cell.date}
+                                  <button
+                                    type="button"
+                                    class="duplicate-day-btn"
+                                    class:duplicate-day-btn-active={shift.duplicateDates.includes(day.date)}
+                                    on:click={() =>
+                                      toggleDuplicateDay(rowIndex, cellIndex, shift.clientId, day.date)}
+                                  >
+                                    {new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', {
+                                      weekday: 'short'
+                                    })}
+                                  </button>
+                                {/if}
+                              {/each}
+                            </div>
+                          </div>
 
                           <div class="editor-actions">
                             <button
@@ -1279,6 +1364,38 @@
     color: #fcd34d;
     font-size: 0.74rem;
     line-height: 1.4;
+  }
+
+  .duplicate-days {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .duplicate-days > span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+  }
+
+  .duplicate-day-chips {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .duplicate-day-btn {
+    width: auto;
+    min-height: 2rem;
+    padding: 0.35rem 0.7rem;
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--color-text);
+    font-size: 0.74rem;
+  }
+
+  .duplicate-day-btn.duplicate-day-btn-active {
+    border-color: rgba(22, 163, 74, 0.25);
+    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.08));
+    color: #dcfce7;
   }
 
   input,

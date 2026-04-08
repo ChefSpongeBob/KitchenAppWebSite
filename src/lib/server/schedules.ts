@@ -1490,7 +1490,7 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   const previousWeekStart = addDays(weekStart, -7);
   const source = await loadScheduleWeek(db, previousWeekStart);
   if (!source.week || source.shifts.length === 0) {
-    return fail(400, { error: 'No previous week schedule was found to copy.' });
+    return fail(400, { error: 'No previous week schedule was found to paste into this week.' });
   }
   if (source.shifts.some((shift) => !isValidScheduleDepartment(shift.department))) {
     return fail(400, { error: 'The previous week has a shift with an invalid department.' });
@@ -1560,7 +1560,7 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
     .bind(now, locals.userId, targetWeek.id)
     .run();
 
-  return { success: true };
+  return { success: true, message: 'Last week pasted into this schedule.' };
 }
 
 export async function saveScheduleAutofillPreference(request: Request, locals: App.Locals) {
