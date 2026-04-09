@@ -129,7 +129,15 @@
   let selectedEmployeeId = '';
   let selectedSection: 'All' | ScheduleDepartment = 'All';
   let mobileTeamPanelOpen = false;
-  $: availableDepartments = data.settings.departments.length > 0 ? data.settings.departments : ['FOH'];
+  let availableDepartments: ScheduleDepartment[] =
+    data.settings.departments.length > 0
+      ? [...data.settings.departments]
+      : (['FOH'] as ScheduleDepartment[]);
+  let defaultDepartment = availableDepartments[0] as ScheduleDepartment;
+  $: availableDepartments =
+    data.settings.departments.length > 0
+      ? [...data.settings.departments]
+      : (['FOH'] as ScheduleDepartment[]);
   $: defaultDepartment = availableDepartments[0] as ScheduleDepartment;
 
   function normalizeDepartment(value: string): ScheduleDepartment {
