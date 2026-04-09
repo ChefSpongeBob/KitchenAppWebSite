@@ -131,9 +131,7 @@ function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
   );
 }
 
-export async function loadScheduleDepartments(db: DB): Promise<ScheduleDepartment[]> {
-  await ensureScheduleSchema(db);
-
+async function loadScheduleDepartmentsFromTable(db: DB): Promise<ScheduleDepartment[]> {
   const rows = await db
     .prepare(
       `
@@ -150,6 +148,11 @@ export async function loadScheduleDepartments(db: DB): Promise<ScheduleDepartmen
     .filter((department) => department.length > 0);
 
   return departments.length > 0 ? departments : [...scheduleDepartments];
+}
+
+export async function loadScheduleDepartments(db: DB): Promise<ScheduleDepartment[]> {
+  await ensureScheduleSchema(db);
+  return loadScheduleDepartmentsFromTable(db);
 }
 
 async function seedDefaultScheduleDepartments(db: DB) {
@@ -217,7 +220,7 @@ async function seedInitialScheduleDepartmentApprovals(db: DB) {
     .first<{ count: number }>();
   if ((existing?.count ?? 0) > 0) return;
 
-  const departments = await loadScheduleDepartments(db);
+  const departments = await loadScheduleDepartmentsFromTable(db);
 
   const activeUsers = await db
     .prepare(
