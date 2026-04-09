@@ -124,6 +124,7 @@ type ScheduleDraftRow = {
 };
 
 let scheduleSchemaEnsured = false;
+let scheduleSchemaPromise: Promise<void> | null = null;
 
 function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
   return Object.fromEntries(
@@ -456,255 +457,268 @@ export function buildWeekDays(weekStart: string, shifts: ScheduleShift[]) {
 
 export async function ensureScheduleSchema(db: DB) {
   if (scheduleSchemaEnsured) return;
+  if (scheduleSchemaPromise) {
+    await scheduleSchemaPromise;
+    return;
+  }
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS schedule_weeks (
-        id TEXT PRIMARY KEY,
-        week_start TEXT NOT NULL UNIQUE,
-        status TEXT NOT NULL DEFAULT 'draft',
-        published_at INTEGER,
-        updated_at INTEGER NOT NULL,
-        updated_by TEXT,
-        FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+  scheduleSchemaPromise = (async () => {
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_weeks (
+          id TEXT PRIMARY KEY,
+          week_start TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL DEFAULT 'draft',
+          published_at INTEGER,
+          updated_at INTEGER NOT NULL,
+          updated_by TEXT,
+          FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+        `
+        )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_shift_offers (
+          id TEXT PRIMARY KEY,
+          shift_id TEXT NOT NULL UNIQUE,
+          offered_by_user_id TEXT NOT NULL,
+          target_user_id TEXT,
+          requested_by_user_id TEXT,
+          manager_note TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY (shift_id) REFERENCES schedule_shifts(id) ON DELETE CASCADE,
+          FOREIGN KEY (offered_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
+          FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        `
       )
-      `
+      .run();
+
+    await ensureOptionalColumn(db, 'schedule_shift_offers', 'target_user_id', 'TEXT');
+
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_shifts (
+          id TEXT PRIMARY KEY,
+          week_id TEXT NOT NULL,
+          shift_date TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          department TEXT NOT NULL,
+          role TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          start_time TEXT NOT NULL,
+          end_label TEXT NOT NULL DEFAULT '',
+          notes TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        `
       )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS schedule_shift_offers (
-        id TEXT PRIMARY KEY,
-        shift_id TEXT NOT NULL UNIQUE,
-        offered_by_user_id TEXT NOT NULL,
-        target_user_id TEXT,
-        requested_by_user_id TEXT,
-        manager_note TEXT NOT NULL DEFAULT '',
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        FOREIGN KEY (shift_id) REFERENCES schedule_shifts(id) ON DELETE CASCADE,
-        FOREIGN KEY (offered_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
-        FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS user_schedule_departments (
+          user_id TEXT NOT NULL,
+          department TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (user_id, department),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await ensureOptionalColumn(db, 'schedule_shift_offers', 'target_user_id', 'TEXT');
-
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS schedule_shifts (
-        id TEXT PRIMARY KEY,
-        week_id TEXT NOT NULL,
-        shift_date TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        department TEXT NOT NULL,
-        role TEXT NOT NULL,
-        detail TEXT NOT NULL DEFAULT '',
-        start_time TEXT NOT NULL,
-        end_label TEXT NOT NULL DEFAULT '',
-        notes TEXT NOT NULL DEFAULT '',
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_departments (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS user_schedule_departments (
-        user_id TEXT NOT NULL,
-        department TEXT NOT NULL,
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (user_id, department),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_role_definitions (
+          id TEXT PRIMARY KEY,
+          department TEXT NOT NULL,
+          role_name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          UNIQUE (department, role_name)
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS schedule_departments (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_preferences (
+          id TEXT PRIMARY KEY,
+          autofill_new_weeks INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL,
+          updated_by TEXT,
+          FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS schedule_role_definitions (
-        id TEXT PRIMARY KEY,
-        department TEXT NOT NULL,
-        role_name TEXT NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        UNIQUE (department, role_name)
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS user_schedule_availability (
+          user_id TEXT NOT NULL,
+          weekday INTEGER NOT NULL,
+          is_available INTEGER NOT NULL DEFAULT 0,
+          start_time TEXT NOT NULL DEFAULT '',
+          end_time TEXT NOT NULL DEFAULT '',
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (user_id, weekday),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS schedule_preferences (
-        id TEXT PRIMARY KEY,
-        autofill_new_weeks INTEGER NOT NULL DEFAULT 0,
-        updated_at INTEGER NOT NULL,
-        updated_by TEXT,
-        FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS user_schedule_time_off_requests (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending',
+          manager_note TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          resolved_at INTEGER,
+          resolved_by_user_id TEXT,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS user_schedule_availability (
-        user_id TEXT NOT NULL,
-        weekday INTEGER NOT NULL,
-        is_available INTEGER NOT NULL DEFAULT 0,
-        start_time TEXT NOT NULL DEFAULT '',
-        end_time TEXT NOT NULL DEFAULT '',
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (user_id, weekday),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_weeks_week_start
+        ON schedule_weeks(week_start, status)
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS user_schedule_time_off_requests (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        start_date TEXT NOT NULL,
-        end_date TEXT NOT NULL,
-        note TEXT NOT NULL DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'pending',
-        manager_note TEXT NOT NULL DEFAULT '',
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        resolved_at INTEGER,
-        resolved_by_user_id TEXT,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_shifts_week_date
+        ON schedule_shifts(week_id, shift_date, start_time, sort_order)
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_schedule_weeks_week_start
-      ON schedule_weeks(week_start, status)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_shifts_user_date
+        ON schedule_shifts(user_id, shift_date, start_time)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_schedule_shifts_week_date
-      ON schedule_shifts(week_id, shift_date, start_time, sort_order)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_shift_offers_week_request
+        ON schedule_shift_offers(shift_id, target_user_id, requested_by_user_id, updated_at)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_schedule_shifts_user_date
-      ON schedule_shifts(user_id, shift_date, start_time)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_user_schedule_departments_department
+        ON user_schedule_departments(department, user_id)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_schedule_shift_offers_week_request
-      ON schedule_shift_offers(shift_id, target_user_id, requested_by_user_id, updated_at)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_departments_order
+        ON schedule_departments(sort_order, name)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_user_schedule_departments_department
-      ON user_schedule_departments(department, user_id)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_role_definitions_department
+        ON schedule_role_definitions(department, sort_order, role_name)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_schedule_departments_order
-      ON schedule_departments(sort_order, name)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_user_schedule_availability_user
+        ON user_schedule_availability(user_id, weekday)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_schedule_role_definitions_department
-      ON schedule_role_definitions(department, sort_order, role_name)
-      `
-    )
-    .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_user_schedule_time_off_requests_user
+        ON user_schedule_time_off_requests(user_id, start_date, end_date, status)
+        `
+      )
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_user_schedule_availability_user
-      ON user_schedule_availability(user_id, weekday)
-      `
-    )
-    .run();
+    await seedDefaultScheduleDepartments(db);
+    await seedInitialScheduleDepartmentApprovals(db);
+    await seedDefaultScheduleRoles(db);
 
-  await db
-    .prepare(
-      `
-      CREATE INDEX IF NOT EXISTS idx_user_schedule_time_off_requests_user
-      ON user_schedule_time_off_requests(user_id, start_date, end_date, status)
-      `
-    )
-    .run();
+    scheduleSchemaEnsured = true;
+  })();
 
-  await seedDefaultScheduleDepartments(db);
-  await seedInitialScheduleDepartmentApprovals(db);
-  await seedDefaultScheduleRoles(db);
-
-  scheduleSchemaEnsured = true;
+  try {
+    await scheduleSchemaPromise;
+  } catch (error) {
+    scheduleSchemaPromise = null;
+    throw error;
+  }
 }
 
 export async function getOrCreateScheduleWeek(db: DB, weekStart: string, userId?: string | null) {
