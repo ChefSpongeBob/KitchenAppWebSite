@@ -6,10 +6,12 @@ import {
   cancelScheduleShiftOffer,
   getWeekStart,
   loadMyWeekSchedule,
+  loadUserScheduleAvailability,
   loadScheduleAssignableUsers,
   loadScheduleShiftOffersForWeek,
   offerScheduleShift,
   requestScheduleShiftOffer,
+  saveUserScheduleAvailability,
   withdrawScheduleShiftRequest
 } from '$lib/server/schedules';
 import type { Actions } from './$types';
@@ -34,10 +36,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     };
   }
 
-  const [schedule, offers, employees] = await Promise.all([
+  const [schedule, offers, employees, availability] = await Promise.all([
     loadMyWeekSchedule(db, weekStart, locals.userId),
     loadScheduleShiftOffersForWeek(db, weekStart),
-    loadScheduleAssignableUsers(db)
+    loadScheduleAssignableUsers(db),
+    loadUserScheduleAvailability(db, locals.userId)
   ]);
 
   const currentUser = employees.find((employee) => employee.id === locals.userId);
@@ -58,13 +61,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     prevWeekStart: addDays(weekStart, -7),
     nextWeekStart: addDays(weekStart, 7),
     week: schedule.week,
-    days: schedule.days,
-    offers: visibleOffers,
-    employees
+      days: schedule.days,
+      offers: visibleOffers,
+      employees,
+      availability
   };
 };
 
 export const actions: Actions = {
+  save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
   offer_shift: ({ request, locals }) => offerScheduleShift(request, locals),
   cancel_offer: ({ request, locals }) => cancelScheduleShiftOffer(request, locals),
   request_offer: ({ request, locals }) => requestScheduleShiftOffer(request, locals),

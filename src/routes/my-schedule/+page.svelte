@@ -3,9 +3,11 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
   import {
+    buildQuarterHourOptions,
     formatScheduleTimeLabel,
     formatScheduleWeekRange,
     isValidScheduleDepartment,
+    scheduleWeekdays,
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import { applyAction, enhance } from '$app/forms';
@@ -64,6 +66,12 @@
       requestedByUserName: string | null;
       requestedByUserEmail: string | null;
     }>;
+    availability: Array<{
+      weekday: number;
+      isAvailable: boolean;
+      startTime: string;
+      endTime: string;
+    }>;
   };
 
   type ShiftSummary = {
@@ -77,6 +85,9 @@
 
   let activeOfferShift: ShiftSummary | null = null;
   let activeOfferTargetUserId = '';
+  const quarterHourOptions = buildQuarterHourOptions();
+  let availabilityEntries = data.availability.map((entry) => ({ ...entry }));
+  let availabilitySeed = JSON.stringify(data.availability);
 
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
@@ -103,6 +114,18 @@
   $: weekRangeLabel = formatScheduleWeekRange(
     data.days.map((day) => day.date),
     data.weekStart
+  );
+  $: if (JSON.stringify(data.availability) !== availabilitySeed) {
+    availabilitySeed = JSON.stringify(data.availability);
+    availabilityEntries = data.availability.map((entry) => ({ ...entry }));
+  }
+  $: availabilityPayload = JSON.stringify(
+    availabilityEntries.map((entry) => ({
+      weekday: entry.weekday,
+      isAvailable: entry.isAvailable,
+      startTime: entry.startTime,
+      endTime: entry.endTime
+    }))
   );
   $: offersByShiftId = new Map(data.offers.map((offer) => [offer.shiftId, offer]));
   $: openShiftOffers = data.offers.filter((offer) => offer.offeredByUserId !== data.userId);
@@ -193,6 +216,18 @@
       }
     };
   };
+
+  const withAvailabilityFeedback: SubmitFunction = () => {
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        await invalidateAll();
+        pushToast(result.data?.message ?? 'Availability updated.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'Availability could not be saved.', 'error');
+      }
+    };
+  };
 </script>
 
 <Layout padded={false}>
@@ -214,6 +249,61 @@
         {totalShiftCount} shifts | {formatHours(weeklyTrackedHours)} hours
         {#if myOfferCount > 0} | {myOfferCount} offered{/if}
       </span>
+    </section>
+
+    <section class="availability-shell" aria-label="Weekly availability">
+      <header class="offers-head">
+        <div>
+          <span class="eyebrow">Availability</span>
+          <h3>Recurring Weekly Availability</h3>
+        </div>
+        <small>Managers use this when building schedules.</small>
+      </header>
+
+      <form method="POST" action="?/save_availability" use:enhance={withAvailabilityFeedback} class="availability-form">
+        <input type="hidden" name="availability" value={availabilityPayload} />
+
+        <div class="availability-grid">
+          {#each scheduleWeekdays as day}
+            {@const entry = availabilityEntries.find((item) => item.weekday === day.value)}
+            {#if entry}
+              <div class:availability-off={entry.isAvailable === false} class="availability-row">
+                <div class="availability-day">
+                  <strong>{day.label}</strong>
+                  <label class="availability-toggle">
+                    <input type="checkbox" bind:checked={entry.isAvailable} />
+                    <span>{entry.isAvailable ? 'Available' : 'Off'}</span>
+                  </label>
+                </div>
+
+                <div class="availability-times">
+                  <label>
+                    <span>Start</span>
+                    <select bind:value={entry.startTime} disabled={!entry.isAvailable}>
+                      {#each quarterHourOptions as option}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>End</span>
+                    <select bind:value={entry.endTime} disabled={!entry.isAvailable}>
+                      {#each quarterHourOptions as option}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            {/if}
+          {/each}
+        </div>
+
+        <div class="availability-actions">
+          <button type="submit" class="offer-btn availability-save-btn">Save Availability</button>
+        </div>
+      </form>
     </section>
 
     <section class="days-stack" aria-label="My scheduled week">
@@ -599,6 +689,87 @@
     gap: 0.85rem;
   }
 
+  .availability-shell {
+    margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
+    padding: 0.95rem 1rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .availability-form,
+  .availability-grid {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .availability-row {
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1.2fr);
+    align-items: center;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 0.8rem;
+    background: rgba(255,255,255,0.025);
+  }
+
+  .availability-row.availability-off {
+    opacity: 0.78;
+  }
+
+  .availability-day,
+  .availability-times,
+  .availability-toggle,
+  .availability-times label {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .availability-day strong {
+    font-size: 0.9rem;
+  }
+
+  .availability-toggle {
+    grid-auto-flow: column;
+    justify-content: start;
+    align-items: center;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .availability-times {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .availability-times label span {
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+  }
+
+  .availability-times select {
+    width: 100%;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 0.42rem 0.56rem;
+    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    color: var(--color-text);
+    font-size: 0.8rem;
+  }
+
+  .availability-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .availability-save-btn {
+    min-width: 11rem;
+  }
+
   .offers-head {
     display: flex;
     justify-content: space-between;
@@ -712,6 +883,14 @@
     .offer-card,
     .offers-head {
       flex-direction: column;
+    }
+
+    .availability-row {
+      grid-template-columns: 1fr;
+    }
+
+    .availability-times {
+      grid-template-columns: 1fr;
     }
   }
 </style>

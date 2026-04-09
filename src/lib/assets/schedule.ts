@@ -1,5 +1,15 @@
 export const scheduleDepartments = ['FOH', 'Sushi', 'Kitchen'] as const;
 
+export const scheduleWeekdays = [
+  { value: 0, label: 'Monday', shortLabel: 'Mon' },
+  { value: 1, label: 'Tuesday', shortLabel: 'Tue' },
+  { value: 2, label: 'Wednesday', shortLabel: 'Wed' },
+  { value: 3, label: 'Thursday', shortLabel: 'Thu' },
+  { value: 4, label: 'Friday', shortLabel: 'Fri' },
+  { value: 5, label: 'Saturday', shortLabel: 'Sat' },
+  { value: 6, label: 'Sunday', shortLabel: 'Sun' }
+] as const;
+
 export const scheduleRolesByDepartment = {
   FOH: ['Server', 'Runner', 'Host', 'FOH MGR'],
   Sushi: ['BOH MGR', 'Roller', 'Opener', 'Sushi Prep', 'Swing'],
@@ -30,6 +40,7 @@ export const scheduleDetailOptionsByRole = {
 
 export type ScheduleDepartment = (typeof scheduleDepartments)[number];
 export type ScheduleRole = (typeof scheduleRolesByDepartment)[ScheduleDepartment][number];
+export type ScheduleWeekday = (typeof scheduleWeekdays)[number]['value'];
 
 export function isValidScheduleDepartment(value: string): value is ScheduleDepartment {
   return (scheduleDepartments as readonly string[]).includes(value);
@@ -80,4 +91,24 @@ export function scheduleDetailOptionsFor(department: ScheduleDepartment, role: s
       : [];
 
   return Array.from(new Set([...roleOptions, ...departmentOptions]));
+}
+
+export function weekdayIndexFromDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  const weekday = date.getDay();
+  return weekday === 0 ? 6 : weekday - 1;
+}
+
+export function buildQuarterHourOptions() {
+  const options: Array<{ value: string; label: string }> = [];
+  for (let hour = 0; hour < 24; hour += 1) {
+    for (const minute of [0, 15, 30, 45]) {
+      const value = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      options.push({
+        value,
+        label: formatScheduleTimeLabel(value)
+      });
+    }
+  }
+  return options;
 }

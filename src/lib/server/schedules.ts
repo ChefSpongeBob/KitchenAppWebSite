@@ -3,6 +3,7 @@ import {
   scheduleDepartments,
   isValidScheduleDepartment,
   scheduleRolesByDepartment,
+  weekdayIndexFromDate,
   type ScheduleDepartment
 } from '$lib/assets/schedule';
 
@@ -79,6 +80,13 @@ export type ScheduleRoleDefinition = {
   department: ScheduleDepartment;
   roleName: string;
   sortOrder: number;
+};
+
+export type UserScheduleAvailability = {
+  weekday: number;
+  isAvailable: boolean;
+  startTime: string;
+  endTime: string;
 };
 
 export type ScheduleDay = {
@@ -217,6 +225,54 @@ export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: st
   }
 
   return approvals;
+}
+
+export async function loadScheduleAvailabilityByUser(db: DB, userIds?: string[]) {
+  await ensureScheduleSchema(db);
+
+  const requestedUserIds = userIds ? Array.from(new Set(userIds.filter((userId) => userId.length > 0))) : null;
+  if (requestedUserIds && requestedUserIds.length === 0) {
+    return new Map<string, UserScheduleAvailability[]>();
+  }
+
+  const placeholders = requestedUserIds?.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `
+      SELECT user_id, weekday, is_available, start_time, end_time
+      FROM user_schedule_availability
+      ${requestedUserIds ? `WHERE user_id IN (${placeholders})` : ''}
+      ORDER BY weekday ASC
+      `
+    )
+    .bind(...(requestedUserIds ?? []))
+    .all<{
+      user_id: string;
+      weekday: number;
+      is_available: number;
+      start_time: string;
+      end_time: string;
+    }>();
+
+  const availability = new Map<string, UserScheduleAvailability[]>();
+  if (requestedUserIds) {
+    for (const userId of requestedUserIds) {
+      availability.set(userId, []);
+    }
+  }
+
+  for (const row of rows.results ?? []) {
+    const userAvailability = availability.get(row.user_id) ?? [];
+    userAvailability.push({
+      weekday: row.weekday,
+      isAvailable: row.is_available === 1,
+      startTime: row.start_time,
+      endTime: row.end_time
+    });
+    availability.set(row.user_id, userAvailability);
+  }
+
+  return availability;
 }
 
 async function loadScheduleAssignableUsersById(db: DB, userIds: string[]) {
@@ -449,6 +505,23 @@ export async function ensureScheduleSchema(db: DB) {
   await db
     .prepare(
       `
+      CREATE TABLE IF NOT EXISTS user_schedule_availability (
+        user_id TEXT NOT NULL,
+        weekday INTEGER NOT NULL,
+        is_available INTEGER NOT NULL DEFAULT 0,
+        start_time TEXT NOT NULL DEFAULT '',
+        end_time TEXT NOT NULL DEFAULT '',
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, weekday),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
       CREATE INDEX IF NOT EXISTS idx_schedule_weeks_week_start
       ON schedule_weeks(week_start, status)
       `
@@ -496,6 +569,15 @@ export async function ensureScheduleSchema(db: DB) {
       `
       CREATE INDEX IF NOT EXISTS idx_schedule_role_definitions_department
       ON schedule_role_definitions(department, sort_order, role_name)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_user_schedule_availability_user
+      ON user_schedule_availability(user_id, weekday)
       `
     )
     .run();
@@ -907,6 +989,22 @@ export async function loadScheduleAssignableUsers(db: DB) {
   }));
 }
 
+export async function loadUserScheduleAvailability(db: DB, userId: string) {
+  const availability = await loadScheduleAvailabilityByUser(db, [userId]);
+  const rows = availability.get(userId) ?? [];
+  return Array.from({ length: 7 }, (_, weekday) => {
+    const existing = rows.find((entry) => entry.weekday === weekday);
+    return (
+      existing ?? {
+        weekday,
+        isAvailable: false,
+        startTime: '09:00',
+        endTime: '17:00'
+      }
+    );
+  });
+}
+
 async function loadOwnedShift(db: DB, shiftId: string) {
   return db
     .prepare(
@@ -940,6 +1038,81 @@ async function loadOwnedShift(db: DB, shiftId: string) {
 async function loadAssignableUserById(db: DB, userId: string) {
   const users = await loadScheduleAssignableUsersById(db, [userId]);
   return users.get(userId) ?? null;
+}
+
+export async function saveUserScheduleAvailability(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const payload = String(form.get('availability') ?? '').trim();
+  if (!payload) {
+    return fail(400, { error: 'No availability data was submitted.' });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return fail(400, { error: 'Availability data could not be read.' });
+  }
+
+  if (!Array.isArray(parsed) || parsed.length !== 7) {
+    return fail(400, { error: 'Availability must include all seven days.' });
+  }
+
+  const rows: UserScheduleAvailability[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') {
+      return fail(400, { error: 'Availability entries must be valid objects.' });
+    }
+    const row = entry as Record<string, unknown>;
+    const weekday = Number(row.weekday);
+    const isAvailable = Number(row.isAvailable) === 1 || row.isAvailable === true;
+    const startTime = String(row.startTime ?? '').trim();
+    const endTime = String(row.endTime ?? '').trim();
+
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      return fail(400, { error: 'Availability day is invalid.' });
+    }
+
+    if (isAvailable) {
+      if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+        return fail(400, { error: 'Available days need a start and end time.' });
+      }
+      if (startTime >= endTime) {
+        return fail(400, { error: 'Availability end time must be after the start time.' });
+      }
+    }
+
+    rows.push({
+      weekday,
+      isAvailable,
+      startTime: isAvailable ? startTime : '',
+      endTime: isAvailable ? endTime : ''
+    });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db.prepare(`DELETE FROM user_schedule_availability WHERE user_id = ?`).bind(locals.userId).run();
+
+  for (const row of rows) {
+    await db
+      .prepare(
+        `
+        INSERT INTO user_schedule_availability (
+          user_id, weekday, is_available, start_time, end_time, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        `
+      )
+      .bind(locals.userId, row.weekday, row.isAvailable ? 1 : 0, row.startTime, row.endTime, now)
+      .run();
+  }
+
+  return { success: true, message: 'Availability updated.' };
 }
 
 export async function offerScheduleShift(request: Request, locals: App.Locals) {

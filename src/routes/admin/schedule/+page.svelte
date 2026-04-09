@@ -12,6 +12,7 @@
     scheduleDetailOptionsFor,
     formatScheduleTimeLabel,
     formatScheduleWeekRange,
+    weekdayIndexFromDate,
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
@@ -68,6 +69,13 @@
     managerNote: string;
   };
 
+  type AvailabilityEntry = {
+    weekday: number;
+    isAvailable: boolean;
+    startTime: string;
+    endTime: string;
+  };
+
   type DraftShift = {
     clientId: string;
     shiftDate: string;
@@ -103,6 +111,7 @@
       autofillNewWeeks: boolean;
       roleOptionsByDepartment: Record<ScheduleDepartment, string[]>;
     };
+    availabilityByUser: Record<string, AvailabilityEntry[]>;
   };
 
   let selectedEmployeeId = '';
@@ -314,6 +323,33 @@
   function approvedDepartmentLabel(userId: string) {
     const departments = approvedDepartmentsForUser(userId);
     return departments.length > 0 ? departments.join(', ') : 'No approved departments';
+  }
+
+  function availabilityForDate(userId: string, date: string) {
+    const weekday = weekdayIndexFromDate(date);
+    return (data.availabilityByUser[userId] ?? []).find((entry) => entry.weekday === weekday) ?? null;
+  }
+
+  function availabilitySummary(userId: string, date: string) {
+    const availability = availabilityForDate(userId, date);
+    if (!availability) return 'Availability not set';
+    if (!availability.isAvailable) return 'Off';
+    return `${formatScheduleTimeLabel(availability.startTime)} - ${formatScheduleTimeLabel(availability.endTime)}`;
+  }
+
+  function shiftAvailabilityWarning(userId: string, shift: DraftShift) {
+    const availability = availabilityForDate(userId, shift.shiftDate);
+    if (!availability) return '';
+    if (!availability.isAvailable) {
+      return `${employeeName(userId)} is marked unavailable that day.`;
+    }
+    if (shift.startTime && shift.startTime < availability.startTime) {
+      return `Starts before availability: ${formatScheduleTimeLabel(availability.startTime)}.`;
+    }
+    if (/^\d{2}:\d{2}$/.test(shift.endLabel) && shift.endLabel > availability.endTime) {
+      return `Ends after availability: ${formatScheduleTimeLabel(availability.endTime)}.`;
+    }
+    return '';
   }
 
   function canAddShift(userId: string) {
@@ -818,6 +854,9 @@
                 <strong>{employeeName(row.userId)}</strong>
                 <span class="employee-name-compact">{compactEmployeeName(row.userId)}</span>
                 <span class="employee-departments">{approvedDepartmentLabel(row.userId)}</span>
+                <span class="employee-availability">
+                  Week start: {availabilitySummary(row.userId, data.days[0]?.date ?? data.weekStart)}
+                </span>
                 <span class="employee-hours">
                   Hours: {formatHours(employeeHours(row.userId))}
                 </span>
@@ -905,6 +944,12 @@
                           {#if !approvedDepartmentsForUser(row.userId).includes(shift.department)}
                             <p class="shift-warning">
                               {employeeName(row.userId)} is not approved for {shift.department}.
+                            </p>
+                          {/if}
+
+                          {#if shiftAvailabilityWarning(row.userId, shift)}
+                            <p class="shift-warning availability-warning">
+                              {shiftAvailabilityWarning(row.userId, shift)}
                             </p>
                           {/if}
 
@@ -1418,6 +1463,12 @@
     line-height: 1.35;
   }
 
+  .employee-availability {
+    color: #bfdbfe;
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
   .employee-hours {
     color: var(--color-text-muted);
     font-size: 0.72rem;
@@ -1536,6 +1587,10 @@
     color: #fcd34d;
     font-size: 0.74rem;
     line-height: 1.4;
+  }
+
+  .availability-warning {
+    color: #fca5a5;
   }
 
   .duplicate-days {
@@ -1841,6 +1896,10 @@
     }
 
     .employee-departments {
+      display: none;
+    }
+
+    .employee-availability {
       display: none;
     }
 

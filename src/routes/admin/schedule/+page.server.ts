@@ -6,6 +6,7 @@ import {
   copyPreviousScheduleWeek,
   declineScheduleShiftOffer,
   getWeekStart,
+  loadScheduleAvailabilityByUser,
   loadScheduleAssignableUsers,
   loadScheduleSettings,
   loadScheduleShiftOffersForWeek,
@@ -46,6 +47,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     loadScheduleSettings(db)
   ]);
 
+  const availabilityByUser = await loadScheduleAvailabilityByUser(
+    db,
+    users.map((user) => user.id)
+  );
+
   return {
     weekStart,
     prevWeekStart: addDays(weekStart, -7),
@@ -54,7 +60,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     week: schedule.week,
     days: schedule.days,
     offers,
-    settings
+    settings,
+    availabilityByUser: Object.fromEntries(availabilityByUser)
   };
 };
 
