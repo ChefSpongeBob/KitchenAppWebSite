@@ -605,7 +605,6 @@
       <header class="workspace-head">
         <div>
           <span class="eyebrow">Schedule Workspace</span>
-          <h2>{weekRangeLabel}</h2>
         </div>
         <div class="workspace-status">
           <span class="status-pill">{visibleShiftCount} visible shifts</span>
@@ -622,6 +621,11 @@
             <div>
               <span class="eyebrow">Week Of</span>
               <h2>{weekRangeLabel}</h2>
+              <div class="week-day-strip" aria-label="Week days">
+                {#each data.days as day}
+                  <span class="week-day-chip">{day.label}</span>
+                {/each}
+              </div>
             </div>
             <div class="week-actions">
               <div class="week-nav">
@@ -1060,11 +1064,6 @@
     margin-bottom: 0.1rem;
   }
 
-  .workspace-head h2 {
-    margin: 0.18rem 0 0;
-    font-size: clamp(1.15rem, 2vw, 1.45rem);
-  }
-
   .workspace-status {
     display: flex;
     gap: 0.45rem;
@@ -1142,6 +1141,25 @@
   .requests-head h2,
   .planner-head h2 {
     margin: 0.18rem 0 0;
+  }
+
+  .week-day-strip {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.55rem;
+  }
+
+  .week-day-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 0.24rem 0.58rem;
+    background: rgba(255,255,255,0.03);
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    line-height: 1;
   }
 
   .week-picker {
