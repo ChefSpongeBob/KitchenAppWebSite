@@ -1,7 +1,6 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ScheduleAdminTabs from '$lib/components/ui/ScheduleAdminTabs.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
@@ -601,10 +600,6 @@
       title="Admin Schedule"
       subtitle="Plan coverage, manage requests, and publish the week from one workspace."
     />
-    <div class="tabs-shell">
-      <ScheduleAdminTabs active="builder" />
-    </div>
-
     <nav class="subnav">
       <a href="/admin">Back to Dashboard</a>
       <a href="/admin/schedule-settings">Schedule Settings</a>

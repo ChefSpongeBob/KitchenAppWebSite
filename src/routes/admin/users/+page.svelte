@@ -1,7 +1,6 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ScheduleAdminTabs from '$lib/components/ui/ScheduleAdminTabs.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -66,8 +65,6 @@
     title="User Access"
     subtitle="Approve, deny, and manage staff access."
   />
-  <ScheduleAdminTabs active="users" />
-
   <nav class="subnav">
     <a href="/admin">Back to Dashboard</a>
   </nav>
