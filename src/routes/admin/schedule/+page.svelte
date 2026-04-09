@@ -600,12 +600,6 @@
       title="Admin Schedule"
       subtitle="Plan coverage, manage requests, and publish the week from one workspace."
     />
-    <nav class="subnav">
-      <a href="/admin">Back to Dashboard</a>
-      <a href="/admin/schedule-settings">Schedule Settings</a>
-      <a href={`?week=${data.prevWeekStart}`}>Previous Week</a>
-      <a href={`?week=${data.nextWeekStart}`}>Next Week</a>
-    </nav>
 
     <section class="control-shell" aria-label="Schedule planning controls">
       <header class="workspace-head">
@@ -630,6 +624,10 @@
               <h2>{weekRangeLabel}</h2>
             </div>
             <div class="week-actions">
+              <div class="week-nav">
+                <a href={`?week=${data.prevWeekStart}`} class="week-nav-btn">Previous</a>
+                <a href={`?week=${data.nextWeekStart}`} class="week-nav-btn">Next</a>
+              </div>
               <label class="section-filter">
                 <span>Section</span>
                 <select bind:value={selectedSection}>
@@ -1022,26 +1020,11 @@
     gap: 1rem;
   }
 
-  .subnav,
   .week-actions,
   .planner-head {
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
-  }
-
-  .subnav {
-    margin: -0.35rem 0 0.2rem;
-    padding-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-  }
-
-  .subnav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    background: rgba(255,255,255,0.03);
   }
 
   .control-shell,
@@ -1120,6 +1103,32 @@
     display: grid;
     gap: 0.25rem;
     min-width: 8.5rem;
+  }
+
+  .week-nav {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .week-nav-btn {
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 0.36rem 0.72rem;
+    background: rgba(255,255,255,0.03);
+    font-size: 0.76rem;
+    line-height: 1;
+    transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out);
+  }
+
+  .week-nav-btn:hover,
+  .week-nav-btn:focus-visible {
+    border-color: rgba(195, 32, 43, 0.22);
+    color: var(--color-text);
+    outline: none;
   }
 
   .section-filter span {
@@ -1708,6 +1717,7 @@
       grid-template-columns: 1fr;
     }
 
+    .week-actions,
     .planner-head {
       flex-direction: column;
       align-items: stretch;
