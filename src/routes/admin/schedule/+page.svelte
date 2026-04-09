@@ -561,7 +561,10 @@
 
 <Layout padded={false}>
   <div class="schedule-shell">
-    <PageHeader title="Admin Schedule" subtitle="Build the whole week in one schedule sheet." />
+    <PageHeader
+      title="Admin Schedule"
+      subtitle="Plan coverage, manage requests, and publish the week from one workspace."
+    />
     <div class="tabs-shell">
       <ScheduleAdminTabs active="builder" />
     </div>
@@ -574,6 +577,20 @@
     </nav>
 
     <section class="control-shell" aria-label="Schedule planning controls">
+      <header class="workspace-head">
+        <div>
+          <span class="eyebrow">Schedule Workspace</span>
+          <h2>{weekRangeLabel}</h2>
+        </div>
+        <div class="workspace-status">
+          <span class="status-pill">{visibleShiftCount} visible shifts</span>
+          <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
+            {scheduleStateLabel}
+          </span>
+          <span class="status-pill">{pendingOffers.length} pending approvals</span>
+        </div>
+      </header>
+
       <div class="control-grid">
         <section class="week-shell">
           <header class="week-head">
@@ -605,7 +622,7 @@
                     </button>
                   </form>
                   <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
-                  <form method="POST" action="?/publish_week" use:enhance={withFeedback}>
+                  <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate">
                     <input type="hidden" name="week_start" value={data.weekStart} />
                     <button type="submit" class="menu-item menu-item-primary">Publish</button>
                   </form>
@@ -613,14 +630,6 @@
               </details>
             </div>
           </header>
-
-          <div class="week-summary-row">
-            <span class="status-pill">{visibleShiftCount} visible shifts</span>
-            <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
-              {scheduleStateLabel}
-            </span>
-          </div>
-
           <form method="GET" class="week-picker">
             <label for="week-start">Jump to week</label>
             <input id="week-start" type="date" name="week" value={data.weekStart} />
@@ -1018,6 +1027,28 @@
     gap: 0.8rem;
   }
 
+  .workspace-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: start;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 0.1rem;
+  }
+
+  .workspace-head h2 {
+    margin: 0.18rem 0 0;
+    font-size: clamp(1.15rem, 2vw, 1.45rem);
+  }
+
+  .workspace-status {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   .planner-shell {
     overflow: hidden;
   }
@@ -1071,12 +1102,6 @@
     align-items: center;
   }
 
-  .week-summary-row {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
   .status-pill {
     color: var(--color-text-muted);
     padding: 0.2rem 0;
@@ -1093,19 +1118,31 @@
     position: relative;
   }
 
+  .action-menu[open] .menu-trigger {
+    border-color: rgba(195, 32, 43, 0.24);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+  }
+
   .menu-trigger {
     list-style: none;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015)),
+      color-mix(in srgb, var(--color-surface) 94%, black 6%);
     color: var(--color-text);
-    min-height: 2.3rem;
-    padding: 0.5rem 0.76rem;
+    min-height: 2.35rem;
+    padding: 0.56rem 0.88rem;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    justify-content: space-between;
+    gap: 0.7rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
   }
 
   .menu-trigger::-webkit-details-marker {
@@ -1113,9 +1150,13 @@
   }
 
   .menu-trigger::after {
-    content: '▾';
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
+    content: '';
+    width: 0.42rem;
+    height: 0.42rem;
+    border-right: 1.5px solid var(--color-text-muted);
+    border-bottom: 1.5px solid var(--color-text-muted);
+    transform: rotate(45deg) translateY(-1px);
+    flex: 0 0 auto;
   }
 
   .menu-panel {
@@ -1124,42 +1165,67 @@
     top: calc(100% + 0.4rem);
     min-width: 13.5rem;
     display: grid;
-    gap: 0.35rem;
-    padding: 0.45rem;
+    gap: 0.1rem;
+    padding: 0.3rem;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 12px;
     background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
+      linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015)),
       color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.3);
+    box-shadow: 0 16px 34px rgba(4, 5, 7, 0.28);
     z-index: 12;
   }
 
   .menu-panel form {
     display: block;
+    margin: 0;
   }
 
   .menu-item {
     width: 100%;
+    min-height: 0;
     justify-content: flex-start;
-    border-color: rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border: 0;
+    border-radius: 8px;
+    padding: 0.64rem 0.78rem;
+    background: transparent;
     color: var(--color-text);
     text-decoration: none;
+    box-shadow: none;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition:
+      background-color 140ms var(--ease-out),
+      color 140ms var(--ease-out),
+      transform 140ms var(--ease-out);
+  }
+
+  .menu-item:hover,
+  .menu-item:focus-visible {
+    background: rgba(255,255,255,0.065);
+    outline: none;
+    transform: none;
   }
 
   .menu-item-primary {
-    border-color: rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
-    color: var(--color-primary-contrast);
+    color: #ffd7d9;
+    background: transparent;
+  }
+
+  .menu-item-primary:hover,
+  .menu-item-primary:focus-visible {
+    background: rgba(195, 32, 43, 0.14);
   }
 
   .menu-link {
     display: inline-flex;
     align-items: center;
-    min-height: 2.3rem;
-    padding: 0.5rem 0.76rem;
-    border-radius: 10px;
+  }
+
+  .menu-separate {
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin-top: 0.12rem;
+    padding-top: 0.2rem;
   }
 
   .planner-head {
@@ -1541,8 +1607,7 @@
   }
 
   .menu-item.autofill-preferred {
-    border-color: rgba(22, 163, 74, 0.25);
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.07));
+    background: rgba(22, 163, 74, 0.12);
     color: #dcfce7;
   }
 
@@ -1575,6 +1640,15 @@
   }
 
   @media (max-width: 960px) {
+    .workspace-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .workspace-status {
+      justify-content: flex-start;
+    }
+
     .control-grid {
       grid-template-columns: 1fr;
     }
@@ -1787,3 +1861,4 @@
     }
   }
 </style>
+
