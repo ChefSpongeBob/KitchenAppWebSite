@@ -3,15 +3,19 @@ import { requireAdmin } from '$lib/server/admin';
 import {
   addDays,
   approveScheduleShiftOffer,
+  approveScheduleTimeOffRequest,
   copyPreviousScheduleWeek,
+  declineScheduleTimeOffRequest,
   declineScheduleShiftOffer,
   getWeekStart,
   loadScheduleAvailabilityByUser,
   loadScheduleAssignableUsers,
   loadScheduleSettings,
   loadScheduleShiftOffersForWeek,
+  loadScheduleTimeOffRequestsForRange,
   loadScheduleWeek,
   publishScheduleWeek,
+  saveScheduleAutofillPreference,
   saveScheduleWeekDraft
 } from '$lib/server/schedules';
 
@@ -29,22 +33,26 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       week: null,
       days: [],
       offers: [],
+      timeOffRequests: [],
       settings: {
         autofillNewWeeks: false,
+        departments: ['FOH', 'Sushi', 'Kitchen'],
         roleOptionsByDepartment: {
           FOH: ['Server', 'Runner', 'Host', 'FOH MGR'],
           Sushi: ['BOH MGR', 'Roller', 'Opener', 'Sushi Prep', 'Swing'],
           Kitchen: ['BOH MGR', 'Cook', 'Dish', 'Swing']
         }
-      }
+      },
+      availabilityByUser: {}
     };
   }
 
-  const [users, schedule, offers, settings] = await Promise.all([
+  const [users, schedule, offers, settings, timeOffRequests] = await Promise.all([
     loadScheduleAssignableUsers(db),
     loadScheduleWeek(db, weekStart, { ensureWeek: true, userId: locals.userId ?? null }),
     loadScheduleShiftOffersForWeek(db, weekStart),
-    loadScheduleSettings(db)
+    loadScheduleSettings(db),
+    loadScheduleTimeOffRequestsForRange(db, weekStart, addDays(weekStart, 6))
   ]);
 
   const availabilityByUser = await loadScheduleAvailabilityByUser(
@@ -60,6 +68,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     week: schedule.week,
     days: schedule.days,
     offers,
+    timeOffRequests,
     settings,
     availabilityByUser: Object.fromEntries(availabilityByUser)
   };
@@ -67,8 +76,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 export const actions: Actions = {
   save_week: ({ request, locals }) => saveScheduleWeekDraft(request, locals),
+  save_autofill: ({ request, locals }) => saveScheduleAutofillPreference(request, locals),
   copy_previous_week: ({ request, locals }) => copyPreviousScheduleWeek(request, locals),
   publish_week: ({ request, locals }) => publishScheduleWeek(request, locals),
   approve_offer: ({ request, locals }) => approveScheduleShiftOffer(request, locals),
-  decline_offer: ({ request, locals }) => declineScheduleShiftOffer(request, locals)
+  decline_offer: ({ request, locals }) => declineScheduleShiftOffer(request, locals),
+  approve_time_off: ({ request, locals }) => approveScheduleTimeOffRequest(request, locals),
+  decline_time_off: ({ request, locals }) => declineScheduleTimeOffRequest(request, locals)
 };

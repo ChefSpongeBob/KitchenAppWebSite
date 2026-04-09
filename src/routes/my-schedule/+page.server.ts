@@ -4,9 +4,12 @@ import { isValidScheduleDepartment } from '$lib/assets/schedule';
 import {
   addDays,
   cancelScheduleShiftOffer,
+  cancelUserScheduleTimeOffRequest,
+  createUserScheduleTimeOffRequest,
   getWeekStart,
   loadMyWeekSchedule,
   loadUserScheduleAvailability,
+  loadUserScheduleTimeOffRequests,
   loadScheduleAssignableUsers,
   loadScheduleShiftOffersForWeek,
   offerScheduleShift,
@@ -32,15 +35,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       week: null,
       days: [],
       offers: [],
-      employees: []
+      employees: [],
+      availability: [],
+      timeOffRequests: []
     };
   }
 
-  const [schedule, offers, employees, availability] = await Promise.all([
+  const [schedule, offers, employees, availability, timeOffRequests] = await Promise.all([
     loadMyWeekSchedule(db, weekStart, locals.userId),
     loadScheduleShiftOffersForWeek(db, weekStart),
     loadScheduleAssignableUsers(db),
-    loadUserScheduleAvailability(db, locals.userId)
+    loadUserScheduleAvailability(db, locals.userId),
+    loadUserScheduleTimeOffRequests(db, locals.userId)
   ]);
 
   const currentUser = employees.find((employee) => employee.id === locals.userId);
@@ -64,12 +70,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       days: schedule.days,
       offers: visibleOffers,
       employees,
-      availability
+      availability,
+      timeOffRequests
   };
 };
 
 export const actions: Actions = {
   save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
+  request_time_off: ({ request, locals }) => createUserScheduleTimeOffRequest(request, locals),
+  cancel_time_off_request: ({ request, locals }) => cancelUserScheduleTimeOffRequest(request, locals),
   offer_shift: ({ request, locals }) => offerScheduleShift(request, locals),
   cancel_offer: ({ request, locals }) => cancelScheduleShiftOffer(request, locals),
   request_offer: ({ request, locals }) => requestScheduleShiftOffer(request, locals),

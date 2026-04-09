@@ -3,12 +3,8 @@
   export let subtitle: string | null = null;
 </script>
 
-<header class="page-header" aria-label={subtitle ? `${title} - ${subtitle}` : title}>
+<header class="page-header" aria-label={title} data-legacy-subtitle={subtitle ? '1' : '0'}>
   <h1>{title}</h1>
-
-  {#if subtitle}
-    <p class="subtitle">{subtitle}</p>
-  {/if}
 
   <img class="divider-blade" src="/knife-divider.svg" alt="" aria-hidden="true" />
 </header>
@@ -29,13 +25,6 @@
 
   header {
     padding-top: 3.25rem;
-  }
-
-  .subtitle {
-    margin: var(--space-2) 0 0;
-    font-size: 0.96rem;
-    color: var(--color-text-muted);
-    max-width: 42rem;
   }
 
   .divider-blade {

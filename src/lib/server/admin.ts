@@ -5,7 +5,8 @@ import { ensureEmployeeSpotlightSchema, loadEmployeeSpotlight } from '$lib/serve
 import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
 import {
   ensureScheduleSchema,
-  loadScheduleDepartmentApprovalsByUser
+  loadScheduleDepartmentApprovalsByUser,
+  loadScheduleDepartments
 } from '$lib/server/schedules';
 import {
   isValidScheduleDepartment,
@@ -132,6 +133,33 @@ export type AdminAssignableUser = {
   email: string;
 };
 
+export type AdminEmployeeProfile = {
+  user_id: string;
+  real_name: string;
+  phone: string;
+  birthday: string;
+  address_line_1: string;
+  address_line_2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  emergency_contact_relationship: string;
+};
+
+export type EmployeeProfileEditRequest = {
+  id: string;
+  user_id: string;
+  requested_real_name: string;
+  requested_birthday: string;
+  status: 'pending' | 'approved' | 'declined';
+  manager_note: string;
+  requested_at: number;
+  resolved_at: number | null;
+  resolved_by: string | null;
+};
+
 export function requireAdmin(role: string | undefined | null) {
   if (role !== 'admin') {
     throw redirect(303, '/');
@@ -160,6 +188,82 @@ export async function tableExists(db: D1, tableName: string) {
 export async function usersHasIsActiveColumn(db: D1) {
   const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
   return (columns.results ?? []).some((column) => column.name === 'is_active');
+}
+
+async function ensureOptionalColumn(db: D1, tableName: string, columnName: string, definition: string) {
+  const columns = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
+  const hasColumn = (columns.results ?? []).some((column) => column.name === columnName);
+  if (hasColumn) return;
+
+  await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+}
+
+export async function ensureEmployeeProfilesTable(db: D1) {
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_profiles (
+        user_id TEXT PRIMARY KEY,
+        real_name TEXT NOT NULL DEFAULT '',
+        phone TEXT NOT NULL DEFAULT '',
+        birthday TEXT NOT NULL DEFAULT '',
+        address_line_1 TEXT NOT NULL DEFAULT '',
+        address_line_2 TEXT NOT NULL DEFAULT '',
+        city TEXT NOT NULL DEFAULT '',
+        state TEXT NOT NULL DEFAULT '',
+        postal_code TEXT NOT NULL DEFAULT '',
+        emergency_contact_name TEXT NOT NULL DEFAULT '',
+        emergency_contact_phone TEXT NOT NULL DEFAULT '',
+        emergency_contact_relationship TEXT NOT NULL DEFAULT '',
+        updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+        updated_by TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await ensureOptionalColumn(db, 'employee_profiles', 'real_name', "TEXT NOT NULL DEFAULT ''");
+}
+
+export async function ensureEmployeeProfileEditRequestsTable(db: D1) {
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_profile_edit_requests (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        requested_real_name TEXT NOT NULL DEFAULT '',
+        requested_birthday TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        manager_note TEXT NOT NULL DEFAULT '',
+        requested_at INTEGER NOT NULL,
+        resolved_at INTEGER,
+        resolved_by TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+}
+
+function emptyEmployeeProfile(userId: string): AdminEmployeeProfile {
+  return {
+    user_id: userId,
+    real_name: '',
+    phone: '',
+    birthday: '',
+    address_line_1: '',
+    address_line_2: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relationship: ''
+  };
 }
 
 export async function ensureUserInvitesTable(db: D1) {
@@ -468,6 +572,64 @@ export async function loadAdminAssignableUsers(db: D1) {
         .all<AdminAssignableUser>();
 
   return users.results ?? [];
+}
+
+export async function loadAdminEmployeeProfile(db: D1, userId: string) {
+  await ensureEmployeeProfilesTable(db);
+
+  const profile = await db
+    .prepare(
+      `
+      SELECT
+        user_id,
+        real_name,
+        phone,
+        birthday,
+        address_line_1,
+        address_line_2,
+        city,
+        state,
+        postal_code,
+        emergency_contact_name,
+        emergency_contact_phone,
+        emergency_contact_relationship
+      FROM employee_profiles
+      WHERE user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId)
+    .first<AdminEmployeeProfile>();
+
+  return profile ?? emptyEmployeeProfile(userId);
+}
+
+export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: string) {
+  await ensureEmployeeProfileEditRequestsTable(db);
+
+  const request = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        user_id,
+        requested_real_name,
+        requested_birthday,
+        status,
+        manager_note,
+        requested_at,
+        resolved_at,
+        resolved_by
+      FROM employee_profile_edit_requests
+      WHERE user_id = ? AND status = 'pending'
+      ORDER BY requested_at DESC
+      LIMIT 1
+      `
+    )
+    .bind(userId)
+    .first<EmployeeProfileEditRequest>();
+
+  return request ?? null;
 }
 
 export async function loadAdminNodeNames(db: D1) {
@@ -1306,7 +1468,8 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
   const userId = String(formData.get('user_id') ?? '').trim();
   const department = String(formData.get('department') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!isValidScheduleDepartment(department)) {
+  const departments = await loadScheduleDepartments(db);
+  if (!isValidScheduleDepartment(department, departments)) {
     return fail(400, { error: 'Invalid schedule department.' });
   }
 
@@ -1362,6 +1525,96 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
     .run();
 
   return { success: true };
+}
+
+export async function saveEmployeeProfile(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  await ensureEmployeeProfilesTable(db);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+
+  const target = await getUserById(db, userId);
+  if (!target) return fail(404, { error: 'Employee not found.' });
+
+  const profile = {
+    real_name: String(formData.get('real_name') ?? '').trim(),
+    phone: String(formData.get('phone') ?? '').trim(),
+    birthday: String(formData.get('birthday') ?? '').trim(),
+    address_line_1: String(formData.get('address_line_1') ?? '').trim(),
+    address_line_2: String(formData.get('address_line_2') ?? '').trim(),
+    city: String(formData.get('city') ?? '').trim(),
+    state: String(formData.get('state') ?? '').trim(),
+    postal_code: String(formData.get('postal_code') ?? '').trim(),
+    emergency_contact_name: String(formData.get('emergency_contact_name') ?? '').trim(),
+    emergency_contact_phone: String(formData.get('emergency_contact_phone') ?? '').trim(),
+    emergency_contact_relationship: String(formData.get('emergency_contact_relationship') ?? '').trim()
+  };
+
+  if (profile.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(profile.birthday)) {
+    return fail(400, { error: 'Birthday must use a valid date.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_profiles (
+        user_id,
+        real_name,
+        phone,
+        birthday,
+        address_line_1,
+        address_line_2,
+        city,
+        state,
+        postal_code,
+        emergency_contact_name,
+        emergency_contact_phone,
+        emergency_contact_relationship,
+        updated_at,
+        updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        real_name = excluded.real_name,
+        phone = excluded.phone,
+        birthday = excluded.birthday,
+        address_line_1 = excluded.address_line_1,
+        address_line_2 = excluded.address_line_2,
+        city = excluded.city,
+        state = excluded.state,
+        postal_code = excluded.postal_code,
+        emergency_contact_name = excluded.emergency_contact_name,
+        emergency_contact_phone = excluded.emergency_contact_phone,
+        emergency_contact_relationship = excluded.emergency_contact_relationship,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(
+      userId,
+      profile.real_name,
+      profile.phone,
+      profile.birthday,
+      profile.address_line_1,
+      profile.address_line_2,
+      profile.city,
+      profile.state,
+      profile.postal_code,
+      profile.emergency_contact_name,
+      profile.emergency_contact_phone,
+      profile.emergency_contact_relationship,
+      now,
+      locals.userId ?? null
+    )
+    .run();
+
+  return { success: true, message: 'Employee profile saved.' };
 }
 
 export async function createUserInvite(

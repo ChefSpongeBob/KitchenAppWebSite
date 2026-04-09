@@ -38,17 +38,23 @@ export const scheduleDetailOptionsByRole = {
   Dish: ['Dish Pit']
 } as const;
 
-export type ScheduleDepartment = (typeof scheduleDepartments)[number];
-export type ScheduleRole = (typeof scheduleRolesByDepartment)[ScheduleDepartment][number];
+export type ScheduleDepartment = string;
+export type ScheduleRole = string;
 export type ScheduleWeekday = (typeof scheduleWeekdays)[number]['value'];
 
-export function isValidScheduleDepartment(value: string): value is ScheduleDepartment {
-  return (scheduleDepartments as readonly string[]).includes(value);
+export function isValidScheduleDepartment(
+  value: string,
+  allowedDepartments?: readonly string[]
+): value is ScheduleDepartment {
+  const normalized = value.trim();
+  if (!normalized) return false;
+  return allowedDepartments ? allowedDepartments.includes(normalized) : true;
 }
 
 export function isValidScheduleRole(department: string, role: string) {
   if (!isValidScheduleDepartment(department)) return false;
-  return (scheduleRolesByDepartment[department] as readonly string[]).includes(role);
+  const roles = scheduleRolesByDepartment[department as keyof typeof scheduleRolesByDepartment];
+  return roles ? (roles as readonly string[]).includes(role) : role.trim().length > 0;
 }
 
 export function formatScheduleTimeLabel(value: string) {
@@ -84,7 +90,11 @@ export function formatScheduleWeekRange(dates: string[], fallback = '') {
 }
 
 export function scheduleDetailOptionsFor(department: ScheduleDepartment, role: string) {
-  const departmentOptions = [...scheduleDetailOptionsByDepartment[department]];
+  const departmentOptions = [
+    ...(scheduleDetailOptionsByDepartment[
+      department as keyof typeof scheduleDetailOptionsByDepartment
+    ] ?? [])
+  ];
   const roleOptions =
     role in scheduleDetailOptionsByRole
       ? [...scheduleDetailOptionsByRole[role as keyof typeof scheduleDetailOptionsByRole]]

@@ -6,7 +6,6 @@
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import {
-    scheduleDepartments,
     scheduleEndLabels,
     scheduleDetailOptionsFor,
     formatScheduleTimeLabel,
@@ -75,6 +74,18 @@
     endTime: string;
   };
 
+  type TimeOffRequest = {
+    id: string;
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    startDate: string;
+    endDate: string;
+    note: string;
+    status: 'pending' | 'approved' | 'declined';
+    managerNote: string;
+  };
+
   type DraftShift = {
     clientId: string;
     shiftDate: string;
@@ -106,9 +117,11 @@
     week: { status: 'draft' | 'published'; publishedAt: number | null } | null;
     days: Day[];
     offers: ShiftOffer[];
+    timeOffRequests: TimeOffRequest[];
     settings: {
+      departments: ScheduleDepartment[];
       autofillNewWeeks: boolean;
-      roleOptionsByDepartment: Record<ScheduleDepartment, string[]>;
+      roleOptionsByDepartment: Record<string, string[]>;
     };
     availabilityByUser: Record<string, AvailabilityEntry[]>;
   };
@@ -116,10 +129,11 @@
   let selectedEmployeeId = '';
   let selectedSection: 'All' | ScheduleDepartment = 'All';
   let mobileTeamPanelOpen = false;
-  const defaultDepartment: ScheduleDepartment = 'FOH';
+  $: availableDepartments = data.settings.departments.length > 0 ? data.settings.departments : ['FOH'];
+  $: defaultDepartment = availableDepartments[0] as ScheduleDepartment;
 
   function normalizeDepartment(value: string): ScheduleDepartment {
-    return (scheduleDepartments.includes(value as ScheduleDepartment)
+    return (availableDepartments.includes(value as ScheduleDepartment)
       ? value
       : defaultDepartment) as ScheduleDepartment;
   }
@@ -133,7 +147,8 @@
   }
 
   function rolesFor(department: ScheduleDepartment) {
-    return data.settings.roleOptionsByDepartment[department] as readonly string[];
+    const options = data.settings.roleOptionsByDepartment[department] ?? [];
+    return options.length > 0 ? options : ['Shift'];
   }
 
   function createShift(userId: string, shiftDate: string): DraftShift {
@@ -217,6 +232,17 @@
   $: visibleUserIds = employeeRows.map((row) => row.userId);
   $: availableUsers = data.users.filter((user) => !visibleUserIds.includes(user.id));
   $: pendingOffers = data.offers.filter((offer) => offer.requestedByUserId);
+  $: pendingTimeOffRequests = data.timeOffRequests.filter((request) => request.status === 'pending');
+  $: timeOffConflictCount = employeeRows.reduce(
+    (total, row) =>
+      total +
+      row.cells.reduce(
+        (cellTotal, cell) =>
+          cellTotal + cell.shifts.filter((shift) => Boolean(shiftTimeOffWarning(row.userId, shift))).length,
+        0
+      ),
+    0
+  );
   $: weekPayload = JSON.stringify(
     employeeRows.flatMap((row) =>
       row.cells.flatMap((cell) =>
@@ -258,23 +284,16 @@
     const hours = shiftHours(shift);
     return hours === null ? sum : sum + hours;
   }, 0);
-  $: departmentHourTotals = {
-    FOH: allShifts.reduce((sum, shift) => {
-      if (shift.department !== 'FOH') return sum;
-      const hours = shiftHours(shift);
-      return hours === null ? sum : sum + hours;
-    }, 0),
-    Sushi: allShifts.reduce((sum, shift) => {
-      if (shift.department !== 'Sushi') return sum;
-      const hours = shiftHours(shift);
-      return hours === null ? sum : sum + hours;
-    }, 0),
-    Kitchen: allShifts.reduce((sum, shift) => {
-      if (shift.department !== 'Kitchen') return sum;
-      const hours = shiftHours(shift);
-      return hours === null ? sum : sum + hours;
-    }, 0)
-  };
+  $: departmentHourTotals = Object.fromEntries(
+    availableDepartments.map((department) => [
+      department,
+      allShifts.reduce((sum, shift) => {
+        if (shift.department !== department) return sum;
+        const hours = shiftHours(shift);
+        return hours === null ? sum : sum + hours;
+      }, 0)
+    ])
+  );
   $: totalsByDay = data.days.map((day) => {
     const dayShifts = allShifts.filter((shift) => shift.shiftDate === day.date);
     const visibleDayShifts =
@@ -284,9 +303,12 @@
     return {
       date: day.date,
       total: visibleDayShifts.length,
-      foh: dayShifts.filter((shift) => shift.department === 'FOH').length,
-      sushi: dayShifts.filter((shift) => shift.department === 'Sushi').length,
-      kitchen: dayShifts.filter((shift) => shift.department === 'Kitchen').length
+      departmentCounts: Object.fromEntries(
+        availableDepartments.map((department) => [
+          department,
+          dayShifts.filter((shift) => shift.department === department).length
+        ])
+      )
     };
   });
   $: weekRangeLabel = formatScheduleWeekRange(
@@ -349,6 +371,48 @@
       return `Ends after availability: ${formatScheduleTimeLabel(availability.endTime)}.`;
     }
     return '';
+  }
+
+  function formatRequestDate(value: string) {
+    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+
+  function formatRequestRange(startDate: string, endDate: string) {
+    return startDate === endDate
+      ? formatRequestDate(startDate)
+      : `${formatRequestDate(startDate)} - ${formatRequestDate(endDate)}`;
+  }
+
+  function timeOffRequestsForUser(userId: string, status: 'pending' | 'approved' | 'declined' = 'approved') {
+    return data.timeOffRequests.filter((request) => request.userId === userId && request.status === status);
+  }
+
+  function timeOffSummary(userId: string) {
+    const requests = timeOffRequestsForUser(userId, 'approved');
+    if (requests.length === 0) return '';
+    return `Time off: ${requests.map((request) => formatRequestRange(request.startDate, request.endDate)).join(' • ')}`;
+  }
+
+  function shiftTimeOffWarning(userId: string, shift: DraftShift) {
+    const request = timeOffRequestsForUser(userId).find(
+      (entry) => entry.startDate <= shift.shiftDate && entry.endDate >= shift.shiftDate
+    );
+    if (!request) return '';
+    return request.status === 'approved'
+      ? `${employeeName(userId)} is approved off that day.`
+      : `${employeeName(userId)} has a pending time off request that day.`;
+  }
+
+  function warnBeforePublish() {
+    if (timeOffConflictCount > 0) {
+      pushToast(
+        `Publishing with ${timeOffConflictCount} time off conflict${timeOffConflictCount === 1 ? '' : 's'} still visible.`,
+        'info'
+      );
+    }
   }
 
   function canAddShift(userId: string) {
@@ -611,7 +675,7 @@
           <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
             {scheduleStateLabel}
           </span>
-          <span class="status-pill">{pendingOffers.length} pending approvals</span>
+          <span class="status-pill">{pendingOffers.length + pendingTimeOffRequests.length} pending approvals</span>
         </div>
       </header>
 
@@ -631,31 +695,43 @@
                 <span>Section</span>
                 <select bind:value={selectedSection}>
                   <option value="All">All</option>
-                  {#each scheduleDepartments as department}
+                  {#each availableDepartments as department}
                     <option value={department}>{department}</option>
                   {/each}
                 </select>
               </label>
               <details class="action-menu">
                 <summary class="menu-trigger">Schedule Actions</summary>
-                <div class="menu-panel">
-                  <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
-                    <input type="hidden" name="week_start" value={data.weekStart} />
-                    <button
-                      type="submit"
-                      class="menu-item"
+                  <div class="menu-panel">
+                    <form method="POST" action="?/save_autofill" use:enhance={withFeedback}>
+                      <input type="hidden" name="autofill_new_weeks" value={data.settings.autofillNewWeeks ? '0' : '1'} />
+                      <button
+                        type="submit"
+                        class="menu-item"
+                        class:autofill-preferred={data.settings.autofillNewWeeks}
+                      >
+                        {data.settings.autofillNewWeeks ? 'Disable Autofill' : 'Enable Autofill'}
+                      </button>
+                    </form>
+                    <form method="POST" action="?/copy_previous_week" use:enhance={withFeedback}>
+                      <input type="hidden" name="week_start" value={data.weekStart} />
+                      <button
+                        type="submit"
+                        class="menu-item"
                       class:autofill-preferred={data.settings.autofillNewWeeks}
-                    >
-                      {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
-                    </button>
-                  </form>
+                      >
+                        {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
+                      </button>
+                    </form>
                   <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
-                  <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate">
-                    <input type="hidden" name="week_start" value={data.weekStart} />
-                    <button type="submit" class="menu-item menu-item-primary">Publish</button>
-                  </form>
-                </div>
-              </details>
+                  <a href="/admin/schedule-roles" class="menu-item menu-link">Department Roles</a>
+                  <a href="/admin/users" class="menu-item menu-link">Employees</a>
+                    <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate">
+                      <input type="hidden" name="week_start" value={data.weekStart} />
+                      <button type="submit" class="menu-item menu-item-primary" on:click={warnBeforePublish}>Publish</button>
+                    </form>
+                  </div>
+                </details>
             </div>
           </header>
           <form method="GET" class="week-picker">
@@ -668,27 +744,28 @@
         <section class="approval-shell">
           <header class="requests-head">
             <div>
-              <span class="eyebrow">Shift Requests</span>
+              <span class="eyebrow">Approvals</span>
               <h2>Pending Approvals</h2>
             </div>
-            <span class="status-pill">{pendingOffers.length} pending</span>
+            <span class="status-pill">{pendingOffers.length + pendingTimeOffRequests.length} pending</span>
           </header>
 
-          {#if pendingOffers.length === 0}
-            <p class="requests-empty">No one is waiting on a pickup approval right now.</p>
+          {#if pendingOffers.length === 0 && pendingTimeOffRequests.length === 0}
+            <p class="requests-empty">No approvals are waiting right now.</p>
           {:else}
             <p class="approval-note">
-              Review requests below and approve or decline them before publishing schedule changes.
+              Review shift pickups and time off requests before publishing schedule changes.
             </p>
           {/if}
         </section>
       </div>
 
-      {#if pendingOffers.length > 0}
+      {#if pendingOffers.length > 0 || pendingTimeOffRequests.length > 0}
         <div class="request-list">
           {#each pendingOffers as offer}
             <article class="request-card">
               <div class="request-main">
+                <span class="request-type">Shift Pickup</span>
                 <strong>{offer.department} | {offer.role}</strong>
                 <p class="request-time">
                   {scheduleDateLabel(offer.shiftDate)} | {formatScheduleTimeLabel(offer.startTime)}{#if offer.endLabel} - {offer.endLabel}{/if}
@@ -721,6 +798,30 @@
               </div>
             </article>
           {/each}
+
+          {#each pendingTimeOffRequests as request}
+            <article class="request-card">
+              <div class="request-main">
+                <span class="request-type">Time Off</span>
+                <strong>{request.userName ?? request.userEmail}</strong>
+                <p class="request-time">{formatRequestRange(request.startDate, request.endDate)}</p>
+                {#if request.note}
+                  <p class="request-detail">{request.note}</p>
+                {/if}
+              </div>
+
+              <div class="request-actions">
+                <form method="POST" action="?/approve_time_off" use:enhance={withFeedback}>
+                  <input type="hidden" name="request_id" value={request.id} />
+                  <button type="submit" class="create-shift-btn">Approve</button>
+                </form>
+                <form method="POST" action="?/decline_time_off" use:enhance={withFeedback}>
+                  <input type="hidden" name="request_id" value={request.id} />
+                  <button type="submit" class="remove-btn request-decline-btn">Decline</button>
+                </form>
+              </div>
+            </article>
+          {/each}
         </div>
       {/if}
     </section>
@@ -741,9 +842,11 @@
                 : `${selectedSection} Hours: ${formatHours(visibleScheduledHours)}`}
             </span>
             <div class="hours-breakdown">
-              <span class="hours-chip">FOH {formatHours(departmentHourTotals.FOH)}</span>
-              <span class="hours-chip">Sushi {formatHours(departmentHourTotals.Sushi)}</span>
-              <span class="hours-chip">Kitchen {formatHours(departmentHourTotals.Kitchen)}</span>
+              {#each availableDepartments as department}
+                <span class="hours-chip">
+                  {department} {formatHours(departmentHourTotals[department] ?? 0)}
+                </span>
+              {/each}
             </div>
           </div>
           <button type="submit">Save Draft</button>
@@ -826,7 +929,11 @@
               <strong>{day.label}</strong>
               {#if totalsByDay[dayIndex]}
                 <span>{totalsByDay[dayIndex].total} shifts</span>
-                <small>FOH {totalsByDay[dayIndex].foh} | Sushi {totalsByDay[dayIndex].sushi} | Kitchen {totalsByDay[dayIndex].kitchen}</small>
+                <small>
+                  {availableDepartments
+                    .map((department) => `${department} ${totalsByDay[dayIndex].departmentCounts[department] ?? 0}`)
+                    .join(' | ')}
+                </small>
               {/if}
             </div>
           {/each}
@@ -849,6 +956,9 @@
                 <span class="employee-availability">
                   Week start: {availabilitySummary(row.userId, data.days[0]?.date ?? data.weekStart)}
                 </span>
+                {#if timeOffSummary(row.userId)}
+                  <span class="employee-timeoff">{timeOffSummary(row.userId)}</span>
+                {/if}
                 <span class="employee-hours">
                   Hours: {formatHours(employeeHours(row.userId))}
                 </span>
@@ -942,6 +1052,12 @@
                           {#if shiftAvailabilityWarning(row.userId, shift)}
                             <p class="shift-warning availability-warning">
                               {shiftAvailabilityWarning(row.userId, shift)}
+                            </p>
+                          {/if}
+
+                          {#if shiftTimeOffWarning(row.userId, shift)}
+                            <p class="shift-warning timeoff-warning">
+                              {shiftTimeOffWarning(row.userId, shift)}
                             </p>
                           {/if}
 
@@ -1221,22 +1337,29 @@
 
   .menu-panel form {
     display: block;
+    width: 100%;
     margin: 0;
   }
 
   .menu-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
     width: 100%;
     min-height: 0;
-    justify-content: flex-start;
     border: 0;
     border-radius: 8px;
     padding: 0.64rem 0.78rem;
+    appearance: none;
     background: transparent;
     color: var(--color-text);
     text-decoration: none;
     box-shadow: none;
     font-size: 0.82rem;
     font-weight: 500;
+    line-height: 1.25;
+    text-align: left;
+    font-family: inherit;
     transition:
       background-color 140ms var(--ease-out),
       color 140ms var(--ease-out),
@@ -1258,11 +1381,6 @@
   .menu-item-primary:hover,
   .menu-item-primary:focus-visible {
     background: rgba(195, 32, 43, 0.14);
-  }
-
-  .menu-link {
-    display: inline-flex;
-    align-items: center;
   }
 
   .menu-separate {
@@ -1321,6 +1439,13 @@
   .request-main {
     display: grid;
     gap: 0.2rem;
+  }
+
+  .request-type {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
 
   .request-time,
@@ -1467,6 +1592,12 @@
     line-height: 1.35;
   }
 
+  .employee-timeoff {
+    color: #fca5a5;
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
   .employee-hours {
     color: var(--color-text-muted);
     font-size: 0.72rem;
@@ -1589,6 +1720,10 @@
 
   .availability-warning {
     color: #fca5a5;
+  }
+
+  .timeoff-warning {
+    color: #fda4af;
   }
 
   .duplicate-days {
@@ -1899,6 +2034,10 @@
     }
 
     .employee-availability {
+      display: none;
+    }
+
+    .employee-timeoff {
       display: none;
     }
 

@@ -5,7 +5,6 @@
   import {
     formatScheduleWeekRange,
     isValidScheduleDepartment,
-    scheduleDepartments,
     type ScheduleDepartment
   } from '$lib/assets/schedule';
 
@@ -15,6 +14,7 @@
     nextWeekStart: string;
     week: { status: 'draft' | 'published' } | null;
     isAdmin: boolean;
+    departments: ScheduleDepartment[];
     visibleDepartments: ScheduleDepartment[];
     days: Array<{
       date: string;
@@ -35,6 +35,7 @@
   };
 
   let selectedDepartments = [...data.visibleDepartments];
+  $: availableDepartments = data.departments.length > 0 ? data.departments : ['FOH', 'Sushi', 'Kitchen'];
 
   $: weekRangeLabel = formatScheduleWeekRange(
     data.days.map((day) => day.date),
@@ -50,7 +51,7 @@
     )
   }));
   $: viewingLabel =
-    selectedDepartments.length === scheduleDepartments.length
+    selectedDepartments.length === availableDepartments.length
       ? 'All areas'
       : selectedDepartments.join(', ');
   $: visibleShifts = filteredDays.flatMap((day) => day.shifts);
@@ -58,41 +59,24 @@
     const hours = shiftHours(shift.startTime, shift.endLabel);
     return hours === null ? sum : sum + hours;
   }, 0);
-  $: departmentHourTotals = {
-    FOH: data.days.reduce((sum, day) => {
-      return (
-        sum +
-        day.shifts.reduce((daySum, shift) => {
-          if (shift.department !== 'FOH') return daySum;
-          const hours = shiftHours(shift.startTime, shift.endLabel);
-          return hours === null ? daySum : daySum + hours;
-        }, 0)
-      );
-    }, 0),
-    Sushi: data.days.reduce((sum, day) => {
-      return (
-        sum +
-        day.shifts.reduce((daySum, shift) => {
-          if (shift.department !== 'Sushi') return daySum;
-          const hours = shiftHours(shift.startTime, shift.endLabel);
-          return hours === null ? daySum : daySum + hours;
-        }, 0)
-      );
-    }, 0),
-    Kitchen: data.days.reduce((sum, day) => {
-      return (
-        sum +
-        day.shifts.reduce((daySum, shift) => {
-          if (shift.department !== 'Kitchen') return daySum;
-          const hours = shiftHours(shift.startTime, shift.endLabel);
-          return hours === null ? daySum : daySum + hours;
-        }, 0)
-      );
-    }, 0)
-  };
+  $: departmentHourTotals = Object.fromEntries(
+    availableDepartments.map((department) => [
+      department,
+      data.days.reduce((sum, day) => {
+        return (
+          sum +
+          day.shifts.reduce((daySum, shift) => {
+            if (shift.department !== department) return daySum;
+            const hours = shiftHours(shift.startTime, shift.endLabel);
+            return hours === null ? daySum : daySum + hours;
+          }, 0)
+        );
+      }, 0)
+    ])
+  );
 
   function showAllDepartments() {
-    selectedDepartments = [...scheduleDepartments];
+    selectedDepartments = [...availableDepartments];
   }
 
   function toggleDepartment(department: ScheduleDepartment) {
@@ -129,7 +113,7 @@
 
 <Layout padded={false}>
   <div class="schedule-shell">
-    <PageHeader title="Schedule" subtitle="Posted weekly schedule for the team." />
+    <PageHeader title="Team Schedule" subtitle="Posted weekly schedule for the team." />
 
     <nav class="subnav">
       <a href="/my-schedule">My Schedule</a>
@@ -152,13 +136,13 @@
       <section class="filter-bar" aria-label="Schedule area filters">
         <button
           type="button"
-          class:filter-active={selectedDepartments.length === scheduleDepartments.length}
+          class:filter-active={selectedDepartments.length === availableDepartments.length}
           class="filter-chip"
           on:click={showAllDepartments}
         >
           All
         </button>
-        {#each scheduleDepartments as department}
+        {#each availableDepartments as department}
           <button
             type="button"
             class:filter-active={selectedDepartments.includes(department)}
@@ -173,7 +157,7 @@
       <section class="hours-banner" aria-label="Schedule hours">
         <div class="hours-primary">
           <strong>
-            {selectedDepartments.length === scheduleDepartments.length
+            {selectedDepartments.length === availableDepartments.length
               ? 'Tracked Hours'
               : `${viewingLabel} Hours`}
             : {formatHours(trackedHours)}
@@ -181,9 +165,11 @@
           <span>Timed shifts only</span>
         </div>
         <div class="hours-breakdown">
-          <span class="hours-chip">FOH {formatHours(departmentHourTotals.FOH)}</span>
-          <span class="hours-chip">Sushi {formatHours(departmentHourTotals.Sushi)}</span>
-          <span class="hours-chip">Kitchen {formatHours(departmentHourTotals.Kitchen)}</span>
+          {#each availableDepartments as department}
+            <span class="hours-chip">
+              {department} {formatHours(departmentHourTotals[department] ?? 0)}
+            </span>
+          {/each}
         </div>
       </section>
     {/if}

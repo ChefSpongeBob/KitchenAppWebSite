@@ -89,14 +89,9 @@
       description: 'Build and post weekly shifts.'
     },
     {
-      href: '/admin/schedule-settings',
-      title: 'Schedule Settings',
-      description: 'Manage roles, departments, and autofill behavior.'
-    },
-    {
       href: '/admin/users',
-      title: 'Users',
-      description: 'Approve, deny, and manage staff access.'
+      title: 'Employees',
+      description: 'Manage staff access, assignments, and employee records.'
     },
     {
       href: '/admin/lists',
@@ -143,30 +138,11 @@
       <p>Ideas waiting for approval.</p>
     </article>
     <article class="hero-card">
-      <span class="eyebrow">Named Nodes</span>
-      <strong>{data.summary.nodeCount}</strong>
-      <p>Named temperature nodes.</p>
+      <span class="eyebrow">Scheduled Employees</span>
+      <strong>{data.users.length}</strong>
+      <p>Employees available in the scheduling system.</p>
     </article>
   </section>
-
-  <section class="editor-grid" aria-label="Admin editors">
-    {#each editorLinks as link}
-      <a class="editor-link" href={link.href}>
-        <span class="editor-kicker">Editor</span>
-        <h2>{link.title}</h2>
-        <p>{link.description}</p>
-        <span class="editor-cta">Open</span>
-      </a>
-    {/each}
-  </section>
-
-  <nav class="jump-nav" aria-label="Admin quick sections">
-    <a href="#todos">Todo</a>
-    <a href="#whiteboard">Whiteboard</a>
-    <a href="#announcement">Announcement</a>
-    <a href="#employee-spotlight">Employee</a>
-    <a href="#nodes">Node Names</a>
-  </nav>
 
   <section class="stack">
     {#if adminMessage}
@@ -356,6 +332,16 @@
     </details>
 
   </section>
+
+  <section class="editor-grid" aria-label="Admin editors">
+    {#each editorLinks as link}
+      <a class="editor-link" href={link.href}>
+        <span class="editor-kicker">Editor</span>
+        <h2>{link.title}</h2>
+        <p>{link.description}</p>
+      </a>
+    {/each}
+  </section>
 </Layout>
 
 <style>
@@ -423,6 +409,7 @@
 
   .editor-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 1rem;
     margin-bottom: 1rem;
   }
 
@@ -442,36 +429,6 @@
   .editor-link h2 {
     margin: 0.45rem 0 0;
     font-size: 1rem;
-  }
-
-  .editor-cta {
-    display: inline-flex;
-    margin-top: 0.9rem;
-    border-radius: 999px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    padding: 0.28rem 0.7rem;
-    font-size: 0.78rem;
-    color: var(--color-text-soft);
-    background: rgba(195, 32, 43, 0.08);
-  }
-
-  .jump-nav {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin: 0 0 1rem;
-  }
-
-  .jump-nav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    font-size: 0.76rem;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
   }
 
   .stack {
@@ -515,6 +472,10 @@
 
   .panel[open] > :global(table) {
     margin-bottom: 1rem;
+  }
+
+  .panel[open]:last-child {
+    padding-bottom: 0.9rem;
   }
 
   .sheet {

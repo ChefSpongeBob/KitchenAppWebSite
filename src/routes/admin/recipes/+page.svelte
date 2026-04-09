@@ -56,10 +56,6 @@
     subtitle="Add and organize recipes here."
   />
 
-  <nav class="subnav">
-    <a href="/admin">Back to Dashboard</a>
-  </nav>
-
   <section class="panel">
     <header class="panel-header">
       <div>
@@ -126,19 +122,6 @@
 </Layout>
 
 <style>
-  .subnav {
-    margin: 0.5rem 0 1rem;
-  }
-
-  .subnav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
   .panel {
     position: relative;
     padding: 1rem;

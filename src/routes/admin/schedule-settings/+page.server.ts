@@ -1,9 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
-import { loadAdminUsers, requireAdmin, toggleScheduleDepartmentApproval } from '$lib/server/admin';
+import { requireAdmin } from '$lib/server/admin';
 import {
-  createScheduleRoleDefinition,
-  deleteScheduleRoleDefinition,
-  loadScheduleRoleDefinitions,
   loadScheduleSettings,
   saveScheduleAutofillPreference
 } from '$lib/server/schedules';
@@ -14,7 +11,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   if (!db) {
     return {
-      users: [],
       settings: {
         autofillNewWeeks: false,
         roleOptionsByDepartment: {
@@ -22,27 +18,15 @@ export const load: PageServerLoad = async ({ locals }) => {
           Sushi: [],
           Kitchen: []
         }
-      },
-      roles: []
+      }
     };
   }
 
-  const [users, settings, roles] = await Promise.all([
-    loadAdminUsers(db),
-    loadScheduleSettings(db),
-    loadScheduleRoleDefinitions(db)
-  ]);
-
   return {
-    users,
-    settings,
-    roles
+    settings: await loadScheduleSettings(db)
   };
 };
 
 export const actions: Actions = {
-  save_autofill: ({ request, locals }) => saveScheduleAutofillPreference(request, locals),
-  create_role: ({ request, locals }) => createScheduleRoleDefinition(request, locals),
-  delete_role: ({ request, locals }) => deleteScheduleRoleDefinition(request, locals),
-  toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals)
+  save_autofill: ({ request, locals }) => saveScheduleAutofillPreference(request, locals)
 };

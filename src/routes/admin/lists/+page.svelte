@@ -106,13 +106,6 @@
     subtitle="Edit prep, inventory, and order sheets."
   />
 
-  <nav class="subnav">
-    <a href="/admin">Back to Dashboard</a>
-    {#each buckets as bucket}
-      <a href={`#${bucket.id}`}>{bucket.title}</a>
-    {/each}
-  </nav>
-
   {#each buckets as bucket}
     <section class="panel" id={bucket.id}>
       <header class="panel-header">
@@ -234,22 +227,6 @@
 </Layout>
 
 <style>
-  .subnav {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin: 0.5rem 0 1rem;
-  }
-
-  .subnav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
   .panel {
     position: relative;
     margin-top: 0.95rem;

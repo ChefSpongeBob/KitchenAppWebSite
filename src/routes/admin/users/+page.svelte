@@ -4,7 +4,6 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
-  import { scheduleDepartments, type ScheduleDepartment } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type UserOption = {
@@ -14,7 +13,7 @@
     role: string;
     is_active: number;
     can_manage_specials: number;
-    approved_departments: ScheduleDepartment[];
+    approved_departments: string[];
   };
 
   type InviteOption = {
@@ -37,15 +36,27 @@
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
   $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
   $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
+  let staffSearch = '';
+
+  $: filteredStaff = activeUsers.filter((user) => {
+    const query = staffSearch.trim().toLowerCase();
+    if (!query) return true;
+    const haystack = [
+      user.display_name ?? '',
+      user.email,
+      user.role,
+      ...user.approved_departments
+    ]
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(query);
+  });
 
   const formatDate = (value: number | null) =>
     value ? new Date(value * 1000).toLocaleDateString() : 'None';
 
   const departmentSummary = (user: UserOption) =>
     user.approved_departments.length > 0 ? user.approved_departments.join(', ') : 'No schedule departments';
-
-  const isDepartmentApproved = (user: UserOption, department: ScheduleDepartment) =>
-    user.approved_departments.includes(department);
 
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
@@ -62,12 +73,9 @@
 
 <Layout>
   <PageHeader
-    title="User Access"
-    subtitle="Approve, deny, and manage staff access."
+    title="Employees"
+    subtitle="Manage invites, access, and employee schedule assignments."
   />
-  <nav class="subnav">
-    <a href="/admin">Back to Dashboard</a>
-  </nav>
 
   <section class="summary-grid" aria-label="User summary">
     <article class="summary-card">
@@ -205,33 +213,11 @@
                 </div>
               </dl>
 
-              <div class="department-editor">
-                <span>Departments</span>
-                <div class="department-chips">
-                  {#each scheduleDepartments as department}
-                    <form method="POST" action="?/toggle_schedule_department" use:enhance={withFeedback}>
-                      <input type="hidden" name="user_id" value={user.id} />
-                      <input type="hidden" name="department" value={department} />
-                      <button
-                        type="submit"
-                        class="department-chip"
-                        class:department-chip-active={isDepartmentApproved(user, department)}
-                      >
-                        {department}
-                      </button>
-                    </form>
-                  {/each}
-                </div>
-              </div>
-
               <div class="actions">
+                <a href={`/admin/users/${user.id}`} class="inline-link">Open Employee</a>
                 <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button type="submit">Allow Access</button>
-                </form>
-                <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit" class="warn-action">Keep Blocked</button>
                 </form>
               </div>
             </article>
@@ -243,88 +229,41 @@
     <section class="panel">
       <header class="panel-head">
         <div>
-          <span class="panel-kicker">Active</span>
-          <h2>Active Users</h2>
+          <h2>Staff</h2>
         </div>
-        <span>{activeUsers.length} users</span>
+        <span>{filteredStaff.length} staff</span>
       </header>
 
-      <div class="user-grid">
-        {#if activeUsers.length === 0}
-          <article class="user-card empty-card">No active users.</article>
+      <div class="staff-search">
+        <input
+          bind:value={staffSearch}
+          type="search"
+          placeholder="Search employees"
+          aria-label="Search employees"
+        />
+      </div>
+
+      <div class="staff-list">
+        {#if filteredStaff.length === 0}
+          <article class="user-card empty-card">
+            {activeUsers.length === 0 ? 'No staff yet.' : 'No staff match that search.'}
+          </article>
         {:else}
-          {#each activeUsers as user}
-            <article class="user-card">
-              <div class="user-head">
-                <div>
-                  <h3>{user.display_name ?? 'Unnamed User'}</h3>
-                  <p>{user.email}</p>
+          {#each filteredStaff as user}
+            <article class="staff-row">
+              <a href={`/admin/users/${user.id}`} class="staff-link">
+                <div class="staff-main">
+                  <strong>{user.display_name ?? 'Unnamed User'}</strong>
+                  <span>{user.email}</span>
                 </div>
-                <span class="status status-approved">Active</span>
-              </div>
-
-              <dl class="meta">
-                <div>
-                  <dt>Role</dt>
-                  <dd>{user.role}</dd>
+                <div class="staff-meta">
+                  <span>{departmentSummary(user)}</span>
                 </div>
-                <div>
-                  <dt>Specials</dt>
-                  <dd>{user.role === 'admin' || user.can_manage_specials === 1 ? 'Allowed' : 'Off'}</dd>
-                </div>
-                <div>
-                  <dt>Schedule</dt>
-                  <dd>{departmentSummary(user)}</dd>
-                </div>
-              </dl>
-
-              <div class="department-editor">
-                <span>Departments</span>
-                <div class="department-chips">
-                  {#each scheduleDepartments as department}
-                    <form method="POST" action="?/toggle_schedule_department" use:enhance={withFeedback}>
-                      <input type="hidden" name="user_id" value={user.id} />
-                      <input type="hidden" name="department" value={department} />
-                      <button
-                        type="submit"
-                        class="department-chip"
-                        class:department-chip-active={isDepartmentApproved(user, department)}
-                      >
-                        {department}
-                      </button>
-                    </form>
-                  {/each}
-                </div>
-              </div>
-
-              <div class="actions">
+              </a>
+              <div class="staff-actions">
                 <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
                   <input type="hidden" name="user_id" value={user.id} />
                   <button type="submit" class="warn-action">Restrict</button>
-                </form>
-
-                {#if user.role !== 'admin'}
-                  <form method="POST" action="?/make_user_admin" use:enhance={withFeedback}>
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <button type="submit">Make Admin</button>
-                  </form>
-                {/if}
-
-                <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <button
-                    type="submit"
-                    class:success-action={user.can_manage_specials === 1 || user.role === 'admin'}
-                  >
-                    {user.can_manage_specials === 1 || user.role === 'admin'
-                      ? 'Specials Allowed'
-                      : 'Grant Specials'}
-                  </button>
-                </form>
-
-                <form method="POST" action="?/delete_user" use:enhance={withFeedback}>
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit" class="danger-action">Delete</button>
                 </form>
               </div>
             </article>
@@ -336,22 +275,6 @@
 </Layout>
 
 <style>
-  .subnav {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin: 0.5rem 0 1rem;
-  }
-
-  .subnav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
   .summary-grid,
   .user-grid {
     display: grid;
@@ -455,6 +378,71 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .staff-search {
+    margin-bottom: 0.9rem;
+  }
+
+  .staff-list {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .staff-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.8rem 0.9rem;
+  }
+
+  .staff-link {
+    min-width: 0;
+    display: grid;
+    gap: 0.45rem;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .staff-link:hover strong,
+  .staff-link:focus-visible strong {
+    color: var(--color-primary-contrast);
+  }
+
+  .staff-main {
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .staff-main strong {
+    font-size: 0.95rem;
+  }
+
+  .staff-main span {
+    color: var(--color-text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .staff-meta {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+  }
+
+  .staff-meta span {
+    display: inline;
+  }
+
+  .staff-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .staff-actions form {
+    min-width: 8rem;
+  }
+
   .user-head {
     display: flex;
     justify-content: space-between;
@@ -502,46 +490,26 @@
     align-items: stretch;
   }
 
-  .department-editor {
-    display: grid;
-    gap: 0.45rem;
-    margin: 0 0 0.9rem;
-  }
-
-  .department-editor > span {
-    color: var(--color-text-muted);
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .department-chips {
-    display: flex;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-  }
-
-  .department-chips form {
-    flex: 0 0 auto;
-  }
-
-  .department-chip {
-    width: auto;
-    min-height: 2.1rem;
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--color-text);
-    padding-inline: 0.8rem;
-  }
-
-  .department-chip.department-chip-active {
-    border-color: rgba(22, 163, 74, 0.24);
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.22), rgba(22, 163, 74, 0.08));
-    color: #dcfce7;
-  }
-
   .actions form {
     flex: 1 1 150px;
+  }
+
+  .inline-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 150px;
+    min-height: 2.6rem;
+    padding: 0.55rem 0.78rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 0.78rem;
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    text-align: center;
   }
 
   .invite-form {
@@ -591,18 +559,6 @@
     border-color: rgba(245, 158, 11, 0.28);
     color: #fcd34d;
     background: linear-gradient(180deg, rgba(120, 86, 10, 0.42), rgba(120, 86, 10, 0.14));
-  }
-
-  .danger-action {
-    border-color: rgba(239, 68, 68, 0.3);
-    color: #ffb6b6;
-    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
-  }
-
-  .success-action {
-    border-color: rgba(22, 163, 74, 0.32);
-    color: #bbf7d0;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.34), rgba(22, 163, 74, 0.12));
   }
 
   .status {
@@ -656,6 +612,15 @@
 
     .invite-form {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .staff-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .staff-actions form {
+      min-width: 0;
+      width: 100%;
     }
   }
 </style>

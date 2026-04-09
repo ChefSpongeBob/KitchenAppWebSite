@@ -114,16 +114,15 @@
     subtitle="View current cameras and open saved clips."
   />
 
-  <nav class="subnav">
-    <a href="/admin">Back to Dashboard</a>
-    <form method="POST" action="?/clear_events" use:enhance={withFeedback}>
-      <button type="submit">Clear Clips</button>
-    </form>
-  </nav>
-
   {#if feedbackMessage}
     <p class="feedback-banner">{feedbackMessage}</p>
   {/if}
+
+  <div class="page-actions">
+    <form method="POST" action="?/clear_events" use:enhance={withFeedback}>
+      <button type="submit">Clear Clips</button>
+    </form>
+  </div>
 
   <section class="feed-grid">
     {#each cameraCards as camera}
@@ -228,25 +227,10 @@
 </Layout>
 
 <style>
-  .subnav {
+  .page-actions {
     margin: 0.5rem 0 1rem;
     display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .subnav a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    min-height: 2.4rem;
-    padding: 0.42rem 0.8rem;
-    background: rgba(255, 255, 255, 0.03);
+    justify-content: flex-end;
   }
 
   .feed-grid {

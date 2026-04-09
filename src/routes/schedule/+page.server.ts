@@ -1,10 +1,10 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { scheduleDepartments } from '$lib/assets/schedule';
 import {
   addDays,
   getWeekStart,
   loadScheduleDepartmentApprovalsByUser,
+  loadScheduleDepartments,
   loadScheduleWeek
 } from '$lib/server/schedules';
 
@@ -23,20 +23,22 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       week: null,
       days: [],
       isAdmin: locals.userRole === 'admin',
-      visibleDepartments: [...scheduleDepartments]
+      departments: ['FOH', 'Sushi', 'Kitchen'],
+      visibleDepartments: ['FOH', 'Sushi', 'Kitchen']
     };
   }
 
-  const [schedule, approvalsByUser] = await Promise.all([
+  const [schedule, approvalsByUser, departments] = await Promise.all([
     loadScheduleWeek(db, weekStart, { publishedOnly: true }),
-    loadScheduleDepartmentApprovalsByUser(db, [locals.userId])
+    loadScheduleDepartmentApprovalsByUser(db, [locals.userId]),
+    loadScheduleDepartments(db)
   ]);
 
   const approvedDepartments = approvalsByUser.get(locals.userId) ?? [];
   const defaultDepartments =
     locals.userRole === 'admin'
-      ? [...scheduleDepartments]
-      : approvedDepartments.filter((department) => scheduleDepartments.includes(department));
+      ? [...departments]
+      : approvedDepartments.filter((department) => departments.includes(department));
 
   return {
     weekStart,
@@ -45,6 +47,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     week: schedule.week,
     days: schedule.days,
     isAdmin: locals.userRole === 'admin',
+    departments,
     visibleDepartments: defaultDepartments
   };
 };

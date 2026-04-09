@@ -68,10 +68,11 @@ export type ScheduleAssignableUser = {
   approvedDepartments: ScheduleDepartment[];
 };
 
-export type ScheduleRoleOptionsByDepartment = Record<ScheduleDepartment, string[]>;
+export type ScheduleRoleOptionsByDepartment = Record<string, string[]>;
 
 export type ScheduleSettings = {
   autofillNewWeeks: boolean;
+  departments: ScheduleDepartment[];
   roleOptionsByDepartment: ScheduleRoleOptionsByDepartment;
 };
 
@@ -87,6 +88,22 @@ export type UserScheduleAvailability = {
   isAvailable: boolean;
   startTime: string;
   endTime: string;
+};
+
+export type ScheduleTimeOffRequest = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string;
+  startDate: string;
+  endDate: string;
+  note: string;
+  status: 'pending' | 'approved' | 'declined';
+  managerNote: string;
+  createdAt: number;
+  updatedAt: number;
+  resolvedAt: number | null;
+  resolvedByUserId: string | null;
 };
 
 export type ScheduleDay = {
@@ -109,11 +126,52 @@ type ScheduleDraftRow = {
 let scheduleSchemaEnsured = false;
 
 function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
-  return {
-    FOH: [...scheduleRolesByDepartment.FOH],
-    Sushi: [...scheduleRolesByDepartment.Sushi],
-    Kitchen: [...scheduleRolesByDepartment.Kitchen]
-  };
+  return Object.fromEntries(
+    Object.entries(scheduleRolesByDepartment).map(([department, roles]) => [department, [...roles]])
+  );
+}
+
+export async function loadScheduleDepartments(db: DB): Promise<ScheduleDepartment[]> {
+  await ensureScheduleSchema(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT name
+      FROM schedule_departments
+      WHERE is_active = 1
+      ORDER BY sort_order ASC, name ASC
+      `
+    )
+    .all<{ name: string }>();
+
+  const departments = (rows.results ?? [])
+    .map((row) => String(row.name ?? '').trim())
+    .filter((department) => department.length > 0);
+
+  return departments.length > 0 ? departments : [...scheduleDepartments];
+}
+
+async function seedDefaultScheduleDepartments(db: DB) {
+  const existing = await db
+    .prepare(`SELECT COUNT(*) AS count FROM schedule_departments`)
+    .first<{ count: number }>();
+  if ((existing?.count ?? 0) > 0) return;
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const [index, department] of scheduleDepartments.entries()) {
+    await db
+      .prepare(
+        `
+        INSERT INTO schedule_departments (
+          id, name, sort_order, is_active, created_at, updated_at
+        )
+        VALUES (?, ?, ?, 1, ?, ?)
+        `
+      )
+      .bind(crypto.randomUUID(), department, index, now, now)
+      .run();
+  }
 }
 
 async function seedDefaultScheduleRoles(db: DB) {
@@ -159,6 +217,8 @@ async function seedInitialScheduleDepartmentApprovals(db: DB) {
     .first<{ count: number }>();
   if ((existing?.count ?? 0) > 0) return;
 
+  const departments = await loadScheduleDepartments(db);
+
   const activeUsers = await db
     .prepare(
       `
@@ -171,7 +231,7 @@ async function seedInitialScheduleDepartmentApprovals(db: DB) {
 
   const now = Math.floor(Date.now() / 1000);
   for (const user of activeUsers.results ?? []) {
-    for (const department of scheduleDepartments) {
+    for (const department of departments) {
       await db
         .prepare(
           `
@@ -474,6 +534,21 @@ export async function ensureScheduleSchema(db: DB) {
   await db
     .prepare(
       `
+      CREATE TABLE IF NOT EXISTS schedule_departments (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
       CREATE TABLE IF NOT EXISTS schedule_role_definitions (
         id TEXT PRIMARY KEY,
         department TEXT NOT NULL,
@@ -514,6 +589,28 @@ export async function ensureScheduleSchema(db: DB) {
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (user_id, weekday),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS user_schedule_time_off_requests (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        manager_note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        resolved_at INTEGER,
+        resolved_by_user_id TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
       )
       `
     )
@@ -567,6 +664,15 @@ export async function ensureScheduleSchema(db: DB) {
   await db
     .prepare(
       `
+      CREATE INDEX IF NOT EXISTS idx_schedule_departments_order
+      ON schedule_departments(sort_order, name)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
       CREATE INDEX IF NOT EXISTS idx_schedule_role_definitions_department
       ON schedule_role_definitions(department, sort_order, role_name)
       `
@@ -582,6 +688,16 @@ export async function ensureScheduleSchema(db: DB) {
     )
     .run();
 
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_user_schedule_time_off_requests_user
+      ON user_schedule_time_off_requests(user_id, start_date, end_date, status)
+      `
+    )
+    .run();
+
+  await seedDefaultScheduleDepartments(db);
   await seedInitialScheduleDepartmentApprovals(db);
   await seedDefaultScheduleRoles(db);
 
@@ -643,7 +759,10 @@ export async function getOrCreateScheduleWeek(db: DB, weekStart: string, userId?
 export async function loadScheduleRoleOptionsByDepartment(db: DB): Promise<ScheduleRoleOptionsByDepartment> {
   await ensureScheduleSchema(db);
 
-  const defaults = defaultRoleOptionsByDepartment();
+  const [departments, defaults] = await Promise.all([
+    loadScheduleDepartments(db),
+    Promise.resolve(defaultRoleOptionsByDepartment())
+  ]);
   const rows = await db
     .prepare(
       `
@@ -655,22 +774,23 @@ export async function loadScheduleRoleOptionsByDepartment(db: DB): Promise<Sched
     )
     .all<{ department: string; role_name: string }>();
 
-  const configured: ScheduleRoleOptionsByDepartment = {
-    FOH: [],
-    Sushi: [],
-    Kitchen: []
-  };
+  const configured: ScheduleRoleOptionsByDepartment = Object.fromEntries(
+    departments.map((department) => [department, [] as string[]])
+  );
 
   for (const row of rows.results ?? []) {
-    if (!isValidScheduleDepartment(row.department)) continue;
+    if (!configured[row.department]) {
+      configured[row.department] = [];
+    }
     configured[row.department].push(row.role_name);
   }
 
-  return {
-    FOH: configured.FOH.length > 0 ? configured.FOH : defaults.FOH,
-    Sushi: configured.Sushi.length > 0 ? configured.Sushi : defaults.Sushi,
-    Kitchen: configured.Kitchen.length > 0 ? configured.Kitchen : defaults.Kitchen
-  };
+  return Object.fromEntries(
+    departments.map((department) => [
+      department,
+      configured[department].length > 0 ? configured[department] : [...(defaults[department] ?? [])]
+    ])
+  );
 }
 
 export async function loadScheduleSettings(db: DB): Promise<ScheduleSettings> {
@@ -692,6 +812,7 @@ export async function loadScheduleSettings(db: DB): Promise<ScheduleSettings> {
 
   return {
     autofillNewWeeks: (preferences?.autofill_new_weeks ?? 0) === 1,
+    departments: await loadScheduleDepartments(db),
     roleOptionsByDepartment
   };
 }
@@ -711,10 +832,9 @@ export async function loadScheduleRoleDefinitions(db: DB): Promise<ScheduleRoleD
     .all<{ id: string; department: string; role_name: string; sort_order: number }>();
 
   return (rows.results ?? [])
-    .filter((row) => isValidScheduleDepartment(row.department))
     .map((row) => ({
       id: row.id,
-      department: row.department as ScheduleDepartment,
+      department: row.department,
       roleName: row.role_name,
       sortOrder: row.sort_order
     }));
@@ -1005,6 +1125,133 @@ export async function loadUserScheduleAvailability(db: DB, userId: string) {
   });
 }
 
+export async function loadUserScheduleTimeOffRequests(db: DB, userId: string) {
+  await ensureScheduleSchema(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        r.id,
+        r.user_id,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        r.start_date,
+        r.end_date,
+        r.note,
+        r.status,
+        r.manager_note,
+        r.created_at,
+        r.updated_at,
+        r.resolved_at,
+        r.resolved_by_user_id
+      FROM user_schedule_time_off_requests r
+      JOIN users u ON u.id = r.user_id
+      WHERE r.user_id = ?
+      ORDER BY
+        CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        r.start_date ASC,
+        r.created_at DESC
+      `
+    )
+    .bind(userId)
+    .all<{
+      id: string;
+      user_id: string;
+      user_name: string | null;
+      user_email: string;
+      start_date: string;
+      end_date: string;
+      note: string | null;
+      status: 'pending' | 'approved' | 'declined';
+      manager_note: string | null;
+      created_at: number;
+      updated_at: number;
+      resolved_at: number | null;
+      resolved_by_user_id: string | null;
+    }>();
+
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    note: row.note ?? '',
+    status: row.status,
+    managerNote: row.manager_note ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at,
+    resolvedByUserId: row.resolved_by_user_id
+  })) satisfies ScheduleTimeOffRequest[];
+}
+
+export async function loadScheduleTimeOffRequestsForRange(db: DB, startDate: string, endDate: string) {
+  await ensureScheduleSchema(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        r.id,
+        r.user_id,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        r.start_date,
+        r.end_date,
+        r.note,
+        r.status,
+        r.manager_note,
+        r.created_at,
+        r.updated_at,
+        r.resolved_at,
+        r.resolved_by_user_id
+      FROM user_schedule_time_off_requests r
+      JOIN users u ON u.id = r.user_id
+      WHERE r.start_date <= ?
+        AND r.end_date >= ?
+      ORDER BY
+        CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        r.start_date ASC,
+        COALESCE(u.display_name, u.email) ASC
+      `
+    )
+    .bind(endDate, startDate)
+    .all<{
+      id: string;
+      user_id: string;
+      user_name: string | null;
+      user_email: string;
+      start_date: string;
+      end_date: string;
+      note: string | null;
+      status: 'pending' | 'approved' | 'declined';
+      manager_note: string | null;
+      created_at: number;
+      updated_at: number;
+      resolved_at: number | null;
+      resolved_by_user_id: string | null;
+    }>();
+
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    note: row.note ?? '',
+    status: row.status,
+    managerNote: row.manager_note ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at,
+    resolvedByUserId: row.resolved_by_user_id
+  })) satisfies ScheduleTimeOffRequest[];
+}
+
 async function loadOwnedShift(db: DB, shiftId: string) {
   return db
     .prepare(
@@ -1115,6 +1362,91 @@ export async function saveUserScheduleAvailability(request: Request, locals: App
   return { success: true, message: 'Availability updated.' };
 }
 
+export async function createUserScheduleTimeOffRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const startDate = String(form.get('start_date') ?? '').trim();
+  const endDate = String(form.get('end_date') ?? '').trim();
+  const note = String(form.get('note') ?? '').trim();
+
+  if (!startDate || !endDate) {
+    return fail(400, { error: 'Start and end dates are required.' });
+  }
+  if (endDate < startDate) {
+    return fail(400, { error: 'End date must be on or after the start date.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM user_schedule_time_off_requests
+      WHERE user_id = ?
+        AND status = 'pending'
+        AND start_date = ?
+        AND end_date = ?
+      LIMIT 1
+      `
+    )
+    .bind(locals.userId, startDate, endDate)
+    .first<{ id: string }>();
+  if (existing) {
+    return fail(400, { error: 'That time off request is already pending.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO user_schedule_time_off_requests (
+        id, user_id, start_date, end_date, note, status, manager_note,
+        created_at, updated_at, resolved_at, resolved_by_user_id
+      )
+      VALUES (?, ?, ?, ?, ?, 'pending', '', ?, ?, NULL, NULL)
+      `
+    )
+    .bind(crypto.randomUUID(), locals.userId, startDate, endDate, note, now, now)
+    .run();
+
+  return { success: true, message: 'Time off request submitted.' };
+}
+
+export async function cancelUserScheduleTimeOffRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const requestId = String(form.get('request_id') ?? '').trim();
+  if (!requestId) return fail(400, { error: 'Missing request id.' });
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM user_schedule_time_off_requests
+      WHERE id = ?
+        AND user_id = ?
+        AND status = 'pending'
+      LIMIT 1
+      `
+    )
+    .bind(requestId, locals.userId)
+    .first<{ id: string }>();
+
+  if (!existing) {
+    return fail(404, { error: 'That pending time off request could not be found.' });
+  }
+
+  await db.prepare(`DELETE FROM user_schedule_time_off_requests WHERE id = ?`).bind(requestId).run();
+  return { success: true, message: 'Pending time off request removed.' };
+}
+
 export async function offerScheduleShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -1140,7 +1472,8 @@ export async function offerScheduleShift(request: Request, locals: App.Locals) {
     if (!targetUser) {
       return fail(400, { error: 'That employee could not be selected.' });
     }
-    if (!isValidScheduleDepartment(shift.department)) {
+    const departments = await loadScheduleDepartments(db);
+    if (!isValidScheduleDepartment(shift.department, departments)) {
       return fail(400, { error: 'That shift has an invalid department.' });
     }
     if (!targetUser.approvedDepartments.includes(shift.department)) {
@@ -1238,7 +1571,8 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
   if (offer.requested_by_user_id && offer.requested_by_user_id !== locals.userId) {
     return fail(400, { error: 'That shift already has a pending request.' });
   }
-  if (!isValidScheduleDepartment(offer.department)) {
+  const departments = await loadScheduleDepartments(db);
+  if (!isValidScheduleDepartment(offer.department, departments)) {
     return fail(400, { error: 'That shift has an invalid department.' });
   }
 
@@ -1310,7 +1644,8 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
   if (!offer?.requested_by_user_id) {
     return fail(400, { error: 'That shift does not have a pending taker yet.' });
   }
-  if (!isValidScheduleDepartment(offer.department)) {
+  const departments = await loadScheduleDepartments(db);
+  if (!isValidScheduleDepartment(offer.department, departments)) {
     return fail(400, { error: 'That shift has an invalid department.' });
   }
 
@@ -1362,6 +1697,78 @@ export async function declineScheduleShiftOffer(request: Request, locals: App.Lo
   return { success: true, message: 'Shift request declined.' };
 }
 
+export async function approveScheduleTimeOffRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const requestId = String(form.get('request_id') ?? '').trim();
+  const managerNote = String(form.get('manager_note') ?? '').trim();
+  if (!requestId) return fail(400, { error: 'Missing request id.' });
+
+  const existing = await db
+    .prepare(`SELECT id FROM user_schedule_time_off_requests WHERE id = ? LIMIT 1`)
+    .bind(requestId)
+    .first<{ id: string }>();
+  if (!existing) return fail(404, { error: 'That time off request could not be found.' });
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      UPDATE user_schedule_time_off_requests
+      SET status = 'approved',
+          manager_note = ?,
+          updated_at = ?,
+          resolved_at = ?,
+          resolved_by_user_id = ?
+      WHERE id = ?
+      `
+    )
+    .bind(managerNote, now, now, locals.userId, requestId)
+    .run();
+
+  return { success: true, message: 'Time off approved.' };
+}
+
+export async function declineScheduleTimeOffRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const requestId = String(form.get('request_id') ?? '').trim();
+  const managerNote = String(form.get('manager_note') ?? '').trim();
+  if (!requestId) return fail(400, { error: 'Missing request id.' });
+
+  const existing = await db
+    .prepare(`SELECT id FROM user_schedule_time_off_requests WHERE id = ? LIMIT 1`)
+    .bind(requestId)
+    .first<{ id: string }>();
+  if (!existing) return fail(404, { error: 'That time off request could not be found.' });
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      UPDATE user_schedule_time_off_requests
+      SET status = 'declined',
+          manager_note = ?,
+          updated_at = ?,
+          resolved_at = ?,
+          resolved_by_user_id = ?
+      WHERE id = ?
+      `
+    )
+    .bind(managerNote, now, now, locals.userId, requestId)
+    .run();
+
+  return { success: true, message: 'Time off declined.' };
+}
+
 export async function saveScheduleShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -1385,7 +1792,8 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
     return fail(400, { error: 'Date, user, department, role, and start time are required.' });
   }
 
-  if (!isValidScheduleDepartment(department)) {
+  const departments = await loadScheduleDepartments(db);
+  if (!isValidScheduleDepartment(department, departments)) {
     return fail(400, { error: 'Invalid department.' });
   }
 
@@ -1488,6 +1896,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   }
 
   const rows: ScheduleDraftRow[] = [];
+  const departments = await loadScheduleDepartments(db);
   const roleOptionsByDepartment = await loadScheduleRoleOptionsByDepartment(db);
   for (const entry of parsed) {
     if (!entry || typeof entry !== 'object') continue;
@@ -1509,7 +1918,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
       return fail(400, { error: 'Every shift needs a date, employee, department, role, and start time.' });
     }
 
-    if (!isValidScheduleDepartment(department)) {
+    if (!isValidScheduleDepartment(department, departments)) {
       return fail(400, { error: `Invalid department on ${shiftDate}.` });
     }
 
@@ -1665,7 +2074,8 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   if (!source.week || source.shifts.length === 0) {
     return fail(400, { error: 'No previous week schedule was found to paste into this week.' });
   }
-  if (source.shifts.some((shift) => !isValidScheduleDepartment(shift.department))) {
+  const departments = await loadScheduleDepartments(db);
+  if (source.shifts.some((shift) => !isValidScheduleDepartment(shift.department, departments))) {
     return fail(400, { error: 'The previous week has a shift with an invalid department.' });
   }
 
@@ -1772,8 +2182,9 @@ export async function createScheduleRoleDefinition(request: Request, locals: App
   const form = await request.formData();
   const department = String(form.get('department') ?? '').trim();
   const roleName = String(form.get('role_name') ?? '').trim();
+  const departments = await loadScheduleDepartments(db);
 
-  if (!isValidScheduleDepartment(department)) {
+  if (!isValidScheduleDepartment(department, departments)) {
     return fail(400, { error: 'Invalid schedule department.' });
   }
   if (!roleName) {
@@ -1822,6 +2233,60 @@ export async function createScheduleRoleDefinition(request: Request, locals: App
   return { success: true, message: 'Schedule role added.' };
 }
 
+export async function createScheduleDepartment(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  const form = await request.formData();
+  const departmentName = String(form.get('department_name') ?? '').trim();
+
+  if (!departmentName) {
+    return fail(400, { error: 'Department name is required.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM schedule_departments
+      WHERE LOWER(name) = LOWER(?)
+      LIMIT 1
+      `
+    )
+    .bind(departmentName)
+    .first<{ id: string }>();
+
+  if (existing) {
+    return fail(400, { error: 'That department already exists.' });
+  }
+
+  const maxSort = await db
+    .prepare(
+      `
+      SELECT COALESCE(MAX(sort_order), -1) AS max_sort
+      FROM schedule_departments
+      `
+    )
+    .first<{ max_sort: number }>();
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO schedule_departments (
+        id, name, sort_order, is_active, created_at, updated_at
+      )
+      VALUES (?, ?, ?, 1, ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), departmentName, (maxSort?.max_sort ?? -1) + 1, now, now)
+    .run();
+
+  return { success: true, message: 'Department added.' };
+}
+
 export async function deleteScheduleRoleDefinition(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -1844,7 +2309,8 @@ export async function deleteScheduleRoleDefinition(request: Request, locals: App
     .bind(roleId)
     .first<{ id: string; department: string; role_name: string }>();
 
-  if (!role || !isValidScheduleDepartment(role.department)) {
+  const departments = await loadScheduleDepartments(db);
+  if (!role || !isValidScheduleDepartment(role.department, departments)) {
     return fail(404, { error: 'That schedule role could not be found.' });
   }
 
