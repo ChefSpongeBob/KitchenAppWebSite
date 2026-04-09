@@ -4,17 +4,12 @@ import { isValidScheduleDepartment } from '$lib/assets/schedule';
 import {
   addDays,
   cancelScheduleShiftOffer,
-  cancelUserScheduleTimeOffRequest,
-  createUserScheduleTimeOffRequest,
   getWeekStart,
   loadMyWeekSchedule,
-  loadUserScheduleAvailability,
-  loadUserScheduleTimeOffRequests,
   loadScheduleAssignableUsers,
   loadScheduleShiftOffersForWeek,
   offerScheduleShift,
   requestScheduleShiftOffer,
-  saveUserScheduleAvailability,
   withdrawScheduleShiftRequest
 } from '$lib/server/schedules';
 import type { Actions } from './$types';
@@ -35,18 +30,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       week: null,
       days: [],
       offers: [],
-      employees: [],
-      availability: [],
-      timeOffRequests: []
+      employees: []
     };
   }
 
-  const [schedule, offers, employees, availability, timeOffRequests] = await Promise.all([
+  const [schedule, offers, employees] = await Promise.all([
     loadMyWeekSchedule(db, weekStart, locals.userId),
     loadScheduleShiftOffersForWeek(db, weekStart),
-    loadScheduleAssignableUsers(db),
-    loadUserScheduleAvailability(db, locals.userId),
-    loadUserScheduleTimeOffRequests(db, locals.userId)
+    loadScheduleAssignableUsers(db)
   ]);
 
   const currentUser = employees.find((employee) => employee.id === locals.userId);
@@ -67,18 +58,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     prevWeekStart: addDays(weekStart, -7),
     nextWeekStart: addDays(weekStart, 7),
     week: schedule.week,
-      days: schedule.days,
-      offers: visibleOffers,
-      employees,
-      availability,
-      timeOffRequests
+    days: schedule.days,
+    offers: visibleOffers,
+    employees
   };
 };
 
 export const actions: Actions = {
-  save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
-  request_time_off: ({ request, locals }) => createUserScheduleTimeOffRequest(request, locals),
-  cancel_time_off_request: ({ request, locals }) => cancelUserScheduleTimeOffRequest(request, locals),
   offer_shift: ({ request, locals }) => offerScheduleShift(request, locals),
   cancel_offer: ({ request, locals }) => cancelScheduleShiftOffer(request, locals),
   request_offer: ({ request, locals }) => requestScheduleShiftOffer(request, locals),

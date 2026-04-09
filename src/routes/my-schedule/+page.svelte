@@ -2,7 +2,6 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
-  import AvailabilityEditor from '$lib/components/ui/AvailabilityEditor.svelte';
   import {
     formatScheduleTimeLabel,
     formatScheduleWeekRange,
@@ -65,20 +64,6 @@
       requestedByUserName: string | null;
       requestedByUserEmail: string | null;
     }>;
-    availability: Array<{
-      weekday: number;
-      isAvailable: boolean;
-      startTime: string;
-      endTime: string;
-    }>;
-    timeOffRequests: Array<{
-      id: string;
-      startDate: string;
-      endDate: string;
-      note: string;
-      status: 'pending' | 'approved' | 'declined';
-      managerNote: string;
-    }>;
   };
 
   type ShiftSummary = {
@@ -92,8 +77,6 @@
 
   let activeOfferShift: ShiftSummary | null = null;
   let activeOfferTargetUserId = '';
-  let availabilityEntries = data.availability.map((entry) => ({ ...entry }));
-  let availabilitySeed = JSON.stringify(data.availability);
 
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
@@ -102,9 +85,9 @@
         await invalidateAll();
       }
       if (result.type === 'success') {
-        pushToast(result.data?.message ?? 'Saved.', 'success');
+        pushToast('Shift update saved.', 'success');
       } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'That update could not be saved.', 'error');
+        pushToast(result.data?.error ?? 'That shift update could not be saved.', 'error');
       }
     };
   };
@@ -121,10 +104,6 @@
     data.days.map((day) => day.date),
     data.weekStart
   );
-  $: if (JSON.stringify(data.availability) !== availabilitySeed) {
-    availabilitySeed = JSON.stringify(data.availability);
-    availabilityEntries = data.availability.map((entry) => ({ ...entry }));
-  }
   $: offersByShiftId = new Map(data.offers.map((offer) => [offer.shiftId, offer]));
   $: openShiftOffers = data.offers.filter((offer) => offer.offeredByUserId !== data.userId);
   $: myOfferCount = data.offers.filter((offer) => offer.offeredByUserId === data.userId).length;
@@ -202,25 +181,6 @@
     return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2).replace(/0$/, '');
   }
 
-  function formatRequestDate(value: string) {
-    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric'
-    });
-  }
-
-  function formatRequestRange(startDate: string, endDate: string) {
-    return startDate === endDate
-      ? formatRequestDate(startDate)
-      : `${formatRequestDate(startDate)} - ${formatRequestDate(endDate)}`;
-  }
-
-  function timeOffStatusLabel(status: 'pending' | 'approved' | 'declined') {
-    if (status === 'approved') return 'Approved';
-    if (status === 'declined') return 'Declined';
-    return 'Pending Review';
-  }
-
   const withOfferFeedback: SubmitFunction = () => {
     return async ({ result }) => {
       await applyAction(result);
@@ -233,18 +193,6 @@
       }
     };
   };
-
-  const withAvailabilityFeedback: SubmitFunction = () => {
-    return async ({ result }) => {
-      await applyAction(result);
-      if (result.type === 'success') {
-        await invalidateAll();
-        pushToast(result.data?.message ?? 'Availability updated.', 'success');
-      } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'Availability could not be saved.', 'error');
-      }
-    };
-  };
 </script>
 
 <Layout padded={false}>
@@ -252,7 +200,7 @@
     <PageHeader title="My Schedule" subtitle="Your posted week, broken down day by day." />
 
     <nav class="subnav">
-      <a href="/schedule">Team Schedule</a>
+      <a href="/schedule">Full Schedule</a>
       <a href={`?week=${data.prevWeekStart}`}>Previous Week</a>
       <a href={`?week=${data.nextWeekStart}`}>Next Week</a>
     </nav>
@@ -266,84 +214,6 @@
         {totalShiftCount} shifts | {formatHours(weeklyTrackedHours)} hours
         {#if myOfferCount > 0} | {myOfferCount} offered{/if}
       </span>
-    </section>
-
-    <section class="availability-shell" aria-label="Weekly availability">
-      <header class="offers-head">
-        <div>
-          <span class="eyebrow">Availability</span>
-          <h3>Recurring Weekly Availability</h3>
-        </div>
-        <small>Managers use this when building schedules.</small>
-      </header>
-
-      <AvailabilityEditor
-        entries={availabilityEntries}
-        action="?/save_availability"
-        enhanceFn={withAvailabilityFeedback}
-        submitLabel="Save Availability"
-        buttonClass="offer-btn availability-save-btn"
-      />
-    </section>
-
-    <section class="offers-shell" aria-label="Time Off Requests">
-      <header class="offers-head">
-        <div>
-          <span class="eyebrow">Time Off</span>
-          <h3>Request Time Off</h3>
-        </div>
-        <small>{data.timeOffRequests.length} requests on file</small>
-      </header>
-
-      <form method="POST" action="?/request_time_off" use:enhance={withFeedback} class="timeoff-form">
-        <label>
-          <span>Start Date</span>
-          <input type="date" name="start_date" required />
-        </label>
-        <label>
-          <span>End Date</span>
-          <input type="date" name="end_date" required />
-        </label>
-        <label class="timeoff-note">
-          <span>Note</span>
-          <input type="text" name="note" maxlength="160" placeholder="Optional reason or context" />
-        </label>
-        <div class="availability-actions">
-          <button type="submit" class="offer-btn availability-save-btn">Submit Request</button>
-        </div>
-      </form>
-
-      {#if data.timeOffRequests.length === 0}
-        <p class="offers-empty">No time off requests submitted yet.</p>
-      {:else}
-        <div class="offer-list">
-          {#each data.timeOffRequests as request}
-            <article class="offer-card">
-              <div class="offer-copy">
-                <strong>{formatRequestRange(request.startDate, request.endDate)}</strong>
-                <p class="offer-time">{timeOffStatusLabel(request.status)}</p>
-                {#if request.note}
-                  <p class="offer-detail">{request.note}</p>
-                {/if}
-                {#if request.managerNote}
-                  <p class="offer-owner">Manager note: {request.managerNote}</p>
-                {/if}
-              </div>
-              <div class="offer-actions">
-                <span class:requested={request.status === 'approved'} class:pending={request.status === 'pending'} class="offer-badge">
-                  {timeOffStatusLabel(request.status)}
-                </span>
-                {#if request.status === 'pending'}
-                  <form method="POST" action="?/cancel_time_off_request" use:enhance={withFeedback}>
-                    <input type="hidden" name="request_id" value={request.id} />
-                    <button type="submit" class="offer-btn">Cancel Request</button>
-                  </form>
-                {/if}
-              </div>
-            </article>
-          {/each}
-        </div>
-      {/if}
     </section>
 
     <section class="days-stack" aria-label="My scheduled week">
@@ -729,27 +599,6 @@
     gap: 0.85rem;
   }
 
-  .availability-shell {
-    margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-    padding: 0.95rem 1rem;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .availability-actions {
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .availability-save-btn {
-    min-width: 11rem;
-  }
-
   .offers-head {
     display: flex;
     justify-content: space-between;
@@ -759,36 +608,6 @@
 
   .offers-head h3 {
     margin: 0.18rem 0 0;
-  }
-
-  .timeoff-form {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.7rem;
-  }
-
-  .timeoff-form label {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .timeoff-form label span {
-    color: var(--color-text-muted);
-    font-size: 0.76rem;
-  }
-
-  .timeoff-form input {
-    width: 100%;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 0.42rem 0.56rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
-    color: var(--color-text);
-    font-size: 0.8rem;
-  }
-
-  .timeoff-note {
-    grid-column: 1 / -1;
   }
 
   .offers-head small,
@@ -893,10 +712,6 @@
     .offer-card,
     .offers-head {
       flex-direction: column;
-    }
-
-    .timeoff-form {
-      grid-template-columns: 1fr;
     }
   }
 </style>
