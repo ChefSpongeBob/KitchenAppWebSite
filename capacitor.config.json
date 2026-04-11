@@ -2,7 +2,7 @@
   "appId": "com.nexusnorthsystems.kitchen",
   "appName": "Kitchen",
   "webDir": "build",
-  "loggingBehavior": "debug",
+  "loggingBehavior": "none",
   "appendUserAgent": " KitchenNative/2.1 Capacitor",
   "zoomEnabled": false,
   "initialFocus": true,
@@ -22,6 +22,6 @@
   },
   "android": {
     "allowMixedContent": false,
-    "webContentsDebuggingEnabled": true
+    "webContentsDebuggingEnabled": false
   }
 }

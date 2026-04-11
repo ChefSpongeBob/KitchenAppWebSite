@@ -44,6 +44,7 @@ You can preview the production build with `npm run preview`.
 ## Mobile Release Notes
 
 - Go-live checklist: `docs/mobile-go-live-checklist.md`
+- Run release validation: `npm run mobile:check`
 - Camera beta flag:
   - Env var: `PUBLIC_CAMERA_BETA_ENABLED`
   - Truthy values: `1`, `true`, `yes`, `on`
