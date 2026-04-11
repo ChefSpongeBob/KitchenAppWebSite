@@ -32,6 +32,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       users: [],
       week: null,
       days: [],
+      rosterUserIds: [],
       offers: [],
       timeOffRequests: [],
       settings: {
@@ -67,6 +68,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     users,
     week: schedule.week,
     days: schedule.days,
+    rosterUserIds: schedule.rosterUserIds,
     offers,
     timeOffRequests,
     settings,

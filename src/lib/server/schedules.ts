@@ -112,6 +112,12 @@ export type ScheduleDay = {
   shifts: ScheduleShift[];
 };
 
+export type ScheduleWeekTeamMember = {
+  weekId: string;
+  userId: string;
+  sortOrder: number;
+};
+
 type ScheduleDraftRow = {
   shiftDate: string;
   userId: string;
@@ -529,6 +535,23 @@ export async function ensureScheduleSchema(db: DB) {
     await db
       .prepare(
         `
+        CREATE TABLE IF NOT EXISTS schedule_week_team (
+          week_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (week_id, user_id),
+          FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
         CREATE TABLE IF NOT EXISTS user_schedule_departments (
           user_id TEXT NOT NULL,
           department TEXT NOT NULL,
@@ -648,6 +671,15 @@ export async function ensureScheduleSchema(db: DB) {
         `
         CREATE INDEX IF NOT EXISTS idx_schedule_shifts_user_date
         ON schedule_shifts(user_id, shift_date, start_time)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_week_team_week_sort
+        ON schedule_week_team(week_id, sort_order, user_id)
         `
       )
       .run();
@@ -907,7 +939,8 @@ export async function loadScheduleWeek(
     return {
       week: null,
       shifts: [] as ScheduleShift[],
-      days: buildWeekDays(weekStart, [])
+      days: buildWeekDays(weekStart, []),
+      rosterUserIds: [] as string[]
     };
   }
 
@@ -967,6 +1000,22 @@ export async function loadScheduleWeek(
     sortOrder: row.sort_order ?? 0
   })) satisfies ScheduleShift[];
 
+  const teamRows = await db
+    .prepare(
+      `
+      SELECT user_id
+      FROM schedule_week_team
+      WHERE week_id = ?
+      ORDER BY sort_order ASC, user_id ASC
+      `
+    )
+    .bind(week.id)
+    .all<{ user_id: string }>();
+
+  const rosterUserIds = (teamRows.results ?? []).map((row) => String(row.user_id ?? '').trim()).filter(Boolean);
+  const shiftUserIds = Array.from(new Set(shifts.map((shift) => shift.userId).filter(Boolean)));
+  const mergedRosterUserIds = Array.from(new Set([...rosterUserIds, ...shiftUserIds]));
+
   return {
     week: {
       id: week.id,
@@ -976,7 +1025,8 @@ export async function loadScheduleWeek(
       updatedAt: week.updated_at
     } satisfies ScheduleWeek,
     shifts,
-    days: buildWeekDays(week.week_start, shifts)
+    days: buildWeekDays(week.week_start, shifts),
+    rosterUserIds: mergedRosterUserIds
   };
 }
 
@@ -1900,6 +1950,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
   const payload = String(form.get('payload') ?? '').trim();
   if (!payload) return fail(400, { error: 'No schedule data was submitted.' });
+  const teamPayload = String(form.get('team_payload') ?? '').trim();
 
   let parsed: unknown;
   try {
@@ -1913,6 +1964,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   }
 
   const rows: ScheduleDraftRow[] = [];
+  const rosterUserIdsFromPayload: string[] = [];
   const departments = await loadScheduleDepartments(db);
   const roleOptionsByDepartment = await loadScheduleRoleOptionsByDepartment(db);
   for (const entry of parsed) {
@@ -1967,10 +2019,37 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     return fail(400, { error: assignmentError });
   }
 
+  if (teamPayload) {
+    let parsedTeam: unknown;
+    try {
+      parsedTeam = JSON.parse(teamPayload);
+    } catch {
+      return fail(400, { error: 'Team data could not be read.' });
+    }
+    if (!Array.isArray(parsedTeam)) {
+      return fail(400, { error: 'Team data must be a list of employees.' });
+    }
+    for (const value of parsedTeam) {
+      const userId = String(value ?? '').trim();
+      if (userId) rosterUserIdsFromPayload.push(userId);
+    }
+  }
+
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
   const now = Math.floor(Date.now() / 1000);
+  const shiftUserIds = rows.map((row) => row.userId);
+  const rosterUserIds = Array.from(new Set([...rosterUserIdsFromPayload, ...shiftUserIds]));
+  if (rosterUserIds.length > 0) {
+    const assignableById = await loadScheduleAssignableUsersById(db, rosterUserIds);
+    for (const userId of rosterUserIds) {
+      if (!assignableById.has(userId)) {
+        return fail(400, { error: 'One or more scheduled employees are no longer active.' });
+      }
+    }
+  }
 
   await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ?`).bind(week.id).run();
+  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ?`).bind(week.id).run();
 
   for (const [index, row] of rows.entries()) {
     await db
@@ -1998,6 +2077,18 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
         now,
         now
       )
+      .run();
+  }
+
+  for (const [index, userId] of rosterUserIds.entries()) {
+    await db
+      .prepare(
+        `
+        INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        `
+      )
+      .bind(week.id, userId, index, now, now)
       .run();
   }
 
@@ -2119,6 +2210,7 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   const now = Math.floor(Date.now() / 1000);
 
   await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ?`).bind(targetWeek.id).run();
+  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ?`).bind(targetWeek.id).run();
 
   for (const shift of source.shifts) {
     const dayOffset = Math.round(
@@ -2152,6 +2244,19 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
         now,
         now
       )
+      .run();
+  }
+
+  const rosterUserIds = Array.from(new Set(source.rosterUserIds));
+  for (const [index, userId] of rosterUserIds.entries()) {
+    await db
+      .prepare(
+        `
+        INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        `
+      )
+      .bind(targetWeek.id, userId, index, now, now)
       .run();
   }
 

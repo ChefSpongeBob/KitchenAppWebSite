@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
+  import ScheduleBuilderCell from '$lib/components/ui/ScheduleBuilderCell.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -98,6 +99,7 @@
     notes: string;
     isEditing: boolean;
     duplicateDates: string[];
+    activeTimeEditor: '' | 'start' | 'end';
   };
 
   type EmployeeRow = {
@@ -116,6 +118,7 @@
     users: UserOption[];
     week: { status: 'draft' | 'published'; publishedAt: number | null } | null;
     days: Day[];
+    rosterUserIds: string[];
     offers: ShiftOffer[];
     timeOffRequests: TimeOffRequest[];
     settings: {
@@ -129,6 +132,23 @@
   let selectedEmployeeId = '';
   let selectedSection: 'All' | ScheduleDepartment = 'All';
   let mobileTeamPanelOpen = false;
+  let mobileTeamMode: 'add' | 'remove' = 'add';
+  type EditorDraft = DraftShift & {
+    userId: string;
+    rowIndex: number;
+    cellIndex: number;
+    sourceClientId: string | null;
+  };
+
+  let editorDraft: EditorDraft | null = null;
+  let isShiftEditorOpen = false;
+  let hasUnsavedChanges = false;
+  let gridRenderVersion = 0;
+  let weekPayload = '';
+  let teamPayload = '';
+  let userOptionsById = new Map<string, UserOption>();
+  let timeOffRequestsByUser = new Map<string, TimeOffRequest[]>();
+  let employeeHourTotals = new Map<string, number>();
   let availableDepartments: ScheduleDepartment[] =
     data.settings.departments.length > 0
       ? [...data.settings.departments]
@@ -144,6 +164,14 @@
     return (availableDepartments.includes(value as ScheduleDepartment)
       ? value
       : defaultDepartment) as ScheduleDepartment;
+  }
+
+  function sortLabel(displayName: string | null, email: string) {
+    return (displayName ?? email).trim().toLowerCase();
+  }
+
+  function compareUsers(a: UserOption, b: UserOption) {
+    return sortLabel(a.displayName, a.email).localeCompare(sortLabel(b.displayName, b.email));
   }
 
   function userOption(userId: string) {
@@ -176,15 +204,19 @@
       endLabel: '',
       notes: '',
       isEditing: true,
-      duplicateDates: []
+      duplicateDates: [],
+      activeTimeEditor: ''
     };
   }
 
   const initialVisibleUserIds = Array.from(
     new Set(
-      data.days.flatMap((day) =>
-        day.shifts.map((shift) => shift.userId).filter((userId) => userId.length > 0)
-      )
+      [
+        ...data.rosterUserIds.filter((userId) => userId.length > 0),
+        ...data.days.flatMap((day) =>
+          day.shifts.map((shift) => shift.userId).filter((userId) => userId.length > 0)
+        )
+      ]
     )
   );
 
@@ -202,7 +234,8 @@
       endLabel: shift.endLabel,
       notes: shift.notes,
       isEditing: false,
-      duplicateDates: []
+      duplicateDates: [],
+      activeTimeEditor: ''
     };
   }
 
@@ -215,11 +248,19 @@
         shifts: day.shifts
           .filter((shift) => shift.userId === userId)
           .map((shift) => draftFromShift(shift))
+          .sort(compareDraftShifts)
       }))
     };
   }
 
-  let employeeRows: EmployeeRow[] = initialVisibleUserIds.map((userId) => buildRow(userId));
+  let employeeRows: EmployeeRow[] = initialVisibleUserIds
+    .map((userId) => buildRow(userId))
+    .sort((a, b) =>
+      compareUsers(
+        userOption(a.userId) ?? { id: a.userId, displayName: null, email: a.userId, approvedDepartments: [] },
+        userOption(b.userId) ?? { id: b.userId, displayName: null, email: b.userId, approvedDepartments: [] }
+      )
+    );
   const initialWeekPayload = JSON.stringify(
     employeeRows.flatMap((row) =>
       row.cells.flatMap((cell) =>
@@ -236,9 +277,20 @@
       )
     )
   );
+  weekPayload = initialWeekPayload;
+  teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
 
   $: visibleUserIds = employeeRows.map((row) => row.userId);
-  $: availableUsers = data.users.filter((user) => !visibleUserIds.includes(user.id));
+  $: availableUsers = [...data.users].sort(compareUsers);
+  $: mobileTeamSelectableUsers =
+    mobileTeamMode === 'add'
+      ? data.users.filter((user) => !visibleUserIds.includes(user.id)).sort(compareUsers)
+      : data.users.filter((user) => visibleUserIds.includes(user.id)).sort(compareUsers);
+  $: userOptionsById = new Map(data.users.map((user) => [user.id, user] as const));
+  $: timeOffRequestsByUser = data.timeOffRequests.reduce(
+    (map, request) => map.set(request.userId, [...(map.get(request.userId) ?? []), request]),
+    new Map<string, TimeOffRequest[]>()
+  );
   $: pendingOffers = data.offers.filter((offer) => offer.requestedByUserId);
   $: pendingTimeOffRequests = data.timeOffRequests.filter((request) => request.status === 'pending');
   $: timeOffConflictCount = employeeRows.reduce(
@@ -251,23 +303,6 @@
       ),
     0
   );
-  $: weekPayload = JSON.stringify(
-    employeeRows.flatMap((row) =>
-      row.cells.flatMap((cell) =>
-        cell.shifts.map((shift) => ({
-          shiftDate: cell.date,
-          userId: row.userId,
-          department: shift.department,
-          role: shift.role,
-          detail: shift.detail,
-          startTime: shift.startTime,
-          endLabel: shift.endLabel,
-          notes: shift.notes
-        }))
-      )
-    )
-  );
-  $: hasUnsavedChanges = weekPayload !== initialWeekPayload;
   $: scheduleStateLabel =
     data.week?.status === 'published' && !hasUnsavedChanges
       ? 'Published Schedule'
@@ -292,6 +327,13 @@
     const hours = shiftHours(shift);
     return hours === null ? sum : sum + hours;
   }, 0);
+  $: employeeHourTotals = allShifts.reduce((map, shift) => {
+    const hours = shiftHours(shift);
+    if (hours === null) return map;
+    if (selectedSection !== 'All' && shift.department !== selectedSection) return map;
+    map.set(shift.userId, (map.get(shift.userId) ?? 0) + hours);
+    return map;
+  }, new Map<string, number>());
   $: departmentHourTotals = Object.fromEntries(
     availableDepartments.map((department) => [
       department,
@@ -328,6 +370,7 @@
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
+        hasUnsavedChanges = false;
         await invalidateAll();
         pushToast(result.data?.message ?? 'Schedule updated.', 'success');
       } else if (result.type === 'failure') {
@@ -336,8 +379,40 @@
     };
   };
 
+  function serializeWeekPayload() {
+    return JSON.stringify(
+      employeeRows.flatMap((row) =>
+        row.cells.flatMap((cell) =>
+          cell.shifts.map((shift) => ({
+            shiftDate: cell.date,
+            userId: row.userId,
+            department: shift.department,
+            role: shift.role,
+            detail: shift.detail,
+            startTime: shift.startTime,
+            endLabel: shift.endLabel,
+            notes: shift.notes
+          }))
+        )
+      )
+    );
+  }
+
+  function markDirty() {
+    hasUnsavedChanges = true;
+  }
+
+  function bumpGridRender() {
+    gridRenderVersion += 1;
+  }
+
+  function prepareWeekPayload() {
+    weekPayload = serializeWeekPayload();
+    teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
+  }
+
   function employeeName(userId: string) {
-    const user = userOption(userId);
+    const user = userOptionsById.get(userId) ?? userOption(userId);
     return user ? user.displayName ?? user.email : 'Unknown user';
   }
 
@@ -395,7 +470,7 @@
   }
 
   function timeOffRequestsForUser(userId: string, status: 'pending' | 'approved' | 'declined' = 'approved') {
-    return data.timeOffRequests.filter((request) => request.userId === userId && request.status === status);
+    return (timeOffRequestsByUser.get(userId) ?? []).filter((request) => request.status === status);
   }
 
   function timeOffSummary(userId: string) {
@@ -424,7 +499,10 @@
   }
 
   function canAddShift(userId: string) {
-    return approvedDepartmentsForUser(userId).length > 0;
+    const approved = approvedDepartmentsForUser(userId);
+    if (approved.length === 0) return false;
+    if (selectedSection === 'All') return true;
+    return approved.includes(selectedSection);
   }
 
   function departmentOptionsForUser(userId: string, currentDepartment: ScheduleDepartment) {
@@ -455,31 +533,112 @@
   }
 
   function addEmployeeRow() {
-    if (!selectedEmployeeId || visibleUserIds.includes(selectedEmployeeId)) return;
-    employeeRows = [...employeeRows, buildRow(selectedEmployeeId)];
+    if (!selectedEmployeeId || visibleUserIds.includes(selectedEmployeeId)) {
+      if (selectedEmployeeId && visibleUserIds.includes(selectedEmployeeId)) {
+        pushToast('Employee is already on this week.', 'info');
+      }
+      return false;
+    }
+    const userId = selectedEmployeeId;
+    const label = employeeName(userId);
+    employeeRows = [...employeeRows, buildRow(userId)].sort((a, b) =>
+      compareUsers(
+        userOption(a.userId) ?? { id: a.userId, displayName: null, email: a.userId, approvedDepartments: [] },
+        userOption(b.userId) ?? { id: b.userId, displayName: null, email: b.userId, approvedDepartments: [] }
+      )
+    );
     selectedEmployeeId = '';
     mobileTeamPanelOpen = false;
+    bumpGridRender();
+    markDirty();
+    pushToast(`${label} added to this week.`, 'success');
+    return true;
+  }
+
+  function removeSelectedEmployeeRow() {
+    if (!selectedEmployeeId || !visibleUserIds.includes(selectedEmployeeId)) return false;
+    return removeEmployeeRow(selectedEmployeeId);
+  }
+
+  function addEmployeeFromTopRail() {
+    if (!selectedEmployeeId || visibleUserIds.includes(selectedEmployeeId)) {
+      mobileTeamMode = 'add';
+      mobileTeamPanelOpen = true;
+      return;
+    }
+    addEmployeeRow();
+  }
+
+  function removeEmployeeFromTopRail() {
+    mobileTeamMode = 'remove';
+    mobileTeamPanelOpen = true;
   }
 
   function removeEmployeeRow(userId: string) {
+    if (!visibleUserIds.includes(userId)) return false;
+    const label = employeeName(userId);
     employeeRows = employeeRows.filter((row) => row.userId !== userId);
+    if (selectedEmployeeId === userId) selectedEmployeeId = '';
+    mobileTeamPanelOpen = false;
+    bumpGridRender();
+    markDirty();
+    pushToast(`${label} removed from this week.`, 'success');
+    return true;
   }
 
-  function addShift(rowIndex: number, cellIndex: number) {
-    const newShiftId = crypto.randomUUID();
-    employeeRows = employeeRows.map((row, currentRowIndex) => {
-      if (currentRowIndex !== rowIndex) return row;
-      return {
-        ...row,
-        cells: row.cells.map((cell, currentCellIndex) => {
-          if (currentCellIndex !== cellIndex) return cell;
-          return {
-            ...cell,
-            shifts: [...cell.shifts, { ...createShift(row.userId, cell.date), clientId: newShiftId }]
-          };
-        })
+  function submitMobileTeamAction() {
+    if (mobileTeamMode === 'remove') {
+      removeSelectedEmployeeRow();
+      return;
+    }
+    addEmployeeRow();
+  }
+
+  function addShift(rowIndex: number, cellIndex: number, userId: string, date: string) {
+    editorDraft = {
+      ...createShift(userId, date),
+      userId,
+      rowIndex,
+      cellIndex,
+      sourceClientId: null
+    };
+    isShiftEditorOpen = true;
+  }
+
+  function openShiftEditor(rowIndex: number, cellIndex: number, clientId: string) {
+    const row = employeeRows[rowIndex];
+    const cell = row?.cells[cellIndex];
+    const shift = cell?.shifts.find((entry) => entry.clientId === clientId);
+    if (row && cell && shift) {
+      editorDraft = {
+        ...shift,
+        userId: row.userId,
+        rowIndex,
+        cellIndex,
+        sourceClientId: clientId
       };
-    });
+      isShiftEditorOpen = true;
+      return;
+    }
+
+    for (let fallbackRowIndex = 0; fallbackRowIndex < employeeRows.length; fallbackRowIndex += 1) {
+      const fallbackRow = employeeRows[fallbackRowIndex];
+      for (let fallbackCellIndex = 0; fallbackCellIndex < fallbackRow.cells.length; fallbackCellIndex += 1) {
+        const fallbackCell = fallbackRow.cells[fallbackCellIndex];
+        const fallbackShift = fallbackCell.shifts.find((entry) => entry.clientId === clientId);
+        if (fallbackShift) {
+          editorDraft = {
+            ...fallbackShift,
+            userId: fallbackRow.userId,
+            rowIndex: fallbackRowIndex,
+            cellIndex: fallbackCellIndex,
+            sourceClientId: clientId
+          };
+          isShiftEditorOpen = true;
+          return;
+        }
+      }
+    }
   }
 
   function removeShift(rowIndex: number, cellIndex: number, clientId: string) {
@@ -496,49 +655,39 @@
         })
       };
     });
+    if (editorDraft?.sourceClientId === clientId) {
+      editorDraft = null;
+      isShiftEditorOpen = false;
+    }
+    bumpGridRender();
+    markDirty();
   }
 
-  function toggleDuplicateDay(
-    rowIndex: number,
-    cellIndex: number,
-    clientId: string,
-    date: string
-  ) {
-    employeeRows = employeeRows.map((row, currentRowIndex) => {
-      if (currentRowIndex !== rowIndex) return row;
-      return {
-        ...row,
-        cells: row.cells.map((cell, currentCellIndex) => {
-          if (currentCellIndex !== cellIndex) return cell;
-          return {
-            ...cell,
-            shifts: cell.shifts.map((shift) => {
-              if (shift.clientId !== clientId) return shift;
-              const duplicateDates = shift.duplicateDates.includes(date)
-                ? shift.duplicateDates.filter((entry) => entry !== date)
-                : [...shift.duplicateDates, date];
-              return { ...shift, duplicateDates };
-            })
-          };
-        })
-      };
-    });
+  function toggleDraftDuplicateDay(date: string) {
+    if (!editorDraft) return;
+    editorDraft = {
+      ...editorDraft,
+      duplicateDates: editorDraft.duplicateDates.includes(date)
+        ? editorDraft.duplicateDates.filter((entry) => entry !== date)
+        : [...editorDraft.duplicateDates, date]
+    };
   }
 
-  function updateDepartment(shift: DraftShift, userId: string, value: string) {
+  function updateDraftDepartment(userId: string, value: string) {
+    if (!editorDraft) return;
     const department = normalizeDepartment(value);
-    const availableDepartments = departmentOptionsForUser(userId, shift.department).map(
+    const availableDepartments = departmentOptionsForUser(userId, editorDraft.department).map(
       (option) => option.value
     );
     const nextDepartment = availableDepartments.includes(department)
       ? department
-      : availableDepartments[0] ?? shift.department;
+      : availableDepartments[0] ?? editorDraft.department;
     const roles = rolesFor(nextDepartment);
-    shift.department = nextDepartment;
-    if (!roles.includes(shift.role)) {
-      shift.role = roles[0];
-    }
-    employeeRows = [...employeeRows];
+    editorDraft = {
+      ...editorDraft,
+      department: nextDepartment,
+      role: roles.includes(editorDraft.role) ? editorDraft.role : roles[0]
+    };
   }
 
   function toggleShiftCard(rowIndex: number, cellIndex: number, clientId: string) {
@@ -557,10 +706,19 @@
         })
       };
     });
+    markDirty();
   }
 
   function isExpanded(shift: DraftShift) {
     return shift.isEditing;
+  }
+
+  function toggleDraftTimeEditor(editor: '' | 'start' | 'end') {
+    if (!editorDraft) return;
+    editorDraft = {
+      ...editorDraft,
+      activeTimeEditor: editorDraft.activeTimeEditor === editor ? '' : editor
+    };
   }
 
   function shiftSummary(shift: DraftShift) {
@@ -578,6 +736,15 @@
     return Number(match[1]) * 60 + Number(match[2]);
   }
 
+  function compareDraftShifts(a: DraftShift, b: DraftShift) {
+    const aStart = parseTimeValue(a.startTime);
+    const bStart = parseTimeValue(b.startTime);
+    if (aStart !== null && bStart !== null && aStart !== bStart) return aStart - bStart;
+    if (aStart !== null && bStart === null) return -1;
+    if (aStart === null && bStart !== null) return 1;
+    return a.role.localeCompare(b.role);
+  }
+
   function shiftHours(shift: DraftShift) {
     const start = parseTimeValue(shift.startTime);
     const end = parseTimeValue(shift.endLabel);
@@ -593,12 +760,113 @@
   }
 
   function employeeHours(userId: string) {
-    return allShifts.reduce((sum, shift) => {
-      if (shift.userId !== userId) return sum;
-      if (selectedSection !== 'All' && shift.department !== selectedSection) return sum;
-      const hours = shiftHours(shift);
-      return hours === null ? sum : sum + hours;
-    }, 0);
+    return employeeHourTotals.get(userId) ?? 0;
+  }
+
+  function sortedEmployeeRows(rows: EmployeeRow[]) {
+    return [...rows].sort((a, b) =>
+      compareUsers(
+        userOption(a.userId) ?? { id: a.userId, displayName: null, email: a.userId, approvedDepartments: [] },
+        userOption(b.userId) ?? { id: b.userId, displayName: null, email: b.userId, approvedDepartments: [] }
+      )
+    );
+  }
+
+  function upsertShiftIntoGrid(
+    rows: EmployeeRow[],
+    userId: string,
+    shiftDate: string,
+    shift: DraftShift,
+    sourceClientId: string | null
+  ) {
+    let nextRows = [...rows];
+    let rowIndex = nextRows.findIndex((row) => row.userId === userId);
+    if (rowIndex === -1) {
+      nextRows = sortedEmployeeRows([...nextRows, buildRow(userId)]);
+      rowIndex = nextRows.findIndex((row) => row.userId === userId);
+    }
+    if (rowIndex === -1) return rows;
+
+    let row = nextRows[rowIndex];
+    let cellIndex = row.cells.findIndex((cell) => cell.date === shiftDate);
+    if (cellIndex === -1) {
+      const addedCell = {
+        date: shiftDate,
+        label: scheduleDateLabel(shiftDate),
+        shifts: [] as DraftShift[]
+      };
+      row = {
+        ...row,
+        cells: [...row.cells, addedCell].sort((a, b) => a.date.localeCompare(b.date))
+      };
+      nextRows[rowIndex] = row;
+      cellIndex = row.cells.findIndex((cell) => cell.date === shiftDate);
+    }
+    if (cellIndex === -1) return rows;
+
+    nextRows = nextRows.map((entry, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return entry;
+      return {
+        ...entry,
+        cells: entry.cells.map((cell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return cell;
+          if (sourceClientId) {
+            const replaced = cell.shifts.map((entry) =>
+              entry.clientId === sourceClientId ? shift : entry
+            );
+            const foundExisting = cell.shifts.some((entry) => entry.clientId === sourceClientId);
+            return {
+              ...cell,
+              shifts: (foundExisting ? replaced : [...cell.shifts, shift]).sort(compareDraftShifts)
+            };
+          }
+          return {
+            ...cell,
+            shifts: [...cell.shifts, shift].sort(compareDraftShifts)
+          };
+        })
+      };
+    });
+
+    return nextRows;
+  }
+
+  function ensureShiftInCell(
+    rows: EmployeeRow[],
+    userId: string,
+    shiftDate: string,
+    shift: DraftShift
+  ) {
+    const rowIndex = rows.findIndex((row) => row.userId === userId);
+    if (rowIndex === -1) return rows;
+    const cellIndex = rows[rowIndex].cells.findIndex((cell) => cell.date === shiftDate);
+    if (cellIndex === -1) return rows;
+    const cell = rows[rowIndex].cells[cellIndex];
+    if (cell.shifts.some((entry) => entry.clientId === shift.clientId)) return rows;
+
+    return rows.map((row, currentRowIndex) => {
+      if (currentRowIndex !== rowIndex) return row;
+      return {
+        ...row,
+        cells: row.cells.map((candidateCell, currentCellIndex) => {
+          if (currentCellIndex !== cellIndex) return candidateCell;
+          return {
+            ...candidateCell,
+            shifts: [...candidateCell.shifts, shift].sort(compareDraftShifts)
+          };
+        })
+      };
+    });
+  }
+
+  function cloneRows(rows: EmployeeRow[]) {
+    return rows.map((row) => ({
+      ...row,
+      cells: row.cells.map((cell) => ({
+        ...cell,
+        shifts: [...cell.shifts]
+      }))
+    }));
   }
 
   function scheduleDateLabel(value: string) {
@@ -613,56 +881,78 @@
     const hours = shiftHours(shift);
     return hours === null ? sum : sum + hours;
   }, 0);
-  function collapseShift(rowIndex: number, cellIndex: number, clientId: string) {
-    const row = employeeRows[rowIndex];
-    const cell = row?.cells[cellIndex];
-    const shift = cell?.shifts.find((entry) => entry.clientId === clientId);
-    if (!row || !cell || !shift) return;
 
-    const duplicateDates = shift.duplicateDates.filter((date) => date !== cell.date);
+  function closeShiftEditor() {
+    editorDraft = null;
+    isShiftEditorOpen = false;
+  }
 
-    employeeRows = employeeRows.map((row, currentRowIndex) => {
-      if (currentRowIndex !== rowIndex) return row;
-      return {
-        ...row,
-        cells: row.cells.map((cell, currentCellIndex) => {
-          if (currentCellIndex !== cellIndex) return cell;
-          return {
-            ...cell,
-            shifts: cell.shifts.map((shift) =>
-              shift.clientId === clientId
-                ? { ...shift, isEditing: false, duplicateDates: [] }
-                : shift
-            )
-          };
-        })
+  function touchDraft() {
+    if (!editorDraft) return;
+    editorDraft = { ...editorDraft };
+  }
+
+  function collapseShiftFromDraft() {
+    if (!editorDraft) return;
+    const {
+      sourceClientId,
+      duplicateDates,
+      userId,
+      shiftDate,
+      department,
+      role,
+      detail,
+      startTime,
+      endLabel,
+      notes
+    } = editorDraft;
+    const baseShift: DraftShift = {
+      clientId: sourceClientId ?? crypto.randomUUID(),
+      shiftDate,
+      userId,
+      department,
+      role,
+      detail,
+      startTime,
+      endLabel,
+      notes,
+      isEditing: false,
+      duplicateDates: [],
+      activeTimeEditor: ''
+    };
+
+    let nextRows = upsertShiftIntoGrid(employeeRows, userId, shiftDate, baseShift, sourceClientId);
+    nextRows = ensureShiftInCell(nextRows, userId, shiftDate, baseShift);
+
+    for (const duplicateDate of duplicateDates.filter((date) => date !== shiftDate)) {
+      const duplicatedShift: DraftShift = {
+        ...baseShift,
+        clientId: crypto.randomUUID(),
+        shiftDate: duplicateDate
       };
-    });
+      nextRows = upsertShiftIntoGrid(nextRows, userId, duplicateDate, duplicatedShift, null);
+      nextRows = ensureShiftInCell(nextRows, userId, duplicateDate, duplicatedShift);
+    }
 
-    if (duplicateDates.length === 0) return;
+    employeeRows = cloneRows(nextRows);
+    if (selectedSection !== 'All' && baseShift.department !== selectedSection) {
+      selectedSection = 'All';
+    }
 
-    employeeRows = employeeRows.map((rowEntry, currentRowIndex) => {
-      if (currentRowIndex !== rowIndex) return rowEntry;
-      return {
-        ...rowEntry,
-        cells: rowEntry.cells.map((cellEntry) => {
-          if (!duplicateDates.includes(cellEntry.date)) return cellEntry;
-          return {
-            ...cellEntry,
-            shifts: [
-              ...cellEntry.shifts,
-              {
-                ...shift,
-                clientId: crypto.randomUUID(),
-                shiftDate: cellEntry.date,
-                isEditing: false,
-                duplicateDates: []
-              }
-            ]
-          };
-        })
-      };
-    });
+    bumpGridRender();
+    editorDraft = null;
+    isShiftEditorOpen = false;
+    markDirty();
+  }
+
+  function removeShiftFromDraft() {
+    if (!editorDraft) return;
+    if (editorDraft.sourceClientId) {
+      removeShift(editorDraft.rowIndex, editorDraft.cellIndex, editorDraft.sourceClientId);
+      return;
+    }
+    editorDraft = null;
+    isShiftEditorOpen = false;
   }
 </script>
 
@@ -834,9 +1124,10 @@
       {/if}
     </section>
 
-    <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell">
+    <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell" on:submit={prepareWeekPayload}>
       <input type="hidden" name="week_start" value={data.weekStart} />
       <input type="hidden" name="payload" value={weekPayload} />
+      <input type="hidden" name="team_payload" value={teamPayload} />
 
         <div class="planner-head">
           <div>
@@ -857,7 +1148,17 @@
               {/each}
             </div>
           </div>
-          <button type="submit">Save Draft</button>
+          <div class="planner-submit-actions">
+            <button type="submit">Save Draft</button>
+            <button
+              type="submit"
+              formaction="?/publish_week"
+              class="planner-publish-btn"
+              on:click={warnBeforePublish}
+            >
+              Publish Schedule
+            </button>
+          </div>
         </div>
 
       {#if mobileTeamPanelOpen}
@@ -882,12 +1183,24 @@
 
         <div class="mobile-team-add">
           <select bind:value={selectedEmployeeId}>
-            <option value="">Add employee</option>
-            {#each availableUsers as user}
+            <option value="">Select employee</option>
+            {#each mobileTeamSelectableUsers as user}
               <option value={user.id}>{user.displayName ?? user.email}</option>
             {/each}
           </select>
-          <button type="button" class="add-employee-btn" on:click={addEmployeeRow}>Add Employee</button>
+          <button
+            type="button"
+            class="mobile-add-btn"
+            on:click={submitMobileTeamAction}
+            disabled={
+              !selectedEmployeeId ||
+              (mobileTeamMode === 'add'
+                ? visibleUserIds.includes(selectedEmployeeId)
+                : !visibleUserIds.includes(selectedEmployeeId))
+            }
+          >
+            {mobileTeamMode === 'remove' ? 'Remove Employee' : 'Add Employee'}
+          </button>
         </div>
 
         <div class="mobile-team-list">
@@ -914,20 +1227,17 @@
           <div class="corner-cell">
             <div class="corner-stack">
               <strong>Employees</strong>
-              <button type="button" class="open-panel-btn" on:click={() => (mobileTeamPanelOpen = true)}>
-                Add Employee
-              </button>
+              <div class="rail-top-actions">
+                <button type="button" class="rail-action-btn" on:click={addEmployeeFromTopRail} aria-label="Add employee">+</button>
+                <button type="button" class="rail-action-btn" on:click={removeEmployeeFromTopRail} aria-label="Remove employee">-</button>
+              </div>
               <div class="corner-actions">
                 <select bind:value={selectedEmployeeId}>
-                  <option value="">Add employee</option>
+                  <option value="">Select employee</option>
                   {#each availableUsers as user}
                     <option value={user.id}>{user.displayName ?? user.email}</option>
                   {/each}
                 </select>
-                <button type="button" class="add-employee-btn" on:click={addEmployeeRow}>
-                  <span class="desktop-label">Add</span>
-                  <span class="mobile-label">+</span>
-                </button>
               </div>
             </div>
           </div>
@@ -950,9 +1260,6 @@
             <div class="employee-cell empty-employee-cell">
               <strong>No employees added</strong>
             </div>
-            <div class="empty-grid-note" style={`grid-column: span ${data.days.length};`}>
-              Add employees from the top-left selector to start building the schedule.
-            </div>
           {/if}
 
           {#each employeeRows as row, rowIndex (row.userId)}
@@ -970,170 +1277,194 @@
                 <span class="employee-hours">
                   Hours: {formatHours(employeeHours(row.userId))}
                 </span>
-                <button type="button" class="remove-row-btn" on:click={() => removeEmployeeRow(row.userId)}>
-                  <span class="desktop-label">Remove Employee</span>
-                  <span class="mobile-label">Remove</span>
-                </button>
               </div>
             </div>
 
-            {#each row.cells as cell, cellIndex (cell.date)}
-              <div class="shift-cell">
-                <div class="cell-body">
-                  {#each visibleShifts(cell) as shift (shift.clientId)}
-                    <div class:open={isExpanded(shift)} class="shift-card">
-                      <button
-                        type="button"
-                        class="shift-card-top shift-toggle"
-                        on:click={() => toggleShiftCard(rowIndex, cellIndex, shift.clientId)}
-                        aria-expanded={isExpanded(shift)}
-                      >
-                        <div class="shift-preview">
-                          <strong>{shiftSummary(shift).title}</strong>
-                          <span>{shiftSummary(shift).time}</span>
-                        </div>
-                        <span class="toggle-text">{isExpanded(shift) ? 'Collapse' : 'Edit'}</span>
-                      </button>
-
-                      {#if isExpanded(shift)}
-                        <div class="shift-editor">
-                          <div class="input-grid two">
-                            <label>
-                              <span>Department</span>
-                              <select
-                                bind:value={shift.department}
-                                on:change={(event) =>
-                                  updateDepartment(
-                                    shift,
-                                    row.userId,
-                                    (event.currentTarget as HTMLSelectElement).value
-                                  )}
-                              >
-                                {#each departmentOptionsForUser(row.userId, shift.department) as option}
-                                  <option value={option.value}>{option.label}</option>
-                                {/each}
-                              </select>
-                            </label>
-
-                            <label>
-                              <span>Role</span>
-                              <select bind:value={shift.role}>
-                                {#each rolesFor(shift.department) as role}
-                                  <option value={role}>{role}</option>
-                                {/each}
-                              </select>
-                            </label>
-                          </div>
-
-                          <div class="input-grid two">
-                            <label>
-                              <span>Start</span>
-                              <ScheduleTimeSelect bind:value={shift.startTime} />
-                            </label>
-
-                            <label class="end-group">
-                              <span>End</span>
-                              <ScheduleTimeSelect
-                                bind:value={shift.endLabel}
-                                includeSpecialOptions={[...scheduleEndLabels]}
-                                specialPlaceholder="Timed End"
-                              />
-                            </label>
-                          </div>
-
-                          <label>
-                            <span>Location / Detail</span>
-                            <select bind:value={shift.detail}>
-                              <option value="">Select detail</option>
-                              {#each scheduleDetailOptionsFor(shift.department, shift.role) as detail}
-                                <option value={detail}>{detail}</option>
-                              {/each}
-                            </select>
-                          </label>
-
-                          {#if !approvedDepartmentsForUser(row.userId).includes(shift.department)}
-                            <p class="shift-warning">
-                              {employeeName(row.userId)} is not approved for {shift.department}.
-                            </p>
-                          {/if}
-
-                          {#if shiftAvailabilityWarning(row.userId, shift)}
-                            <p class="shift-warning availability-warning">
-                              {shiftAvailabilityWarning(row.userId, shift)}
-                            </p>
-                          {/if}
-
-                          {#if shiftTimeOffWarning(row.userId, shift)}
-                            <p class="shift-warning timeoff-warning">
-                              {shiftTimeOffWarning(row.userId, shift)}
-                            </p>
-                          {/if}
-
-                          <label>
-                            <span>Notes</span>
-                            <input bind:value={shift.notes} placeholder="Optional notes" />
-                          </label>
-
-                          <div class="duplicate-days">
-                            <span>Duplicate To</span>
-                            <div class="duplicate-day-chips">
-                              {#each data.days as day}
-                                {#if day.date !== cell.date}
-                                  <button
-                                    type="button"
-                                    class="duplicate-day-btn"
-                                    class:duplicate-day-btn-active={shift.duplicateDates.includes(day.date)}
-                                    on:click={() =>
-                                      toggleDuplicateDay(rowIndex, cellIndex, shift.clientId, day.date)}
-                                  >
-                                    {new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', {
-                                      weekday: 'short'
-                                    })}
-                                  </button>
-                                {/if}
-                              {/each}
-                            </div>
-                          </div>
-
-                          <div class="editor-actions">
-                            <button
-                              type="button"
-                              class="create-shift-btn"
-                              on:click={() => collapseShift(rowIndex, cellIndex, shift.clientId)}
-                            >
-                              Create Shift
-                            </button>
-                            <button
-                              type="button"
-                              class="remove-btn inline-remove"
-                              aria-label="Remove shift"
-                              on:click={() => removeShift(rowIndex, cellIndex, shift.clientId)}
-                            >
-                              Remove Shift
-                            </button>
-                          </div>
-                        </div>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-
-                <button
-                  type="button"
-                  class="add-btn"
-                  on:click={() => addShift(rowIndex, cellIndex)}
-                  disabled={!canAddShift(row.userId)}
-                  title={!canAddShift(row.userId) ? 'This employee has no approved schedule departments.' : undefined}
-                >
-                  Add Shift
-                </button>
-              </div>
+            {#each row.cells as cell, cellIndex (`${row.userId}:${cell.date}:${gridRenderVersion}`)}
+              <ScheduleBuilderCell
+                {cell}
+                userId={row.userId}
+                {rowIndex}
+                {cellIndex}
+                {selectedSection}
+                canAdd={canAddShift(row.userId)}
+                on:addshift={(event) =>
+                  addShift(
+                    event.detail.rowIndex,
+                    event.detail.cellIndex,
+                    event.detail.userId,
+                    event.detail.date
+                  )}
+                on:editshift={(event) =>
+                  openShiftEditor(event.detail.rowIndex, event.detail.cellIndex, event.detail.clientId)}
+              />
             {/each}
           {/each}
         </section>
       </div>
 
     </form>
+
+    {#if isShiftEditorOpen}
+      <div class="shift-editor-dock" role="region" aria-label="Shift builder">
+        <div class="shift-editor-dialog">
+          {#if editorDraft}
+            {@const activeCellLabel =
+              employeeRows[editorDraft.rowIndex]?.cells[editorDraft.cellIndex]?.label ??
+              scheduleDateLabel(editorDraft.shiftDate)}
+            {@const editorUserId = editorDraft.userId}
+          <div class="shift-editor-head">
+            <div>
+              <span class="eyebrow">Shift Builder</span>
+              <h3>{employeeName(editorDraft.userId)} | {activeCellLabel}</h3>
+            </div>
+            <button type="button" class="menu-item" on:click={closeShiftEditor}>Close</button>
+          </div>
+
+          <div class="shift-editor-body">
+            <div class="input-grid two">
+              <label>
+                <span>Department</span>
+                <select
+                  bind:value={editorDraft.department}
+                  on:change={(event) =>
+                    updateDraftDepartment(editorUserId, (event.currentTarget as HTMLSelectElement).value)}
+                >
+                  {#each departmentOptionsForUser(editorDraft.userId, editorDraft.department) as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              </label>
+
+              <label>
+                <span>Role</span>
+                <select bind:value={editorDraft.role} on:change={touchDraft}>
+                  {#each rolesFor(editorDraft.department) as role}
+                    <option value={role}>{role}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+
+            <div class="input-grid two">
+              <label>
+                <span>Start</span>
+                <button
+                  type="button"
+                  class="time-launch-btn"
+                  on:click={() => toggleDraftTimeEditor('start')}
+                >
+                  {editorDraft.startTime
+                    ? formatScheduleTimeLabel(editorDraft.startTime)
+                    : 'Set Start Time'}
+                </button>
+                {#if editorDraft.activeTimeEditor === 'start'}
+                  <ScheduleTimeSelect bind:value={editorDraft.startTime} on:commit={touchDraft} />
+                {/if}
+              </label>
+
+              <label>
+                <span>End</span>
+                <button
+                  type="button"
+                  class="time-launch-btn"
+                  on:click={() => toggleDraftTimeEditor('end')}
+                >
+                  {editorDraft.endLabel
+                    ? /^\d{2}:\d{2}$/.test(editorDraft.endLabel)
+                      ? formatScheduleTimeLabel(editorDraft.endLabel)
+                      : editorDraft.endLabel
+                    : 'Set End Time'}
+                </button>
+                {#if editorDraft.activeTimeEditor === 'end'}
+                  <ScheduleTimeSelect
+                    bind:value={editorDraft.endLabel}
+                    includeSpecialOptions={[...scheduleEndLabels]}
+                    specialPlaceholder="Timed End"
+                    on:commit={touchDraft}
+                  />
+                {/if}
+              </label>
+            </div>
+
+            <label>
+              <span>Location / Detail</span>
+              <select bind:value={editorDraft.detail} on:change={touchDraft}>
+                <option value="">Select detail</option>
+                {#each scheduleDetailOptionsFor(editorDraft.department, editorDraft.role) as detail}
+                  <option value={detail}>{detail}</option>
+                {/each}
+              </select>
+            </label>
+
+            {#if shiftAvailabilityWarning(editorDraft.userId, editorDraft)}
+              <p class="shift-warning availability-warning">
+                {shiftAvailabilityWarning(editorDraft.userId, editorDraft)}
+              </p>
+            {/if}
+            {#if shiftTimeOffWarning(editorDraft.userId, editorDraft)}
+              <p class="shift-warning timeoff-warning">
+                {shiftTimeOffWarning(editorDraft.userId, editorDraft)}
+              </p>
+            {/if}
+
+            <label>
+              <span>Notes</span>
+              <input bind:value={editorDraft.notes} placeholder="Optional notes" on:input={touchDraft} />
+            </label>
+
+            <div class="duplicate-days">
+              <span>Duplicate To</span>
+              <div class="duplicate-day-chips">
+                {#each data.days as day}
+                  {#if day.date !== editorDraft.shiftDate}
+                    <button
+                      type="button"
+                      class="duplicate-day-btn"
+                      class:duplicate-day-btn-active={editorDraft.duplicateDates.includes(day.date)}
+                      on:click={() => toggleDraftDuplicateDay(day.date)}
+                    >
+                      {new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}
+                    </button>
+                  {/if}
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="shift-editor-actions">
+            <button
+              type="button"
+              class="create-shift-btn"
+              on:click={collapseShiftFromDraft}
+            >
+              Create Shift
+            </button>
+            <button
+              type="button"
+              class="remove-btn"
+              on:click={removeShiftFromDraft}
+            >
+              {editorDraft.sourceClientId ? 'Remove Shift' : 'Cancel'}
+            </button>
+          </div>
+          {:else}
+            <div class="shift-editor-head">
+              <div>
+                <span class="eyebrow">Shift Builder</span>
+                <h3>Editor could not load this shift</h3>
+              </div>
+              <button type="button" class="menu-item" on:click={closeShiftEditor}>Close</button>
+            </div>
+            <div class="shift-editor-body">
+              <p class="shift-warning timeoff-warning">
+                Shift editor state is open, but the selected shift context was not found.
+              </p>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
   </div>
 </Layout>
 
@@ -1148,6 +1479,7 @@
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
+    min-width: 0;
   }
 
   .control-shell,
@@ -1192,6 +1524,7 @@
 
   .planner-shell {
     overflow: hidden;
+    max-width: 100%;
   }
 
   .control-grid {
@@ -1211,8 +1544,7 @@
   }
 
   .eyebrow,
-  .week-picker label,
-  .shift-card label span {
+  .week-picker label {
     color: var(--color-text-muted);
     font-size: 0.76rem;
   }
@@ -1220,7 +1552,7 @@
   .section-filter {
     display: grid;
     gap: 0.25rem;
-    min-width: 8.5rem;
+    min-width: 0;
   }
 
   .week-nav {
@@ -1228,6 +1560,7 @@
     gap: 0.4rem;
     flex-wrap: wrap;
     align-items: center;
+    min-width: 0;
   }
 
   .week-nav-btn {
@@ -1267,6 +1600,7 @@
     grid-template-columns: auto minmax(160px, 220px) auto;
     gap: 0.6rem;
     align-items: center;
+    min-width: 0;
   }
 
   .status-pill {
@@ -1412,12 +1746,52 @@
     display: grid;
     gap: 0.35rem;
     align-content: start;
+    min-width: 0;
+  }
+
+  .planner-submit-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .planner-submit-actions button {
+    min-height: 1.95rem;
+    padding: 0.36rem 0.72rem;
+    font-size: 0.75rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+    border-radius: 9px;
+  }
+
+  .planner-publish-btn {
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+  }
+
+  .rail-action-btn {
+    min-height: 1.9rem;
+    width: 1.9rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+    border-radius: 9px;
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .hours-breakdown {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
+    min-width: 0;
   }
 
   .hours-chip {
@@ -1502,8 +1876,7 @@
 
   .corner-cell,
   .day-header,
-  .employee-cell,
-  .shift-cell {
+  .employee-cell {
     border-right: 1px solid rgba(255,255,255,0.06);
     border-bottom: 1px solid rgba(255,255,255,0.06);
   }
@@ -1534,18 +1907,18 @@
     color: var(--color-text-muted);
   }
 
-  .mobile-label {
-    display: none;
-  }
-
-  .open-panel-btn,
   .close-panel-btn {
     display: none;
   }
 
+  .rail-top-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
   .corner-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.45rem;
   }
 
@@ -1567,6 +1940,7 @@
   .day-header small {
     font-size: 0.7rem;
     line-height: 1.35;
+    word-break: break-word;
   }
 
   .employee-cell {
@@ -1582,6 +1956,7 @@
   .employee-stack {
     display: grid;
     gap: 0.5rem;
+    min-width: 0;
   }
 
   .employee-name-compact {
@@ -1610,6 +1985,7 @@
     color: var(--color-text-muted);
     font-size: 0.72rem;
     line-height: 1.35;
+    word-break: break-word;
   }
 
   .employee-cell strong,
@@ -1617,153 +1993,9 @@
     font-size: 0.88rem;
   }
 
-  .empty-employee-cell,
-  .empty-grid-note {
+  .empty-employee-cell {
     position: static;
     background: rgba(255,255,255,0.02);
-  }
-
-  .empty-grid-note {
-    padding: 0.9rem;
-    color: var(--color-text-muted);
-    display: flex;
-    align-items: center;
-  }
-
-  .shift-cell {
-    display: grid;
-    gap: 0.6rem;
-    padding: 0.7rem;
-    align-content: start;
-    min-height: 170px;
-  }
-
-  .cell-body {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .shift-card {
-    display: grid;
-    gap: 0.3rem;
-    padding: 0.55rem;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
-    background: rgba(255,255,255,0.025);
-  }
-
-  .shift-card.open {
-    gap: 0.55rem;
-    padding: 0.7rem;
-  }
-
-  .shift-card-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    align-items: start;
-  }
-
-  .shift-toggle {
-    width: 100%;
-    text-align: left;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.03);
-    color: var(--color-text);
-    min-height: 0;
-    padding: 0.55rem 0.6rem;
-  }
-
-  .shift-preview {
-    display: grid;
-    gap: 0.18rem;
-  }
-
-  .shift-preview strong {
-    font-size: 0.82rem;
-  }
-
-  .shift-preview span {
-    color: var(--color-text-muted);
-    font-size: 0.74rem;
-  }
-
-  .toggle-text {
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    white-space: nowrap;
-  }
-
-  .shift-editor {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .editor-actions {
-    display: flex;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-  }
-
-  .input-grid {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .input-grid.two {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .shift-card label {
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .shift-warning {
-    margin: 0;
-    color: #fcd34d;
-    font-size: 0.74rem;
-    line-height: 1.4;
-  }
-
-  .availability-warning {
-    color: #fca5a5;
-  }
-
-  .timeoff-warning {
-    color: #fda4af;
-  }
-
-  .duplicate-days {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .duplicate-days > span {
-    color: var(--color-text-muted);
-    font-size: 0.74rem;
-  }
-
-  .duplicate-day-chips {
-    display: flex;
-    gap: 0.35rem;
-    flex-wrap: wrap;
-  }
-
-  .duplicate-day-btn {
-    width: auto;
-    min-height: 2rem;
-    padding: 0.35rem 0.7rem;
-    border-color: rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.05);
-    color: var(--color-text);
-    font-size: 0.74rem;
-  }
-
-  .duplicate-day-btn.duplicate-day-btn-active {
-    border-color: rgba(22, 163, 74, 0.25);
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.08));
-    color: #dcfce7;
   }
 
   input,
@@ -1793,9 +2025,7 @@
     opacity: 0.55;
   }
 
-  .add-btn,
   .remove-btn,
-  .add-employee-btn,
   .remove-row-btn {
     border-color: rgba(255,255,255,0.12);
     background: rgba(255,255,255,0.06);
@@ -1807,8 +2037,140 @@
     color: #dcfce7;
   }
 
-  .add-btn {
+  .shift-editor-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    padding: 0.8rem clamp(0.7rem, 2.2vw, 1rem) calc(0.8rem + var(--safe-bottom));
+    background: linear-gradient(180deg, rgba(4, 5, 7, 0), rgba(4, 5, 7, 0.68) 35%, rgba(4, 5, 7, 0.85));
+    pointer-events: none;
+  }
+
+  .shift-editor-dialog {
+    width: min(54rem, calc(100vw - 1.2rem - var(--safe-left) - var(--safe-right)));
+    max-height: min(78vh, 54rem);
+    overflow: auto;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
+      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    box-shadow: 0 22px 56px rgba(4, 5, 7, 0.38);
+    display: grid;
+    gap: 0;
+    margin-inline: auto;
+    pointer-events: auto;
+  }
+
+  .shift-editor-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .shift-editor-head h3 {
+    margin: 0.18rem 0 0;
+    font-size: 1rem;
+  }
+
+  .shift-editor-body {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+  }
+
+  .input-grid.two {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .shift-editor-body label {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .shift-editor-body label > span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .time-launch-btn {
     width: 100%;
+    justify-content: flex-start;
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+  }
+
+  .duplicate-days {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .duplicate-days > span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .duplicate-day-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .duplicate-day-btn {
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: var(--color-text);
+    min-height: 1.95rem;
+    padding: 0.35rem 0.58rem;
+    border-radius: 999px;
+  }
+
+  .duplicate-day-btn-active {
+    border-color: rgba(195, 32, 43, 0.3);
+    background: rgba(195, 32, 43, 0.18);
+    color: #ffe4e6;
+  }
+
+  .shift-warning {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 0.55rem 0.62rem;
+  }
+
+  .shift-warning.availability-warning {
+    color: #bfdbfe;
+    border-color: rgba(59, 130, 246, 0.24);
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .shift-warning.timeoff-warning {
+    color: #fecaca;
+    border-color: rgba(239, 68, 68, 0.24);
+    background: rgba(239, 68, 68, 0.08);
+  }
+
+  .shift-editor-actions {
+    padding: 0.85rem 1rem 0.95rem;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 
   .remove-btn,
@@ -1816,11 +2178,6 @@
     color: #ffb6b6;
     border-color: rgba(239, 68, 68, 0.24);
     background: rgba(120, 12, 18, 0.14);
-  }
-
-  .inline-remove {
-    width: auto;
-    flex: 1 1 8rem;
   }
 
   .create-shift-btn {
@@ -1849,8 +2206,7 @@
       grid-template-columns: 1fr;
     }
 
-    .week-picker,
-    .input-grid.two {
+    .week-picker {
       grid-template-columns: 1fr;
     }
 
@@ -1858,6 +2214,26 @@
     .planner-head {
       flex-direction: column;
       align-items: stretch;
+    }
+
+    .week-actions > *,
+    .planner-head > * {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .planner-submit-actions {
+      justify-content: stretch;
+    }
+
+    .planner-submit-actions > button {
+      flex: 1 1 100%;
+      width: 100%;
+    }
+
+    .menu-trigger {
+      width: 100%;
+      justify-content: space-between;
     }
 
     .request-card {
@@ -1872,12 +2248,19 @@
     .menu-panel {
       left: 0;
       right: auto;
+      width: min(100%, 20rem);
+      min-width: 0;
     }
   }
 
   @media (max-width: 760px) {
+    .control-shell,
+    .planner-shell {
+      margin-inline: clamp(0.5rem, 2.2vw, 0.8rem);
+    }
+
     .schedule-grid {
-      grid-template-columns: 92px repeat(7, minmax(260px, 1fr));
+      grid-template-columns: 94px repeat(7, minmax(185px, 1fr));
     }
 
     .corner-cell,
@@ -1891,19 +2274,6 @@
 
     .corner-stack strong {
       font-size: 0.68rem;
-    }
-
-    .open-panel-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-height: 2rem;
-      padding: 0.35rem 0.65rem;
-      font-size: 0.72rem;
-      border-color: rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06);
-      color: var(--color-text);
     }
 
     .corner-actions {
@@ -1970,10 +2340,18 @@
       color: var(--color-text);
     }
 
-    .mobile-team-add {
-      display: grid;
-      gap: 0.35rem;
-    }
+  .mobile-team-add {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .mobile-add-btn {
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text);
+    min-height: 2rem;
+    font-size: 0.72rem;
+  }
 
     .mobile-team-list {
       display: grid;
@@ -2010,10 +2388,11 @@
     }
 
     .mobile-team-add select,
-    .mobile-team-add .add-employee-btn,
+    .mobile-add-btn,
     .mobile-team-item .remove-row-btn {
       min-height: 2rem;
       font-size: 0.72rem;
+      width: 100%;
     }
 
     .employee-stack {
@@ -2053,17 +2432,35 @@
       font-size: 0.68rem;
     }
 
-    .employee-cell .remove-row-btn {
-      display: none;
+    .shift-editor-dock {
+      padding: 0.55rem calc(0.45rem + var(--safe-left)) calc(0.55rem + var(--safe-bottom))
+        calc(0.45rem + var(--safe-right));
     }
 
-    .desktop-label {
-      display: none;
+    .shift-editor-dialog {
+      width: min(100vw - 0.9rem - var(--safe-left) - var(--safe-right), 54rem);
+      max-height: 72vh;
     }
 
-    .mobile-label {
-      display: inline;
+    .input-grid.two {
+      grid-template-columns: 1fr;
+    }
+
+    .request-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .shift-editor-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .shift-editor-actions .create-shift-btn,
+    .shift-editor-actions .remove-btn {
+      width: 100%;
+      flex: initial;
     }
   }
 </style>
+
 

@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+
   export let value = '';
   export let includeSpecialOptions: string[] = [];
   export let specialPlaceholder = 'Timed End';
+  const dispatch = createEventDispatcher<{ commit: { value: string } }>();
 
   const hourOptions = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
   const minuteOptions = ['00', '15', '30', '45'];
@@ -83,6 +86,7 @@
   function handleOk() {
     value = selectedSpecial || timeValueFromParts();
     draftValue = value;
+    dispatch('commit', { value });
     confirmationText = selectedSpecial
       ? `${selectedSpecial} set`
       : `${selectedHour}:${selectedMinute} ${selectedPeriod} set`;

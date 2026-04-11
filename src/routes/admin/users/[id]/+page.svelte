@@ -77,27 +77,36 @@
     subtitle="Manage employee access, permissions, and schedule departments."
   />
 
-  <section class="summary-grid">
-    <article class="summary-card">
-      <span class="eyebrow">Status</span>
-      <strong>{data.employee.is_active === 1 ? 'Active' : 'Restricted'}</strong>
-      <p>{data.employee.email}</p>
-    </article>
-    <article class="summary-card">
-      <span class="eyebrow">Role</span>
-      <strong>{data.employee.role}</strong>
-      <p>{data.employee.role === 'admin' ? 'Full admin access' : 'Standard staff access'}</p>
-    </article>
-    <article class="summary-card">
-      <span class="eyebrow">Schedule</span>
-      <strong>{data.employee.approved_departments.length}</strong>
-      <p>{departmentSummary(data.employee)}</p>
-    </article>
-    <article class="summary-card">
-      <span class="eyebrow">Contact</span>
-      <strong>{data.profile.phone || 'Not Set'}</strong>
-      <p>{formatBirthday(data.profile.birthday)}</p>
-    </article>
+  <section class="profile-header">
+    <div class="profile-identity">
+      <div class="profile-avatar" aria-hidden="true">
+        {(data.employee.display_name ?? data.employee.email).trim().charAt(0).toUpperCase()}
+      </div>
+      <div class="profile-copy">
+        <span class="eyebrow">Employee Profile</span>
+        <h2>{data.employee.display_name ?? 'Unnamed Employee'}</h2>
+        <p>{data.employee.email}</p>
+      </div>
+    </div>
+
+    <div class="profile-meta">
+      <div class="meta-item">
+        <span>Status</span>
+        <strong>{data.employee.is_active === 1 ? 'Active' : 'Restricted'}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Role</span>
+        <strong>{data.employee.role === 'admin' ? 'Admin' : 'Staff'}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Departments</span>
+        <strong>{departmentSummary(data.employee)}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Birthday</span>
+        <strong>{formatBirthday(data.profile.birthday)}</strong>
+      </div>
+    </div>
   </section>
 
   <section class="stack">
@@ -283,14 +292,7 @@
 </Layout>
 
 <style>
-  .summary-grid {
-    display: grid;
-    gap: 0.8rem;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin: 0.5rem 0 1rem;
-  }
-
-  .summary-card,
+  .profile-header,
   .panel {
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -302,7 +304,7 @@
     overflow: hidden;
   }
 
-  .summary-card::before,
+  .profile-header::before,
   .panel::before {
     content: '';
     position: absolute;
@@ -311,21 +313,68 @@
     background: linear-gradient(180deg, rgba(195, 32, 43, 0.9), rgba(195, 32, 43, 0.2));
   }
 
-  .summary-card {
+  .profile-header {
     padding: 1rem;
+    display: grid;
+    gap: 1rem;
+    margin: 0.5rem 0 1rem;
   }
 
-  .summary-card strong {
-    display: block;
-    margin-top: 0.45rem;
+  .profile-identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .profile-avatar {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
     font-size: 1.55rem;
+    font-weight: 700;
+    color: var(--color-primary-contrast);
+    border: 1px solid rgba(195, 32, 43, 0.24);
+    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .profile-copy h2 {
+    margin: 0.25rem 0 0;
+    font-size: clamp(1.4rem, 2vw, 1.9rem);
     line-height: 1.05;
   }
 
-  .summary-card p {
-    margin: 0.45rem 0 0;
+  .profile-copy p {
+    margin: 0.35rem 0 0;
     color: var(--color-text-muted);
     overflow-wrap: anywhere;
+  }
+
+  .profile-meta {
+    display: grid;
+    gap: 0.8rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .meta-item {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .meta-item span {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  .meta-item strong {
+    font-size: 0.98rem;
+    line-height: 1.3;
   }
 
   .eyebrow,
@@ -483,11 +532,15 @@
   }
 
   @media (max-width: 780px) {
-    .summary-grid,
+    .profile-meta,
     .action-grid,
     .field-grid,
     .field-grid-three {
       grid-template-columns: 1fr;
+    }
+
+    .profile-identity {
+      align-items: flex-start;
     }
 
     .profile-foot {
@@ -496,4 +549,3 @@
     }
   }
 </style>
-

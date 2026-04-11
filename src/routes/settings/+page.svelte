@@ -189,8 +189,9 @@
             <input value={formatBirthday(data.profile.birthday)} readonly disabled />
           </label>
 
-          <label>
-            <span>Request Birthday Change</span>
+          <details class="birthday-request">
+            <summary>Edit Birthday</summary>
+
             <div class="birthday-inline__row">
               <input
                 form="birthday-request-form"
@@ -201,16 +202,16 @@
               />
               <button form="birthday-request-form" type="submit" class="secondary-button">Submit</button>
             </div>
-          </label>
 
-          <p class="form-note">Birthday changes require admin approval.</p>
+            <p class="form-note">Birthday changes require admin approval.</p>
 
-          {#if data.pendingBirthdayRequest}
-            <p class="form-note">
-              Pending request for {formatBirthday(data.pendingBirthdayRequest.requested_birthday)} submitted
-              {formatPendingDate(data.pendingBirthdayRequest.requested_at)}.
-            </p>
-          {/if}
+            {#if data.pendingBirthdayRequest}
+              <p class="form-note">
+                Pending request for {formatBirthday(data.pendingBirthdayRequest.requested_birthday)} submitted
+                {formatPendingDate(data.pendingBirthdayRequest.requested_at)}.
+              </p>
+            {/if}
+          </details>
         </div>
 
         <div class="form-actions">
@@ -545,6 +546,35 @@
     display: flex;
     gap: 0.7rem;
     align-items: end;
+  }
+
+  .birthday-request {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .birthday-request summary {
+    cursor: pointer;
+    list-style: none;
+    color: var(--color-text);
+    font-size: 0.84rem;
+    font-weight: var(--weight-medium);
+  }
+
+  .birthday-request summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .birthday-request summary::after {
+    content: 'Expand';
+    margin-left: 0.55rem;
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    font-weight: var(--weight-regular);
+  }
+
+  .birthday-request[open] summary::after {
+    content: 'Hide';
   }
 
   .birthday-inline__row input {

@@ -253,11 +253,14 @@
             <article class="staff-row">
               <a href={`/admin/users/${user.id}`} class="staff-link">
                 <div class="staff-main">
-                  <strong>{user.display_name ?? 'Unnamed User'}</strong>
-                  <span>{user.email}</span>
-                </div>
-                <div class="staff-meta">
-                  <span>{departmentSummary(user)}</span>
+                  <div class="staff-name-block">
+                    <strong>{user.display_name ?? 'Unnamed User'}</strong>
+                    <span>{user.email}</span>
+                  </div>
+                  <div class="staff-inline-meta">
+                    <span>{departmentSummary(user)}</span>
+                    <span>{user.role === 'admin' ? 'Admin' : 'Staff'}</span>
+                  </div>
                 </div>
               </a>
               <div class="staff-actions">
@@ -413,6 +416,11 @@
 
   .staff-main {
     display: grid;
+    gap: 0.55rem;
+  }
+
+  .staff-name-block {
+    display: grid;
     gap: 0.18rem;
   }
 
@@ -425,13 +433,16 @@
     overflow-wrap: anywhere;
   }
 
-  .staff-meta {
+  .staff-inline-meta {
+    display: flex;
+    gap: 0.7rem;
+    flex-wrap: wrap;
     color: var(--color-text-muted);
     font-size: 0.82rem;
   }
 
-  .staff-meta span {
-    display: inline;
+  .staff-inline-meta span {
+    display: inline-flex;
   }
 
   .staff-actions {
