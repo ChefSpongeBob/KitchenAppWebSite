@@ -10,6 +10,26 @@ export function startVisiblePolling(
 ) {
   const { intervalMs, runImmediately = true, refreshOnVisible = true } = options;
   let intervalId: ReturnType<typeof setInterval> | null = null;
+  let inFlight = false;
+  let rerunRequested = false;
+
+  const runCallback = async () => {
+    if (inFlight) {
+      rerunRequested = true;
+      return;
+    }
+
+    inFlight = true;
+    try {
+      await callback();
+    } finally {
+      inFlight = false;
+      if (rerunRequested) {
+        rerunRequested = false;
+        void runCallback();
+      }
+    }
+  };
 
   const stop = () => {
     if (intervalId) {
@@ -24,14 +44,14 @@ export function startVisiblePolling(
     }
 
     intervalId = setInterval(() => {
-      void callback();
+      void runCallback();
     }, intervalMs);
   };
 
   const handleVisibilityChange = () => {
     if (document.visibilityState === 'visible') {
       if (refreshOnVisible) {
-        void callback();
+        void runCallback();
       }
       start();
       return;
@@ -41,7 +61,7 @@ export function startVisiblePolling(
   };
 
   if (runImmediately) {
-    void callback();
+    void runCallback();
   }
 
   start();

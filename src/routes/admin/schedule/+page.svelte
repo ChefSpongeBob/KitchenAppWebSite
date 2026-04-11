@@ -526,12 +526,6 @@
     ];
   }
 
-  function visibleShifts(cell: EmployeeRow['cells'][number]) {
-    return selectedSection === 'All'
-      ? cell.shifts
-      : cell.shifts.filter((shift) => shift.department === selectedSection);
-  }
-
   function addEmployeeRow() {
     if (!selectedEmployeeId || visibleUserIds.includes(selectedEmployeeId)) {
       if (selectedEmployeeId && visibleUserIds.includes(selectedEmployeeId)) {
@@ -688,29 +682,6 @@
       department: nextDepartment,
       role: roles.includes(editorDraft.role) ? editorDraft.role : roles[0]
     };
-  }
-
-  function toggleShiftCard(rowIndex: number, cellIndex: number, clientId: string) {
-    employeeRows = employeeRows.map((row, currentRowIndex) => {
-      if (currentRowIndex !== rowIndex) return row;
-      return {
-        ...row,
-        cells: row.cells.map((cell, currentCellIndex) => {
-          if (currentCellIndex !== cellIndex) return cell;
-          return {
-            ...cell,
-            shifts: cell.shifts.map((shift) =>
-              shift.clientId === clientId ? { ...shift, isEditing: !shift.isEditing } : shift
-            )
-          };
-        })
-      };
-    });
-    markDirty();
-  }
-
-  function isExpanded(shift: DraftShift) {
-    return shift.isEditing;
   }
 
   function toggleDraftTimeEditor(editor: '' | 'start' | 'end') {

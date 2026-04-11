@@ -129,6 +129,18 @@ type ScheduleDraftRow = {
   notes?: string;
 };
 
+type ShiftInsertRow = {
+  shiftDate: string;
+  userId: string;
+  department: string;
+  role: string;
+  detail: string;
+  startTime: string;
+  endLabel: string;
+  notes: string;
+  sortOrder: number;
+};
+
 let scheduleSchemaEnsured = false;
 let scheduleSchemaPromise: Promise<void> | null = null;
 
@@ -1354,6 +1366,101 @@ async function loadAssignableUserById(db: DB, userId: string) {
   return users.get(userId) ?? null;
 }
 
+async function insertScheduleShifts(db: DB, weekId: string, rows: ShiftInsertRow[], now: number) {
+  if (rows.length === 0) return;
+
+  const chunkSize = 100;
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunk = rows.slice(index, index + chunkSize);
+    await db.batch(
+      chunk.map((row) =>
+        db
+          .prepare(
+            `
+            INSERT INTO schedule_shifts (
+              id, week_id, shift_date, user_id, department, role, detail,
+              start_time, end_label, notes, sort_order, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `
+          )
+          .bind(
+            crypto.randomUUID(),
+            weekId,
+            row.shiftDate,
+            row.userId,
+            row.department,
+            row.role,
+            row.detail,
+            row.startTime,
+            row.endLabel,
+            row.notes,
+            row.sortOrder,
+            now,
+            now
+          )
+      )
+    );
+  }
+}
+
+async function replaceWeekTeamRoster(db: DB, weekId: string, userIds: string[], now: number) {
+  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ?`).bind(weekId).run();
+  const uniqueUserIds = Array.from(new Set(userIds));
+  if (uniqueUserIds.length === 0) return;
+
+  await db.batch(
+    uniqueUserIds.map((userId, index) =>
+      db
+        .prepare(
+          `
+          INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          `
+        )
+        .bind(weekId, userId, index, now, now)
+    )
+  );
+}
+
+function toShiftInsertRows(rows: ScheduleDraftRow[]): ShiftInsertRow[] {
+  return rows.map((row, index) => ({
+    shiftDate: row.shiftDate,
+    userId: row.userId,
+    department: row.department,
+    role: row.role,
+    detail: row.detail ?? '',
+    startTime: row.startTime,
+    endLabel: row.endLabel ?? '',
+    notes: row.notes ?? '',
+    sortOrder: index
+  }));
+}
+
+function toCopiedShiftInsertRows(
+  sourceShifts: ScheduleShift[],
+  previousWeekStart: string,
+  weekStart: string
+): ShiftInsertRow[] {
+  return sourceShifts.map((shift) => {
+    const dayOffset = Math.round(
+      (new Date(`${shift.shiftDate}T00:00:00`).getTime() - new Date(`${previousWeekStart}T00:00:00`).getTime()) /
+        86400000
+    );
+    return {
+      shiftDate: addDays(weekStart, dayOffset),
+      userId: shift.userId,
+      department: shift.department,
+      role: shift.role,
+      detail: shift.detail,
+      startTime: shift.startTime,
+      endLabel: shift.endLabel,
+      notes: shift.notes,
+      sortOrder: shift.sortOrder
+    };
+  });
+}
+
 export async function saveUserScheduleAvailability(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -2049,48 +2156,9 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   }
 
   await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ?`).bind(week.id).run();
-  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ?`).bind(week.id).run();
+  await insertScheduleShifts(db, week.id, toShiftInsertRows(rows), now);
 
-  for (const [index, row] of rows.entries()) {
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_shifts (
-          id, week_id, shift_date, user_id, department, role, detail,
-          start_time, end_label, notes, sort_order, created_at, updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        crypto.randomUUID(),
-        week.id,
-        row.shiftDate,
-        row.userId,
-        row.department,
-        row.role,
-        row.detail ?? '',
-        row.startTime,
-        row.endLabel ?? '',
-        row.notes ?? '',
-        index,
-        now,
-        now
-      )
-      .run();
-  }
-
-  for (const [index, userId] of rosterUserIds.entries()) {
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        `
-      )
-      .bind(week.id, userId, index, now, now)
-      .run();
-  }
+  await replaceWeekTeamRoster(db, week.id, rosterUserIds, now);
 
   await db
     .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
@@ -2208,57 +2276,12 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
 
   const targetWeek = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
   const now = Math.floor(Date.now() / 1000);
+  const copiedRows = toCopiedShiftInsertRows(source.shifts, previousWeekStart, weekStart);
 
   await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ?`).bind(targetWeek.id).run();
-  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ?`).bind(targetWeek.id).run();
+  await insertScheduleShifts(db, targetWeek.id, copiedRows, now);
 
-  for (const shift of source.shifts) {
-    const dayOffset = Math.round(
-      (new Date(`${shift.shiftDate}T00:00:00`).getTime() - new Date(`${previousWeekStart}T00:00:00`).getTime()) /
-        86400000
-    );
-    const copiedDate = addDays(weekStart, dayOffset);
-
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_shifts (
-          id, week_id, shift_date, user_id, department, role, detail,
-          start_time, end_label, notes, sort_order, created_at, updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        crypto.randomUUID(),
-        targetWeek.id,
-        copiedDate,
-        shift.userId,
-        shift.department,
-        shift.role,
-        shift.detail,
-        shift.startTime,
-        shift.endLabel,
-        shift.notes,
-        shift.sortOrder,
-        now,
-        now
-      )
-      .run();
-  }
-
-  const rosterUserIds = Array.from(new Set(source.rosterUserIds));
-  for (const [index, userId] of rosterUserIds.entries()) {
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        `
-      )
-      .bind(targetWeek.id, userId, index, now, now)
-      .run();
-  }
+  await replaceWeekTeamRoster(db, targetWeek.id, source.rosterUserIds, now);
 
   await db
     .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
