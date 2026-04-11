@@ -40,3 +40,11 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Mobile Release Notes
+
+- Go-live checklist: `docs/mobile-go-live-checklist.md`
+- Camera beta flag:
+  - Env var: `PUBLIC_CAMERA_BETA_ENABLED`
+  - Truthy values: `1`, `true`, `yes`, `on`
+  - Default behavior: enabled if unset

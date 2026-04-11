@@ -4,6 +4,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { cameraBetaEnabled } from '$lib/config/features';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type Todo = {
@@ -110,8 +111,10 @@
     },
     {
       href: '/admin/camera',
-      title: 'Camera Activity',
-      description: 'View camera clips and live feed settings.'
+      title: cameraBetaEnabled ? 'Camera Activity (Beta)' : 'Camera Activity',
+      description: cameraBetaEnabled
+        ? 'Beta feature: test clips and live feed settings.'
+        : 'View camera clips and live feed settings.'
     }
   ];
 </script>

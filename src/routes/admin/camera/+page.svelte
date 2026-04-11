@@ -4,6 +4,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { cameraBetaEnabled } from '$lib/config/features';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type CameraEvent = {
@@ -110,12 +111,18 @@
 
 <Layout>
   <PageHeader
-    title="Admin Camera Activity"
-    subtitle="View current cameras and open saved clips."
+    title={cameraBetaEnabled ? 'Admin Camera Activity (Beta)' : 'Admin Camera Activity'}
+    subtitle={cameraBetaEnabled
+      ? 'Beta mode: test clips and feed behavior before full rollout.'
+      : 'View current cameras and open saved clips.'}
   />
 
   {#if feedbackMessage}
     <p class="feedback-banner">{feedbackMessage}</p>
+  {/if}
+
+  {#if cameraBetaEnabled}
+    <p class="beta-banner">Camera is in beta. Use for testing and validation before production rollout.</p>
   {/if}
 
   <div class="page-actions">
@@ -256,6 +263,15 @@
     border-radius: 12px;
     background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
     color: #bbf7d0;
+  }
+
+  .beta-banner {
+    margin: 0 0 0.9rem;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(120, 86, 10, 0.34), rgba(120, 86, 10, 0.14));
+    color: #fcd34d;
   }
 
   .feed-card::before {
