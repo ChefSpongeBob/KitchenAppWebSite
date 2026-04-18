@@ -13,6 +13,8 @@ declare global {
 				RESEND_FROM_EMAIL?: string;
 				RESEND_REPLY_TO_EMAIL?: string;
 				APP_BASE_URL?: string;
+				SMOKE_INTERNAL_TOKEN?: string;
+				SMOKE_DEFAULT_EMAIL?: string;
 			};
 		}
 

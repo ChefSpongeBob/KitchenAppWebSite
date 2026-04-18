@@ -42,6 +42,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Public routes
 	if (
 		isAuthRoute ||
+		pathname.startsWith('/api/internal/smoke') ||
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/camera/upload') ||
 		pathname.startsWith('/api/camera/activity')

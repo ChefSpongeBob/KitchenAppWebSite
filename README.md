@@ -46,9 +46,13 @@ You can preview the production build with `npm run preview`.
 - Go-live checklist: `docs/mobile-go-live-checklist.md`
 - iOS Mac handoff: `docs/ios-handoff-checklist.md`
 - Deploy/rollback playbook: `docs/release-deploy-playbook.md`
+- Manual auth smoke fallback: `docs/prod-auth-smoke-manual.md`
 - Run release validation: `npm run mobile:check`
 - Run Android release pass: `npm run android:release:check`
 - Run production smoke pass: `npm run smoke:prod`
+- Production smoke auth (preferred):
+  - Env var: `SMOKE_INTERNAL_TOKEN`
+  - Optional user selection: `SMOKE_EMAIL` (falls back to `SMOKE_DEFAULT_EMAIL` on server)
 - Normalize migration tracking:
   - local: `npm run db:migrations:normalize:local`
   - remote: `npm run db:migrations:normalize:remote`

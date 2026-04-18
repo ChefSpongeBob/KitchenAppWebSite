@@ -27,6 +27,10 @@ Use this as the default runbook for pushing web + DB safely.
 ## 4) Post-Deploy Smoke (Production)
 - Run:
   - `npm run smoke:prod`
+- Preferred authenticated mode:
+  - Set `SMOKE_INTERNAL_TOKEN` (and optional `SMOKE_EMAIL`) to use `/api/internal/smoke/session` auth bypass for smoke checks.
+- Manual fallback when Cloudflare challenge blocks script auth:
+  - Run checklist in `docs/prod-auth-smoke-manual.md`.
 - Auth:
   - Login/logout
   - Password reset link flow

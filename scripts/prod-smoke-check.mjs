@@ -1,6 +1,7 @@
 const baseUrl = process.env.SMOKE_BASE_URL?.trim() || process.env.APP_BASE_URL?.trim() || '';
 const email = process.env.SMOKE_EMAIL?.trim() || '';
 const password = process.env.SMOKE_PASSWORD?.trim() || '';
+const internalToken = process.env.SMOKE_INTERNAL_TOKEN?.trim() || '';
 const runAdminChecks = (process.env.SMOKE_ADMIN ?? '').trim() === '1';
 
 if (!baseUrl) {
@@ -74,7 +75,43 @@ async function main() {
   await assertGetOk('/login', 'Login page');
   await assertGetOk('/forgot-password', 'Forgot password page');
 
-  if (email && password) {
+  if (internalToken) {
+    const smokeSessionResponse = await request('/api/internal/smoke/session', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-smoke-token': internalToken
+      },
+      body: JSON.stringify(email ? { email } : {})
+    });
+    if (smokeSessionResponse.status >= 200 && smokeSessionResponse.status < 300) {
+      logPass(`Internal smoke session established (${smokeSessionResponse.status})`);
+    } else {
+      logFail(`Internal smoke session expected 2xx, got ${smokeSessionResponse.status}`);
+    }
+
+    await assertGetOk('/', 'Homepage after login');
+    await assertGetOk('/schedule', 'Team schedule');
+    await assertGetOk('/my-schedule', 'My schedule');
+    await assertGetOk('/settings', 'My profile/settings');
+
+    if (runAdminChecks) {
+      await assertGetOk('/admin', 'Admin dashboard');
+      await assertGetOk('/admin/schedule', 'Admin schedule builder');
+    }
+
+    const internalLogout = await request('/api/internal/smoke/session', {
+      method: 'DELETE',
+      headers: {
+        'x-smoke-token': internalToken
+      }
+    });
+    if (internalLogout.status >= 200 && internalLogout.status < 300) {
+      logPass(`Internal smoke session revoked (${internalLogout.status})`);
+    } else {
+      logFail(`Internal smoke session revoke expected 2xx, got ${internalLogout.status}`);
+    }
+  } else if (email && password) {
     const body = new URLSearchParams({ email, password }).toString();
     const loginResponse = await request('/login', {
       method: 'POST',
@@ -116,7 +153,9 @@ async function main() {
       logFail(`Logout expected redirect, got ${logoutResponse.status}`);
     }
   } else {
-    console.log('Skipping authenticated checks. Set SMOKE_EMAIL and SMOKE_PASSWORD to enable.');
+    console.log(
+      'Skipping authenticated checks. Set SMOKE_INTERNAL_TOKEN (preferred) or SMOKE_EMAIL and SMOKE_PASSWORD.'
+    );
   }
 
   if (failed) {
