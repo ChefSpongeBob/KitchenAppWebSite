@@ -76,7 +76,7 @@ async function main() {
   await assertGetOk('/forgot-password', 'Forgot password page');
 
   if (internalToken) {
-    const smokeSessionResponse = await request('/api/internal/smoke/session', {
+    const smokeSessionResponse = await request('/api/smoke-session', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -100,7 +100,7 @@ async function main() {
       await assertGetOk('/admin/schedule', 'Admin schedule builder');
     }
 
-    const internalLogout = await request('/api/internal/smoke/session', {
+    const internalLogout = await request('/api/smoke-session', {
       method: 'DELETE',
       headers: {
         'x-smoke-token': internalToken
