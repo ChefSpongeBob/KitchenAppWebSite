@@ -1,4 +1,4 @@
-<script>
+﻿<script>
 	export let form;
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import Layout from '$lib/components/ui/Layout.svelte';
@@ -8,7 +8,7 @@
 </script>
 
 <Layout>
-	<PageHeader title="Login" subtitle="Sign in and get back on the line" />
+	<PageHeader title="Login" />
 
 	<section class="auth-shell">
 		<form method="POST" class="auth-card">
@@ -145,3 +145,4 @@
 		}
 	}
 </style>
+

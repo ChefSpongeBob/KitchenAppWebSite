@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleWeekColumns from '$lib/components/ui/ScheduleWeekColumns.svelte';
@@ -113,7 +113,7 @@
 
 <Layout padded={false}>
   <div class="schedule-shell">
-    <PageHeader title="Team Schedule" subtitle="Posted weekly schedule for the team." />
+    <PageHeader title="Team Schedule" />
 
     <nav class="subnav">
       <a href="/my-schedule">My Schedule</a>
@@ -325,3 +325,4 @@
   }
 
 </style>
+

@@ -114,7 +114,7 @@
   }
 </script>
 
-<PageHeader title={`Recipes: ${category}`} subtitle="Browse recipes in this category" />
+<PageHeader title={`Recipes: ${category}`} />
 
 <section class="search">
   <input

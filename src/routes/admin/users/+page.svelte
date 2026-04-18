@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -74,7 +74,6 @@
 <Layout>
   <PageHeader
     title="Employees"
-    subtitle="Manage invites, access, and employee schedule assignments."
   />
 
   <section class="summary-grid" aria-label="User summary">
@@ -635,3 +634,4 @@
     }
   }
 </style>
+

@@ -1,4 +1,4 @@
-<script>
+﻿<script>
 	export let form;
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import Layout from '$lib/components/ui/Layout.svelte';
@@ -8,7 +8,7 @@
 </script>
 
 <Layout>
-	<PageHeader title="Create Account" subtitle="Use your invite code to create an account" />
+	<PageHeader title="Create Account" />
 
 	<section class="auth-shell">
 		<form method="POST" class="auth-card">
@@ -171,3 +171,4 @@
 		}
 	}
 </style>
+

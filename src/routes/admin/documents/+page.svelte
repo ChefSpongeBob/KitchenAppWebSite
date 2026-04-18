@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -61,7 +61,6 @@
 <Layout>
   <PageHeader
     title="Admin Documents"
-    subtitle="Add and update documents here."
   />
 
   <section class="panel">
@@ -313,3 +312,4 @@
     }
   }
 </style>
+

@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
 
@@ -30,7 +30,6 @@
 <Layout>
   <PageHeader
     title={data.title}
-    subtitle={data.subtitle ?? 'Submit prep counts together. Admins can adjust par levels in admin tools.'}
   />
 
   {#if data.items.length === 0}
@@ -84,7 +83,7 @@
 
               <div class="ref-readonly">
                 <span class="field-tag">REF:</span>
-                <span>{item.details?.trim() || '—'}</span>
+                <span>{item.details?.trim() || 'â€”'}</span>
               </div>
 
               <div class="par-readonly">
@@ -382,3 +381,4 @@
     }
   }
 </style>
+

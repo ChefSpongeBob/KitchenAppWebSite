@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
@@ -40,7 +40,7 @@
   }
 </script>
 
-<PageHeader title="Recipes" subtitle="Browse by category" />
+<PageHeader title="Recipes" />
 
 <section class="search">
   <input
@@ -163,3 +163,4 @@
     }
   }
 </style>
+

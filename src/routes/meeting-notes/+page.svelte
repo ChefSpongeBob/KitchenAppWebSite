@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
@@ -55,7 +55,6 @@
 <Layout>
   <PageHeader
     title="Meeting Notes"
-    subtitle="Internal admin notes with shared visibility and individual ownership."
   />
 
   <section class="stack">
@@ -197,3 +196,4 @@
     }
   }
 </style>
+

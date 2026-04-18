@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -112,9 +112,6 @@
 <Layout>
   <PageHeader
     title={cameraBetaEnabled ? 'Admin Camera Activity (Beta)' : 'Admin Camera Activity'}
-    subtitle={cameraBetaEnabled
-      ? 'Beta mode: test clips and feed behavior before full rollout.'
-      : 'View current cameras and open saved clips.'}
   />
 
   {#if feedbackMessage}
@@ -496,3 +493,4 @@
     }
   }
 </style>
+

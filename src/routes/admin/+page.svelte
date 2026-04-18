@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -122,7 +122,6 @@
 <Layout>
   <PageHeader
     title="Admin Dashboard"
-    subtitle="Handle approvals and updates from one admin page."
   />
   <section class="hero-grid" aria-label="Admin overview">
     <article class="hero-card">
@@ -747,3 +746,4 @@
   }
 
 </style>
+

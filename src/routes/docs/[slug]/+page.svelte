@@ -15,7 +15,7 @@
 </script>
 
 <Layout>
-  <PageHeader title={data.doc.title} subtitle={data.doc.category} />
+  <PageHeader title={data.doc.title} />
 
   <DashboardCard title={data.doc.title} description={data.doc.category}>
     <p>{data.doc.content ?? 'Details will appear here once added.'}</p>

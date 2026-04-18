@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -28,7 +28,6 @@
 <Layout>
   <PageHeader
     title="Schedule Settings"
-    subtitle="Manage builder behavior and scheduling preferences."
   />
 
   <section class="stack">
@@ -193,3 +192,4 @@
     }
   }
 </style>
+

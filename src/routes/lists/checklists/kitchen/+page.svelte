@@ -1,4 +1,4 @@
-<script>
+﻿<script>
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
@@ -12,7 +12,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="Kitchen Check Lists" subtitle="Select a shift checklist" />
+  <PageHeader title="Kitchen Check Lists" />
   <div class="grid">
     {#each lists as list, index}
       <a href={list.href} class="card-link" in:fade={{ delay: index * 80, duration: 180 }}>
@@ -50,3 +50,4 @@
     outline-offset: 4px;
   }
 </style>
+

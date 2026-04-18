@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
@@ -197,7 +197,7 @@
 
 <Layout padded={false}>
   <div class="schedule-shell">
-    <PageHeader title="My Schedule" subtitle="Your posted week, broken down day by day." />
+    <PageHeader title="My Schedule" />
 
     <nav class="subnav">
       <a href="/schedule">Full Schedule</a>
@@ -715,3 +715,4 @@
     }
   }
 </style>
+

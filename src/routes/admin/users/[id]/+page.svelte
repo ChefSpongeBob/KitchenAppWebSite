@@ -74,7 +74,6 @@
 <Layout>
   <PageHeader
     title={data.employee.display_name ?? 'Unnamed Employee'}
-    subtitle="Manage employee access, permissions, and schedule departments."
   />
 
   <section class="profile-header">

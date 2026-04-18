@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount } from 'svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { pushToast } from '$lib/client/toasts';
@@ -95,7 +95,7 @@
   });
 </script>
 
-<PageHeader title="Whiteboard" subtitle="Brainstorm space" />
+<PageHeader title="Whiteboard" />
 
 <section class="whiteboard-shell">
   <div class="input-row">
@@ -262,3 +262,4 @@
     }
   }
 </style>
+

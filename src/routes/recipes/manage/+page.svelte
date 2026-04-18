@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
@@ -18,7 +18,7 @@
   let categories: string[] = data.categories ?? [];
 </script>
 
-<PageHeader title="Manage Recipes" subtitle="Edit, add, or delete recipes" />
+<PageHeader title="Manage Recipes" />
 
 <section class="create-recipe-grid">
   {#each recipes as r, index}
@@ -86,3 +86,4 @@
     margin-top: 0.25rem;
   }
 </style>
+

@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
@@ -420,7 +420,7 @@
     const label = employeeName(userId).trim();
     const [first, second] = label.split(/\s+/);
     if (!first) return label;
-    if (!second) return first.length > 12 ? `${first.slice(0, 12)}…` : first;
+    if (!second) return first.length > 12 ? `${first.slice(0, 12)}â€¦` : first;
     return `${first} ${second[0]}.`;
   }
 
@@ -476,7 +476,7 @@
   function timeOffSummary(userId: string) {
     const requests = timeOffRequestsForUser(userId, 'approved');
     if (requests.length === 0) return '';
-    return `Time off: ${requests.map((request) => formatRequestRange(request.startDate, request.endDate)).join(' • ')}`;
+    return `Time off: ${requests.map((request) => formatRequestRange(request.startDate, request.endDate)).join(' â€¢ ')}`;
   }
 
   function shiftTimeOffWarning(userId: string, shift: DraftShift) {
@@ -931,7 +931,6 @@
   <div class="schedule-shell">
     <PageHeader
       title="Admin Schedule"
-      subtitle="Plan coverage, manage requests, and publish the week from one workspace."
     />
 
     <section class="control-shell" aria-label="Schedule planning controls">
@@ -2433,5 +2432,6 @@
     }
   }
 </style>
+
 
 

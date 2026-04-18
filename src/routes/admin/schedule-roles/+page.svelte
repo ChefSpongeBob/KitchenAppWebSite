@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -40,7 +40,6 @@
 <Layout>
   <PageHeader
     title="Department Roles"
-    subtitle="Manage the role options used in the schedule builder."
   />
 
   <section class="stack">
@@ -278,3 +277,4 @@
     }
   }
 </style>
+

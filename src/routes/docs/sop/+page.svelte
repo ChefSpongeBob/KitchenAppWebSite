@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
@@ -8,7 +8,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="SOPs" subtitle="Standard operating procedures." />
+  <PageHeader title="SOPs" />
 
   {#if data.doc}
     <DashboardCard title={data.doc.title} description={data.doc.category}>
@@ -54,3 +54,4 @@
     color: var(--color-text-muted);
   }
 </style>
+

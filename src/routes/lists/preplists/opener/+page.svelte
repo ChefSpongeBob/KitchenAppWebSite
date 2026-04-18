@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import PreplistEditor from '$lib/components/ui/PreplistEditor.svelte';
 
   type PreplistItem = {
@@ -26,7 +26,6 @@
 
 <PreplistEditor
   title={data.title}
-  subtitle={data.subtitle}
   items={data.items}
   isAdmin={data.isAdmin}
   valueLabel={data.valueLabel ?? 'Prep'}
@@ -35,4 +34,5 @@
   adminSummaryLabel={data.adminSummaryLabel ?? '+ Admin Par Levels'}
   valueType={data.valueType ?? 'text'}
 />
+
 

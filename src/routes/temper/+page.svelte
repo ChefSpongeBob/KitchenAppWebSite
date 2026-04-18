@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount } from 'svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { startVisiblePolling } from '$lib/client/polling';
@@ -114,7 +114,7 @@
     }));
 </script>
 
-<PageHeader title="Kitchen Temps" subtitle="12h history" />
+<PageHeader title="Kitchen Temps" />
 
 {#if warningNodes.length > 0}
   <section class="warning-row" aria-label="Temperature warnings">
@@ -289,3 +289,4 @@
     }
   }
 </style>
+

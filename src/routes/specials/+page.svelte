@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
@@ -45,7 +45,6 @@
 <Layout>
   <PageHeader
     title="Daily Specials"
-    subtitle="Roll, nigiri, sashimi, and kitchen features for the day."
   />
 
   <section class="grid">
@@ -78,7 +77,6 @@
   {#if canEdit}
     <PageHeader
       title="Edit Specials"
-      subtitle="Update the published specials for the service day."
     />
     <form method="POST" action="?/save_specials" use:enhance={withSpecialsFeedback} class="editor">
       <section class="grid">
@@ -217,3 +215,4 @@
     }
   }
 </style>
+

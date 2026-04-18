@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
@@ -93,7 +93,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="My Profile" subtitle="Your account, availability, and personal information." />
+  <PageHeader title="My Profile" />
 
   <section class="profile-header">
     <div class="profile-identity">
@@ -720,3 +720,4 @@
     }
   }
 </style>
+
