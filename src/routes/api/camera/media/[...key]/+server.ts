@@ -1,4 +1,9 @@
+import { cameraBetaEnabled } from '$lib/config/features';
+
 export async function GET({ params, platform }) {
+  if (!cameraBetaEnabled) {
+    return new Response('Not found.', { status: 404 });
+  }
   const bucket = platform?.env?.CAMERA_MEDIA;
   if (!bucket) {
     return new Response('Camera media bucket not configured.', { status: 503 });

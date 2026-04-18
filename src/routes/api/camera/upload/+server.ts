@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { cameraBetaEnabled } from '$lib/config/features';
 import {
   cleanupExpiredCameraMedia,
   cameraIngestAuthorized,
@@ -8,6 +9,9 @@ import {
 import { allowIoTIngest } from '$lib/server/iotIngest';
 
 export async function POST({ request, platform, url }) {
+  if (!cameraBetaEnabled) {
+    return json({ error: 'Not found.' }, { status: 404 });
+  }
   const bucket = platform?.env?.CAMERA_MEDIA;
   const db = platform?.env?.DB;
   if (!bucket) {

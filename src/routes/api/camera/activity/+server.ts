@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { cameraBetaEnabled } from '$lib/config/features';
 import {
   cameraIngestAuthorized,
   cleanupExpiredCameraMedia,
@@ -7,6 +8,9 @@ import {
 import { allowIoTIngest } from '$lib/server/iotIngest';
 
 export async function POST({ request, platform }) {
+  if (!cameraBetaEnabled) {
+    return json({ error: 'Not found.' }, { status: 404 });
+  }
   const db = platform?.env?.DB;
   if (!db) {
     return json({ error: 'Database not configured.' }, { status: 503 });

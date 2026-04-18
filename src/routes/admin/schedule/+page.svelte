@@ -4,7 +4,7 @@
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
   import ScheduleBuilderCell from '$lib/components/ui/ScheduleBuilderCell.svelte';
   import { applyAction, enhance } from '$app/forms';
-  import { invalidateAll } from '$app/navigation';
+  import { invalidate } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import {
     scheduleEndLabels,
@@ -371,7 +371,7 @@
       await applyAction(result);
       if (result.type === 'success') {
         hasUnsavedChanges = false;
-        await invalidateAll();
+        await invalidate('app:admin-schedule');
         pushToast(result.data?.message ?? 'Schedule updated.', 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That schedule change could not be saved.', 'error');

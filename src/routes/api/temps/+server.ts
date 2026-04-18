@@ -8,6 +8,17 @@ type TempRow = {
   ts: number;
 };
 
+let tempsIndexesEnsured = false;
+
+async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
+  if (tempsIndexesEnsured) return;
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_temps_ts_desc ON temps(ts DESC)`).run();
+  await db
+    .prepare(`CREATE INDEX IF NOT EXISTS idx_temps_sensor_ts_desc ON temps(sensor_id, ts DESC)`)
+    .run();
+  tempsIndexesEnsured = true;
+}
+
 function normalizeReading(input: Record<string, unknown>): TempRow | null {
   const sensorRaw = input.sensor_id ?? input.sensorId ?? input.node;
   const tempRaw = input.temperature ?? input.temp;
@@ -29,6 +40,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
+  await ensureTempsIndexes(db);
 
   const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit') ?? 500)));
   const sensor = url.searchParams.get('sensor');
@@ -74,6 +86,7 @@ export const POST: RequestHandler = async ({ platform, request }) => {
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
+  await ensureTempsIndexes(db);
 
   const apiKey = platform?.env?.IOT_API_KEY;
   if (apiKey) {

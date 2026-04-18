@@ -13,9 +13,9 @@ Use this as the release gate before shipping native installs.
 
 ## 2) Feature Flags
 - [ ] Set `PUBLIC_CAMERA_BETA_ENABLED` for the target environment.
-  - `true`/`1`: Camera shown as Beta.
-  - `false`/`0`: Camera treated as normal feature labeling.
-- [ ] Verify beta labeling appears in Admin dashboard and Camera page.
+  - `true`/`1`: Camera feature is enabled (Beta).
+  - `false`/`0`: Camera admin page and camera APIs are hidden/disabled.
+- [ ] Verify camera visibility matches the target flag value.
 
 ## 3) Authentication + Session
 - [ ] Login persists after app close/reopen.
@@ -24,7 +24,8 @@ Use this as the release gate before shipping native installs.
 - [ ] Inactive/disabled users are blocked as expected.
 
 ## 4) Data + Migrations
-- [ ] Run all pending D1 migrations in production.
+- [ ] Confirm migration tracking strategy is consistent for this environment (`d1_migrations`).
+- [ ] Run all pending D1 migrations in production (or execute equivalent idempotent SQL if tracking is legacy/manual).
 - [ ] Confirm schema parity between local/prod for:
   - schedules
   - profile data
@@ -71,4 +72,3 @@ Use this as the release gate before shipping native installs.
 - [ ] Push TestFlight beta first.
 - [ ] Run UAT checklist with managers.
 - [ ] Promote same build to production after signoff.
-

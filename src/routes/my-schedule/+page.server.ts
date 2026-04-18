@@ -14,7 +14,8 @@ import {
 } from '$lib/server/schedules';
 import type { Actions } from './$types';
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, depends }) => {
+  depends('app:my-schedule');
   if (!locals.userId) {
     throw redirect(303, '/login');
   }

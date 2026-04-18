@@ -1,6 +1,7 @@
-import { fail } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { requireAdmin } from '$lib/server/admin';
+import { cameraBetaEnabled } from '$lib/config/features';
 import {
   cleanupExpiredCameraMedia,
   deleteCameraEventAssets,
@@ -29,8 +30,15 @@ type CameraSource = {
   updated_at: number;
 };
 
+function requireCameraBeta() {
+  if (!cameraBetaEnabled) {
+    throw error(404, 'Not found');
+  }
+}
+
 export const load: PageServerLoad = async ({ locals, url, platform }) => {
   requireAdmin(locals.userRole);
+  requireCameraBeta();
   const db = locals.DB;
   if (!db) {
     return { events: [], sources: [] };
@@ -79,6 +87,7 @@ export const load: PageServerLoad = async ({ locals, url, platform }) => {
 export const actions: Actions = {
   clear_events: async ({ locals, platform }) => {
     requireAdmin(locals.userRole);
+    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
 
@@ -97,6 +106,7 @@ export const actions: Actions = {
 
   delete_event: async ({ request, locals, platform }) => {
     requireAdmin(locals.userRole);
+    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
 
@@ -120,6 +130,7 @@ export const actions: Actions = {
 
   save_source: async ({ request, locals }) => {
     requireAdmin(locals.userRole);
+    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
 
@@ -164,6 +175,7 @@ export const actions: Actions = {
 
   delete_source: async ({ request, locals }) => {
     requireAdmin(locals.userRole);
+    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
 

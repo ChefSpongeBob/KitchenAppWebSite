@@ -6,4 +6,4 @@ function isEnabled(value: string | undefined, defaultValue = false) {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
 
-export const cameraBetaEnabled = isEnabled(env.PUBLIC_CAMERA_BETA_ENABLED, true);
+export const cameraBetaEnabled = isEnabled(env.PUBLIC_CAMERA_BETA_ENABLED, false);

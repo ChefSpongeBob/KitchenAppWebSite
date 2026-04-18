@@ -9,7 +9,7 @@
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import { applyAction, enhance } from '$app/forms';
-  import { invalidateAll } from '$app/navigation';
+  import { invalidate } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -82,7 +82,7 @@
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
-        await invalidateAll();
+        await invalidate('app:my-schedule');
       }
       if (result.type === 'success') {
         pushToast('Shift update saved.', 'success');
@@ -186,7 +186,7 @@
       await applyAction(result);
       if (result.type === 'success') {
         closeOfferPopup();
-        await invalidateAll();
+        await invalidate('app:my-schedule');
         pushToast('Shift update saved.', 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That shift update could not be saved.', 'error');

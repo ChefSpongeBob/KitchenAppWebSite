@@ -19,8 +19,9 @@ import {
   saveScheduleWeekDraft
 } from '$lib/server/schedules';
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, depends }) => {
   requireAdmin(locals.userRole);
+  depends('app:admin-schedule');
   const db = locals.DB;
   const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
 

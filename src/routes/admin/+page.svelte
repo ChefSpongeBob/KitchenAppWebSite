@@ -109,13 +109,15 @@
       title: 'Documents',
       description: 'Update docs, handbook pages, and file links.'
     },
-    {
-      href: '/admin/camera',
-      title: cameraBetaEnabled ? 'Camera Activity (Beta)' : 'Camera Activity',
-      description: cameraBetaEnabled
-        ? 'Beta feature: test clips and live feed settings.'
-        : 'View camera clips and live feed settings.'
-    }
+    ...(cameraBetaEnabled
+      ? [
+          {
+            href: '/admin/camera',
+            title: 'Camera Activity (Beta)',
+            description: 'Beta feature: test clips and live feed settings.'
+          }
+        ]
+      : [])
   ];
 </script>
 
