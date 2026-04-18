@@ -44,8 +44,18 @@ You can preview the production build with `npm run preview`.
 ## Mobile Release Notes
 
 - Go-live checklist: `docs/mobile-go-live-checklist.md`
+- iOS Mac handoff: `docs/ios-handoff-checklist.md`
+- Deploy/rollback playbook: `docs/release-deploy-playbook.md`
 - Run release validation: `npm run mobile:check`
+- Run Android release pass: `npm run android:release:check`
+- Run production smoke pass: `npm run smoke:prod`
+- Normalize migration tracking:
+  - local: `npm run db:migrations:normalize:local`
+  - remote: `npm run db:migrations:normalize:remote`
+- Apply migrations:
+  - local: `npm run db:migrations:apply:local`
+  - remote: `npm run db:migrations:apply:remote`
 - Camera beta flag:
   - Env var: `PUBLIC_CAMERA_BETA_ENABLED`
   - Truthy values: `1`, `true`, `yes`, `on`
-  - Default behavior: enabled if unset
+  - Default behavior: disabled if unset

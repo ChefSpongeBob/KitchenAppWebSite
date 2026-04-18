@@ -14,8 +14,10 @@ Use this as the default runbook for pushing web + DB safely.
 ## 2) Database Safety
 - Validate production DB access:
   - `npx wrangler d1 execute kitchen --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`
-- If migration tracking (`d1_migrations`) is not aligned, use idempotent SQL (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`) and record what was applied.
-- Apply required DB changes before app deploy.
+- Normalize migration tracking if needed:
+  - `npm run db:migrations:normalize:remote`
+- Apply required migrations before deploy:
+  - `npm run db:migrations:apply:remote`
 
 ## 3) Deploy
 - Push code to `main`.
@@ -23,6 +25,8 @@ Use this as the default runbook for pushing web + DB safely.
 - Confirm deployment version timestamp.
 
 ## 4) Post-Deploy Smoke (Production)
+- Run:
+  - `npm run smoke:prod`
 - Auth:
   - Login/logout
   - Password reset link flow

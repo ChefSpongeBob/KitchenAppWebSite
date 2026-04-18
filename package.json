@@ -45,6 +45,12 @@
 		"cap:open:ios": "npx cap open ios",
 		"cap:open:android": "npx cap open android",
 		"mobile:check": "node ./scripts/mobile-release-check.mjs",
+		"android:release:check": "node ./scripts/android-release-pass.mjs",
+		"smoke:prod": "node ./scripts/prod-smoke-check.mjs",
+		"db:migrations:normalize:local": "node ./scripts/normalize-d1-migrations.mjs --local",
+		"db:migrations:normalize:remote": "node ./scripts/normalize-d1-migrations.mjs --remote",
+		"db:migrations:apply:local": "npx wrangler d1 migrations apply kitchen --local",
+		"db:migrations:apply:remote": "npx wrangler d1 migrations apply kitchen --remote",
 		"lint": "prettier --check .",
 		"format": "prettier --write ."
 	},
