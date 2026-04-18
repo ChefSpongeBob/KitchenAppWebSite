@@ -3,6 +3,7 @@ import {
   scheduleDepartments,
   isValidScheduleDepartment,
   scheduleRolesByDepartment,
+  scheduleEndLabels,
   weekdayIndexFromDate,
   type ScheduleDepartment
 } from '$lib/assets/schedule';
@@ -139,6 +140,18 @@ type ShiftInsertRow = {
   endLabel: string;
   notes: string;
   sortOrder: number;
+};
+
+type PublishShiftRow = {
+  id: string;
+  shift_date: string;
+  user_id: string;
+  department: string;
+  role: string;
+  start_time: string;
+  end_label: string;
+  user_name: string | null;
+  user_email: string;
 };
 
 let scheduleSchemaEnsured = false;
@@ -1461,6 +1474,178 @@ function toCopiedShiftInsertRows(
   });
 }
 
+function parseTimeToMinutes(value: string): number | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isTimeLabel(value: string) {
+  return parseTimeToMinutes(value) !== null;
+}
+
+function summarizePublishIssues(prefix: string, issues: string[]) {
+  if (issues.length === 0) return '';
+  if (issues.length === 1) return `${prefix}${issues[0]}`;
+  return `${prefix}${issues[0]} (+${issues.length - 1} more)`;
+}
+
+async function loadPublishShifts(db: DB, weekId: string) {
+  return db
+    .prepare(
+      `
+      SELECT
+        s.id,
+        s.shift_date,
+        s.user_id,
+        s.department,
+        s.role,
+        s.start_time,
+        s.end_label,
+        u.display_name AS user_name,
+        u.email AS user_email
+      FROM schedule_shifts s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.week_id = ?
+      ORDER BY s.shift_date ASC, s.user_id ASC, s.start_time ASC, s.sort_order ASC
+      `
+    )
+    .bind(weekId)
+    .all<PublishShiftRow>();
+}
+
+async function validatePublishWeek(db: DB, weekId: string, weekStart: string) {
+  const [rowsResult, departments, roleOptionsByDepartment] = await Promise.all([
+    loadPublishShifts(db, weekId),
+    loadScheduleDepartments(db),
+    loadScheduleRoleOptionsByDepartment(db)
+  ]);
+
+  const shifts = rowsResult.results ?? [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (shifts.length === 0) {
+    errors.push('Cannot publish an empty schedule.');
+    return { errors, warnings };
+  }
+
+  const assignmentError = await validateScheduleAssignments(
+    db,
+    shifts.map((shift) => ({
+      userId: shift.user_id,
+      department: shift.department as ScheduleDepartment,
+      shiftDate: shift.shift_date
+    }))
+  );
+  if (assignmentError) {
+    errors.push(assignmentError);
+  }
+
+  for (const shift of shifts) {
+    const employee = shift.user_name ?? shift.user_email;
+    const onDate = ` on ${shift.shift_date}`;
+
+    if (!isValidScheduleDepartment(shift.department, departments)) {
+      errors.push(`${employee} has an invalid department${onDate}.`);
+    }
+
+    if (!roleIsAllowed(roleOptionsByDepartment, shift.department, shift.role)) {
+      errors.push(`${employee} has an invalid role for ${shift.department}${onDate}.`);
+    }
+
+    if (!isTimeLabel(shift.start_time)) {
+      errors.push(`${employee} has an invalid start time${onDate}.`);
+    }
+
+    const endLabel = shift.end_label.trim();
+    if (endLabel && !isTimeLabel(endLabel) && !scheduleEndLabels.includes(endLabel as (typeof scheduleEndLabels)[number])) {
+      errors.push(`${employee} has an invalid shift end label${onDate}.`);
+    }
+  }
+
+  const byEmployeeDate = new Map<string, PublishShiftRow[]>();
+  for (const shift of shifts) {
+    const key = `${shift.user_id}|${shift.shift_date}`;
+    byEmployeeDate.set(key, [...(byEmployeeDate.get(key) ?? []), shift]);
+  }
+
+  for (const dayShifts of byEmployeeDate.values()) {
+    if (dayShifts.length < 2) continue;
+
+    const withRanges = dayShifts
+      .map((shift) => {
+        const start = parseTimeToMinutes(shift.start_time);
+        const end = parseTimeToMinutes(shift.end_label);
+        if (start === null || end === null) return null;
+        const normalizedEnd = end <= start ? end + 24 * 60 : end;
+        return { shift, start, end: normalizedEnd };
+      })
+      .filter((value): value is { shift: PublishShiftRow; start: number; end: number } => Boolean(value))
+      .sort((a, b) => a.start - b.start);
+
+    for (let index = 1; index < withRanges.length; index += 1) {
+      const previous = withRanges[index - 1];
+      const current = withRanges[index];
+      if (current.start < previous.end) {
+        const employee = current.shift.user_name ?? current.shift.user_email;
+        errors.push(`${employee} has overlapping shifts on ${current.shift.shift_date}.`);
+        break;
+      }
+    }
+  }
+
+  const weekEnd = addDays(weekStart, 6);
+
+  const approvedTimeOffConflicts = await db
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM schedule_shifts s
+      JOIN user_schedule_time_off_requests r
+        ON r.user_id = s.user_id
+       AND r.status = 'approved'
+       AND r.start_date <= s.shift_date
+       AND r.end_date >= s.shift_date
+      WHERE s.week_id = ?
+        AND s.shift_date BETWEEN ? AND ?
+      `
+    )
+    .bind(weekId, weekStart, weekEnd)
+    .first<{ count: number }>();
+
+  if ((approvedTimeOffConflicts?.count ?? 0) > 0) {
+    errors.push(
+      `${approvedTimeOffConflicts?.count} shift${approvedTimeOffConflicts?.count === 1 ? '' : 's'} conflict with approved time off.`
+    );
+  }
+
+  const pendingTimeOffConflicts = await db
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM schedule_shifts s
+      JOIN user_schedule_time_off_requests r
+        ON r.user_id = s.user_id
+       AND r.status = 'pending'
+       AND r.start_date <= s.shift_date
+       AND r.end_date >= s.shift_date
+      WHERE s.week_id = ?
+        AND s.shift_date BETWEEN ? AND ?
+      `
+    )
+    .bind(weekId, weekStart, weekEnd)
+    .first<{ count: number }>();
+
+  if ((pendingTimeOffConflicts?.count ?? 0) > 0) {
+    warnings.push(
+      `${pendingTimeOffConflicts?.count} shift${pendingTimeOffConflicts?.count === 1 ? '' : 's'} overlap pending time off requests.`
+    );
+  }
+
+  return { errors, warnings };
+}
+
 export async function saveUserScheduleAvailability(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -2193,6 +2378,13 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   if (!weekStart) return fail(400, { error: 'Missing week start.' });
 
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
+  const publishValidation = await validatePublishWeek(db, week.id, weekStart);
+  if (publishValidation.errors.length > 0) {
+    return fail(400, {
+      error: summarizePublishIssues('Cannot publish schedule: ', publishValidation.errors)
+    });
+  }
+
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
@@ -2205,7 +2397,11 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
     .bind(now, now, locals.userId, week.id)
     .run();
 
-  return { success: true };
+  const warningSummary = summarizePublishIssues('Published with warning: ', publishValidation.warnings);
+  return {
+    success: true,
+    message: warningSummary || 'Schedule published.'
+  };
 }
 
 export async function markScheduleWeekDraft(request: Request, locals: App.Locals) {
