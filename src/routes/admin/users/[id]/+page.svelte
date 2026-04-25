@@ -309,7 +309,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.9), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
   }
 
   .profile-header {
@@ -334,8 +334,8 @@
     font-size: 1.55rem;
     font-weight: 700;
     color: var(--color-primary-contrast);
-    border: 1px solid rgba(195, 32, 43, 0.24);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    border: 1px solid rgba(132, 146, 166, 0.24);
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
@@ -500,9 +500,9 @@
 
   button {
     width: 100%;
-    border: 1px solid rgba(195, 32, 43, 0.22);
+    border: 1px solid rgba(132, 146, 166, 0.22);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     min-height: 2.6rem;
     padding: 0.55rem 0.78rem;
@@ -548,3 +548,4 @@
     }
   }
 </style>
+

@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   if (!db) {
     return {
-      departments: ['FOH', 'Sushi', 'Kitchen'],
+      departments: ['General'],
       roles: []
     };
   }

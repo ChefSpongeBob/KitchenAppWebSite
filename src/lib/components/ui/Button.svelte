@@ -22,7 +22,7 @@
 
     padding: var(--space-3) var(--space-5);
     border-radius: var(--radius-lg);
-    border: none;
+    border: 1px solid transparent;
 
     font-size: var(--text-md);
     font-weight: var(--weight-medium);
@@ -34,13 +34,24 @@
   }
 
   .btn.primary {
-    background: var(--color-primary);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 86%, white 14%), var(--color-primary));
     color: var(--color-primary-contrast);
+    box-shadow: 0 10px 20px color-mix(in srgb, var(--color-primary) 28%, transparent);
   }
 
   .btn.secondary {
     background: var(--color-surface-alt);
     color: var(--color-text);
+    border-color: var(--color-border);
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn:active {
+    transform: translateY(0);
   }
 
   .icon {

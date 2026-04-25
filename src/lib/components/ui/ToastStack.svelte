@@ -85,7 +85,7 @@
   }
 
   .toast-info {
-    border-color: rgba(195, 32, 43, 0.24);
+    border-color: rgba(132, 146, 166, 0.24);
   }
 
   .toast span {
@@ -114,3 +114,4 @@
     }
   }
 </style>
+

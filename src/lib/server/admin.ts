@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { ensureAnnouncementsSchema, loadHomepageAnnouncement } from '$lib/server/announcements';
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 import { ensureEmployeeSpotlightSchema, loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
-import { isValidRecipeCategory, normalizeRecipeCategory } from '$lib/assets/recipeCategories';
+import { normalizeRecipeCategory } from '$lib/assets/recipeCategories';
 import {
   ensureScheduleSchema,
   loadScheduleDepartmentApprovalsByUser,
@@ -162,12 +162,77 @@ export type EmployeeProfileEditRequest = {
 
 export function requireAdmin(role: string | undefined | null) {
   if (role !== 'admin') {
-    throw redirect(303, '/');
+    throw redirect(303, '/app');
   }
 }
 
 export function normalizeSlug(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+function documentMediaKeyFromUrl(fileUrl: string) {
+  const prefix = '/api/documents/media/';
+  if (!fileUrl.startsWith(prefix)) return null;
+  const encoded = fileUrl.slice(prefix.length).trim();
+  if (!encoded) return null;
+  return encoded
+    .split('/')
+    .map((part) => decodeURIComponent(part))
+    .join('/');
+}
+
+function extensionFromFilename(name: string) {
+  const trimmed = name.trim();
+  const dotIndex = trimmed.lastIndexOf('.');
+  if (dotIndex <= 0 || dotIndex >= trimmed.length - 1) return '';
+  return trimmed.slice(dotIndex + 1).toLowerCase();
+}
+
+function extensionFromContentType(contentType: string) {
+  if (contentType === 'application/pdf') return 'pdf';
+  if (contentType === 'image/jpeg') return 'jpg';
+  if (contentType === 'image/png') return 'png';
+  if (contentType === 'image/webp') return 'webp';
+  if (contentType === 'image/gif') return 'gif';
+  if (contentType === 'image/svg+xml') return 'svg';
+  return '';
+}
+
+function isAllowedDocumentUpload(contentType: string, extension: string) {
+  if (contentType === 'application/pdf') return true;
+  if (contentType.startsWith('image/')) return true;
+  return ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(extension);
+}
+
+async function uploadDocumentMedia(
+  bucket: NonNullable<App.Locals['MEDIA_BUCKET']>,
+  slug: string,
+  file: File
+) {
+  const contentType = file.type || 'application/octet-stream';
+  const filenameExtension = extensionFromFilename(file.name);
+  const typeExtension = extensionFromContentType(contentType);
+  const extension = filenameExtension || typeExtension || 'bin';
+  const normalizedSlug = normalizeSlug(slug) || 'document';
+  const key = `documents/${normalizedSlug}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+  const body = await file.arrayBuffer();
+
+  await bucket.put(key, body, {
+    httpMetadata: {
+      contentType,
+      cacheControl: 'public, max-age=31536000, immutable'
+    }
+  });
+
+  const encodedKey = key
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+
+  return {
+    key,
+    url: `/api/documents/media/${encodedKey}`
+  };
 }
 
 export async function tableExists(db: D1, tableName: string) {
@@ -925,10 +990,6 @@ export async function createRecipe(request: Request, locals: App.Locals) {
   if (!title || !category || !ingredients || !instructions) {
     return fail(400, { error: 'All recipe fields are required.' });
   }
-  if (!isValidRecipeCategory(category)) {
-    return fail(400, { error: 'Invalid recipe category selected.' });
-  }
-
   await db
     .prepare(
       `
@@ -1136,11 +1197,32 @@ export async function createDocument(request: Request, locals: App.Locals) {
   const section = String(formData.get('section') ?? 'Docs').trim();
   const category = String(formData.get('category') ?? 'General').trim();
   const content = String(formData.get('content') ?? '').trim();
-  const fileUrl = String(formData.get('file_url') ?? '').trim();
+  let fileUrl = String(formData.get('file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
   if (!slug || !title) return fail(400, { error: 'Slug and title are required.' });
   if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
+
+  const upload = formData.get('file');
+  if (upload instanceof File && upload.size > 0) {
+    if (upload.size > 15 * 1024 * 1024) {
+      return fail(400, { error: 'Document upload must be 15MB or smaller.' });
+    }
+
+    const contentType = upload.type || 'application/octet-stream';
+    const extension = extensionFromFilename(upload.name);
+    if (!isAllowedDocumentUpload(contentType, extension)) {
+      return fail(400, { error: 'Only PDF and image uploads are supported.' });
+    }
+
+    if (!locals.MEDIA_BUCKET) {
+      return fail(503, { error: 'Document media bucket is not configured. Use File URL for now.' });
+    }
+
+    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, slug, upload);
+    fileUrl = uploaded.url;
+  }
+
   const now = Math.floor(Date.now() / 1000);
 
   await db
@@ -1172,11 +1254,36 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   const section = String(formData.get('section') ?? 'Docs').trim();
   const category = String(formData.get('category') ?? 'General').trim();
   const content = String(formData.get('content') ?? '').trim();
-  const fileUrl = String(formData.get('file_url') ?? '').trim();
+  let fileUrl = String(formData.get('file_url') ?? '').trim();
+  const existingFileUrl = String(formData.get('existing_file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
   if (!id || !slug || !title) return fail(400, { error: 'Document id, slug, and title are required.' });
   if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
+
+  const upload = formData.get('file');
+  if (upload instanceof File && upload.size > 0) {
+    if (upload.size > 15 * 1024 * 1024) {
+      return fail(400, { error: 'Document upload must be 15MB or smaller.' });
+    }
+
+    const contentType = upload.type || 'application/octet-stream';
+    const extension = extensionFromFilename(upload.name);
+    if (!isAllowedDocumentUpload(contentType, extension)) {
+      return fail(400, { error: 'Only PDF and image uploads are supported.' });
+    }
+
+    if (!locals.MEDIA_BUCKET) {
+      return fail(503, { error: 'Document media bucket is not configured. Use File URL for now.' });
+    }
+
+    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, slug, upload);
+    const previousKey = documentMediaKeyFromUrl(existingFileUrl);
+    if (previousKey && previousKey !== uploaded.key) {
+      await locals.MEDIA_BUCKET.delete(previousKey);
+    }
+    fileUrl = uploaded.url;
+  }
 
   await db
     .prepare(
@@ -1201,7 +1308,18 @@ export async function deleteDocument(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '').trim();
   if (!id) return fail(400, { error: 'Missing document id.' });
 
+  const existing = await db
+    .prepare(`SELECT file_url FROM documents WHERE id = ? LIMIT 1`)
+    .bind(id)
+    .first<{ file_url: string | null }>();
+
   await db.prepare(`DELETE FROM documents WHERE id = ?`).bind(id).run();
+
+  const mediaKey = documentMediaKeyFromUrl(existing?.file_url ?? '');
+  if (mediaKey && locals.MEDIA_BUCKET) {
+    await locals.MEDIA_BUCKET.delete(mediaKey);
+  }
+
   return { success: true };
 }
 

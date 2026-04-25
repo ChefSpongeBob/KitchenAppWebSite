@@ -164,7 +164,7 @@
     inset: 0 auto 0 0;
     width: 4px;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.88), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
   }
 
   .sheet-row.done {
@@ -218,8 +218,8 @@
     min-height: 2.75rem;
     padding: 0.72rem 1rem;
     border-radius: 10px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    border: 1px solid rgba(132, 146, 166, 0.22);
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.84rem;
@@ -319,3 +319,4 @@
     }
   }
 </style>
+

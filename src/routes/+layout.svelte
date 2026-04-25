@@ -1,22 +1,115 @@
 <script lang="ts">
   import "../app.css";
   import { onMount } from "svelte";
+  import { afterNavigate } from "$app/navigation";
   import { browser } from "$app/environment";
-  import { page } from "$app/stores";
-  import { primaryNav, type NavItem } from "$lib/assets/navigation";
+  import { navigating, page } from "$app/stores";
+  import { primaryNav, publicNav, type NavItem } from "$lib/assets/navigation";
+  import {
+    canRoleAccessFeature,
+    defaultAppFeatureModes,
+    type AppFeatureKey,
+    type AppFeatureModes
+  } from "$lib/features/appFeatures";
   import ToastStack from "$lib/components/ui/ToastStack.svelte";
 
-  export let data: { user: { id: string; role: string } | null };
+  type FeatureAwareNavItem = NavItem & {
+    featureKey?: AppFeatureKey;
+  };
+
+  export let data: {
+    user:
+      | {
+          id: string;
+          role: string;
+          businessId?: string | null;
+          businessName?: string | null;
+          businessLogoUrl?: string | null;
+          businessRole?: string | null;
+          businessOnboardingComplete?: boolean;
+        }
+      | null;
+    featureModes?: AppFeatureModes;
+    featureAccess?: Partial<Record<AppFeatureKey, boolean>>;
+  };
 
   let sidebarOpen = false;
+  let marketingMenuOpen = false;
+  let themeMode: "dark" | "light" = "dark";
+  let mobileView: "default" | "compact" = "default";
+  let narrowViewportQuery: MediaQueryList | null = null;
+  let coarsePointerQuery: MediaQueryList | null = null;
+  let revealObserver: IntersectionObserver | null = null;
+  const THEME_STORAGE_KEY = "kitchen_theme_mode";
   const adminNavItem: NavItem = {
     label: "Admin",
     route: "/admin",
     icon: "admin_panel_settings"
   };
+  const adminControlLinks: FeatureAwareNavItem[] = [
+    { label: "Home", route: "/app", icon: "home" },
+    { label: "Admin Dashboard", route: "/admin", icon: "space_dashboard" },
+    { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
+    { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" },
+    { label: "Staff Manager", route: "/admin/users", icon: "groups" },
+    { label: "List Editor", route: "/admin/lists", icon: "list_alt", featureKey: "lists" },
+    { label: "Recipe Editor", route: "/admin/recipes", icon: "menu_book", featureKey: "recipes" },
+    { label: "Document Editor", route: "/admin/documents", icon: "description", featureKey: "documents" },
+    { label: "Schedule Settings", route: "/admin/schedule-settings", icon: "settings", featureKey: "scheduling" }
+  ];
+  const adminEditorLinks: FeatureAwareNavItem[] = [
+    { label: "Lists", route: "/lists", icon: "checklist", featureKey: "lists" },
+    { label: "Schedule", route: "/schedule", icon: "event_note", featureKey: "scheduling" },
+    { label: "Todo", route: "/todo", icon: "task_alt", featureKey: "todo" },
+    { label: "Whiteboard", route: "/whiteboard", icon: "draw", featureKey: "whiteboard" },
+    { label: "Recipes", route: "/recipes", icon: "restaurant", featureKey: "recipes" },
+    { label: "Docs", route: "/docs", icon: "description", featureKey: "documents" },
+    { label: "Menus", route: "/menu", icon: "restaurant_menu", featureKey: "menus" }
+  ];
+
+  function canSeeFeature(featureKey: AppFeatureKey | undefined) {
+    if (!featureKey) return true;
+    const role = data.user?.role ?? null;
+    const mode = (data.featureModes ?? defaultAppFeatureModes)[featureKey];
+    return canRoleAccessFeature(mode, role);
+  }
 
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
+  }
+
+  function toggleMarketingMenu() {
+    marketingMenuOpen = !marketingMenuOpen;
+  }
+
+  function applyTheme(mode: "dark" | "light") {
+    if (!browser) return;
+    document.documentElement.setAttribute("data-theme", mode);
+    document.documentElement.style.colorScheme = mode;
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    themeMeta?.setAttribute("content", mode === "light" ? "#eef2f6" : "#10141b");
+  }
+
+  function applyMobileView(mode: "default" | "compact") {
+    if (!browser) return;
+    document.documentElement.setAttribute("data-mobile-view", mode);
+  }
+
+  function syncMobileView() {
+    if (!browser) return;
+    const isNarrow = narrowViewportQuery?.matches ?? window.matchMedia("(max-width: 900px)").matches;
+    const isCoarsePointer = coarsePointerQuery?.matches ?? window.matchMedia("(pointer: coarse)").matches;
+    mobileView = isNarrow || isCoarsePointer ? "compact" : "default";
+    applyMobileView(mobileView);
+  }
+
+  function attachMediaListener(query: MediaQueryList, handler: () => void) {
+    query.addEventListener("change", handler);
+    return () => query.removeEventListener("change", handler);
+  }
+
+  function toggleTheme() {
+    themeMode = themeMode === "dark" ? "light" : "dark";
   }
 
   function isActive(route: string, path: string) {
@@ -24,18 +117,122 @@
     return path === route || path.startsWith(`${route}/`);
   }
 
+  function setupScrollReveal() {
+    if (!browser) return;
+
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    if (!nodes.length) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!isMarketingRoute || reduceMotion) {
+      for (const node of nodes) node.classList.add("is-visible");
+      return;
+    }
+
+    revealObserver?.disconnect();
+    revealObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const target = entry.target as HTMLElement;
+          target.classList.add("is-visible");
+          revealObserver?.unobserve(target);
+        }
+      },
+      { threshold: 0.16, rootMargin: "0px 0px -8% 0px" }
+    );
+
+    nodes.forEach((node, index) => {
+      if (!node.style.getPropertyValue("--reveal-delay")) {
+        node.style.setProperty("--reveal-delay", `${Math.min(index * 45, 260)}ms`);
+      }
+      if (node.classList.contains("is-visible")) return;
+      revealObserver?.observe(node);
+    });
+  }
+
   $: currentPath = $page.url.pathname;
+  $: navTargetPath = $navigating?.to?.url.pathname ?? "";
+  const marketingExactRoutes = new Set([
+    "/",
+    "/features",
+    "/how-it-works",
+    "/pricing",
+    "/register",
+    "/login",
+    "/forgot-password",
+    "/onboarding"
+  ]);
+  const marketingPrefixRoutes = ["/reset-password/"];
+  $: isOnboardingRoute =
+    currentPath === "/onboarding" || currentPath.startsWith("/welcome") || currentPath === "/register";
+  $: isMarketingRoute =
+    !data.user &&
+    (marketingExactRoutes.has(currentPath) ||
+      marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix)));
+  $: showRouteSplash =
+    Boolean(data.user) &&
+    Boolean($navigating) &&
+    Boolean(navTargetPath) &&
+    !navTargetPath.startsWith("/onboarding") &&
+    !navTargetPath.startsWith("/welcome") &&
+    !navTargetPath.startsWith("/register");
+  $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
+  $: filteredPrimaryNav = primaryNav.filter((item) => canSeeFeature(item.featureKey));
+  $: visibleAdminControlLinks = adminControlLinks.filter((item) => canSeeFeature(item.featureKey));
+  $: visibleAdminEditorLinks = adminEditorLinks.filter((item) => canSeeFeature(item.featureKey));
   $: navItems =
-    data.user?.role === "admin"
-      ? [...primaryNav, adminNavItem]
-      : primaryNav;
+    !data.user
+      ? publicNav
+      : data.user.role === "admin"
+        ? [...filteredPrimaryNav, adminNavItem]
+        : filteredPrimaryNav;
+  $: isAdminSidebar = Boolean(data.user && data.user.role === "admin" && currentPath.startsWith("/admin"));
+  $: if (currentPath) {
+    sidebarOpen = false;
+    marketingMenuOpen = false;
+  }
+
+  afterNavigate(() => {
+    if (!browser) return;
+    requestAnimationFrame(setupScrollReveal);
+  });
 
   onMount(() => {
-    if (!browser || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
-      console.error("Service worker registration failed:", error);
-    });
+    narrowViewportQuery = window.matchMedia("(max-width: 900px)");
+    coarsePointerQuery = window.matchMedia("(pointer: coarse)");
+
+    const teardownViewportListener = attachMediaListener(narrowViewportQuery, syncMobileView);
+    const teardownPointerListener = attachMediaListener(coarsePointerQuery, syncMobileView);
+    window.addEventListener("resize", syncMobileView, { passive: true });
+
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === "light" || savedTheme === "dark") {
+      themeMode = savedTheme;
+    }
+    applyTheme(themeMode);
+    syncMobileView();
+
+    requestAnimationFrame(setupScrollReveal);
+
+    if (browser && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+        console.error("Service worker registration failed:", error);
+      });
+    }
+
+    return () => {
+      revealObserver?.disconnect();
+      teardownViewportListener();
+      teardownPointerListener();
+      window.removeEventListener("resize", syncMobileView);
+    };
   });
+
+  $: if (browser) {
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    applyTheme(themeMode);
+  }
 </script>
 
 <svelte:head>
@@ -53,90 +250,220 @@
     rel="stylesheet"
   />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#0b0706" />
+  <meta name="theme-color" content="#10141b" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Dave's Sushi" />
+  <meta name="apple-mobile-web-app-title" content="Kitchen Hub" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-touch-fullscreen" content="yes" />
 </svelte:head>
 
-<!-- ===== Hamburger ===== -->
-<button
-  class="hamburger tap"
-  class:open={sidebarOpen}
-  on:click={toggleSidebar}
-  aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
->
-  <img class="sushi-icon" src="/sushi-assets/sushi-tray.svg" alt="" aria-hidden="true" />
-</button>
+{#if !isOnboardingRoute}
+  {#if isMarketingRoute}
+  <header class="marketing-header">
+    <div class="marketing-shell">
+      <a href="/" class="marketing-brand">
+        <img src="/kitchen-icons/whisk.svg" alt="" aria-hidden="true" class="marketing-brand-icon" />
+        <div class="marketing-brand-copy">
+          <strong>SoftwareKitchenNNS</strong>
+          <small>Kitchen Operations Platform</small>
+        </div>
+      </a>
 
-<!-- ===== Overlay ===== -->
-{#if sidebarOpen}
-  <div
-    class="overlay"
-    on:click={() => (sidebarOpen = false)}
-    role="button"
-    tabindex="0"
-    aria-label="Close sidebar"
-    on:keydown={(e) => e.key === "Enter" && (sidebarOpen = false)}
-  ></div>
-{/if}
+      <nav class="marketing-nav" aria-label="Primary navigation">
+        {#each marketingNav as item}
+          <a href={item.route} class:active={isActive(item.route, currentPath)}>{item.label}</a>
+        {/each}
+      </nav>
 
-<!-- ===== Sidebar ===== -->
-<aside class="sidebar" class:open={sidebarOpen} aria-label="Sidebar navigation">
-  <div class="sidebar-inner">
-    <div class="sidebar-brand">
-      <span class="brand-mark">K</span>
-      <div class="brand-copy">
-        <strong>Dave's Sushi</strong>
-        <small>Daily Service Hub</small>
+      <div class="marketing-actions">
+        <button
+          class="theme-toggle marketing-theme tap"
+          on:click={toggleTheme}
+          aria-label={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={themeMode === "dark" ? "Light mode" : "Dark mode"}
+        >
+          <span class="material-icons">{themeMode === "dark" ? "light_mode" : "dark_mode"}</span>
+        </button>
+        <a href="/login" class="marketing-btn marketing-btn-ghost">Sign In</a>
+        <a href="/register#onboarding-slideshow" class="marketing-btn marketing-btn-primary">Start Free</a>
+        <button
+          class="marketing-menu-btn tap"
+          on:click={toggleMarketingMenu}
+          aria-label={marketingMenuOpen ? "Close menu" : "Open menu"}
+        >
+          <span class="material-icons">{marketingMenuOpen ? "close" : "menu"}</span>
+        </button>
       </div>
     </div>
-    {#each navItems as item}
-      <a
-        href={item.route}
-        class="side-item tap"
-        class:active={isActive(item.route, currentPath)}
-        on:click={() => (sidebarOpen = false)}
-      >
-        <span class="active-indicator"></span>
-        <span class="material-icons">{item.icon}</span>
-        <span>{item.label}</span>
-      </a>
-    {/each}
-  </div>
-</aside>
+
+    {#if marketingMenuOpen}
+      <div class="marketing-mobile-menu">
+        {#each marketingNav as item}
+          <a href={item.route} class:active={isActive(item.route, currentPath)} on:click={() => (marketingMenuOpen = false)}>{item.label}</a>
+        {/each}
+        <div class="marketing-mobile-cta">
+          <a href="/login" on:click={() => (marketingMenuOpen = false)}>Sign In</a>
+          <a href="/register#onboarding-slideshow" class="primary" on:click={() => (marketingMenuOpen = false)}>Start Free</a>
+        </div>
+      </div>
+    {/if}
+  </header>
+  {:else}
+  <!-- ===== Hamburger ===== -->
+  <button
+    class="hamburger tap"
+    class:open={sidebarOpen}
+    on:click={toggleSidebar}
+    aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+  >
+    <img class="menu-icon" src="/kitchen-icons/burger.svg" alt="" aria-hidden="true" />
+  </button>
+
+  <button
+    class="theme-toggle tap"
+    on:click={toggleTheme}
+    aria-label={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+    title={themeMode === "dark" ? "Light mode" : "Dark mode"}
+  >
+    <span class="material-icons">{themeMode === "dark" ? "light_mode" : "dark_mode"}</span>
+  </button>
+
+  <!-- ===== Overlay ===== -->
+  {#if sidebarOpen}
+    <div
+      class="overlay"
+      on:click={() => (sidebarOpen = false)}
+      role="button"
+      tabindex="0"
+      aria-label="Close sidebar"
+      on:keydown={(e) => e.key === "Enter" && (sidebarOpen = false)}
+    ></div>
+  {/if}
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar" class:open={sidebarOpen} aria-label="Sidebar navigation">
+    <div class="sidebar-inner">
+      <div class="sidebar-brand">
+        {#if data.user?.businessLogoUrl}
+          <img src={data.user.businessLogoUrl} alt="" aria-hidden="true" class="brand-mark brand-mark-image" />
+        {:else}
+          <span class="brand-mark">K</span>
+        {/if}
+        <div class="brand-copy">
+          <strong>{data.user?.businessName?.trim() || 'Kitchen Hub'}</strong>
+          <small>Service Workspace</small>
+        </div>
+      </div>
+      {#if isAdminSidebar}
+        <div class="side-section-label">Admin Controls</div>
+        {#each visibleAdminControlLinks as item}
+          <a
+            href={item.route}
+            class="side-item tap"
+            class:active={isActive(item.route, currentPath)}
+            on:click={() => (sidebarOpen = false)}
+          >
+            <span class="active-indicator"></span>
+            <span class="material-icons">{item.icon}</span>
+            <span>{item.label}</span>
+          </a>
+        {/each}
+        <div class="side-section-label">Editor Quick Links</div>
+        {#each visibleAdminEditorLinks as item}
+          <a
+            href={item.route}
+            class="side-item tap"
+            class:active={isActive(item.route, currentPath)}
+            on:click={() => (sidebarOpen = false)}
+          >
+            <span class="active-indicator"></span>
+            <span class="material-icons">{item.icon}</span>
+            <span>{item.label}</span>
+          </a>
+        {/each}
+      {:else}
+        {#each navItems as item}
+          <a
+            href={item.route}
+            class="side-item tap"
+            class:active={isActive(item.route, currentPath)}
+            on:click={() => (sidebarOpen = false)}
+          >
+            <span class="active-indicator"></span>
+            <span class="material-icons">{item.icon}</span>
+            <span>{item.label}</span>
+          </a>
+        {/each}
+      {/if}
+    </div>
+  </aside>
+  {/if}
+{/if}
 
 <!-- ===== App Shell ===== -->
-<div class="app-shell">
+<div
+  class="app-shell"
+  class:marketing-app={isMarketingRoute}
+  class:onboarding-shell={isOnboardingRoute}
+  class:mobile-compact={mobileView === "compact"}
+>
+  {#if showRouteSplash}
+    <div class="route-splash" role="status" aria-live="polite">
+      <div class="route-splash-inner">
+        <img src="/favicon-splash.svg" alt="" aria-hidden="true" class="route-splash-logo" />
+        <p class="route-splash-copy">Prepping...</p>
+        <div class="route-splash-loader" aria-hidden="true"></div>
+      </div>
+    </div>
+  {/if}
   <ToastStack />
-  <main class="app-content">
+  <main class="app-content" class:marketing-content={isMarketingRoute} class:onboarding-content={isOnboardingRoute}>
     <slot />
   </main>
-  <footer class="app-footer">
+  {#if !isOnboardingRoute}
+  <footer class="app-footer" class:marketing-footer={isMarketingRoute}>
     <div class="footer-shell">
       <div class="footer-top">
         <div class="footer-brand">
-          <img src="/spider-mark.svg" alt="" aria-hidden="true" class="footer-logo" />
+          <img src="/kitchen-icons/whisk.svg" alt="" aria-hidden="true" class="footer-logo" />
           <div class="footer-brand-copy">
-            <strong>Nexus North Systems, LLC</strong>
-            <span class="footer-version">Kitchen App v2.1</span>
+            <strong>{isMarketingRoute ? "SoftwareKitchenNNS" : "Kitchen Hub"}</strong>
+            <span class="footer-version">{isMarketingRoute ? "Platform Preview" : "Boilerplate v1.0"}</span>
           </div>
         </div>
       </div>
-      <p class="footer-copy">Kitchen operations hub for tasks, lists, docs, recipes, and live temperature monitoring.</p>
+      <p class="footer-copy">
+        {#if isMarketingRoute}
+          Restaurant workforce scheduling, prep execution, and live kitchen communication in one operational platform.
+        {:else}
+          Kitchen operations hub for schedules, tasks, lists, docs, recipes, and live temperature monitoring.
+        {/if}
+      </p>
       <nav class="footer-links" aria-label="Footer links">
-        <a href="/about">About App</a>
-        <a href="/docs">Documentation</a>
-        <a href="https://charlottesweb.nexus" target="_blank" rel="noreferrer">Support Contact</a>
+        {#if isMarketingRoute}
+          <a href="/">Overview</a>
+          <a href="/features">Features</a>
+          <a href="/how-it-works">How It Works</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/register#onboarding-slideshow">Start Free</a>
+        {:else if data.user}
+          <a href="/about">About App</a>
+          <a href="/docs">Documentation</a>
+          <a href="/settings">Support</a>
+        {:else}
+          <a href="/features">Features</a>
+          <a href="/how-it-works">How It Works</a>
+          <a href="/pricing">Pricing</a>
+        {/if}
       </nav>
       <div class="footer-bottom">
-        <span>&copy; 2026 Nexus North Systems, LLC</span>
-        <span>Built for connected kitchen operations</span>
+        <span>&copy; 2026 {isMarketingRoute ? "SoftwareKitchenNNS" : "Kitchen Hub"}</span>
+        <span>{isMarketingRoute ? "Built for modern kitchen teams" : "Built for connected kitchen operations"}</span>
       </div>
     </div>
   </footer>
+  {/if}
 </div>
 
 <style>
@@ -149,14 +476,340 @@
     z-index: 1;
   }
 
+  .app-shell.mobile-compact .app-content {
+    max-width: 1120px;
+    padding: clamp(0.58rem, 1.8vw, 0.92rem);
+    padding-top: calc(2.25rem + var(--safe-top));
+    padding-bottom: calc(3.95rem + var(--safe-bottom));
+  }
+
+  .app-shell.mobile-compact .app-content.marketing-content {
+    padding-top: calc(3.92rem + var(--safe-top));
+  }
+
+  :global(html[data-mobile-view='compact']) .hamburger,
+  :global(html[data-mobile-view='compact']) .theme-toggle {
+    width: 2.45rem;
+    height: 2.45rem;
+    top: calc(0.62rem + var(--safe-top));
+  }
+
+  :global(html[data-mobile-view='compact']) .side-item {
+    padding: 10px 11px;
+    font-size: 0.9rem;
+    gap: 11px;
+  }
+
+  .app-shell.marketing-app::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 28%),
+      radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 32%),
+      radial-gradient(circle at 52% 100%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 36%);
+    z-index: 0;
+  }
+
+  .app-shell.marketing-app::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.09;
+    z-index: 0;
+  }
+
+  .route-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(circle at 16% 12%, rgba(132, 146, 166, 0.12), transparent 30%),
+      radial-gradient(circle at top, rgba(132, 146, 166, 0.16), transparent 38%),
+      radial-gradient(circle at bottom, rgba(148, 163, 184, 0.09), transparent 34%),
+      linear-gradient(180deg, #141821, #0f131a);
+    backdrop-filter: blur(6px);
+  }
+
+  .route-splash-inner {
+    display: grid;
+    justify-items: center;
+    gap: 0.55rem;
+    text-align: center;
+    padding: 1rem;
+  }
+
+  .route-splash-logo {
+    width: min(220px, 58vw);
+    height: auto;
+    display: block;
+    filter:
+      brightness(0) saturate(100%) invert(92%) sepia(23%) saturate(189%) hue-rotate(327deg) brightness(109%) contrast(93%)
+      drop-shadow(0 10px 24px rgba(0, 0, 0, 0.24));
+  }
+
+  .route-splash-copy {
+    margin: 0;
+    color: #f3f7fd;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .route-splash-loader {
+    width: 140px;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  .route-splash-loader::after {
+    content: "";
+    display: block;
+    width: 44%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.72), rgba(132, 146, 166, 0.95));
+    animation: route-splash-load 1.1s ease-in-out infinite;
+  }
+
+  @keyframes route-splash-load {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(320%);
+    }
+  }
+
   .app-content {
     flex: 1;
+    position: relative;
+    z-index: 1;
     padding: clamp(0.75rem, 2.6vw, var(--space-4));
     padding-bottom: var(--space-8);
     padding-top: calc(2.5rem + var(--safe-top));
     max-width: 1440px;
     width: 100%;
     margin: 0 auto;
+  }
+
+  .app-content.marketing-content {
+    padding-top: calc(4.35rem + var(--safe-top));
+    max-width: 1200px;
+    display: grid;
+    gap: clamp(0.85rem, 2.2vw, 1.45rem);
+  }
+
+  .app-content.onboarding-content {
+    max-width: none;
+    width: 100%;
+    padding: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    min-height: 100dvh;
+  }
+
+  :global([data-reveal]) {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 460ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  :global([data-reveal].is-visible) {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global([data-reveal]) {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  .marketing-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1100;
+    padding: calc(0.42rem + var(--safe-top)) 0.75rem 0.34rem;
+    background: color-mix(in srgb, var(--color-bg) 92%, black 8%);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+    backdrop-filter: blur(10px);
+  }
+
+  .marketing-shell {
+    width: min(1200px, 100%);
+    margin: 0 auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.22rem 0.1rem;
+  }
+
+  .marketing-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .marketing-brand-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    opacity: 0.92;
+  }
+
+  .marketing-brand-copy {
+    display: grid;
+    gap: 0.08rem;
+  }
+
+  .marketing-brand-copy strong {
+    color: var(--color-text);
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+
+  .marketing-brand-copy small {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .marketing-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .marketing-nav a {
+    text-decoration: none;
+    color: var(--color-text-muted);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0.32rem 0.62rem;
+    font-size: 0.8rem;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  }
+
+  .marketing-nav a:hover,
+  .marketing-nav a.active {
+    color: var(--color-text);
+    border-color: color-mix(in srgb, var(--color-border) 84%, transparent);
+    background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+  }
+
+  .marketing-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .marketing-btn {
+    text-decoration: none;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+    padding: 0.42rem 0.7rem;
+    font-size: 0.8rem;
+    font-weight: var(--weight-semibold);
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+  }
+
+  .marketing-btn-primary {
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+    background:
+      linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.1)),
+      color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+  }
+
+  .marketing-theme {
+    position: static;
+    inset: auto;
+    width: 2.2rem;
+    height: 2.2rem;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+  }
+
+  .marketing-menu-btn {
+    display: none;
+    border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    color: var(--color-text);
+    border-radius: 10px;
+    width: 2.2rem;
+    height: 2.2rem;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .marketing-mobile-menu {
+    width: min(1200px, 100%);
+    margin: 0.45rem auto 0;
+    border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    padding: 0.42rem;
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .marketing-mobile-menu a {
+    text-decoration: none;
+    color: var(--color-text);
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    padding: 0.5rem 0.62rem;
+    font-size: 0.82rem;
+  }
+
+  .marketing-mobile-menu a.active {
+    border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
+  }
+
+  .marketing-mobile-cta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem;
+    margin-top: 0.15rem;
+  }
+
+  .marketing-mobile-cta a.primary {
+    border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
+    background:
+      linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.1)),
+      color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
   }
 
   /* ===== Hamburger ===== */
@@ -181,20 +834,48 @@
   }
 
   .hamburger:hover {
-    border-color: rgba(195, 32, 43, 0.28);
+    border-color: rgba(132, 146, 166, 0.28);
     background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
   }
 
-  .sushi-icon {
+  .menu-icon {
     width: 1.42rem;
     height: 1.42rem;
     object-fit: contain;
     filter: brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%);
   }
 
+  :global(html[data-theme='light']) .menu-icon {
+    filter: brightness(0) saturate(100%) invert(14%) sepia(11%) saturate(1188%) hue-rotate(175deg) brightness(95%) contrast(89%);
+  }
+
+  .theme-toggle {
+    position: fixed;
+    top: calc(0.75rem + var(--safe-top));
+    right: calc(0.75rem + var(--safe-right));
+    z-index: 1001;
+
+    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+    width: 2.7rem;
+    height: 2.7rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+    color: var(--color-text);
+  }
+
+  .theme-toggle .material-icons {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
   .hamburger.open,
   .hamburger:focus-visible {
-    border-color: rgba(195, 32, 43, 0.3);
+    border-color: rgba(132, 146, 166, 0.3);
   }
 
   /* ===== Overlay ===== */
@@ -271,12 +952,18 @@
     align-items: center;
     justify-content: center;
     background:
-      linear-gradient(145deg, rgba(201, 110, 74, 0.26), rgba(216, 192, 166, 0.08)),
+      linear-gradient(145deg, rgba(132, 146, 166, 0.26), rgba(216, 192, 166, 0.08)),
       var(--color-surface-alt);
-    border: 1px solid rgba(179, 58, 63, 0.25);
+    border: 1px solid rgba(122, 132, 148, 0.25);
     color: var(--color-primary-contrast);
     font-weight: var(--weight-bold);
     letter-spacing: 0.03em;
+  }
+
+  .brand-mark-image {
+    object-fit: cover;
+    padding: 0;
+    background: color-mix(in srgb, var(--color-surface-alt) 90%, black 10%);
   }
 
   .brand-copy {
@@ -326,6 +1013,17 @@
     font-size: 20px;
   }
 
+  .side-section-label {
+    margin-top: 0.45rem;
+    margin-bottom: 0.2rem;
+    padding: 0 0.3rem;
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-weight: var(--weight-semibold);
+  }
+
   /* ===== Active Indicator ===== */
   .active-indicator {
     position: absolute;
@@ -341,9 +1039,9 @@
   .side-item.active {
     color: var(--color-text);
     background:
-      linear-gradient(90deg, rgba(201, 110, 74, 0.12), transparent 65%),
+      linear-gradient(90deg, rgba(132, 146, 166, 0.12), transparent 65%),
       var(--color-surface-alt);
-    border-color: rgba(179, 58, 63, 0.18);
+    border-color: rgba(122, 132, 148, 0.18);
   }
 
   .side-item.active .active-indicator {
@@ -358,13 +1056,21 @@
     font-size: 0.78rem;
     padding: 1rem 1rem calc(0.95rem + var(--safe-bottom));
     background:
-      radial-gradient(circle at top center, rgba(195, 32, 43, 0.14), transparent 50%),
+      radial-gradient(circle at top center, rgba(132, 146, 166, 0.14), transparent 50%),
       linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0)),
       color-mix(in srgb, var(--color-bg) 90%, black 10%);
     backdrop-filter: blur(14px);
     box-shadow:
-      0 -10px 26px rgba(195, 32, 43, 0.08),
+      0 -10px 26px rgba(132, 146, 166, 0.08),
       inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .app-footer.marketing-footer {
+    margin-top: 2rem;
+    background:
+      radial-gradient(circle at top center, rgba(132, 146, 166, 0.08), transparent 56%),
+      linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+      color-mix(in srgb, var(--color-bg) 93%, black 7%);
   }
 
   .app-footer::before {
@@ -376,8 +1082,8 @@
     top: -1px;
     height: 2px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(195, 32, 43, 0.06), rgba(195, 32, 43, 0.55), rgba(195, 32, 43, 0.06));
-    box-shadow: 0 0 18px rgba(195, 32, 43, 0.22);
+    background: linear-gradient(90deg, rgba(132, 146, 166, 0.06), rgba(132, 146, 166, 0.55), rgba(132, 146, 166, 0.06));
+    box-shadow: 0 0 18px rgba(132, 146, 166, 0.22);
   }
 
   .footer-shell {
@@ -424,7 +1130,7 @@
     opacity: 0.92;
     filter:
       brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
-      drop-shadow(0 0 10px rgba(195, 32, 43, 0.18));
+      drop-shadow(0 0 10px rgba(132, 146, 166, 0.18));
   }
 
   .footer-brand-copy {
@@ -483,7 +1189,7 @@
 
   .app-footer a:hover {
     text-decoration: none;
-    border-color: rgba(179, 58, 63, 0.22);
+    border-color: rgba(122, 132, 148, 0.22);
     color: var(--color-primary-contrast);
     background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
   }
@@ -504,6 +1210,33 @@
   }
 
   @media (max-width: 760px) {
+    .marketing-header {
+      padding-inline: 0.55rem;
+    }
+
+    .marketing-shell {
+      grid-template-columns: auto 1fr auto;
+      gap: 0.55rem;
+      padding: 0.42rem 0.5rem;
+    }
+
+    .marketing-brand-copy small {
+      display: none;
+    }
+
+    .marketing-nav,
+    .marketing-btn {
+      display: none;
+    }
+
+    .marketing-menu-btn {
+      display: inline-flex;
+    }
+
+    .app-content.marketing-content {
+      padding-top: calc(4.15rem + var(--safe-top));
+    }
+
     .app-content {
       padding-bottom: calc(4.5rem + var(--safe-bottom));
     }
@@ -549,3 +1282,8 @@
   }
 
 </style>
+
+
+
+
+

@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { onMount } from 'svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { pushToast } from '$lib/client/toasts';
@@ -158,7 +158,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.9), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
   }
 
   .input-row {
@@ -188,7 +188,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 18px;
     background:
-      radial-gradient(circle at top, rgba(195, 32, 43, 0.08), transparent 36%),
+      radial-gradient(circle at top, rgba(132, 146, 166, 0.08), transparent 36%),
       linear-gradient(180deg, color-mix(in srgb, var(--color-surface-alt) 80%, black 20%), var(--color-surface));
   }
   .wrap { display: inline-block; }
@@ -204,7 +204,7 @@
     text-align: center;
     background:
       radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.22), transparent 36%),
-      radial-gradient(circle at 70% 78%, rgba(195, 32, 43, 0.16), transparent 42%),
+      radial-gradient(circle at 70% 78%, rgba(132, 146, 166, 0.16), transparent 42%),
       linear-gradient(180deg, color-mix(in srgb, var(--color-surface-soft) 84%, var(--color-primary) 16%), color-mix(in srgb, var(--color-surface) 94%, black 6%));
     border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border) 64%);
     backdrop-filter: blur(8px);
@@ -228,7 +228,7 @@
   @keyframes float { 0% { transform: translateY(0) } 50% { transform: translateY(-14px) } 100% { transform: translateY(0) } }
   @keyframes glowPulse {
     0% { box-shadow: 0 10px 22px rgba(8, 9, 12, 0.24); }
-    50% { box-shadow: 0 16px 38px rgba(195, 32, 43, 0.18); }
+    50% { box-shadow: 0 16px 38px rgba(132, 146, 166, 0.18); }
     100% { box-shadow: 0 10px 22px rgba(8, 9, 12, 0.24); }
   }
   span { position: relative; z-index: 1; font-size: 0.85rem; line-height: 1.2; color: var(--color-text); }
@@ -262,4 +262,5 @@
     }
   }
 </style>
+
 

@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
@@ -561,8 +561,8 @@
 
   .offer-actions .offer-btn,
   .offer-popup-actions .offer-btn:last-child {
-    border-color: rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    border-color: rgba(132, 146, 166, 0.22);
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
   }
 
@@ -715,4 +715,5 @@
     }
   }
 </style>
+
 

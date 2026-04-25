@@ -4,21 +4,22 @@
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { fade } from 'svelte/transition';
 
-  const lists = [
-    { href: '/lists/checklists/sushiprep', title: 'Sushi Prep' },
-    { href: '/lists/checklists/sushi', title: 'Sushi' },
-    { href: '/lists/checklists/kitchen', title: 'Kitchen' }
-  ];
+  export let data;
+  const lists = data.sections ?? [];
 </script>
 
 <Layout>
-  <PageHeader title="Check Lists" />
+  <PageHeader title="Checklists" />
   <div class="grid">
-    {#each lists as list, index}
+    {#if lists.length === 0}
+      <p class="empty">No checklist groups configured yet.</p>
+    {:else}
+      {#each lists as list, index}
       <a href={list.href} class="card-link" in:fade={{ delay: index * 80, duration: 180 }}>
         <DashboardCard title={list.title} />
       </a>
-    {/each}
+      {/each}
+    {/if}
   </div>
 </Layout>
 
@@ -48,5 +49,10 @@
   .card-link:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 4px;
+  }
+
+  .empty {
+    margin: 0;
+    color: var(--color-text-muted);
   }
 </style>

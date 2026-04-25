@@ -1,4 +1,4 @@
-export const scheduleDepartments = ['FOH', 'Sushi', 'Kitchen'] as const;
+export const scheduleDepartments = ['FOH', 'BOH', 'Management'] as const;
 
 export const scheduleWeekdays = [
   { value: 0, label: 'Monday', shortLabel: 'Mon' },
@@ -11,31 +11,29 @@ export const scheduleWeekdays = [
 ] as const;
 
 export const scheduleRolesByDepartment = {
-  FOH: ['Server', 'Runner', 'Host', 'FOH MGR'],
-  Sushi: ['BOH MGR', 'Roller', 'Opener', 'Sushi Prep', 'Swing'],
-  Kitchen: ['BOH MGR', 'Cook', 'Dish', 'Swing']
+  FOH: ['Server', 'Host', 'Runner'],
+  BOH: ['Cook', 'Prep', 'Dish'],
+  Management: ['BOH MGR', 'FOH MGR', 'GM']
 } as const;
 
 export const scheduleEndLabels = ['BD', 'Close'] as const;
 
 export const scheduleDetailOptionsByDepartment = {
-  FOH: ['Front Door', 'Host Stand', 'Dining Room', 'Patio', 'Bar', 'Expo'],
-  Sushi: ['3 Bus', '7 Bus', '8 Bus', '9 Bus', 'Sushi Line', 'Expo'],
-  Kitchen: ['Cook Line', 'Hot Line', 'Fryers', 'Dish Pit', 'Prep', 'Expo']
+  FOH: ['Dining Room', 'Host Stand', 'Bar', 'Patio'],
+  BOH: ['Hot Line', 'Cold Line', 'Prep Station', 'Dish Pit'],
+  Management: ['Floor Lead', 'Office', 'Expo Lead', 'Shift Lead']
 } as const;
 
 export const scheduleDetailOptionsByRole = {
-  Server: ['Section 1', 'Section 2', 'Section 3', 'Section 4', 'Patio', 'Bar'],
-  Runner: ['Dining Room', 'Patio', 'Expo'],
-  Host: ['Front Door', 'Host Stand'],
-  'FOH MGR': ['Dining Room', 'Patio', 'Front Door'],
-  'BOH MGR': ['Sushi Line', 'Cook Line', 'Expo'],
-  Roller: ['3 Bus', '7 Bus', '8 Bus', '9 Bus'],
-  Opener: ['Sushi Line', '3 Bus', '7 Bus'],
-  'Sushi Prep': ['Prep', '7 Bus', '8 Bus'],
-  Swing: ['Expo', '3 Bus', '7 Bus', 'Cook Line', 'Dish Pit'],
-  Cook: ['Cook Line', 'Hot Line', 'Fryers', 'Expo'],
-  Dish: ['Dish Pit']
+  Server: ['Section A', 'Section B', 'Patio'],
+  Host: ['Front Door', 'Waitlist', 'Phone'],
+  Runner: ['Food Runner', 'Drink Runner', 'Expo Runner'],
+  Cook: ['Line 1', 'Line 2', 'Grill'],
+  Prep: ['Prep Table', 'Cold Prep'],
+  Dish: ['Dish Pit', 'Closing Dish', 'Utility'],
+  'BOH MGR': ['Open BOH', 'Mid BOH', 'Close BOH'],
+  'FOH MGR': ['Open FOH', 'Mid FOH', 'Close FOH'],
+  GM: ['Open', 'Mid', 'Close']
 } as const;
 
 export type ScheduleDepartment = string;

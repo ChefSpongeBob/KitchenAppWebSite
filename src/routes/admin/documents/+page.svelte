@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -21,7 +21,6 @@
 
   let newDocSlug = 'about';
   let feedbackMessage = '';
-  const preferredDocSlugOrder = ['about', 'sop', 'handbook'];
   $: documentBuckets = Array.from(
     data.documents.reduce((acc, doc) => {
       const bucket = acc.get(doc.slug) ?? [];
@@ -29,14 +28,7 @@
       acc.set(doc.slug, bucket);
       return acc;
     }, new Map<string, DocumentItem[]>())
-  ).sort((a, b) => {
-    const aIndex = preferredDocSlugOrder.indexOf(a[0]);
-    const bIndex = preferredDocSlugOrder.indexOf(b[0]);
-    if (aIndex === -1 && bIndex === -1) return a[0].localeCompare(b[0]);
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
+  ).sort((a, b) => a[0].localeCompare(b[0]));
 
   const withFeedback: SubmitFunction = () => {
     feedbackMessage = '';
@@ -76,20 +68,13 @@
       <p class="feedback-banner">{feedbackMessage}</p>
     {/if}
 
-    <form method="POST" action="?/create_document" use:enhance={withFeedback} class="add-row docs-form">
-      <select name="slug" bind:value={newDocSlug} required>
-        <option value="about">About</option>
-        <option value="sop">SOP</option>
-        <option value="handbook">Handbook</option>
-        <option value="custom">Custom slug</option>
-      </select>
-      {#if newDocSlug === 'custom'}
-        <input name="slug_custom" placeholder="custom-slug" required />
-      {/if}
+    <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
+      <input name="slug" bind:value={newDocSlug} placeholder="doc-slug" required />
       <input name="title" placeholder="Document title" required />
       <input name="section" placeholder="Section" value="Docs" />
       <input name="category" placeholder="Category" value="General" />
       <input name="file_url" placeholder="File URL (optional)" />
+      <input name="file" type="file" accept="application/pdf,image/*" />
       <textarea name="content" rows="8" placeholder="Document content"></textarea>
       <select name="is_active">
         <option value="1" selected>Active</option>
@@ -111,13 +96,15 @@
             {#each docs as doc}
               <details class="edit-doc">
                 <summary>{doc.title}</summary>
-                <form method="POST" action="?/update_document" use:enhance={withFeedback} class="add-row docs-form">
+                <form method="POST" action="?/update_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
                   <input type="hidden" name="id" value={doc.id} />
+                  <input type="hidden" name="existing_file_url" value={doc.file_url ?? ''} />
                   <input name="slug" value={doc.slug} required />
                   <input name="title" value={doc.title} required />
                   <input name="section" value={doc.section} />
                   <input name="category" value={doc.category} />
                   <input name="file_url" value={doc.file_url ?? ''} />
+                  <input name="file" type="file" accept="application/pdf,image/*" />
                   <textarea name="content" rows="8">{doc.content ?? ''}</textarea>
                   <select name="is_active">
                     <option value="1" selected={doc.is_active === 1}>Active</option>
@@ -157,7 +144,7 @@
     inset: 0 auto 0 0;
     width: 4px;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.88), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
   }
 
   .panel-header {
@@ -241,7 +228,7 @@
 
   .edit-doc {
     margin-top: 0.45rem;
-    border: 1px dashed rgba(195, 32, 43, 0.22);
+    border: 1px dashed rgba(132, 146, 166, 0.22);
     border-radius: 12px;
     padding: 0.6rem;
     background: rgba(255, 255, 255, 0.015);
@@ -269,9 +256,9 @@
   }
 
   button {
-    border: 1px solid rgba(195, 32, 43, 0.22);
+    border: 1px solid rgba(132, 146, 166, 0.22);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     min-height: 2.6rem;
     padding: 0.55rem 0.78rem;
@@ -312,4 +299,5 @@
     }
   }
 </style>
+
 

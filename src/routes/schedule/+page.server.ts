@@ -23,8 +23,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       week: null,
       days: [],
       isAdmin: locals.userRole === 'admin',
-      departments: ['FOH', 'Sushi', 'Kitchen'],
-      visibleDepartments: ['FOH', 'Sushi', 'Kitchen']
+      departments: ['General'],
+      visibleDepartments: ['General']
     };
   }
 

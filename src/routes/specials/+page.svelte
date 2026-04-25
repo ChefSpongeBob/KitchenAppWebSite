@@ -8,7 +8,7 @@
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type Special = {
-    category: 'roll' | 'nigiri' | 'sashimi' | 'kitchen';
+    category: string;
     label: string;
     content: string;
     updatedAt: number;
@@ -44,7 +44,7 @@
 
 <Layout>
   <PageHeader
-    title="Daily Specials"
+    title="Daily Highlights"
   />
 
   <section class="grid">
@@ -56,7 +56,7 @@
             <small>{formatUpdatedAt(special.updatedAt)}</small>
           </div>
           <span class="summary-preview">
-            {special.content ? special.content : 'No special posted.'}
+              {special.content ? special.content : 'No highlight posted.'}
           </span>
         </summary>
         <DashboardCard title={special.label} description={`Updated ${formatUpdatedAt(special.updatedAt)}`}>
@@ -66,7 +66,7 @@
                 <p>{line}</p>
               {/each}
             {:else}
-              <p class="muted">No special posted.</p>
+              <p class="muted">No highlight posted.</p>
             {/if}
           </div>
         </DashboardCard>
@@ -75,9 +75,7 @@
   </section>
 
   {#if canEdit}
-    <PageHeader
-      title="Edit Specials"
-    />
+    <PageHeader title="Edit Highlights" />
     <form method="POST" action="?/save_specials" use:enhance={withSpecialsFeedback} class="editor">
       <section class="grid">
         {#each specials as special}
@@ -85,13 +83,13 @@
             <textarea
               name={special.category}
               rows="6"
-              placeholder={`Add today's ${special.label.toLowerCase()} special...`}
+              placeholder={`Add today's ${special.label.toLowerCase()} update...`}
             >{special.content}</textarea>
           </DashboardCard>
         {/each}
       </section>
       <div class="actions">
-        <button type="submit">Save Daily Specials</button>
+        <button type="submit">Save Highlights</button>
       </div>
     </form>
   {/if}

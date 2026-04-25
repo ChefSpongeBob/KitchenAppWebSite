@@ -1,779 +1,972 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
-  import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
-  import TempGraph from '$lib/components/ui/TempGraph.svelte';
-  import { startVisiblePolling } from '$lib/client/polling';
-  import { formatScheduleTimeLabel } from '$lib/assets/schedule';
-  import { fly, fade } from 'svelte/transition';
-  import { onMount } from 'svelte';
+	import Layout from '$lib/components/ui/Layout.svelte';
+	import { onMount } from 'svelte';
 
-  type HomeTask = {
-    id: string;
-    title: string;
-    description: string | null;
-    assigned_to: string | null;
-    assigned_name: string | null;
-    assigned_email: string | null;
-  };
-  type Idea = { text: string; votes: number };
-  type NodeTemp = { sensorId: number; nodeName: string | null; temperature: number; ts: number };
-  type DailySpecial = {
-    category: 'roll' | 'nigiri' | 'sashimi' | 'kitchen';
-    label: string;
-    content: string;
-    updatedAt: number;
-  };
-  type EmployeeSpotlight = {
-    employeeName: string;
-    shoutout: string;
-    updatedAt: number;
-  };
-  type TodayShift = {
-    id: string;
-    department: string;
-    role: string;
-    detail: string;
-    startTime: string;
-    endLabel: string;
-    notes: string;
-  };
+	type CarouselSlide = {
+		tag: string;
+		title: string;
+		subtitle: string;
+		image: string;
+		fit?: 'cover' | 'contain';
+		position?: string;
+		filter?: string;
+	};
 
-  export let data: {
-    isAdmin?: boolean;
-    userName?: string;
-    announcement?: { content: string; updatedAt: number };
-    employeeSpotlight?: EmployeeSpotlight;
-    dailySpecials?: DailySpecial[];
-    todayTasks?: HomeTask[];
-    todaySchedule?: TodayShift[];
-    todayMeta?: { assignedCount: number; unassignedCount: number };
-    topIdeas?: Idea[];
-    nodeTemps?: NodeTemp[];
-    tempSeries?: Record<string, number[]>;
-    refreshedAt?: number;
-  };
+	type CapabilityItem = {
+		title: string;
+		detail: string;
+	};
 
-  let series: Record<string, number[]> = data.tempSeries ?? { avg: [] };
-  let isAdmin = data.isAdmin ?? false;
-  let time = '';
-  let greeting = '';
-  let topGreeting = '';
-  let userName = data.userName ?? 'Team';
-  let announcement = data.announcement ?? { content: '', updatedAt: 0 };
-  let employeeSpotlight = data.employeeSpotlight ?? { employeeName: '', shoutout: '', updatedAt: 0 };
-  let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
-  let todayTasks: HomeTask[] = data.todayTasks ?? [];
-  let todaySchedule: TodayShift[] = data.todaySchedule ?? [];
-  let topIdeas: Idea[] = data.topIdeas ?? [];
-  let nodeTemps: NodeTemp[] = data.nodeTemps ?? [];
-  let todayMeta = data.todayMeta ?? { assignedCount: 0, unassignedCount: 0 };
-  let lastIdeasRefresh = data.refreshedAt ?? Math.floor(Date.now() / 1000);
-  let px = 0;
-  let py = 0;
-  const TEMP_WARNING_THRESHOLD = 42;
-  const HOMEPAGE_TEMP_LIMIT = 480;
+	type GalleryShot = {
+		image: string;
+		alt: string;
+	};
 
-  const namesBySensor = new Map<number, string | null>(
-    nodeTemps.map((node) => [node.sensorId, node.nodeName])
-  );
+	type WorkflowStep = {
+		step: string;
+		title: string;
+		description: string;
+		link: string;
+		linkLabel: string;
+	};
 
-  function updateTime() {
-    const now = new Date();
-    time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const h = now.getHours();
-    greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    topGreeting = h < 12 ? 'おはよう' : h < 18 ? 'こんにちは' : 'こんばんは';
-  }
+	const carouselSlides: CarouselSlide[] = [
+		{
+			tag: 'Unified Shift View',
+			title: 'One live homepage for schedules, tasks, and shift updates.',
+			subtitle: 'Staff sees priorities quickly while admins keep service aligned in real time.',
+			image: '/marketing/FB_IMG_7461876514951404517.jpg',
+			fit: 'cover',
+			position: 'center 40%',
+			filter: 'saturate(1.24) contrast(1.18) brightness(1.04)'
+		},
+		{
+			tag: 'Scheduling Control',
+			title: 'Build and publish department schedules without spreadsheet chaos.',
+			subtitle: 'Role-aware shifts, cleaner coverage, and instant employee visibility.',
+			image: '/marketing/IMG_20230606_210739074_HDR.jpg',
+			fit: 'cover',
+			position: 'center 52%'
+		},
+		{
+			tag: 'Execution Tools',
+			title: 'Run prep, checklists, inventory, and orders in one workflow.',
+			subtitle: 'Keep stations synced with assignments, recipes, and SOP references.',
+			image: '/marketing/FB_IMG_4126678697134084261.jpg',
+			fit: 'cover',
+			position: 'center 38%'
+		},
+		{
+			tag: 'Monitoring + Admin',
+			title: 'Track operational signal with temperature and optional camera monitoring.',
+			subtitle: 'Manage announcements, spotlight, and workspace controls from admin.',
+			image: '/marketing/FB_IMG_3952972665318110830.jpg',
+			fit: 'cover',
+			position: 'center 42%'
+		}
+	];
 
-  function handleMove(e: MouseEvent | TouchEvent) {
-    const x = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    px = x / window.innerWidth - 0.5;
-    py = y / window.innerHeight - 0.5;
-  }
+	const keyStats = ['< 1 day setup', '1 workspace', 'Live ops signal', 'Desktop + mobile'];
 
-  function secondsAgoLabel(unixTs: number) {
-    const diff = Math.max(0, Math.floor(Date.now() / 1000) - unixTs);
-    if (diff < 5) return 'just now';
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    return `${Math.floor(diff / 3600)}h ago`;
-  }
+	const coreCapabilities: CapabilityItem[] = [
+		{
+			title: 'Scheduling + Coverage',
+			detail: 'Build weekly schedules by department and publish instantly to employee views.'
+		},
+		{
+			title: 'Daily Execution',
+			detail: 'Run todo, prep, checklists, inventory, and orders from one shared workspace.'
+		},
+		{
+			title: 'Recipes + Docs',
+			detail: 'Keep SOPs, documents, and recipes accessible while service is active.'
+		},
+		{
+			title: 'Admin + Monitoring',
+			detail: 'Manage users, feature visibility, and live operational signals from one control area.'
+		},
+		{
+			title: 'Homepage Command View',
+			detail: 'Give every shift one place for announcements, spotlight, assignments, and current context.'
+		},
+		{
+			title: 'Business-Ready Onboarding',
+			detail: 'Guide new workspaces through setup, business details, role flow, and launch steps.'
+		}
+	];
 
-  function buildTempState(rows: Array<{ sensor_id: number; temperature: number; ts: number }>) {
-    const latestBySensor = new Map<number, { sensor_id: number; temperature: number; ts: number }>();
-    for (const row of rows) {
-      if (!latestBySensor.has(row.sensor_id)) {
-        latestBySensor.set(row.sensor_id, row);
-        if (latestBySensor.size >= 3) break;
-      }
-    }
+	const overviewScreens: GalleryShot[] = [
+		{
+			image: '/marketing/app/employee-homepage.png',
+			alt: 'Live employee homepage with shift and announcements'
+		},
+		{
+			image: '/marketing/app/scheduling-builder.png',
+			alt: 'Scheduling builder interface with role and shift controls'
+		}
+	];
 
-    nodeTemps = Array.from(latestBySensor.values())
-      .sort((a, b) => a.sensor_id - b.sensor_id)
-      .map((row) => ({
-        sensorId: row.sensor_id,
-        nodeName: namesBySensor.get(row.sensor_id) ?? null,
-        temperature: row.temperature,
-        ts: row.ts
-      }));
+	const workflowTimeline: WorkflowStep[] = [
+		{
+			step: '01',
+			title: 'Configure Your Operation',
+			description: 'Set departments, roles, and user access to match your kitchen structure.',
+			link: '/register#onboarding-slideshow',
+			linkLabel: 'View onboarding slideshow'
+		},
+		{
+			step: '02',
+			title: 'Build Weekly Execution',
+			description: 'Build schedules, assign tasks, and run lists, recipes, and docs from one workspace.',
+			link: '/features',
+			linkLabel: 'See feature map'
+		},
+		{
+			step: '03',
+			title: 'Run Service With Live Visibility',
+			description:
+				'Keep teams aligned with homepage updates, announcements, and live operational monitoring.',
+			link: '/app',
+			linkLabel: 'Preview app routes'
+		}
+	];
 
-    const buckets = new Map<number, { sum: number; count: number }>();
-    for (const row of rows) {
-      const bucket = Math.floor(row.ts / 300) * 300;
-      const current = buckets.get(bucket) ?? { sum: 0, count: 0 };
-      current.sum += row.temperature;
-      current.count += 1;
-      buckets.set(bucket, current);
-    }
-    series = {
-      avg: Array.from(buckets.entries())
-        .sort((a, b) => a[0] - b[0])
-        .slice(-24)
-        .map(([, value]) => Number((value.sum / value.count).toFixed(2)))
-    };
-  }
+	const operatorQuote = {
+		quote:
+			'The biggest win was having schedules, tasks, docs, and updates in one place so shifts run cleaner.',
+		role: 'General Manager',
+		focus: 'Operations and communication'
+	};
 
-  async function refreshTemps() {
-    const response = await fetch(`/api/temps?limit=${HOMEPAGE_TEMP_LIMIT}`);
-    if (!response.ok) return;
-    const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; ts: number }>;
-    if (!rows?.length) return;
-    buildTempState(rows);
-  }
+	let activeSlide = 0;
+	let slideTimer: ReturnType<typeof setInterval> | undefined;
 
-  async function refreshIdeas() {
-    const response = await fetch('/api/whiteboard');
-    if (!response.ok) return;
-    const rows = (await response.json()) as Array<{ content: string; votes: number }>;
-    topIdeas = (rows ?? []).slice(0, 3).map((row) => ({ text: row.content, votes: row.votes }));
-    lastIdeasRefresh = Math.floor(Date.now() / 1000);
-  }
+	const activateSlide = (index: number) => {
+		activeSlide = index;
+	};
 
-  $: latestTempTs = nodeTemps.length ? Math.max(...nodeTemps.map((node) => node.ts)) : 0;
-  $: tempFreshText = latestTempTs ? secondsAgoLabel(latestTempTs) : 'no data';
-  $: ideasFreshText = secondsAgoLabel(lastIdeasRefresh);
-  $: highTempNodes = nodeTemps.filter((node) => node.temperature >= TEMP_WARNING_THRESHOLD);
-  $: activeSpecials = dailySpecials
-    .filter((special) => special.content.trim().length > 0)
-    .map((special) => ({
-      ...special,
-      preview: special.content.trim()
-    }));
+	onMount(() => {
+		slideTimer = setInterval(() => {
+			activeSlide = (activeSlide + 1) % carouselSlides.length;
+		}, 5200);
 
-  onMount(() => {
-    updateTime();
-    const clock = setInterval(updateTime, 1000);
-    const stopPolling = startVisiblePolling(
-      () => Promise.all([refreshTemps(), refreshIdeas()]).then(() => undefined),
-      { intervalMs: 60000, runImmediately: false, refreshOnVisible: true }
-    );
-    return () => {
-      clearInterval(clock);
-      stopPolling();
-    };
-  });
+		return () => {
+			if (slideTimer) clearInterval(slideTimer);
+		};
+	});
 </script>
 
 <Layout>
-  <section class="page-header" in:fly={{ y: 20, duration: 500 }}>
-    <h1>{topGreeting}</h1>
-    <p class="header-sub">Here's what's happening today</p>
-    <img class="divider" src="/knife-divider.svg" alt="" aria-hidden="true" />
-  </section>
+	<section class="hero" aria-label="Top Banner">
+		<div class="hero-carousel">
+			{#each carouselSlides as slide, index}
+				<article
+					class="carousel-slide"
+					class:active={index === activeSlide}
+					style={`--slide-image: url('${slide.image}'); --slide-fit: ${slide.fit ?? 'contain'}; --slide-position: ${slide.position ?? 'center'}; --slide-filter: ${slide.filter ?? 'saturate(1.22) contrast(1.13) brightness(1.04)'};`}
+					aria-hidden={index !== activeSlide}
+				>
+					<div class="slide-content">
+						<p class="slide-tag">{slide.tag}</p>
+						<h1>{slide.title}</h1>
+						<p>{slide.subtitle}</p>
+					</div>
+				</article>
+			{/each}
+			<div class="hero-controls">
+				<div class="dot-group">
+					{#each carouselSlides as _, index}
+						<button
+							type="button"
+							class="dot"
+							class:active={index === activeSlide}
+							on:click={() => activateSlide(index)}
+							aria-label={`Show slide ${index + 1}`}
+						></button>
+					{/each}
+				</div>
+				<div class="hero-actions">
+					<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Free Trial</a>
+					<a href="/features" class="btn">View Features</a>
+					<a href="/pricing" class="btn">Pricing</a>
+				</div>
+			</div>
+		</div>
+	</section>
 
-  <section
-    class="mosaic"
-    class:admin-mosaic={isAdmin}
-    on:mousemove={handleMove}
-    on:touchmove={handleMove}
-    aria-label="Dashboard Tiles"
-    in:fade={{ duration: 500 }}
-  >
-    <div
-      class="tile greeting"
-      style="transform: translate({px * -6}px, {py * -6}px);"
-      in:fly={{ y: 20, duration: 500 }}
-    >
-      <div class="greeting-main">
-        <div class="greeting-copy">
-          <h2>{greeting}</h2>
-          <span class="time">{time}</span>
-        </div>
-        <div class="announcement-block">
-          <div class="shift-title-row">
-            <span class="tile-label">Today's Shift</span>
-            <img src="/fishsvg.svg" alt="" aria-hidden="true" class="shift-fish-icon" />
-          </div>
-          {#if todaySchedule.length === 0}
-            <div class="shift-empty-state">
-              <SchoolOfFish label="Have a good day!" />
-            </div>
-          {:else}
-            <div class="shift-summary-list">
-              {#each todaySchedule as shift}
-                <div class="shift-summary-row">
-                  <strong>{shift.department} | {shift.role}</strong>
-                  <span>
-                    {#if shift.detail}{shift.detail} | {/if}{formatScheduleTimeLabel(shift.startTime)}{#if shift.endLabel} - {shift.endLabel}{/if}
-                  </span>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-      <div class="shift-summary">
-        <div class="announcement-copy">
-          <span class="tile-label">Announcements</span>
-          {#if announcement.content}
-            <p>{announcement.content}</p>
-          {:else}
-            <p class="announcement-empty">Nothing new right now.</p>
-          {/if}
-        </div>
-      </div>
-      {#if highTempNodes.length > 0}
-        <small class="alert">Alert: {highTempNodes.length} temp node(s) at or above {TEMP_WARNING_THRESHOLD}F</small>
-      {/if}
-    </div>
+	<section class="quick-proof" data-reveal style="--reveal-delay: 60ms;">
+		<p class="proof-line">
+			<strong>Schedule + Coverage Control</strong>
+			<span>Department-aware builder, publish flow, and employee my-schedule visibility.</span>
+		</p>
+		<p class="proof-line">
+			<strong>Execution + Knowledge Workspace</strong>
+			<span>Prep, checklists, inventory, orders, recipes, docs, and task assignments in one app.</span>
+		</p>
+		<p class="proof-line">
+			<strong>Live Manager Signal</strong>
+			<span>Announcements, whiteboard context, temperature visibility, and optional camera monitoring.</span>
+		</p>
+	</section>
 
-    <a
-      href="/specials"
-      class="tile specials-card"
-      style="transform: translate({px * 2}px, {py * 2}px);"
-      in:fly={{ y: 20, duration: 525 }}
-    >
-      <div class="tile-head">
-        <span class="tile-label">Daily Specials</span>
-        <small>{activeSpecials.length} posted</small>
-      </div>
-      {#if activeSpecials.length === 0}
-        <small class="specials-empty">No specials up yet.</small>
-      {:else}
-        <div class="specials-list">
-          {#each activeSpecials as special}
-            <div class="special-row">
-              <strong>{special.label}</strong>
-              <span>{special.preview}</span>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </a>
+	<section class="landing-summary" data-reveal>
+		<div class="summary-layout">
+			<figure class="summary-photo">
+				<img
+					src="/marketing/IMG_20230606_163319714.jpg"
+					alt="Chef finishing burger pass in active service"
+					loading="lazy"
+				/>
+			</figure>
+			<div class="summary-copy">
+				<header class="section-head">
+					<p class="eyebrow">Why Teams Switch</p>
+					<h2>A cleaner way to run daily kitchen operations.</h2>
+					<p class="section-copy">
+						SoftwareKitchenNNS replaces fragmented tools with one workspace for scheduling, execution,
+						communication, and operational visibility.
+					</p>
+				</header>
+				<p class="stat-line">
+					{#each keyStats as stat}
+						<span>| {stat} |</span>
+					{/each}
+				</p>
+			</div>
+		</div>
+	</section>
 
-    <a
-      href="/menu"
-      class="tile menu-card"
-      style="transform: translate({px * 3}px, {py * 3}px);"
-      in:fly={{ y: 20, duration: 540 }}
-    >
-      <div class="tile-head">
-        <span class="tile-label menu-label">Main &amp; Secret Menu</span>
-        <small>pdfs</small>
-      </div>
-    </a>
+	<section class="core-features" data-reveal>
+		<div class="core-layout">
+			<div class="core-copy">
+				<header class="section-head">
+					<p class="eyebrow">Core Features</p>
+					<h2>Built around real shift workflows.</h2>
+				</header>
+				<ul class="capability-list">
+					{#each coreCapabilities as feature}
+						<li>
+							<h3>{feature.title}</h3>
+							<p>{feature.detail}</p>
+						</li>
+					{/each}
+				</ul>
+			</div>
+			<figure class="core-photo">
+				<img
+					src="/marketing/FB_IMG_7461876514951404517.jpg"
+					alt="Chef team coordinating at service pace"
+					loading="lazy"
+				/>
+			</figure>
+		</div>
+	</section>
 
-    <div
-      class="tile employee-card"
-      style="transform: translate({px * 3.5}px, {py * 3.5}px);"
-      in:fly={{ y: 20, duration: 545 }}
-    >
-      <div class="tile-head employee-head">
-        <div class="employee-title">
-          <img src="/fishsvg.svg" alt="" aria-hidden="true" class="fish-icon" />
-          <span class="tile-label employee-label">Employee Of The Day</span>
-        </div>
-      </div>
-      {#if employeeSpotlight.employeeName}
-        <div class="employee-copy">
-          <strong>{employeeSpotlight.employeeName}</strong>
-          {#if employeeSpotlight.shoutout}
-            <p>{employeeSpotlight.shoutout}</p>
-          {/if}
-        </div>
-      {:else}
-        <small class="employee-empty">No spotlight set yet.</small>
-      {/if}
-    </div>
+	<section class="overview-preview" data-reveal>
+		<header class="section-head">
+			<p class="eyebrow">App Preview</p>
+			<h2>Homepage, scheduling, and assignment views used in real service.</h2>
+		</header>
+		<div class="preview-grid">
+			{#each overviewScreens as shot}
+				<figure class="preview-shot">
+					<img src={shot.image} alt={shot.alt} loading="lazy" />
+				</figure>
+			{/each}
+		</div>
+	</section>
 
-    <div
-      class="tile temps"
-      style="transform: translate({px * 4}px, {py * 4}px);"
-      in:fly={{ y: 20, duration: 550 }}
-    >
-      <div class="tile-head">
-        <span class="tile-label">Kitchen Temps</span>
-        <small>updated {tempFreshText}</small>
-      </div>
-      <div class="node-strip">
-        {#if nodeTemps.length === 0}
-          <small>No recent nodes</small>
-        {:else}
-          {#each nodeTemps as node}
-            <div class="node-pill" class:warn={node.temperature >= TEMP_WARNING_THRESHOLD}>
-              <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
-              <span>{node.temperature.toFixed(1)}F</span>
-            </div>
-          {/each}
-        {/if}
-      </div>
-      {#if highTempNodes.length > 0}
-        <div class="temp-warnings">
-          {#each highTempNodes as node}
-            <a href="/temper" class="temp-warning-line">
-              <strong>{node.nodeName ?? `Node ${node.sensorId}`}</strong>
-              <span>{node.temperature.toFixed(1)}F</span>
-            </a>
-          {/each}
-        </div>
-      {/if}
-      <div class="mini-graph">
-        <TempGraph {series} height={40} />
-      </div>
-    </div>
+	<section class="execution-path" data-reveal>
+		<header class="section-head">
+			<p class="eyebrow">How Teams Adopt</p>
+			<h2>Launch in three clear steps.</h2>
+		</header>
+		<div class="step-list">
+			{#each workflowTimeline as item}
+				<article class="step-row">
+					<p class="timeline-step">{item.step}</p>
+					<div>
+						<h3>{item.title}</h3>
+						<p>{item.description}</p>
+						<a href={item.link} class="inline-link">{item.linkLabel}</a>
+					</div>
+				</article>
+			{/each}
+		</div>
+	</section>
 
-    <div
-      class="tile ideas"
-      style="transform: translate({px * 8}px, {py * 8}px);"
-      in:fly={{ y: 20, duration: 600 }}
-    >
-      <div class="tile-head">
-        <span class="tile-label">Top Ideas</span>
-        <small>updated {ideasFreshText}</small>
-      </div>
-      {#if topIdeas.length === 0}
-        <small>No ideas posted.</small>
-      {:else}
-        {#each topIdeas as idea}
-          <div class="idea">
-            <span>{idea.text}</span>
-            <small>{idea.votes}</small>
-          </div>
-        {/each}
-      {/if}
-    </div>
+	<section class="operator-quote" data-reveal>
+		<blockquote>"{operatorQuote.quote}"</blockquote>
+		<p>{operatorQuote.role} - {operatorQuote.focus}</p>
+	</section>
 
-  </section>
+	<section class="bottom-cta" data-reveal>
+		<div>
+			<h2>One workspace for scheduling, execution, and monitoring.</h2>
+			<p>Launch the app, onboard your team, and run cleaner shifts with live visibility.</p>
+		</div>
+		<div class="hero-actions">
+			<a href="/register#onboarding-slideshow" class="btn btn-primary">Create Workspace</a>
+			<a href="/login" class="btn">Sign In</a>
+		</div>
+	</section>
 
-  <section class="today-area">
-    <div class="today-head">
-      <h3>Today</h3>
-      <small>{todayMeta.assignedCount} assigned | {todayMeta.unassignedCount} open</small>
-    </div>
-    {#if todayTasks.length === 0}
-      <p class="today-empty">Nothing assigned right now.</p>
-    {:else}
-      <ul class="today-list">
-        {#each todayTasks as task}
-          <li>
-            <a href="/todo">{task.title}</a>
-            <small>Assigned: {task.assigned_name ?? task.assigned_email ?? 'Anyone'}</small>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
+	<div class="store-badge-row" aria-label="Supported store billing platforms">
+		<img src="/store-badges/google-play-badge.svg" alt="Get it on Google Play" class="store-badge" loading="lazy" />
+		<img src="/store-badges/app-store-badge.svg" alt="Download on the App Store" class="store-badge" loading="lazy" />
+	</div>
 
-  <section class="dashboard" aria-label="Quick Access">
-    <div class="section-row">
-      <p class="section-label">Quick Access</p>
-      <small class="section-muted">Tap a card to continue</small>
-    </div>
-    <a href="/lists" class="card-link">
-      <DashboardCard title="Lists" />
-    </a>
-    <a href="/todo" class="card-link">
-      <DashboardCard title="ToDos" />
-    </a>
-    <a href="/whiteboard" class="card-link">
-      <DashboardCard title="Whiteboard" />
-    </a>
-    <a href="/temper" class="card-link">
-      <DashboardCard title="Temps" />
-    </a>
-    {#if isAdmin}
-      <a href="/meeting-notes" class="card-link">
-        <DashboardCard title="Meeting Notes" />
-      </a>
-    {/if}
-  </section>
+	<p class="nns-line nns-credits" aria-label="NexusNorthSystems credentials">
+		<img src="/spider-mark.svg" alt="NexusNorthSystems spider mark" class="nns-line-logo" />
+		<span>NNS | NexusNorthSystems LLC</span>
+		<span aria-hidden="true">|</span>
+		<span class="cert-inline">
+			<img
+				src="/cert-badges/google-cybersecurity.jpg"
+				alt="Google Cybersecurity Certificate badge"
+				class="cert-inline-logo"
+				loading="lazy"
+			/>
+			<span>Google Cybersecurity Certified</span>
+		</span>
+		<span aria-hidden="true">|</span>
+		<span class="cert-inline">
+			<img
+				src="/cert-badges/microsoft-fullstack.png"
+				alt="Microsoft certificate badge"
+				class="cert-inline-logo"
+				loading="lazy"
+			/>
+			<span>Microsoft Full Stack Developer Certified</span>
+		</span>
+	</p>
 </Layout>
 
 <style>
-  .page-header { padding: 3rem 1rem 0.5rem; }
-  .page-header h1 { margin: 0; font-size: 2.2rem; font-weight: var(--weight-semibold); letter-spacing: -0.03em; }
-  .header-sub { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: 0.9rem; }
-  .divider {
-    display: block;
-    width: 112px;
-    height: auto;
-    margin-top: -6px;
-    margin-left: 1.35rem;
-    transform: rotate(45deg);
-    transform-origin: left center;
-    filter:
-      brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
-      drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
-    opacity: 0.98;
-  }
+	.hero {
+		position: relative;
+		width: 100vw;
+		margin-left: calc(50% - 50vw);
+		margin-right: calc(50% - 50vw);
+		margin-top: calc(clamp(0.75rem, 2.6vw, var(--space-4)) * -1);
+		background: transparent;
+		overflow: clip;
+	}
 
-  .mosaic { display: grid; grid-template-columns: 1.2fr 1fr; grid-auto-rows: 118px; gap: 12px; padding: 1rem; }
-  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--color-surface) 88%, var(--color-primary) 12%), var(--color-surface)); border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; justify-content: center; transition: transform .25s ease, box-shadow .25s ease, border-color .2s ease; }
-  .tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
-  .greeting { grid-row: span 2; }
-  .greeting-main {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 0.85rem;
-    align-items: start;
-  }
-  .greeting-copy {
-    display: grid;
-    gap: 0.3rem;
-    align-content: start;
-  }
-  .greeting h2 { margin: 0; font-size: 1.5rem; }
-  .time { color: var(--color-text-muted); }
-  .announcement-block {
-    display: grid;
-    gap: 0.35rem;
-    align-content: start;
-    padding-left: 0.85rem;
-    border-left: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-  }
-  .shift-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-  .shift-fish-icon {
-    width: 1.9rem;
-    height: 1.9rem;
-    object-fit: contain;
-    filter:
-      brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
-    opacity: 0.96;
-    flex: 0 0 auto;
-  }
-  .announcement-block :global(p) {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.84rem;
-    line-height: 1.45;
-  }
-  .announcement-empty {
-    opacity: 0.85;
-  }
-  .announcement-copy {
-    display: grid;
-    gap: 0.35rem;
-  }
-  .shift-summary {
-    display: grid;
-    gap: 0.35rem;
-    margin-top: 0.9rem;
-    padding-top: 0.8rem;
-    border-top: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-  }
-  .shift-summary-list {
-    display: grid;
-    gap: 0.32rem;
-  }
-  .shift-summary-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
-    align-items: start;
-    font-size: 0.8rem;
-  }
-  .shift-summary-row strong {
-    color: var(--color-text);
-    font-size: 0.8rem;
-  }
-  .shift-summary-row span {
-    margin: 0;
-    color: var(--color-text-muted);
-    line-height: 1.4;
-  }
-  .shift-empty-state {
-    display: grid;
-    justify-items: start;
-  }
-  .specials-list {
-    display: grid;
-    gap: 0.35rem;
-  }
-  .specials-card {
-    text-decoration: none;
-    color: inherit;
-    gap: 0.7rem;
-    min-height: 0;
-  }
-  .menu-card {
-    text-decoration: none;
-    color: inherit;
-    gap: 0.55rem;
-    min-height: 0;
-  }
-  .employee-card {
-    gap: 0.6rem;
-    min-height: 0;
-  }
-  .employee-head {
-    justify-content: flex-start;
-  }
-  .employee-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .employee-label {
-    font-family: inherit;
-    font-size: 0.9rem;
-    font-weight: var(--weight-semibold);
-    letter-spacing: 0.02em;
-    text-transform: none;
-    color: var(--color-text);
-  }
-  .fish-icon {
-    width: 1.15rem;
-    height: 1.15rem;
-    object-fit: contain;
-    filter:
-      brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
-    opacity: 0.96;
-    flex: 0 0 auto;
-  }
-  .employee-copy {
-    display: grid;
-    gap: 0.28rem;
-  }
-  .employee-copy strong {
-    font-size: 0.98rem;
-    color: var(--color-text);
-  }
-  .employee-copy p,
-  .employee-empty {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-    line-height: 1.4;
-  }
-  .special-row {
-    display: grid;
-    grid-template-columns: 4.8rem 1fr;
-    gap: 0.5rem;
-    align-items: start;
-    font-size: 0.76rem;
-  }
-  .special-row strong {
-    color: var(--color-text);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .special-row span {
-    color: var(--color-text-muted);
-    line-height: 1.35;
-    display: -webkit-box;
-    line-clamp: 2;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .alert { margin-top: 0.35rem; color: #fca5a5; font-size: 0.78rem; }
-  .specials-empty {
-    color: var(--color-text-muted);
-  }
+	.hero::after {
+		content: '';
+		position: absolute;
+		inset: auto 0 0 0;
+		height: clamp(78px, 16vw, 150px);
+		background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--color-bg) 80%, black) 86%);
+		pointer-events: none;
+	}
 
-  .tile-head { display: flex; justify-content: space-between; align-items: center; gap: 0.35rem; }
-  .tile-head small { color: var(--color-text-muted); font-size: 0.72rem; }
-  .node-strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
-  .node-pill { display: inline-flex; gap: 6px; align-items: center; font-size: 0.72rem; border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 7px; color: var(--color-text-muted); }
-  .node-pill.warn { border-color: #f59e0b; color: #f59e0b; }
-  .node-pill strong { color: var(--color-text); font-size: 0.7rem; }
-  .temp-warnings {
-    display: grid;
-    gap: 0.28rem;
-    margin-top: 0.35rem;
-  }
-  .temp-warning-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    text-decoration: none;
-    color: #fecaca;
-    font-size: 0.76rem;
-    line-height: 1.25;
-  }
-  .temp-warning-line strong {
-    font-weight: var(--weight-semibold);
-  }
-  .mini-graph { width: 100%; height: 40px; margin-top: 4px; overflow: hidden; }
-  .tile-label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); }
-  .menu-label {
-    font-family: inherit;
-    font-size: 0.92rem;
-    font-weight: var(--weight-semibold);
-    letter-spacing: 0.02em;
-    text-transform: none;
-    color: var(--color-text);
-  }
-  .idea { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-muted); }
-  .today-area { margin: 1rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 35%),
-      var(--color-surface); }
-  .today-head { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; margin-bottom: 0.5rem; }
-  .today-head h3 { margin: 0; font-size: var(--text-md); }
-  .today-head small { color: var(--color-text-muted); font-size: 0.78rem; }
-  .today-list { margin: 0; padding-left: 1rem; display: grid; gap: 0.35rem; }
-  .today-list li { line-height: 1.35; }
-  .today-list a { color: var(--color-text); text-decoration: none; }
-  .today-list small { color: var(--color-text-muted); margin-left: 0.4rem; }
-  .today-empty { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+	.hero-carousel {
+		position: relative;
+		min-height: clamp(360px, 58vw, 620px);
+		overflow: hidden;
+		background: color-mix(in srgb, var(--color-bg) 88%, black);
+	}
 
-  .dashboard { display: flex; flex-direction: column; gap: 1.1rem; padding-inline: 1rem; margin-top: 1.2rem; padding-bottom: 8rem; }
-  .dashboard :global(.card) {
-    border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 45%),
-      var(--color-surface);
-  }
-  .section-row { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; }
-  .section-label { font-size: var(--text-sm); color: var(--color-text-muted); letter-spacing: .08em; text-transform: uppercase; margin: 0; }
-  .section-muted { color: var(--color-text-muted); font-size: 0.76rem; }
-  .card-link { text-decoration: none; display: block; }
+	.carousel-slide {
+		position: absolute;
+		inset: 0;
+		background-image:
+			linear-gradient(
+				115deg,
+				rgba(7, 9, 12, 0.58) 8%,
+				rgba(7, 9, 12, 0.18) 46%,
+				rgba(7, 9, 12, 0.74) 100%
+			),
+			var(--slide-image);
+		background-position: center, var(--slide-position);
+		background-size: cover, var(--slide-fit);
+		background-repeat: no-repeat, no-repeat;
+		background-color: color-mix(in srgb, var(--color-bg) 92%, black);
+		opacity: 0;
+		transform: scale(1.04);
+		transition: opacity 500ms ease, transform 900ms ease;
+		pointer-events: none;
+		filter: var(--slide-filter);
+	}
 
-  @media (max-width: 760px) {
-    .page-header {
-      padding: 1.35rem 0.9rem 0.4rem;
-    }
-    .page-header h1 {
-      font-size: 1.55rem;
-      line-height: 1.15;
-    }
-    .header-sub {
-      font-size: 0.82rem;
-    }
+	.carousel-slide.active {
+		opacity: 1;
+		transform: scale(1);
+		pointer-events: auto;
+	}
 
-    .divider {
-      width: 92px;
-      margin-top: -5px;
-      margin-left: 1rem;
-    }
-    .mosaic {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-auto-rows: minmax(108px, auto);
-      gap: 10px;
-      padding: 0.85rem 0.9rem;
-    }
-    .greeting {
-      grid-column: 1 / -1;
-      grid-row: auto;
-    }
-    .greeting-main {
-      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-      gap: 0.7rem;
-    }
-    .specials-card,
-    .menu-card,
-    .ideas {
-      min-height: 0;
-      align-self: stretch;
-    }
-    .tile {
-      padding: 12px;
-      min-height: 108px;
-    }
-    .greeting h2 {
-      font-size: 1.25rem;
-    }
-    .announcement-block {
-      padding-left: 0.7rem;
-    }
-    .special-row {
-      grid-template-columns: 4.2rem 1fr;
-    }
-    .tile-head {
-      flex-wrap: wrap;
-      row-gap: 0.2rem;
-    }
-    .tile-head small {
-      font-size: 0.68rem;
-    }
-    .node-pill {
-      font-size: 0.68rem;
-      padding: 2px 6px;
-    }
-    .today-area {
-      margin: 0.9rem;
-      padding: 0.7rem;
-    }
-    .today-head {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-    .today-list {
-      list-style: none;
-      padding-left: 0;
-      gap: 0.45rem;
-    }
-    .today-list li {
-      border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
-      border-radius: 10px;
-      padding: 0.45rem 0.55rem;
-      background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary) 8%);
-      display: grid;
-      gap: 0.16rem;
-    }
-    .today-list small {
-      margin-left: 0;
-    }
-    .shift-summary-row {
-      flex-direction: column;
-      gap: 0.12rem;
-    }
-    .dashboard {
-      gap: 0.85rem;
-      margin-top: 0.85rem;
-      padding-inline: 0.9rem;
-      padding-bottom: 6.5rem;
-    }
-    .section-row {
-      flex-wrap: wrap;
-      row-gap: 0.2rem;
-    }
-  }
+	.slide-content {
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+		bottom: clamp(6.1rem, 12vw, 8.7rem);
+		width: min(1040px, 100%);
+		padding-inline: clamp(0.95rem, 3.5vw, 1.8rem);
+		max-width: min(1040px, 100%);
+		text-shadow: 0 10px 32px rgba(2, 3, 5, 0.42);
+	}
 
-  @media (max-width: 430px) {
-    .page-header h1 {
-      font-size: 1.42rem;
-    }
-    .section-muted {
-      display: none;
-    }
-    .greeting-main {
-      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-      gap: 0.6rem;
-    }
-    .announcement-block {
-      padding-left: 0.6rem;
-    }
-    .special-row {
-      grid-template-columns: 1fr;
-      gap: 0.18rem;
-    }
-  }
+	.slide-tag {
+		margin: 0;
+		font-size: 0.74rem;
+		color: color-mix(in srgb, var(--color-text) 87%, transparent);
+		text-transform: uppercase;
+		letter-spacing: 0.09em;
+	}
 
-  @media (hover: none) {
-    .tile,
-    .tile:hover {
-      transform: none !important;
-    }
-  }
+	h1 {
+		margin: 0.32rem 0 0;
+		font-size: clamp(1.5rem, 4.5vw, 2.7rem);
+		line-height: 1.06;
+		letter-spacing: -0.03em;
+		text-wrap: balance;
+	}
+
+	.slide-content p {
+		margin: 0.4rem 0 0;
+		font-size: 0.95rem;
+		color: color-mix(in srgb, var(--color-text) 92%, transparent);
+	}
+
+	.hero-controls {
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+		bottom: clamp(1rem, 2.9vw, 1.75rem);
+		width: min(1040px, 100%);
+		padding-inline: clamp(0.95rem, 3.5vw, 1.8rem);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.72rem;
+		flex-wrap: wrap;
+		z-index: 3;
+	}
+
+	.dot-group {
+		display: flex;
+		align-items: center;
+		gap: 0.42rem;
+	}
+
+	.hero-controls .dot-group {
+		padding: 0.45rem 0.54rem;
+		border-radius: 999px;
+		background: rgba(9, 12, 18, 0.42);
+		border: 1px solid rgba(255, 255, 255, 0.13);
+		backdrop-filter: blur(8px);
+	}
+
+	.dot {
+		width: 0.62rem;
+		height: 0.62rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-border);
+		background: color-mix(in srgb, var(--color-surface-alt) 84%, transparent);
+		cursor: pointer;
+	}
+
+	.dot.active {
+		background: color-mix(in srgb, var(--color-primary) 60%, white 8%);
+		border-color: color-mix(in srgb, var(--color-primary) 72%, var(--color-border));
+	}
+
+	.hero-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.hero-controls .hero-actions {
+		padding: 0.38rem;
+		border-radius: 999px;
+		background: rgba(9, 12, 18, 0.42);
+		border: 1px solid rgba(255, 255, 255, 0.13);
+		backdrop-filter: blur(8px);
+	}
+
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface-alt);
+		color: var(--color-text);
+		border-radius: 10px;
+		padding: 0.58rem 0.84rem;
+		font-weight: var(--weight-semibold);
+		transition: transform 140ms ease, border-color 140ms ease;
+	}
+
+	.btn:hover {
+		transform: translateY(-1px);
+		border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+	}
+
+	.btn-primary {
+		background: linear-gradient(180deg, rgba(122, 132, 148, 0.26), rgba(122, 132, 148, 0.14));
+		border-color: rgba(122, 132, 148, 0.36);
+	}
+
+	.section-head {
+		display: grid;
+		gap: 0.34rem;
+	}
+
+	.eyebrow {
+		margin: 0;
+		font-size: 0.76rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--color-text-muted);
+	}
+
+	.section-head h2 {
+		margin: 0;
+		font-size: clamp(1.18rem, 3vw, 1.9rem);
+		letter-spacing: -0.02em;
+		text-wrap: balance;
+	}
+
+	.section-copy {
+		margin: 0;
+		color: var(--color-text-muted);
+		max-width: 72ch;
+		line-height: 1.5;
+	}
+
+	.quick-proof {
+		margin-top: 0.9rem;
+		display: grid;
+		gap: 0;
+		padding: 0.12rem 0;
+		border-top: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+		border-bottom: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+	}
+
+	.proof-line {
+		margin: 0;
+		padding: 0.76rem 0.18rem;
+		display: grid;
+		gap: 0.24rem;
+		border-bottom: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+	}
+
+	.proof-line:last-child {
+		border-bottom: 0;
+	}
+
+	.proof-line strong {
+		display: block;
+		font-size: 0.9rem;
+	}
+
+	.proof-line span {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		line-height: 1.45;
+	}
+
+	.landing-summary {
+		margin-top: 1rem;
+	}
+
+	.summary-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+		gap: 0.9rem;
+		align-items: center;
+	}
+
+	.summary-photo {
+		margin: 0;
+		overflow: hidden;
+		border-radius: 16px;
+	}
+
+	.summary-photo img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		aspect-ratio: 3 / 4;
+		object-fit: cover;
+		object-position: center;
+		filter: saturate(1.05) contrast(1.08) brightness(1.01);
+	}
+
+	.summary-copy {
+		display: grid;
+		gap: 0.74rem;
+	}
+
+	.stat-line {
+		margin: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 0.65rem;
+		align-items: center;
+	}
+
+	.stat-line span {
+		display: inline;
+		font-size: 0.8rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		font-weight: var(--weight-semibold);
+		color: var(--color-text);
+	}
+
+	.core-features {
+		margin-top: clamp(1rem, 2.4vw, 1.45rem);
+	}
+
+	.core-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+		gap: 0.72rem;
+		align-items: center;
+	}
+
+	.core-copy {
+		display: grid;
+		gap: 0.72rem;
+	}
+
+	.core-photo {
+		margin: 0;
+		overflow: hidden;
+		border-radius: 16px;
+	}
+
+	.core-photo img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		aspect-ratio: 3 / 4;
+		object-fit: cover;
+		object-position: center;
+		filter: saturate(1.05) contrast(1.08) brightness(1.01);
+	}
+
+	.capability-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.62rem 0.84rem;
+	}
+
+	.capability-list li {
+		padding: 0.25rem 0 0.62rem;
+		border-bottom: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+	}
+
+	.capability-list h3 {
+		margin: 0;
+		font-size: 0.95rem;
+	}
+
+	.capability-list p {
+		margin: 0.3rem 0 0;
+		font-size: 0.83rem;
+		line-height: 1.44;
+		color: var(--color-text-muted);
+	}
+
+	.overview-preview {
+		margin-top: clamp(1rem, 2.5vw, 1.45rem);
+	}
+
+	.preview-grid {
+		margin-top: 0.72rem;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.56rem;
+	}
+
+	.preview-shot {
+		margin: 0;
+		overflow: hidden;
+		background: color-mix(in srgb, var(--color-surface-alt) 94%, transparent);
+		padding: 0.35rem;
+		border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+		border-radius: 16px;
+	}
+
+	.preview-shot img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		aspect-ratio: 16 / 9;
+		object-fit: cover;
+		object-position: top center;
+		border-radius: 12px;
+		filter: saturate(0.9) contrast(1.12) brightness(1.04);
+	}
+
+	.execution-path {
+		margin-top: clamp(1rem, 2.5vw, 1.45rem);
+		padding-top: 0.2rem;
+	}
+
+	.step-list {
+		margin-top: 0.5rem;
+		display: grid;
+		gap: 0;
+	}
+
+	.step-row {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 0.72rem;
+		padding: 0.72rem 0.2rem;
+		border-bottom: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+	}
+
+	.step-row:last-child {
+		border-bottom: 0;
+	}
+
+	.timeline-step {
+		margin: 0;
+		width: 2.1rem;
+		height: 2.1rem;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.7rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+		background: color-mix(in srgb, var(--color-surface-alt) 90%, transparent);
+	}
+
+	.step-row h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.step-row p {
+		margin: 0.28rem 0 0;
+		color: var(--color-text-muted);
+		font-size: 0.84rem;
+		line-height: 1.44;
+	}
+
+	.inline-link {
+		margin-top: 0.5rem;
+		display: inline-flex;
+		align-items: center;
+		text-decoration: none;
+		color: var(--color-text);
+		border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+		padding-bottom: 0.12rem;
+		font-weight: var(--weight-semibold);
+		font-size: 0.85rem;
+	}
+
+	.operator-quote {
+		margin-top: 1rem;
+		padding: 0.85rem 0.95rem;
+		border-left: 3px solid color-mix(in srgb, var(--color-primary) 52%, var(--color-border));
+		background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+		border-radius: 12px;
+	}
+
+	.operator-quote blockquote {
+		margin: 0;
+		font-size: 0.95rem;
+		line-height: 1.5;
+	}
+
+	.operator-quote p {
+		margin: 0.5rem 0 0;
+		color: var(--color-text-muted);
+		font-size: 0.78rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+
+	.bottom-cta {
+		margin-top: 1.1rem;
+		padding: 0.9rem;
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 0.8rem;
+		background:
+			linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 58%),
+			var(--color-surface);
+		border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+		border-radius: 16px;
+	}
+
+	.bottom-cta h2 {
+		margin: 0;
+		font-size: 1.2rem;
+	}
+
+	.bottom-cta p {
+		margin: 0.35rem 0 0;
+		color: var(--color-text-muted);
+	}
+
+	.store-badge-row {
+		margin-top: 0.55rem;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.52rem;
+		width: min(100%, 24rem);
+		margin-inline: auto;
+	}
+
+	.store-badge {
+		width: 100%;
+		height: auto;
+		display: block;
+		border-radius: 0.5rem;
+		border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+		background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+	}
+
+	.nns-line {
+		margin: 0;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 0.28rem 0.38rem;
+		font-size: 0.64rem;
+		color: var(--color-text-muted);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.nns-credits {
+		margin-top: 0.55rem;
+	}
+
+	.nns-line-logo {
+		width: 0.9rem;
+		height: 0.9rem;
+		display: block;
+		opacity: 0.9;
+	}
+
+	.cert-inline {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.28rem;
+	}
+
+	.cert-inline-logo {
+		width: auto;
+		height: 0.9rem;
+		display: block;
+		opacity: 0.92;
+		object-fit: contain;
+	}
+
+	.nns-line [aria-hidden='true'] {
+		opacity: 0.6;
+	}
+
+	@media (max-width: 900px) {
+		.summary-layout {
+			grid-template-columns: minmax(140px, 38vw) minmax(0, 1fr);
+			gap: 0.65rem;
+		}
+
+		.core-layout {
+			grid-template-columns: minmax(0, 1fr) minmax(140px, 38vw);
+			gap: 0.65rem;
+		}
+
+		.capability-list {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.56rem 0.62rem;
+		}
+
+		.preview-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.section-head h2 {
+			font-size: clamp(1.05rem, 3.5vw, 1.45rem);
+		}
+
+		.capability-list h3 {
+			font-size: 0.88rem;
+		}
+
+		.capability-list p {
+			font-size: 0.76rem;
+		}
+
+		.summary-photo img,
+		.core-photo img {
+			aspect-ratio: 4 / 5;
+		}
+
+		.stat-line span {
+			font-size: 0.73rem;
+			letter-spacing: 0.06em;
+		}
+	}
+
+	@media (max-width: 760px) {
+		.hero {
+			margin-top: calc(clamp(0.75rem, 2.6vw, var(--space-4)) * -1 - 0.1rem);
+		}
+
+		.hero-carousel {
+			min-height: clamp(400px, 102vw, 540px);
+		}
+
+		.slide-content {
+			bottom: clamp(7.3rem, 16vw, 8.8rem);
+			padding-inline: 0.9rem;
+		}
+
+		.hero-controls {
+			bottom: 0.8rem;
+			gap: 0.45rem;
+			padding-inline: 0.9rem;
+		}
+
+		.hero-controls .dot-group,
+		.hero-controls .hero-actions {
+			border-radius: 12px;
+		}
+
+		.hero-controls .hero-actions {
+			width: 100%;
+			justify-content: flex-start;
+		}
+
+		.bottom-cta {
+			flex-direction: column;
+			align-items: flex-start;
+			border-radius: 16px;
+		}
+
+		.nns-line {
+			font-size: 0.58rem;
+		}
+
+		.store-badge {
+			border-radius: 0.46rem;
+		}
+	}
 </style>
+
+
+
 

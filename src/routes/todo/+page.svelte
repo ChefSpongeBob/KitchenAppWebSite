@@ -110,10 +110,10 @@
   .tabs { display: flex; gap: 0.5rem; padding: 0 0 0.9rem; }
   .tabs button { flex: 1; padding: 0.6rem; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted); }
   .tabs button.active {
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-text);
     border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border) 45%);
-    box-shadow: 0 0 0 1px rgba(195, 32, 43, 0.12);
+    box-shadow: 0 0 0 1px rgba(132, 146, 166, 0.12);
   }
   .card-list { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 6rem; }
   .card-wrapper { display: flex; flex-direction: column; gap: 4px; }
@@ -136,3 +136,4 @@
     }
   }
 </style>
+

@@ -6,12 +6,6 @@ type SectionRow = {
   description: string | null;
 };
 
-const hrefBySlug: Record<string, string> = {
-  foh: '/lists/inventory/fohinv',
-  kitchen: '/lists/inventory/kitcheninv',
-  sushi: '/lists/inventory/sushiinv'
-};
-
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { sections: [] };
@@ -30,7 +24,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     sections: (result.results ?? []).map((s) => ({
       ...s,
-      href: hrefBySlug[s.slug] ?? '/lists/inventory'
+      href: `/lists/inventory/${encodeURIComponent(s.slug)}`
     }))
   };
 };

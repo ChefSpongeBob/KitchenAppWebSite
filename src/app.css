@@ -2,6 +2,7 @@
    ROOT TOKENS
    ========================================================= */
 :root {
+  color-scheme: dark;
   --font-sans: "Manrope", "Segoe UI", sans-serif;
   --font-body: var(--font-sans);
 
@@ -25,10 +26,10 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
 
-  --color-primary: #c3202b;
-  --color-primary-contrast: #fff4f4;
-  --color-primary-soft: rgba(195, 32, 43, 0.2);
-  --color-accent: #df6369;
+  --color-primary: #7b8798;
+  --color-primary-contrast: #f8fafc;
+  --color-primary-soft: rgba(132, 146, 166, 0.2);
+  --color-accent: #9aa6b8;
 
   --color-bg: #121315;
   --color-bg-elevated: #181a1d;
@@ -64,11 +65,88 @@
   --shadow-sm: 0 12px 24px rgba(4, 5, 7, 0.18);
   --shadow-md: 0 20px 50px rgba(4, 5, 7, 0.3);
   --shadow-glow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 60px rgba(5, 6, 8, 0.34);
-  --ring-red: rgba(195, 32, 43, 0.16);
+  --ring-red: rgba(132, 146, 166, 0.16);
 
   --duration-fast: 120ms;
   --duration-medium: 240ms;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --color-primary: #6f7d90;
+  --color-primary-contrast: #ffffff;
+  --color-primary-soft: rgba(115, 128, 147, 0.14);
+  --color-accent: #8b96a8;
+
+  --color-bg: #eef2f6;
+  --color-bg-elevated: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f3f5f8;
+  --color-surface-soft: #e9edf3;
+
+  --color-text: #131a22;
+  --color-text-muted: #3f4d5c;
+  --color-text-soft: #2a3746;
+
+  --color-border: rgba(20, 33, 45, 0.2);
+  --color-divider: rgba(20, 33, 45, 0.16);
+
+  --shadow-sm: 0 10px 24px rgba(33, 42, 54, 0.08);
+  --shadow-md: 0 18px 42px rgba(33, 42, 54, 0.14);
+  --shadow-glow: 0 0 0 1px rgba(17, 24, 39, 0.05), 0 22px 48px rgba(17, 24, 39, 0.12);
+  --ring-red: rgba(115, 128, 147, 0.16);
+}
+
+[data-mobile-view='compact'] {
+  --text-xs: 0.68rem;
+  --text-sm: 0.8rem;
+  --text-md: 0.93rem;
+  --text-lg: 1.04rem;
+  --text-xl: 1.34rem;
+  --text-2xl: 1.76rem;
+  --text-3xl: 2.2rem;
+
+  --space-2: 7px;
+  --space-3: 10px;
+  --space-4: 14px;
+  --space-5: 18px;
+  --space-6: 22px;
+  --space-8: 28px;
+
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+}
+
+[data-theme='light'] body {
+  background:
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--color-primary) 36%, transparent), transparent 38%),
+    radial-gradient(circle at 84% 14%, color-mix(in srgb, var(--color-primary) 32%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 28%),
+    var(--color-bg);
+}
+
+[data-theme='light'] body::before {
+  opacity: 0.3;
+  filter: grayscale(1) invert(1) brightness(0.38) contrast(1.18);
+}
+
+[data-mobile-view='compact'] body::before {
+  opacity: 0.08;
+}
+
+[data-theme='light'][data-mobile-view='compact'] body::before {
+  opacity: 0.2;
+}
+
+[data-theme='light'] .app-panel,
+[data-theme='light'] .panel,
+[data-theme='light'] [class$='card'],
+[data-theme='light'] [class*='-card'] {
+  border-color: rgba(20, 33, 45, 0.24) !important;
+  box-shadow: 0 10px 22px rgba(24, 36, 52, 0.08);
 }
 
 .link-card a {
@@ -98,9 +176,7 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   -webkit-text-size-adjust: 100%;
-  background:
-    radial-gradient(circle at top, rgba(195, 32, 43, 0.1), transparent 34%),
-    linear-gradient(180deg, #17191c, #111214 58%, #0f1012);
+  background: var(--color-bg);
 }
 
 html,
@@ -116,9 +192,9 @@ body {
   position: relative;
   min-height: 100dvh;
   background:
-    radial-gradient(circle at 18% 0%, rgba(223, 99, 105, 0.05), transparent 24%),
-    radial-gradient(circle at 84% 14%, rgba(195, 32, 43, 0.06), transparent 22%),
-    linear-gradient(180deg, rgba(195, 32, 43, 0.03), transparent 18%),
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--color-primary) 15%, transparent), transparent 24%),
+    radial-gradient(circle at 84% 14%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 22%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 18%),
     var(--color-bg);
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
   background-size: auto, auto, auto, auto;
@@ -144,17 +220,17 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.075;
+  opacity: 0.12;
   background-image:
-    url("/sushi-assets/sushi-piece-a.svg"),
-    url("/sushi-assets/sushi-piece-b.svg"),
-    url("/sushi-assets/onigiri.svg"),
-    url("/sushi-assets/onigiri.svg"),
-    url("/sushi-assets/sushi-piece-a.svg"),
-    url("/sushi-assets/sushi-piece-b.svg"),
-    url("/sushi-assets/onigiri.svg");
+    url("/kitchen-icons/burger.svg"),
+    url("/kitchen-icons/chicken-leg.svg"),
+    url("/kitchen-icons/fries.svg"),
+    url("/kitchen-icons/whisk.svg"),
+    url("/kitchen-icons/knife.svg"),
+    url("/kitchen-icons/burger.svg"),
+    url("/kitchen-icons/fries.svg");
   background-repeat: no-repeat;
-  background-size: 108px auto, 110px auto, 58px auto, 52px auto, 96px auto, 100px auto, 54px auto;
+  background-size: 84px auto, 82px auto, 62px auto, 72px auto, 98px auto, 78px auto, 56px auto;
   background-position:
     left 2.5rem top 8rem,
     right 2.5rem top 13rem,
@@ -163,7 +239,7 @@ body::before {
     right 6rem bottom 13rem,
     left 3rem bottom 7rem,
     right 8rem bottom 22rem;
-  filter: brightness(0) saturate(100%) invert(70%) sepia(7%) saturate(180%) hue-rotate(292deg) brightness(72%) contrast(82%);
+  filter: none;
 }
 
 main {
@@ -260,7 +336,7 @@ button {
 button:hover,
 button:focus-visible {
   border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border));
-  box-shadow: 0 0 0 1px rgba(195, 32, 43, 0.16);
+  box-shadow: 0 0 0 1px rgba(132, 146, 166, 0.16);
 }
 
 input:focus,
@@ -274,7 +350,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border));
-  box-shadow: 0 0 0 3px rgba(195, 32, 43, 0.14);
+  box-shadow: 0 0 0 3px rgba(132, 146, 166, 0.14);
 }
 
 a {
@@ -288,7 +364,7 @@ a:focus-visible {
 }
 
 ::selection {
-  background: rgba(195, 32, 43, 0.28);
+  background: rgba(132, 146, 166, 0.28);
   color: var(--color-primary-contrast);
 }
 
@@ -298,6 +374,21 @@ a:focus-visible {
 
 .tap:active {
   transform: scale(0.97);
+}
+
+.app-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)), var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 @media (max-width: 760px) {
@@ -313,8 +404,8 @@ a:focus-visible {
   }
 
   body::before {
-    opacity: 0.065;
-    background-size: 82px auto, 84px auto, 44px auto, 38px auto, 74px auto, 78px auto, 42px auto;
+    opacity: 0.1;
+    background-size: 66px auto, 64px auto, 48px auto, 56px auto, 72px auto, 64px auto, 46px auto;
     background-position:
       left 0.8rem top 7rem,
       right 0.8rem top 11rem,
@@ -324,4 +415,11 @@ a:focus-visible {
       left 1rem bottom 6rem,
       right 2.8rem bottom 18rem;
   }
+
+  [data-theme='light'] body::before {
+    opacity: 0.24;
+  }
 }
+
+
+

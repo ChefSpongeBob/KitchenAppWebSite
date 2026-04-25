@@ -1,11 +1,10 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import type { SubmitFunction } from '@sveltejs/kit';
-  import { recipeCategories } from '$lib/assets/recipeCategories';
 
   type Recipe = {
     id: number;
@@ -17,13 +16,9 @@
 
   export let data: { recipes: Recipe[] };
 
-  const defaultRecipeCategories = [...recipeCategories];
   let feedbackMessage = '';
   $: recipeCategoryOptions = Array.from(
-    new Set([
-      ...defaultRecipeCategories,
-      ...data.recipes.map((recipe) => recipe.category).filter(Boolean)
-    ])
+    new Set(data.recipes.map((recipe) => recipe.category).filter(Boolean))
   );
   $: recipesByCategory = recipeCategoryOptions.map((category) => ({
     category,
@@ -69,12 +64,12 @@
     {/if}
 
     <form method="POST" action="?/create_recipe" use:enhance={withFeedback} class="add-row recipe-add">
-      <select name="category" required>
-        <option value="">Select Category</option>
+      <input name="category" list="recipe-category-options" placeholder="Category" required />
+      <datalist id="recipe-category-options">
         {#each recipeCategoryOptions as category}
-          <option value={category}>{category}</option>
+          <option value={category}></option>
         {/each}
-      </select>
+      </datalist>
       <input name="title" placeholder="Title" required />
       <textarea name="materials_needed" placeholder="Materials needed" rows="3" required></textarea>
       <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
@@ -137,7 +132,7 @@
     inset: 0 auto 0 0;
     width: 4px;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.88), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
   }
 
   .panel-header {
@@ -169,8 +164,7 @@
   }
 
   .recipe-add textarea,
-  .recipe-add input,
-  .recipe-add select {
+  .recipe-add input {
     width: 100%;
   }
 
@@ -229,8 +223,7 @@
   }
 
   input,
-  textarea,
-  select {
+  textarea {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     padding: 0.42rem 0.55rem;
@@ -240,9 +233,9 @@
   }
 
   button {
-    border: 1px solid rgba(195, 32, 43, 0.22);
+    border: 1px solid rgba(132, 146, 166, 0.22);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     padding: 0.4rem 0.62rem;
     cursor: pointer;
@@ -276,4 +269,5 @@
     }
   }
 </style>
+
 

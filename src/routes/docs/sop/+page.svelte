@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
@@ -44,8 +44,8 @@
     justify-content: center;
     padding: 0.48rem 0.75rem;
     border-radius: 10px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    border: 1px solid rgba(132, 146, 166, 0.22);
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     text-decoration: none;
   }
@@ -54,4 +54,5 @@
     color: var(--color-text-muted);
   }
 </style>
+
 

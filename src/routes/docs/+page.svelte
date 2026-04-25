@@ -20,16 +20,6 @@
     if (doc.slug === 'about') return '/about';
     return `/docs/${doc.slug}`;
   }
-
-  const extraDocs = [
-    {
-      id: 'doc-menu',
-      href: '/menu',
-      file_url: '/menus/main-menu.pdf',
-      title: 'Menu',
-      description: 'Main menu and secret menu.'
-    }
-  ];
 </script>
 
 <Layout>
@@ -39,16 +29,6 @@
     <p class="empty">No documents available.</p>
   {:else}
     <section class="grid">
-      {#each extraDocs as doc}
-        <div class="doc-card">
-          <a href={doc.href} class="card-link">
-            <DashboardCard title={doc.title}>
-              <p>{doc.description}</p>
-            </DashboardCard>
-          </a>
-        </div>
-      {/each}
-
       {#each docs as d}
         <div class="doc-card">
           <a href={getDocHref(d)} class="card-link">

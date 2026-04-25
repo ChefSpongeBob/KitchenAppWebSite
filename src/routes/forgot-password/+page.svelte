@@ -89,8 +89,8 @@
   .submit {
     padding: 0.72rem 0.85rem;
     border-radius: 12px;
-    border: 1px solid rgba(179, 58, 63, 0.24);
-    background: linear-gradient(180deg, rgba(179, 58, 63, 0.24), rgba(179, 58, 63, 0.15));
+    border: 1px solid rgba(122, 132, 148, 0.24);
+    background: linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.15));
     color: var(--color-primary-contrast);
     font-weight: var(--weight-semibold);
   }
@@ -114,3 +114,4 @@
     margin: 0;
   }
 </style>
+

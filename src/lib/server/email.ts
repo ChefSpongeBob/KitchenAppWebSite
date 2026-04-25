@@ -134,7 +134,7 @@ export async function sendInviteEmail({
   expiresAt: number | null;
 }) {
   const baseUrl = getAppBaseUrl(origin, env);
-  const registerUrl = `${baseUrl}/register`;
+  const registerUrl = `${baseUrl}/register?invite=${encodeURIComponent(inviteCode)}`;
   const expirationText = expiresAt
     ? new Date(expiresAt * 1000).toLocaleDateString('en-US', {
         year: 'numeric',

@@ -14,7 +14,7 @@ let meetingNotesSchemaEnsured = false;
 
 function requireAdmin(role: string | undefined | null) {
   if (role !== 'admin') {
-    throw redirect(303, '/');
+    throw redirect(303, '/app');
   }
 }
 

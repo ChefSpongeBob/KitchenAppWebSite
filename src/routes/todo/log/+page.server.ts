@@ -3,7 +3,7 @@ import { redirect, fail } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.userRole !== 'admin') {
-		throw redirect(303, '/');
+		throw redirect(303, '/app');
 	}
 
 	const db = locals.DB;
@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
 	delete: async ({ request, locals }) => {
 		if (locals.userRole !== 'admin') {
-			throw redirect(303, '/');
+			throw redirect(303, '/app');
 		}
 
 		const db = locals.DB;

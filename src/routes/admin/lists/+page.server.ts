@@ -2,11 +2,15 @@ import type { Actions, PageServerLoad } from './$types';
 import {
   addChecklistItem,
   addListItem,
+  createDocument,
   deleteChecklistItem,
+  deleteDocument,
   deleteListItem,
   loadAdminChecklists,
+  loadAdminDocuments,
   loadAdminSections,
   requireAdmin,
+  updateDocument,
   updateChecklistItem,
   updateListItem
 } from '$lib/server/admin';
@@ -16,12 +20,13 @@ export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
 
   if (!db) {
-    return { preplists: [], inventory: [], orders: [], checklists: [] };
+    return { preplists: [], inventory: [], orders: [], checklists: [], documents: [] };
   }
 
   const sections = await loadAdminSections(db);
   const checklists = await loadAdminChecklists(db);
-  return { ...sections, checklists };
+  const documents = await loadAdminDocuments(db);
+  return { ...sections, checklists, documents };
 };
 
 export const actions: Actions = {
@@ -30,5 +35,8 @@ export const actions: Actions = {
   delete_list_item: ({ request, locals }) => deleteListItem(request, locals),
   add_checklist_item: ({ request, locals }) => addChecklistItem(request, locals),
   update_checklist_item: ({ request, locals }) => updateChecklistItem(request, locals),
-  delete_checklist_item: ({ request, locals }) => deleteChecklistItem(request, locals)
+  delete_checklist_item: ({ request, locals }) => deleteChecklistItem(request, locals),
+  create_document: ({ request, locals }) => createDocument(request, locals),
+  update_document: ({ request, locals }) => updateDocument(request, locals),
+  delete_document: ({ request, locals }) => deleteDocument(request, locals)
 };

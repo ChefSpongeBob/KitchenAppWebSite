@@ -1,12 +1,23 @@
 <script lang="ts">
+  import { page } from '$app/stores';
+  import AdminEditorMenu from '$lib/components/ui/AdminEditorMenu.svelte';
+
   export let title: string;
   export let subtitle: string | null = null;
+
+  $: showAdminEditorMenu = $page.url.pathname.startsWith('/admin');
 </script>
 
 <header class="page-header" aria-label={title} data-legacy-subtitle={subtitle ? '1' : '0'}>
   <h1>{title}</h1>
 
   <img class="divider-blade" src="/knife-divider.svg" alt="" aria-hidden="true" />
+
+  {#if showAdminEditorMenu}
+    <div class="admin-editor-slot">
+      <AdminEditorMenu />
+    </div>
+  {/if}
 </header>
 
 <style>
@@ -37,8 +48,13 @@
     transform-origin: left center;
     filter:
       brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
-      drop-shadow(0 2px 8px rgba(195, 32, 43, 0.18));
+      drop-shadow(0 2px 8px rgba(132, 146, 166, 0.18));
     opacity: 0.98;
+  }
+
+  .admin-editor-slot {
+    margin-top: 0.72rem;
+    width: 100%;
   }
 
   .page-header::before {
@@ -49,8 +65,8 @@
     width: 4px;
     height: 44px;
     border-radius: 999px;
-    background: linear-gradient(180deg, var(--color-primary), rgba(195, 32, 43, 0.12));
-    box-shadow: 0 0 0 1px rgba(195, 32, 43, 0.08);
+    background: linear-gradient(180deg, var(--color-primary), rgba(132, 146, 166, 0.12));
+    box-shadow: 0 0 0 1px rgba(132, 146, 166, 0.08);
   }
 
   @media (max-width: 760px) {
@@ -74,9 +90,14 @@
       margin-left: 1rem;
     }
 
+    .admin-editor-slot {
+      margin-top: 0.62rem;
+    }
+
     h1 {
       font-size: 1.48rem;
       line-height: 1.2;
     }
   }
 </style>
+

@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
@@ -152,12 +152,12 @@
   let availableDepartments: ScheduleDepartment[] =
     data.settings.departments.length > 0
       ? [...data.settings.departments]
-      : (['FOH'] as ScheduleDepartment[]);
+      : (['General'] as ScheduleDepartment[]);
   let defaultDepartment = availableDepartments[0] as ScheduleDepartment;
   $: availableDepartments =
     data.settings.departments.length > 0
       ? [...data.settings.departments]
-      : (['FOH'] as ScheduleDepartment[]);
+      : (['General'] as ScheduleDepartment[]);
   $: defaultDepartment = availableDepartments[0] as ScheduleDepartment;
 
   function normalizeDepartment(value: string): ScheduleDepartment {
@@ -420,7 +420,7 @@
     const label = employeeName(userId).trim();
     const [first, second] = label.split(/\s+/);
     if (!first) return label;
-    if (!second) return first.length > 12 ? `${first.slice(0, 12)}â€¦` : first;
+    if (!second) return first.length > 12 ? `${first.slice(0, 12)}…` : first;
     return `${first} ${second[0]}.`;
   }
 
@@ -476,7 +476,7 @@
   function timeOffSummary(userId: string) {
     const requests = timeOffRequestsForUser(userId, 'approved');
     if (requests.length === 0) return '';
-    return `Time off: ${requests.map((request) => formatRequestRange(request.startDate, request.endDate)).join(' â€¢ ')}`;
+    return `Time off: ${requests.map((request) => formatRequestRange(request.startDate, request.endDate)).join(' • ')}`;
   }
 
   function shiftTimeOffWarning(userId: string, shift: DraftShift) {
@@ -1547,7 +1547,7 @@
 
   .week-nav-btn:hover,
   .week-nav-btn:focus-visible {
-    border-color: rgba(195, 32, 43, 0.22);
+    border-color: rgba(132, 146, 166, 0.22);
     color: var(--color-text);
     outline: none;
   }
@@ -1590,7 +1590,7 @@
   }
 
   .action-menu[open] .menu-trigger {
-    border-color: rgba(195, 32, 43, 0.24);
+    border-color: rgba(132, 146, 166, 0.24);
     background:
       linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
       color-mix(in srgb, var(--color-surface) 92%, black 8%);
@@ -1692,7 +1692,7 @@
 
   .menu-item-primary:hover,
   .menu-item-primary:focus-visible {
-    background: rgba(195, 32, 43, 0.14);
+    background: rgba(132, 146, 166, 0.14);
   }
 
   .menu-separate {
@@ -1980,9 +1980,9 @@
   }
 
   button {
-    border: 1px solid rgba(195, 32, 43, 0.22);
+    border: 1px solid rgba(132, 146, 166, 0.22);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     min-height: 2.3rem;
     padding: 0.5rem 0.76rem;
@@ -2108,8 +2108,8 @@
   }
 
   .duplicate-day-btn-active {
-    border-color: rgba(195, 32, 43, 0.3);
-    background: rgba(195, 32, 43, 0.18);
+    border-color: rgba(132, 146, 166, 0.3);
+    background: rgba(132, 146, 166, 0.18);
     color: #ffe4e6;
   }
 
@@ -2432,6 +2432,7 @@
     }
   }
 </style>
+
 
 
 

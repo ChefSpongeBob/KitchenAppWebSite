@@ -1,4 +1,4 @@
-export const dailySpecialCategories = ['roll', 'nigiri', 'sashimi', 'kitchen'] as const;
+export const dailySpecialCategories = ['item-1', 'item-2', 'item-3', 'item-4'] as const;
 let dailySpecialsSchemaEnsured = false;
 
 export type DailySpecialCategory = (typeof dailySpecialCategories)[number];
@@ -12,10 +12,10 @@ export type DailySpecial = {
 };
 
 const labels: Record<DailySpecialCategory, string> = {
-  roll: 'Roll',
-  nigiri: 'Nigiri',
-  sashimi: 'Sashimi',
-  kitchen: 'Kitchen'
+  'item-1': 'Highlight 1',
+  'item-2': 'Highlight 2',
+  'item-3': 'Highlight 3',
+  'item-4': 'Highlight 4'
 };
 
 export function getDailySpecialLabel(category: DailySpecialCategory) {

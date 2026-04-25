@@ -38,11 +38,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       timeOffRequests: [],
       settings: {
         autofillNewWeeks: false,
-        departments: ['FOH', 'Sushi', 'Kitchen'],
+        departments: ['General'],
         roleOptionsByDepartment: {
-          FOH: ['Server', 'Runner', 'Host', 'FOH MGR'],
-          Sushi: ['BOH MGR', 'Roller', 'Opener', 'Sushi Prep', 'Swing'],
-          Kitchen: ['BOH MGR', 'Cook', 'Dish', 'Swing']
+          General: ['Shift']
         }
       },
       availabilityByUser: {}

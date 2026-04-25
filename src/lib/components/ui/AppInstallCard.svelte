@@ -63,7 +63,7 @@
 
 <section class:compact class="install-card">
 	<div class="left">
-		<img src="/favicon-32x32.png" alt="Dave's Sushi app" width="32" height="32" />
+		<img src="/favicon-32x32.png" alt="Kitchen Hub app" width="32" height="32" />
 		<div>
 			<h3>Download App</h3>
 			<p>Install on your phone for quick access.</p>
@@ -135,3 +135,4 @@
 		color: var(--color-text-muted);
 	}
 </style>
+

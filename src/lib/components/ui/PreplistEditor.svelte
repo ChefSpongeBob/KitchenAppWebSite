@@ -243,7 +243,7 @@
     inset: 0 auto 0 0;
     width: 4px;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.88), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
   }
 
   .sheet-row.done {
@@ -309,8 +309,8 @@
     min-height: 2.75rem;
     padding: 0.72rem 1rem;
     border-radius: 10px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    border: 1px solid rgba(132, 146, 166, 0.22);
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.84rem;
@@ -329,7 +329,7 @@
     cursor: pointer;
     width: fit-content;
     padding: 0.28rem 0.55rem;
-    border: 1px dashed rgba(195, 32, 43, 0.24);
+    border: 1px dashed rgba(132, 146, 166, 0.24);
     border-radius: 10px;
     color: var(--color-text-muted);
     font-size: 0.8rem;
@@ -355,8 +355,8 @@
     min-height: 2.35rem;
     padding: 0.55rem 0.72rem;
     border-radius: 10px;
-    border: 1px solid rgba(195, 32, 43, 0.22);
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.18), rgba(195, 32, 43, 0.06));
+    border: 1px solid rgba(132, 146, 166, 0.22);
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.18), rgba(132, 146, 166, 0.06));
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.8rem;
@@ -435,3 +435,4 @@
     }
   }
 </style>
+

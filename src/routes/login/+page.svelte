@@ -1,4 +1,4 @@
-﻿<script>
+<script>
 	export let form;
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import Layout from '$lib/components/ui/Layout.svelte';
@@ -37,8 +37,14 @@
 		<p class="error">Your session could not be restored. Please sign in again.</p>
 	{:else if $page.url.searchParams.get('registered') === 'success'}
 		<p class="notice">Account created. You can sign in now.</p>
+	{:else if $page.url.searchParams.get('purchase') === 'pending'}
+		<p class="notice">Account created. Paid activation is pending app-store billing setup.</p>
 	{:else if $page.url.searchParams.get('reset') === 'success'}
 		<p class="notice">Password reset. You can sign in now.</p>
+	{:else if $page.url.searchParams.get('trial') === 'expired'}
+		<p class="error">Trial ended without conversion. The workspace was closed and trial access is now locked.</p>
+	{:else if $page.url.searchParams.get('trial') === 'canceled'}
+		<p class="notice">Workspace canceled and closed. Future signup will require paid activation.</p>
 	{/if}
 
 	<p>
@@ -47,7 +53,7 @@
 
 	<p>
 		No account?
-		<a href="/register">Create one here</a>
+		<a href="/register#onboarding-slideshow">Create one here</a>
 	</p>
 
 	<AppInstallCard compact />
@@ -98,8 +104,8 @@
 	.submit {
 		padding: 0.72rem 0.85rem;
 		border-radius: 12px;
-		border: 1px solid rgba(179, 58, 63, 0.24);
-		background: linear-gradient(180deg, rgba(179, 58, 63, 0.24), rgba(179, 58, 63, 0.15));
+		border: 1px solid rgba(122, 132, 148, 0.24);
+		background: linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.15));
 		color: var(--color-primary-contrast);
 		font-weight: var(--weight-semibold);
 	}
@@ -145,4 +151,5 @@
 		}
 	}
 </style>
+
 

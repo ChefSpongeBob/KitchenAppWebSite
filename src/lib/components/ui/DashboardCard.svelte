@@ -50,7 +50,7 @@
     top: 0;
     height: 3px;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    background: linear-gradient(90deg, rgba(195, 32, 43, 0.95), rgba(195, 32, 43, 0.12));
+    background: linear-gradient(90deg, rgba(132, 146, 166, 0.95), rgba(132, 146, 166, 0.12));
   }
 
   .header h2 {
@@ -88,3 +88,4 @@
     }
   }
 </style>
+

@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
@@ -134,7 +134,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.9), rgba(195, 32, 43, 0.2));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
   }
 
   .panel {
@@ -249,9 +249,9 @@
   button {
     min-height: 2.5rem;
     padding: 0.6rem 0.9rem;
-    border: 1px solid rgba(195, 32, 43, 0.22);
+    border: 1px solid rgba(132, 146, 166, 0.22);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(195, 32, 43, 0.22), rgba(195, 32, 43, 0.08));
+    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.8rem;
@@ -277,4 +277,5 @@
     }
   }
 </style>
+
 
