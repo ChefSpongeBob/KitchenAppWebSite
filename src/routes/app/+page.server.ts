@@ -1,10 +1,12 @@
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
 import { buildFeatureAccess, defaultAppFeatureModes } from '$lib/features/appFeatures';
 import { loadHomepageAnnouncement } from '$lib/server/announcements';
 import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 import { loadTodayShifts } from '$lib/server/schedules';
+import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
 
 type HomeTask = {
   id: string;
@@ -45,7 +47,11 @@ type TodayShift = {
 export const load: PageServerLoad = async ({ locals, url }) => {
   const db = locals.DB;
   const isAdmin = locals.userRole === 'admin';
-  const guided = url.searchParams.get('guided') === '1';
+  const guidedQuery = url.searchParams.get('guided') === '1';
+  const guidedAuto = db && locals.userId
+    ? !(await isFirstOpenTourComplete(db, locals.userId, 'user_home'))
+    : false;
+  const guided = guidedQuery || guidedAuto;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
   const featureAccess = buildFeatureAccess(featureModes, locals.userRole);
   const HOMEPAGE_TEMP_LIMIT = 480;
@@ -233,4 +239,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     tempSeries: { avg },
     refreshedAt: Math.floor(Date.now() / 1000)
   };
+};
+
+export const actions: Actions = {
+  complete_guided_tour: async ({ locals }) => {
+    if (!locals.DB || !locals.userId) {
+      return fail(401, { error: 'Session expired. Sign in again.' });
+    }
+
+    await markFirstOpenTourComplete(locals.DB, locals.userId, 'user_home');
+    return { ok: true };
+  }
 };

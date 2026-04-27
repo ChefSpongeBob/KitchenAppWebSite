@@ -19,13 +19,13 @@
 
   export let data: { documents: DocumentItem[] };
 
-  let newDocSlug = 'about';
   let feedbackMessage = '';
   $: documentBuckets = Array.from(
     data.documents.reduce((acc, doc) => {
-      const bucket = acc.get(doc.slug) ?? [];
+      const key = doc.category?.trim() || 'General';
+      const bucket = acc.get(key) ?? [];
       bucket.push(doc);
-      acc.set(doc.slug, bucket);
+      acc.set(key, bucket);
       return acc;
     }, new Map<string, DocumentItem[]>())
   ).sort((a, b) => a[0].localeCompare(b[0]));
@@ -69,7 +69,6 @@
     {/if}
 
     <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
-      <input name="slug" bind:value={newDocSlug} placeholder="doc-slug" required />
       <input name="title" placeholder="Document title" required />
       <input name="section" placeholder="Section" value="Docs" />
       <input name="category" placeholder="Category" value="General" />
@@ -87,10 +86,10 @@
       {#if documentBuckets.length === 0}
         <p class="muted">No documents found.</p>
       {:else}
-        {#each documentBuckets as [slug, docs]}
+        {#each documentBuckets as [category, docs]}
           <details class="section-block">
             <summary>
-              <h3>{slug}</h3>
+              <h3>{category}</h3>
               <span>{docs.length} docs</span>
             </summary>
             {#each docs as doc}
@@ -99,7 +98,7 @@
                 <form method="POST" action="?/update_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
                   <input type="hidden" name="id" value={doc.id} />
                   <input type="hidden" name="existing_file_url" value={doc.file_url ?? ''} />
-                  <input name="slug" value={doc.slug} required />
+                  <input type="hidden" name="slug" value={doc.slug} />
                   <input name="title" value={doc.title} required />
                   <input name="section" value={doc.section} />
                   <input name="category" value={doc.category} />

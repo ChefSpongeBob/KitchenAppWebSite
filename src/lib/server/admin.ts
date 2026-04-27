@@ -160,6 +160,14 @@ export type EmployeeProfileEditRequest = {
   resolved_by: string | null;
 };
 
+export type AdminCreatorCatalog = {
+  preplists: string[];
+  inventory: string[];
+  orders: string[];
+  recipes: string[];
+  documents: string[];
+};
+
 export function requireAdmin(role: string | undefined | null) {
   if (role !== 'admin') {
     throw redirect(303, '/app');
@@ -168,6 +176,10 @@ export function requireAdmin(role: string | undefined | null) {
 
 export function normalizeSlug(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+function normalizeCategoryName(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
 }
 
 function documentMediaKeyFromUrl(fileUrl: string) {
@@ -261,6 +273,30 @@ async function ensureOptionalColumn(db: D1, tableName: string, columnName: strin
   if (hasColumn) return;
 
   await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+}
+
+async function ensureCreatorCategoryRegistry(db: D1) {
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS creator_category_registry (
+        id TEXT PRIMARY KEY,
+        editor_type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_category_registry_unique
+      ON creator_category_registry(editor_type, category)
+      `
+    )
+    .run();
 }
 
 export async function ensureEmployeeProfilesTable(db: D1) {
@@ -503,6 +539,133 @@ export async function loadAdminRecipes(db: D1) {
     )
     .all();
   return recipes.results ?? [];
+}
+
+function titleFromChecklistSlug(value: string) {
+  return value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export async function loadAdminCreatorCatalog(db: D1): Promise<AdminCreatorCatalog> {
+  const preplists = new Set<string>();
+  const inventory = new Set<string>();
+  const orders = new Set<string>();
+  const recipes = new Set<string>();
+  const documents = new Set<string>();
+
+  try {
+    const listRows = await db
+      .prepare(
+        `
+        SELECT domain, title
+        FROM list_sections
+        WHERE domain IN ('preplists', 'inventory', 'orders')
+        ORDER BY title ASC
+        `
+      )
+      .all<{ domain: 'preplists' | 'inventory' | 'orders'; title: string }>();
+
+    for (const row of listRows.results ?? []) {
+      const title = String(row.title ?? '').trim();
+      if (!title) continue;
+      if (row.domain === 'preplists') preplists.add(title);
+      if (row.domain === 'inventory') inventory.add(title);
+      if (row.domain === 'orders') orders.add(title);
+    }
+  } catch {
+    // Leave empty when list tables are unavailable.
+  }
+
+  try {
+    const checklistRows = await db
+      .prepare(
+        `
+        SELECT slug, title
+        FROM checklist_sections
+        ORDER BY slug ASC, title ASC
+        `
+      )
+      .all<{ slug: string; title: string }>();
+
+    for (const row of checklistRows.results ?? []) {
+      const baseSlug = String(row.slug ?? '').replace(/-(opening|midday|closing)$/i, '');
+      const normalized = titleFromChecklistSlug(baseSlug) || String(row.title ?? '').trim();
+      if (normalized) preplists.add(normalized);
+    }
+  } catch {
+    // Leave empty when checklist tables are unavailable.
+  }
+
+  try {
+    const recipeRows = await db
+      .prepare(
+        `
+        SELECT DISTINCT category
+        FROM recipes
+        WHERE TRIM(COALESCE(category, '')) != ''
+        ORDER BY category ASC
+        `
+      )
+      .all<{ category: string }>();
+    for (const row of recipeRows.results ?? []) {
+      const category = String(row.category ?? '').trim();
+      if (category) recipes.add(category);
+    }
+  } catch {
+    // Leave empty when recipe table is unavailable.
+  }
+
+  try {
+    const documentRows = await db
+      .prepare(
+        `
+        SELECT DISTINCT category
+        FROM documents
+        WHERE TRIM(COALESCE(category, '')) != ''
+        ORDER BY category ASC
+        `
+      )
+      .all<{ category: string }>();
+    for (const row of documentRows.results ?? []) {
+      const category = String(row.category ?? '').trim();
+      if (category) documents.add(category);
+    }
+  } catch {
+    // Leave empty when documents table is unavailable.
+  }
+
+  try {
+    await ensureCreatorCategoryRegistry(db);
+    const registryRows = await db
+      .prepare(
+        `
+        SELECT editor_type, category
+        FROM creator_category_registry
+        ORDER BY category ASC
+        `
+      )
+      .all<{ editor_type: string; category: string }>();
+
+    for (const row of registryRows.results ?? []) {
+      const category = String(row.category ?? '').trim();
+      if (!category) continue;
+      if (row.editor_type === 'recipe') recipes.add(category);
+      if (row.editor_type === 'document') documents.add(category);
+    }
+  } catch {
+    // Leave empty when registry table is unavailable.
+  }
+
+  return {
+    preplists: Array.from(preplists.values()),
+    inventory: Array.from(inventory.values()),
+    orders: Array.from(orders.values()),
+    recipes: Array.from(recipes.values()),
+    documents: Array.from(documents.values())
+  };
 }
 
 export async function loadAdminTodos(db: D1) {
@@ -805,6 +968,352 @@ export async function loadAdminEmployeeSpotlight(db: D1) {
   return loadEmployeeSpotlight(db);
 }
 
+export async function createCreatorCategory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const editorType = String(formData.get('editor_type') ?? '').trim().toLowerCase();
+  const category = normalizeCategoryName(String(formData.get('category') ?? ''));
+
+  if (editorType !== 'recipe' && editorType !== 'document') {
+    return fail(400, { error: 'Invalid category editor type.' });
+  }
+  if (!category) {
+    return fail(400, { error: 'Category name is required.' });
+  }
+
+  await ensureCreatorCategoryRegistry(db);
+  await db
+    .prepare(
+      `
+      INSERT OR IGNORE INTO creator_category_registry (id, editor_type, category, created_at)
+      VALUES (?, ?, ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), editorType, category, Math.floor(Date.now() / 1000))
+    .run();
+
+  return { success: true };
+}
+
+export async function updateCreatorCategory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const editorType = String(formData.get('editor_type') ?? '').trim().toLowerCase();
+  const previousCategory = normalizeCategoryName(String(formData.get('previous_category') ?? ''));
+  const nextCategory = normalizeCategoryName(String(formData.get('next_category') ?? ''));
+
+  if (editorType !== 'recipe' && editorType !== 'document') {
+    return fail(400, { error: 'Invalid category editor type.' });
+  }
+  if (!previousCategory || !nextCategory) {
+    return fail(400, { error: 'Both current and new category names are required.' });
+  }
+  if (previousCategory === nextCategory) return { success: true };
+
+  if (editorType === 'recipe') {
+    await db
+      .prepare(`UPDATE recipes SET category = ? WHERE TRIM(COALESCE(category, '')) = ?`)
+      .bind(nextCategory, previousCategory)
+      .run();
+  } else {
+    await db
+      .prepare(`UPDATE documents SET category = ? WHERE TRIM(COALESCE(category, '')) = ?`)
+      .bind(nextCategory, previousCategory)
+      .run();
+  }
+
+  await ensureCreatorCategoryRegistry(db);
+  await db
+    .prepare(`DELETE FROM creator_category_registry WHERE editor_type = ? AND category = ?`)
+    .bind(editorType, previousCategory)
+    .run();
+  await db
+    .prepare(
+      `
+      INSERT OR IGNORE INTO creator_category_registry (id, editor_type, category, created_at)
+      VALUES (?, ?, ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), editorType, nextCategory, Math.floor(Date.now() / 1000))
+    .run();
+
+  return { success: true };
+}
+
+export async function deleteCreatorCategory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const editorType = String(formData.get('editor_type') ?? '').trim().toLowerCase();
+  const category = normalizeCategoryName(String(formData.get('category') ?? ''));
+  const deleteWithContent = String(formData.get('delete_with_content') ?? '').trim() === '1';
+
+  if (editorType !== 'recipe' && editorType !== 'document') {
+    return fail(400, { error: 'Invalid category editor type.' });
+  }
+  if (!category) {
+    return fail(400, { error: 'Category name is required.' });
+  }
+
+  const inUse =
+    editorType === 'recipe'
+      ? await db
+          .prepare(`SELECT COUNT(*) AS total FROM recipes WHERE TRIM(COALESCE(category, '')) = ?`)
+          .bind(category)
+          .first<{ total: number }>()
+      : await db
+          .prepare(`SELECT COUNT(*) AS total FROM documents WHERE TRIM(COALESCE(category, '')) = ?`)
+          .bind(category)
+          .first<{ total: number }>();
+
+  if ((inUse?.total ?? 0) > 0 && !deleteWithContent) {
+    return fail(400, { error: 'Category still has content. Move or delete content first.' });
+  }
+
+  if (deleteWithContent) {
+    if (editorType === 'recipe') {
+      await db
+        .prepare(`DELETE FROM recipes WHERE TRIM(COALESCE(category, '')) = ?`)
+        .bind(category)
+        .run();
+    } else {
+      await db
+        .prepare(`DELETE FROM documents WHERE TRIM(COALESCE(category, '')) = ?`)
+        .bind(category)
+        .run();
+    }
+  }
+
+  await ensureCreatorCategoryRegistry(db);
+  await db
+    .prepare(`DELETE FROM creator_category_registry WHERE editor_type = ? AND category = ?`)
+    .bind(editorType, category)
+    .run();
+
+  return { success: true };
+}
+
+export async function createListSection(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const domain = String(formData.get('domain') ?? '').trim().toLowerCase();
+  const title = String(formData.get('title') ?? '').trim();
+  const requestedSlug = String(formData.get('slug') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const firstItem = String(formData.get('first_item') ?? '').trim();
+  const firstDetails = String(formData.get('first_details') ?? '').trim();
+  const firstParCountRaw = Number(formData.get('first_par_count') ?? 0);
+  const slug = normalizeSlug(requestedSlug || title);
+
+  if (domain !== 'preplists' && domain !== 'inventory' && domain !== 'orders') {
+    return fail(400, { error: 'Invalid list type.' });
+  }
+  if (!title) return fail(400, { error: 'Section title is required.' });
+  if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
+    return fail(400, { error: 'Section slug can only use letters, numbers, and hyphens.' });
+  }
+  if (firstItem && (!Number.isFinite(firstParCountRaw) || firstParCountRaw < 0)) {
+    return fail(400, { error: 'First item par count must be a valid non-negative number.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM list_sections
+      WHERE domain = ? AND slug = ?
+      LIMIT 1
+      `
+    )
+    .bind(domain, slug)
+    .first<{ id: string }>();
+  if (existing) {
+    return fail(400, { error: `A ${domain} section already exists with slug "${slug}".` });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const sectionId = crypto.randomUUID();
+  await db
+    .prepare(
+      `
+      INSERT INTO list_sections (id, domain, slug, title, description, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      `
+    )
+    .bind(sectionId, domain, slug, title, description || null, now, now)
+    .run();
+
+  if (firstItem) {
+    const maxSort = await db
+      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM list_items WHERE section_id = ?`)
+      .bind(sectionId)
+      .first<{ max_sort: number }>();
+    const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
+    const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
+    if (detailsEnabled) {
+      await db
+        .prepare(
+          `
+          INSERT INTO list_items (
+            id, section_id, content, details, sort_order, is_checked,
+            amount, par_count, created_at, updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+          `
+        )
+        .bind(
+          crypto.randomUUID(),
+          sectionId,
+          firstItem,
+          firstDetails,
+          (maxSort?.max_sort ?? -1) + 1,
+          firstParCountRaw || 0,
+          now,
+          now
+        )
+        .run();
+    } else {
+      await db
+        .prepare(
+          `
+          INSERT INTO list_items (
+            id, section_id, content, sort_order, is_checked,
+            amount, par_count, created_at, updated_at
+          )
+          VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+          `
+        )
+        .bind(
+          crypto.randomUUID(),
+          sectionId,
+          firstItem,
+          (maxSort?.max_sort ?? -1) + 1,
+          firstParCountRaw || 0,
+          now,
+          now
+        )
+        .run();
+    }
+  }
+
+  return { success: true };
+}
+
+export async function updateListSection(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const sectionId = String(formData.get('section_id') ?? '').trim();
+  const title = String(formData.get('title') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+
+  if (!sectionId) return fail(400, { error: 'Missing section id.' });
+  if (!title) return fail(400, { error: 'Section title is required.' });
+
+  await db
+    .prepare(
+      `
+      UPDATE list_sections
+      SET title = ?, description = ?, updated_at = ?
+      WHERE id = ?
+      `
+    )
+    .bind(title, description || null, Math.floor(Date.now() / 1000), sectionId)
+    .run();
+
+  return { success: true };
+}
+
+export async function deleteListSection(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const sectionId = String(formData.get('section_id') ?? '').trim();
+  if (!sectionId) return fail(400, { error: 'Missing section id.' });
+
+  await db.prepare(`DELETE FROM list_items WHERE section_id = ?`).bind(sectionId).run();
+  await db.prepare(`DELETE FROM list_sections WHERE id = ?`).bind(sectionId).run();
+
+  return { success: true };
+}
+
+export async function createChecklistCategory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const formData = await request.formData();
+  const title = String(formData.get('title') ?? '').trim();
+  const requestedSlug = String(formData.get('slug') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const createShiftSections = String(formData.get('create_shift_sections') ?? '1') === '1';
+  const baseSlug = normalizeSlug(requestedSlug || title);
+
+  if (!title) return fail(400, { error: 'Checklist category title is required.' });
+  if (!baseSlug || !/^[a-z0-9-]+$/.test(baseSlug)) {
+    return fail(400, { error: 'Checklist category slug can only use letters, numbers, and hyphens.' });
+  }
+
+  if (!(await tableExists(db, 'checklist_sections')) || !(await tableExists(db, 'checklist_items'))) {
+    return fail(503, { error: 'Checklist tables are not available yet.' });
+  }
+
+  const sections = createShiftSections
+    ? [
+        { slug: `${baseSlug}-opening`, title: `${title} Opening Checklist` },
+        { slug: `${baseSlug}-midday`, title: `${title} Mid Day Checklist` },
+        { slug: `${baseSlug}-closing`, title: `${title} Closing Checklist` }
+      ]
+    : [{ slug: baseSlug, title: `${title} Checklist` }];
+
+  for (const section of sections) {
+    const existing = await db
+      .prepare(
+        `
+        SELECT id
+        FROM checklist_sections
+        WHERE slug = ?
+        LIMIT 1
+        `
+      )
+      .bind(section.slug)
+      .first<{ id: string }>();
+    if (existing) {
+      return fail(400, { error: `Checklist section slug "${section.slug}" already exists.` });
+    }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const section of sections) {
+    await db
+      .prepare(
+        `
+        INSERT INTO checklist_sections (id, slug, title, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        `
+      )
+      .bind(crypto.randomUUID(), section.slug, section.title, description || null, now, now)
+      .run();
+  }
+
+  return { success: true };
+}
+
 export async function addListItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -1003,6 +1512,44 @@ export async function createRecipe(request: Request, locals: App.Locals) {
   return { success: true };
 }
 
+export async function updateRecipe(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+
+  const f = await request.formData();
+  const id = Number(f.get('id'));
+  const title = String(f.get('title') ?? '').trim();
+  const category = normalizeRecipeCategory(String(f.get('category') ?? ''));
+  const ingredients = String(f.get('ingredients') ?? '').trim();
+  const materialsNeeded = String(f.get('materials_needed') ?? f.get('procedure') ?? '').trim();
+  const instruction = String(f.get('instruction') ?? '').trim();
+  const fallbackInstructions = String(f.get('instructions') ?? '').trim();
+
+  const instructions =
+    materialsNeeded && instruction
+      ? `Materials needed:\n${materialsNeeded}\n\nInstruction:\n${instruction}`
+      : fallbackInstructions;
+
+  if (!Number.isFinite(id)) return fail(400, { error: 'Invalid recipe id.' });
+  if (!title || !category || !ingredients || !instructions) {
+    return fail(400, { error: 'All recipe fields are required.' });
+  }
+
+  await db
+    .prepare(
+      `
+      UPDATE recipes
+      SET title = ?, category = ?, ingredients = ?, instructions = ?
+      WHERE id = ?
+      `
+    )
+    .bind(title, category, ingredients, instructions, id)
+    .run();
+
+  return { success: true };
+}
+
 export async function deleteRecipe(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -1192,15 +1739,16 @@ export async function createDocument(request: Request, locals: App.Locals) {
   const formData = await request.formData();
   const rawSlug = String(formData.get('slug') ?? '');
   const customSlug = String(formData.get('slug_custom') ?? '');
-  const slug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
   const title = String(formData.get('title') ?? '').trim();
   const section = String(formData.get('section') ?? 'Docs').trim();
   const category = String(formData.get('category') ?? 'General').trim();
+  const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
+  const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
   const content = String(formData.get('content') ?? '').trim();
   let fileUrl = String(formData.get('file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
-  if (!slug || !title) return fail(400, { error: 'Slug and title are required.' });
+  if (!title) return fail(400, { error: 'Title is required.' });
   if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
 
   const upload = formData.get('file');
@@ -1249,16 +1797,17 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '').trim();
   const rawSlug = String(formData.get('slug') ?? '');
   const customSlug = String(formData.get('slug_custom') ?? '');
-  const slug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
   const title = String(formData.get('title') ?? '').trim();
   const section = String(formData.get('section') ?? 'Docs').trim();
   const category = String(formData.get('category') ?? 'General').trim();
+  const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
+  const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
   const content = String(formData.get('content') ?? '').trim();
   let fileUrl = String(formData.get('file_url') ?? '').trim();
   const existingFileUrl = String(formData.get('existing_file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
-  if (!id || !slug || !title) return fail(400, { error: 'Document id, slug, and title are required.' });
+  if (!id || !title) return fail(400, { error: 'Document id and title are required.' });
   if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
 
   const upload = formData.get('file');

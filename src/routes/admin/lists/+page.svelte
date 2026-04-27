@@ -105,21 +105,21 @@
 
   const documentGroupMap = new Map<string, DocumentItem[]>();
   for (const document of data.documents) {
-    const bucket = documentGroupMap.get(document.slug) ?? [];
+    const groupKey = document.category?.trim() || 'General';
+    const bucket = documentGroupMap.get(groupKey) ?? [];
     bucket.push(document);
-    documentGroupMap.set(document.slug, bucket);
+    documentGroupMap.set(groupKey, bucket);
   }
   const documentGroups = Array.from(documentGroupMap.entries())
-    .map(([slug, docs]) => ({
-      id: slug,
-      title: toTitle(slug),
+    .map(([category, docs]) => ({
+      id: category,
+      title: category,
       docs: docs.sort((a, b) => a.title.localeCompare(b.title))
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 
   let editorType: EditorType = 'preplists';
   let selectedCategory = '';
-  let newDocumentSlug = '';
   let editorOpen = false;
   let feedbackMessage = '';
 
@@ -156,10 +156,6 @@
 
   $: if (!hasCategory(categoryOptions, selectedCategory)) {
     selectedCategory = categoryOptions[0]?.id ?? '';
-  }
-
-  $: if (editorType === 'documents' && selectedCategory && !newDocumentSlug) {
-    newDocumentSlug = selectedCategory;
   }
 
   $: currentListSection =
@@ -271,7 +267,6 @@
       <section class="editor-block">
         <h3>Documents</h3>
         <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
-          <input name="slug" bind:value={newDocumentSlug} placeholder="doc-slug" required />
           <input name="title" placeholder="Document title" required />
           <input name="section" placeholder="Section" value="Docs" />
           <input name="category" placeholder="Category" value="General" />
@@ -297,7 +292,7 @@
               <form method="POST" action="?/update_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
                 <input type="hidden" name="id" value={doc.id} />
                 <input type="hidden" name="existing_file_url" value={doc.file_url ?? ''} />
-                <input name="slug" value={doc.slug} required />
+                <input type="hidden" name="slug" value={doc.slug} />
                 <input name="title" value={doc.title} required />
                 <input name="section" value={doc.section} />
                 <input name="category" value={doc.category} />

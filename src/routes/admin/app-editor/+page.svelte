@@ -134,7 +134,7 @@
 <Layout>
   <PageHeader title="App Editor" />
 
-  <section class="panel editor-tile" id="business-registry">
+  <section class="panel editor-tile" id="sidebar-branding">
     <div class="tile-top">
       <div>
         <h2>Sidebar Branding</h2>
@@ -192,80 +192,82 @@
     {/if}
   </section>
 
-  <section class="panel editor-tile">
-    <div class="tile-top">
-      <div>
-        <h2>Business Registry</h2>
-        <p>Store ownership and entity details for a stronger account identity.</p>
-      </div>
-    </div>
+  <section class="panel editor-tile" id="business-registry">
+    <details class="panel-section">
+      <summary>
+        <div>
+          <h2>Business Registry</h2>
+          <p>Business information and registration details</p>
+        </div>
+      </summary>
 
-    <form method="POST" action="?/save_registry" use:enhance={withRegistrySaveFeedback} class="tile-form">
-      <div class="registry-grid">
-        <label class="branding-field field-span-2">
-          <span>Legal Business Name</span>
-          <input type="text" name="legal_name" bind:value={registry.legalName} maxlength="120" placeholder="Northside Kitchen LLC" />
-        </label>
+      <form method="POST" action="?/save_registry" use:enhance={withRegistrySaveFeedback} class="tile-form">
+        <div class="registry-grid">
+          <label class="branding-field field-span-2">
+            <span>Legal Business Name</span>
+            <input type="text" name="legal_name" bind:value={registry.legalName} maxlength="120" placeholder="Northside Kitchen LLC" />
+          </label>
 
-        <label class="branding-field">
-          <span>Registry ID</span>
-          <input type="text" name="registry_id" bind:value={registry.registryId} maxlength="80" placeholder="State Filing Number" />
-        </label>
+          <label class="branding-field">
+            <span>Registry ID</span>
+            <input type="text" name="registry_id" bind:value={registry.registryId} maxlength="80" placeholder="State Filing Number" />
+          </label>
 
-        <label class="branding-field">
-          <span>Business Contact Email</span>
-          <input type="email" name="contact_email" bind:value={registry.contactEmail} maxlength="120" placeholder="admin@northsidekitchen.com" />
-        </label>
+          <label class="branding-field">
+            <span>Business Contact Email</span>
+            <input type="email" name="contact_email" bind:value={registry.contactEmail} maxlength="120" placeholder="admin@northsidekitchen.com" />
+          </label>
 
-        <label class="branding-field">
-          <span>Business Contact Phone</span>
-          <input type="text" name="contact_phone" bind:value={registry.contactPhone} maxlength="48" placeholder="(555) 555-0143" />
-        </label>
+          <label class="branding-field">
+            <span>Business Contact Phone</span>
+            <input type="text" name="contact_phone" bind:value={registry.contactPhone} maxlength="48" placeholder="(555) 555-0143" />
+          </label>
 
-        <label class="branding-field">
-          <span>Website</span>
-          <input type="text" name="website_url" bind:value={registry.websiteUrl} maxlength="180" placeholder="northsidekitchen.com" />
-        </label>
+          <label class="branding-field">
+            <span>Website</span>
+            <input type="text" name="website_url" bind:value={registry.websiteUrl} maxlength="180" placeholder="northsidekitchen.com" />
+          </label>
 
-        <label class="branding-field field-span-2">
-          <span>Address Line 1</span>
-          <input type="text" name="address_line_1" bind:value={registry.addressLine1} maxlength="120" placeholder="123 Main Street" />
-        </label>
+          <label class="branding-field field-span-2">
+            <span>Address Line 1</span>
+            <input type="text" name="address_line_1" bind:value={registry.addressLine1} maxlength="120" placeholder="123 Main Street" />
+          </label>
 
-        <label class="branding-field field-span-2">
-          <span>Address Line 2</span>
-          <input type="text" name="address_line_2" bind:value={registry.addressLine2} maxlength="120" placeholder="Suite / Unit (optional)" />
-        </label>
+          <label class="branding-field field-span-2">
+            <span>Address Line 2</span>
+            <input type="text" name="address_line_2" bind:value={registry.addressLine2} maxlength="120" placeholder="Suite / Unit (optional)" />
+          </label>
 
-        <label class="branding-field">
-          <span>City</span>
-          <input type="text" name="address_city" bind:value={registry.addressCity} maxlength="80" />
-        </label>
+          <label class="branding-field">
+            <span>City</span>
+            <input type="text" name="address_city" bind:value={registry.addressCity} maxlength="80" />
+          </label>
 
-        <label class="branding-field">
-          <span>State / Region</span>
-          <input type="text" name="address_state" bind:value={registry.addressState} maxlength="80" />
-        </label>
+          <label class="branding-field">
+            <span>State / Region</span>
+            <input type="text" name="address_state" bind:value={registry.addressState} maxlength="80" />
+          </label>
 
-        <label class="branding-field">
-          <span>Postal Code</span>
-          <input type="text" name="address_postal_code" bind:value={registry.addressPostalCode} maxlength="24" />
-        </label>
+          <label class="branding-field">
+            <span>Postal Code</span>
+            <input type="text" name="address_postal_code" bind:value={registry.addressPostalCode} maxlength="24" />
+          </label>
 
-        <label class="branding-field">
-          <span>Country</span>
-          <input type="text" name="address_country" bind:value={registry.addressCountry} maxlength="80" placeholder="United States" />
-        </label>
-      </div>
+          <label class="branding-field">
+            <span>Country</span>
+            <input type="text" name="address_country" bind:value={registry.addressCountry} maxlength="80" placeholder="United States" />
+          </label>
+        </div>
 
-      <div class="form-actions">
-        <button type="submit">Save Business Registry</button>
-      </div>
-    </form>
+        <div class="form-actions">
+          <button type="submit">Save Business Registry</button>
+        </div>
+      </form>
 
-    {#if registryMessage}
-      <p class="save-message">{registryMessage}</p>
-    {/if}
+      {#if registryMessage}
+        <p class="save-message">{registryMessage}</p>
+      {/if}
+    </details>
   </section>
 
   <section class="panel editor-tile">
@@ -396,6 +398,24 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.62rem;
+  }
+
+  .panel-section {
+    display: grid;
+    gap: 0.72rem;
+  }
+
+  .panel-section > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 0.9rem;
+  }
+
+  .panel-section > summary::-webkit-details-marker {
+    display: none;
   }
 
   .field-span-2 {

@@ -18,6 +18,11 @@
 	};
 
 	const serviceModes = ['Front of House', 'Sushi', 'Kitchen', 'Cross-department managers', 'Multi-role staff'];
+	const missionPoints = [
+		'Built around real shift workflows instead of disconnected tools.',
+		'Combines scheduling, execution, and communication in one workspace.',
+		'Designed for fast scanning and low-friction daily usage.'
+	];
 
 	const featureBands: FeatureBand[] = [
 		{
@@ -123,6 +128,18 @@
 				{/each}
 			</p>
 		</div>
+	</section>
+
+	<section class="principles-band" data-reveal>
+		<header class="section-head">
+			<p class="eyebrow">What We Build For</p>
+			<h2>Practical operations over flashy complexity.</h2>
+		</header>
+		<ul>
+			{#each missionPoints as point}
+				<li>{point}</li>
+			{/each}
+		</ul>
 	</section>
 
 	{#each featureBands as band, index}
@@ -309,6 +326,18 @@
 		gap: 0.35rem;
 		font-size: 0.8rem;
 		letter-spacing: 0.03em;
+	}
+
+	.principles-band {
+		margin-top: 0.95rem;
+		display: grid;
+		gap: 0.5rem;
+		border: 1px solid var(--color-border);
+		border-radius: 14px;
+		padding: 0.8rem;
+		background:
+			linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 60%),
+			var(--color-surface);
 	}
 
 	.capability-map {

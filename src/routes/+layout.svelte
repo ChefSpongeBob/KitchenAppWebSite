@@ -50,6 +50,8 @@
     { label: "Home", route: "/app", icon: "home" },
     { label: "Admin Dashboard", route: "/admin", icon: "space_dashboard" },
     { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
+    { label: "Creator Studio", route: "/admin/creator", icon: "build_circle" },
+    { label: "Category Creator", route: "/admin/category-creator", icon: "category" },
     { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" },
     { label: "Staff Manager", route: "/admin/users", icon: "groups" },
     { label: "List Editor", route: "/admin/lists", icon: "list_alt", featureKey: "lists" },
@@ -58,12 +60,9 @@
     { label: "Schedule Settings", route: "/admin/schedule-settings", icon: "settings", featureKey: "scheduling" }
   ];
   const adminEditorLinks: FeatureAwareNavItem[] = [
-    { label: "Lists", route: "/lists", icon: "checklist", featureKey: "lists" },
     { label: "Schedule", route: "/schedule", icon: "event_note", featureKey: "scheduling" },
     { label: "Todo", route: "/todo", icon: "task_alt", featureKey: "todo" },
     { label: "Whiteboard", route: "/whiteboard", icon: "draw", featureKey: "whiteboard" },
-    { label: "Recipes", route: "/recipes", icon: "restaurant", featureKey: "recipes" },
-    { label: "Docs", route: "/docs", icon: "description", featureKey: "documents" },
     { label: "Menus", route: "/menu", icon: "restaurant_menu", featureKey: "menus" }
   ];
 
@@ -157,6 +156,7 @@
     "/",
     "/features",
     "/how-it-works",
+    "/about",
     "/pricing",
     "/register",
     "/login",
@@ -164,12 +164,31 @@
     "/onboarding"
   ]);
   const marketingPrefixRoutes = ["/reset-password/"];
+  const appChromePrefixes = [
+    "/app",
+    "/admin",
+    "/my-schedule",
+    "/schedule",
+    "/lists",
+    "/recipes",
+    "/todo",
+    "/docs",
+    "/whiteboard",
+    "/temper",
+    "/menu",
+    "/settings",
+    "/meeting-notes",
+    "/specials",
+    "/billing"
+  ];
   $: isOnboardingRoute =
     currentPath === "/onboarding" || currentPath.startsWith("/welcome") || currentPath === "/register";
   $: isMarketingRoute =
-    !data.user &&
-    (marketingExactRoutes.has(currentPath) ||
-      marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix)));
+    marketingExactRoutes.has(currentPath) ||
+    marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix));
+  $: isAppChromeRoute = appChromePrefixes.some(
+    (prefix) => currentPath === prefix || currentPath.startsWith(`${prefix}/`)
+  );
   $: showRouteSplash =
     Boolean(data.user) &&
     Boolean($navigating) &&
@@ -199,12 +218,18 @@
   });
 
   onMount(() => {
+    document.documentElement.classList.add("reveal-ready");
     narrowViewportQuery = window.matchMedia("(max-width: 900px)");
     coarsePointerQuery = window.matchMedia("(pointer: coarse)");
 
     const teardownViewportListener = attachMediaListener(narrowViewportQuery, syncMobileView);
     const teardownPointerListener = attachMediaListener(coarsePointerQuery, syncMobileView);
     window.addEventListener("resize", syncMobileView, { passive: true });
+    const revealFailSafeTimer = window.setTimeout(() => {
+      document.querySelectorAll<HTMLElement>("[data-reveal]").forEach((node) => {
+        node.classList.add("is-visible");
+      });
+    }, 900);
 
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
     if (savedTheme === "light" || savedTheme === "dark") {
@@ -223,6 +248,7 @@
 
     return () => {
       revealObserver?.disconnect();
+      window.clearTimeout(revealFailSafeTimer);
       teardownViewportListener();
       teardownPointerListener();
       window.removeEventListener("resize", syncMobileView);
@@ -259,7 +285,7 @@
 </svelte:head>
 
 {#if !isOnboardingRoute}
-  {#if isMarketingRoute}
+  {#if !isAppChromeRoute}
   <header class="marketing-header">
     <div class="marketing-shell">
       <a href="/" class="marketing-brand">
@@ -445,10 +471,11 @@
           <a href="/">Overview</a>
           <a href="/features">Features</a>
           <a href="/how-it-works">How It Works</a>
+          <a href="/about">About</a>
           <a href="/pricing">Pricing</a>
           <a href="/register#onboarding-slideshow">Start Free</a>
         {:else if data.user}
-          <a href="/about">About App</a>
+          <a href="/app/about">About App</a>
           <a href="/docs">Documentation</a>
           <a href="/settings">Support</a>
         {:else}
@@ -622,6 +649,11 @@
   }
 
   :global([data-reveal]) {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  :global(html.reveal-ready [data-reveal]) {
     opacity: 0;
     transform: translateY(18px);
     transition:
@@ -631,7 +663,7 @@
     will-change: opacity, transform;
   }
 
-  :global([data-reveal].is-visible) {
+  :global(html.reveal-ready [data-reveal].is-visible) {
     opacity: 1;
     transform: translateY(0);
   }

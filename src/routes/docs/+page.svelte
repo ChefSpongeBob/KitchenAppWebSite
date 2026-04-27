@@ -17,7 +17,7 @@
   const docs: DocItem[] = data.docs ?? [];
 
   function getDocHref(doc: DocItem) {
-    if (doc.slug === 'about') return '/about';
+    if (doc.slug === 'about') return '/app/about';
     return `/docs/${doc.slug}`;
   }
 </script>

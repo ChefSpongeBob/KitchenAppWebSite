@@ -12,13 +12,12 @@
     nodeNames?: NodeName[];
   };
 
-  let temps: Array<{ sensor_id: number; temperature: number; ts: number }> = [];
   let latest: Record<number, number> = {};
   let lastSeen: Record<number, number> = {};
   let seenSensorIds: number[] = [];
   const TEMP_WARNING_THRESHOLD = 42;
 
-  const URL = '/api/temps';
+  const URL = '/api/temps?limit=300';
 
   const defaultNodeNames: Record<number, string> = {
     1: 'Cook Bus',
@@ -38,6 +37,7 @@
   async function load() {
     try {
       const res = await fetch(URL);
+      if (!res.ok) return;
       const responseData = await res.json();
 
       const latestMap: Record<number, number> = {};
@@ -62,7 +62,6 @@
 
       latest = latestMap;
       lastSeen = seen;
-      temps = responseData;
       seenSensorIds = Array.from(seenIds).sort((a, b) => a - b);
     } catch (err) {
       console.error('Failed to load temps:', err);

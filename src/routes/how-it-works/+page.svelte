@@ -17,7 +17,123 @@
 		items: string[];
 	};
 
+	type TourTarget = {
+		label: string;
+		description: string;
+		focus: { x: number; y: number; w: number; h: number };
+	};
+
+	type TourScene = {
+		title: string;
+		src: string;
+		alt: string;
+		targets: TourTarget[];
+	};
+
 	const quickStats = ['1 workspace', 'Live view', 'Desktop + mobile'];
+
+	const tourScenes: TourScene[] = [
+		{
+			title: 'Homepage workspace',
+			src: '/marketing/app/homepage-main-block.png',
+			alt: 'Homepage with morning brief and shift block',
+			targets: [
+				{
+					label: 'Main shift block',
+					description: 'The core daily brief, shift context, and announcement feed are centered here.',
+					focus: { x: 4, y: 29, w: 84, h: 40 }
+				},
+				{
+					label: 'Announcements area',
+					description: 'Live shift announcements are pinned in this lower section of the brief block.',
+					focus: { x: 6, y: 52, w: 80, h: 15 }
+				},
+				{
+					label: 'Daily Highlights card',
+					description: 'Quick service updates stay visible in this left tile.',
+					focus: { x: 4, y: 73, w: 42, h: 18 }
+				},
+				{
+					label: 'Menus card',
+					description: 'Fast access to menu docs and references sits in this right tile.',
+					focus: { x: 48, y: 73, w: 40, h: 18 }
+				}
+			]
+		},
+		{
+			title: 'Scheduling controls',
+			src: '/marketing/app/scheduling-builder.png',
+			alt: 'Admin schedule builder page',
+			targets: [
+				{
+					label: 'Schedule selector',
+					description: 'Switch between schedule views from one unified control row.',
+					focus: { x: 25, y: 42, w: 50, h: 7 }
+				},
+				{
+					label: 'Week and section filters',
+					description: 'Navigate weeks and section filters before publishing coverage.',
+					focus: { x: 25, y: 65, w: 30, h: 25 }
+				},
+				{
+					label: 'Approvals status',
+					description: 'Pending approvals are tracked so admin can resolve blockers quickly.',
+					focus: { x: 54, y: 64, w: 20, h: 24 }
+				}
+			]
+		},
+		{
+			title: 'Task execution',
+			src: '/marketing/app/todo-assign.png',
+			alt: 'ToDo page with active and completed tabs',
+			targets: [
+				{
+					label: 'Active tasks tab',
+					description: 'Current open tasks are managed in the Active queue.',
+					focus: { x: 24, y: 47, w: 26, h: 8 }
+				},
+				{
+					label: 'Completed tasks tab',
+					description: 'Finished tasks move to Completed for review and accountability.',
+					focus: { x: 50, y: 47, w: 26, h: 8 }
+				}
+			]
+		},
+		{
+			title: 'Recipe access',
+			src: '/marketing/app/recipe-categories.png',
+			alt: 'Recipe categories page with search and category entry',
+			targets: [
+				{
+					label: 'Recipe search',
+					description: 'Find the exact recipe quickly during prep or service.',
+					focus: { x: 4, y: 44, w: 37, h: 8 }
+				},
+				{
+					label: 'Category entry',
+					description: 'Open category groups to drill into documented recipe sets.',
+					focus: { x: 4, y: 54, w: 93, h: 16 }
+				}
+			]
+		},
+		{
+			title: 'Admin dashboard',
+			src: '/marketing/app/admin-dashboard.png',
+			alt: 'Admin dashboard control center summary',
+			targets: [
+				{
+					label: 'Dashboard selector',
+					description: 'Module-level admin navigation starts from this top control row.',
+					focus: { x: 25, y: 45, w: 50, h: 7 }
+				},
+				{
+					label: 'Control center summary',
+					description: 'Staffing, whiteboard, todo, and node state are summarized in one panel.',
+					focus: { x: 24, y: 56, w: 32, h: 43 }
+				}
+			]
+		}
+	];
 
 	const workflowSteps: WorkflowStep[] = [
 		{
@@ -106,6 +222,33 @@
 		'Camera monitoring available as an optional add-on (+$30/mo).',
 		'All tiers include guided rollout for managers and admins.'
 	];
+
+	let activeSceneIndex = 0;
+	let activeTargetIndex = 0;
+
+	$: activeScene = tourScenes[activeSceneIndex];
+	$: activeTargets = activeScene.targets;
+	$: if (activeTargetIndex >= activeTargets.length) {
+		activeTargetIndex = 0;
+	}
+	$: activeTarget = activeTargets[activeTargetIndex];
+
+	function setScene(index: number) {
+		activeSceneIndex = (index + tourScenes.length) % tourScenes.length;
+		activeTargetIndex = 0;
+	}
+
+	function previousScene() {
+		setScene(activeSceneIndex - 1);
+	}
+
+	function nextScene() {
+		setScene(activeSceneIndex + 1);
+	}
+
+	function setTarget(index: number) {
+		activeTargetIndex = index;
+	}
 </script>
 
 <Layout>
@@ -135,6 +278,60 @@
 					<span>| {stat} |</span>
 				{/each}
 			</p>
+		</div>
+	</section>
+
+	<section class="tour-preview-band" data-reveal>
+		<header class="section-head">
+			<p class="eyebrow">Guided Walkthrough</p>
+			<h2>Feature-by-feature preview of real app screens</h2>
+		</header>
+		<div class="tour-preview-shell">
+			<div class="tour-stage" role="region" aria-label={`Guided preview for ${activeScene.title}`}>
+				<img src={activeScene.src} alt={activeScene.alt} loading="lazy" />
+				<div
+					class="focus-ring"
+					aria-hidden="true"
+					style={`left:${activeTarget.focus.x}%;top:${activeTarget.focus.y}%;width:${activeTarget.focus.w}%;height:${activeTarget.focus.h}%;`}
+				></div>
+			</div>
+
+			<div class="scene-nav" aria-label="Tour scene navigation">
+				<button type="button" on:click={previousScene} aria-label="Previous screen">&#8249;</button>
+				<p>{activeScene.title} ({activeSceneIndex + 1}/{tourScenes.length})</p>
+				<button type="button" on:click={nextScene} aria-label="Next screen">&#8250;</button>
+			</div>
+
+			<div class="target-tabs" role="tablist" aria-label="Highlighted features">
+				{#each activeTargets as target, index}
+					<button
+						type="button"
+						role="tab"
+						aria-selected={index === activeTargetIndex}
+						class:active={index === activeTargetIndex}
+						on:click={() => setTarget(index)}
+					>
+						{target.label}
+					</button>
+				{/each}
+			</div>
+
+			<article class="target-copy" aria-live="polite">
+				<h3>{activeTarget.label}</h3>
+				<p>{activeTarget.description}</p>
+			</article>
+
+			<div class="scene-progress" aria-hidden="true">
+				{#each tourScenes as _, index}
+					<button
+						type="button"
+						aria-label={`Go to screen ${index + 1}`}
+						title={`Screen ${index + 1}`}
+						class:active={index === activeSceneIndex}
+						on:click={() => setScene(index)}
+					></button>
+				{/each}
+			</div>
 		</div>
 	</section>
 
@@ -321,6 +518,131 @@
 		display: grid;
 		gap: 0.42rem;
 		align-content: center;
+	}
+
+	.tour-preview-band {
+		margin-top: 1rem;
+		display: grid;
+		gap: 0.55rem;
+	}
+
+	.tour-preview-shell {
+		display: grid;
+		gap: 0.45rem;
+	}
+
+	.tour-stage {
+		position: relative;
+		border-radius: 14px;
+		overflow: hidden;
+		border: 1px solid var(--color-border);
+		background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+	}
+
+	.tour-stage img {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.focus-ring {
+		position: absolute;
+		border-radius: 12px;
+		border: 2px solid rgba(232, 243, 255, 0.94);
+		box-shadow: 0 0 0 9999px rgba(7, 10, 16, 0.53);
+		pointer-events: none;
+		transition: all 220ms ease;
+	}
+
+	.scene-nav {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
+	.scene-nav p {
+		margin: 0;
+		text-align: center;
+		color: var(--color-text);
+		font-size: 0.84rem;
+		letter-spacing: 0.02em;
+	}
+
+	.scene-nav button {
+		width: 2rem;
+		height: 2rem;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+		background: color-mix(in srgb, var(--color-surface) 82%, black 18%);
+		color: var(--color-text);
+		cursor: pointer;
+		font-size: 1.3rem;
+		line-height: 1;
+	}
+
+	.target-tabs {
+		display: grid;
+		gap: 0.35rem;
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	}
+
+	.target-tabs button {
+		text-align: left;
+		border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+		background: color-mix(in srgb, var(--color-surface) 92%, black 8%);
+		color: var(--color-text-muted);
+		border-radius: 10px;
+		padding: 0.48rem 0.56rem;
+		cursor: pointer;
+		font-size: 0.78rem;
+		line-height: 1.35;
+	}
+
+	.target-tabs button.active {
+		border-color: color-mix(in srgb, var(--color-primary) 56%, transparent);
+		color: var(--color-text);
+		background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+	}
+
+	.target-copy {
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		padding: 0.56rem 0.62rem;
+		background:
+			linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 70%),
+			var(--color-surface);
+	}
+
+	.target-copy h3 {
+		margin: 0;
+		font-size: 0.95rem;
+	}
+
+	.target-copy p {
+		margin: 0.22rem 0 0;
+		color: var(--color-text-muted);
+		line-height: 1.45;
+		font-size: 0.82rem;
+	}
+
+	.scene-progress {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 0.3rem;
+	}
+
+	.scene-progress button {
+		height: 0.24rem;
+		border-radius: 999px;
+		border: 0;
+		background: color-mix(in srgb, var(--color-border) 82%, transparent);
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.scene-progress button.active {
+		background: color-mix(in srgb, var(--color-primary) 78%, white 22%);
 	}
 
 	.pipe-line {

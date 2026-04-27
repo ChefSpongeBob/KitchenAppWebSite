@@ -98,9 +98,27 @@
   const guidedSteps: GuidedStep[] = [
     {
       selector: '[data-guide="admin-command-center"]',
-      title: 'Operations Command Center',
-      description: 'Use this area to watch staffing, throughput, and live kitchen signals.',
+      title: 'Ops Command Center',
+      description: 'This is your live overview of staffing, throughput, and service signals.',
       placement: 'bottom'
+    },
+    {
+      selector: '[data-guide="admin-kpis"]',
+      title: 'KPI Snapshot',
+      description: 'Track staffing, task completion, anomalies, and node health at a glance.',
+      placement: 'bottom'
+    },
+    {
+      selector: '[data-guide="admin-charts"]',
+      title: 'Trend Charts',
+      description: 'Use these charts to spot staffing gaps, task bottlenecks, and temp drift quickly.',
+      placement: 'top'
+    },
+    {
+      selector: '[data-guide="admin-feature-matrix"]',
+      title: 'Feature Matrix',
+      description: 'Every module status appears here so you can confirm what is live right now.',
+      placement: 'top'
     },
     {
       selector: '[data-guide="admin-feature-controls"]',
@@ -161,8 +179,17 @@
     });
   }
 
+  async function markGuidedTourComplete() {
+    try {
+      await fetch('?/complete_guided_tour', { method: 'POST' });
+    } catch {
+      // Best-effort save only; do not block UI close.
+    }
+  }
+
   async function handleGuidedTourClose() {
     showGuidedTour = false;
+    await markGuidedTourComplete();
     await clearGuidedQuery();
   }
 
@@ -291,7 +318,7 @@
       </nav>
     </div>
 
-    <div class="kpi-grid">
+    <div class="kpi-grid" data-guide="admin-kpis">
       <article class="kpi-card">
         <p>Staffed Today</p>
         <h3>{data.analytics.kpis.staffing.value}</h3>
@@ -322,7 +349,7 @@
       </article>
     </div>
 
-    <div class="chart-grid">
+    <div class="chart-grid" data-guide="admin-charts">
       <article class="chart-card">
         <div class="chart-head">
           <h3>Staffing Coverage</h3>
@@ -387,7 +414,7 @@
     </div>
 
     <div class="command-bottom">
-      <article class="matrix-card">
+      <article class="matrix-card" data-guide="admin-feature-matrix">
         <div class="chart-head">
           <h3>Feature Matrix</h3>
           <small>Live state by module</small>
@@ -502,6 +529,14 @@
         <span class="panel-kicker">Ownership</span>
         <h2>Business Registry</h2>
         <p>Update legal entity, contact, website, and address records.</p>
+      </a>
+    </article>
+
+    <article class="panel quick-link-tile">
+      <a href="/admin/creator" class="quick-link">
+        <span class="panel-kicker">Builder</span>
+        <h2>Creator Studio</h2>
+        <p>Open the dedicated editor page for lists, recipes, and document uploads.</p>
       </a>
     </article>
 
@@ -1659,6 +1694,7 @@
     .panel-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
   }
 
   @media (max-width: 900px) {

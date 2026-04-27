@@ -2,18 +2,32 @@ type PollingOptions = {
   intervalMs: number;
   runImmediately?: boolean;
   refreshOnVisible?: boolean;
+  pauseWhenOffline?: boolean;
+  onError?: (error: unknown) => void;
 };
 
 export function startVisiblePolling(
   callback: () => void | Promise<void>,
   options: PollingOptions
 ) {
-  const { intervalMs, runImmediately = true, refreshOnVisible = true } = options;
+  const {
+    intervalMs,
+    runImmediately = true,
+    refreshOnVisible = true,
+    pauseWhenOffline = true,
+    onError
+  } = options;
   let intervalId: ReturnType<typeof setInterval> | null = null;
   let inFlight = false;
   let rerunRequested = false;
 
+  const isVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
+  const isOnline = () => typeof navigator === 'undefined' || navigator.onLine;
+
   const runCallback = async () => {
+    if (!isVisible()) return;
+    if (pauseWhenOffline && !isOnline()) return;
+
     if (inFlight) {
       rerunRequested = true;
       return;
@@ -22,6 +36,8 @@ export function startVisiblePolling(
     inFlight = true;
     try {
       await callback();
+    } catch (error) {
+      onError?.(error);
     } finally {
       inFlight = false;
       if (rerunRequested) {
@@ -39,7 +55,7 @@ export function startVisiblePolling(
   };
 
   const start = () => {
-    if (intervalId || typeof document === 'undefined' || document.visibilityState !== 'visible') {
+    if (intervalId || !isVisible()) {
       return;
     }
 
@@ -60,15 +76,26 @@ export function startVisiblePolling(
     stop();
   };
 
+  const handleOnline = () => {
+    void runCallback();
+    start();
+  };
+
   if (runImmediately) {
     void runCallback();
   }
 
   start();
   document.addEventListener('visibilitychange', handleVisibilityChange);
+  if (pauseWhenOffline) {
+    window.addEventListener('online', handleOnline);
+  }
 
   return () => {
     stop();
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    if (pauseWhenOffline) {
+      window.removeEventListener('online', handleOnline);
+    }
   };
 }

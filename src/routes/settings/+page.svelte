@@ -346,7 +346,7 @@
 
         <div class="utility-links">
           <a href="/forgot-password">Change Password</a>
-          <a href="/about">Contact / Support</a>
+          <a href="/app/about">Contact / Support</a>
         </div>
 
         <div class="form-actions">

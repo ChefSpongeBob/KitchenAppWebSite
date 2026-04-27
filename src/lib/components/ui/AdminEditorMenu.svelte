@@ -26,6 +26,8 @@
   const menuItems: AdminRoute[] = [
     { href: '/admin', label: 'Dashboard', matches: exact('/admin') },
     { href: '/admin/app-editor', label: 'App Editor', matches: prefix('/admin/app-editor') },
+    { href: '/admin/creator', label: 'Creator Studio', matches: prefix('/admin/creator') },
+    { href: '/admin/category-creator', label: 'Category Creator', matches: prefix('/admin/category-creator') },
     { href: '/admin/app-editor#business-registry', label: 'Business Registry', matches: prefix('/admin/app-editor') },
     { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
     { href: '/admin/users', label: 'Employees', matches: prefix('/admin/users') },

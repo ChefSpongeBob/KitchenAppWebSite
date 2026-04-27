@@ -40,9 +40,13 @@ async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
   whiteboardVotesSchemaEnsured = true;
 }
 
-export const GET: RequestHandler = async ({ platform }) => {
+export const GET: RequestHandler = async ({ platform, url }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
+  const requestedLimit = Number(url.searchParams.get('limit') ?? 100);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
+    : 100;
 
   const reviewEnabled = await hasReviewTable(db);
   const result = reviewEnabled
@@ -54,9 +58,10 @@ export const GET: RequestHandler = async ({ platform }) => {
           LEFT JOIN whiteboard_review r ON r.post_id = p.id
           WHERE COALESCE(r.status, 'approved') = 'approved'
           ORDER BY p.votes DESC, p.created_at DESC
-          LIMIT 100
+          LIMIT ?
         `
         )
+        .bind(limit)
         .all<WhiteboardRow>()
     : await db
         .prepare(
@@ -64,9 +69,10 @@ export const GET: RequestHandler = async ({ platform }) => {
           SELECT id, content, votes
           FROM whiteboard_posts
           ORDER BY votes DESC, created_at DESC
-          LIMIT 100
+          LIMIT ?
         `
         )
+        .bind(limit)
         .all<WhiteboardRow>();
 
   return json(result.results ?? [], {

@@ -33,6 +33,7 @@ import {
   buildFeatureAccess,
   defaultAppFeatureModes
 } from '$lib/features/appFeatures';
+import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
 
 function isoDate(date = new Date()) {
   const y = date.getFullYear();
@@ -68,7 +69,11 @@ function dayLabel(dayIso: string) {
 export const load: PageServerLoad = async ({ locals, url }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
-  const guided = url.searchParams.get('guided') === '1';
+  const guidedQuery = url.searchParams.get('guided') === '1';
+  const guidedAuto = db && locals.userId
+    ? !(await isFirstOpenTourComplete(db, locals.userId, 'admin_dashboard'))
+    : false;
+  const guided = guidedQuery || guidedAuto;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
   const featureAccess = buildFeatureAccess(featureModes, 'admin');
   const windowDays = parseWindow(url.searchParams.get('window'));
@@ -446,6 +451,13 @@ function blockedFeatureError(featureName: string) {
 }
 
 export const actions: Actions = {
+  complete_guided_tour: async ({ locals }) => {
+    if (!locals.DB || !locals.userId) {
+      return fail(401, { error: 'Session expired. Sign in again.' });
+    }
+    await markFirstOpenTourComplete(locals.DB, locals.userId, 'admin_dashboard');
+    return { ok: true };
+  },
   create_todo: ({ request, locals }) =>
     adminFeatureEnabled(locals, 'todo') ? createTodo(request, locals) : blockedFeatureError('ToDo'),
   delete_todo: ({ request, locals }) =>

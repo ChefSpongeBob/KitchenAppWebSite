@@ -97,30 +97,86 @@
   $: guidedSteps = [
     {
       selector: '[data-guide="home-brief"]',
-      title: 'Shift Brief',
-      description: 'This header gives your daily service context and live homepage status.',
+      title: 'Service Header',
+      description: 'Start every shift here for a quick service-state snapshot.',
       placement: 'bottom' as const
     },
     {
       selector: '[data-guide="shift-card"]',
-      title: 'Live Shift Card',
-      description: 'Announcements and shift details stay visible here while the team is in service.',
+      title: 'Shift + Announcements',
+      description: 'This card keeps schedule details and active announcements visible in one place.',
       placement: 'bottom' as const
     },
+    ...(featureAccess.daily_specials
+      ? [{
+          selector: '[data-guide="specials-focus"]',
+          title: 'Daily Highlights',
+          description: 'Open this tile to review specials and shift highlights before service starts.',
+          placement: 'top' as const
+        }]
+      : []),
+    ...(featureAccess.temps
+      ? [{
+          selector: '[data-guide="temps-overview"]',
+          title: 'Temperature Watch',
+          description: 'Monitor live node readings and jump into detailed temperature logs when needed.',
+          placement: 'top' as const
+        }]
+      : []),
+    ...(featureAccess.whiteboard
+      ? [{
+          selector: '[data-guide="ideas-focus"]',
+          title: 'Top Ideas',
+          description: 'Team-submitted ideas with votes surface here so operations can act quickly.',
+          placement: 'top' as const
+        }]
+      : []),
     ...(featureAccess.todo
       ? [{
           selector: '[data-guide="todo-focus"]',
           title: 'Today Task Queue',
-          description: 'Start here to work assigned tasks first, then open tasks.',
+          description: 'Work assigned tasks first, then pick up open tasks from the same section.',
           placement: 'top' as const
         }]
       : []),
     {
       selector: '[data-guide="quick-links"]',
-      title: 'Quick Access',
-      description: 'Use these cards as your core daily entry points.',
+      title: 'Quick Navigation',
+      description: 'These cards are your fastest path to each core module during a shift.',
       placement: 'top' as const
-    }
+    },
+    ...(featureAccess.lists
+      ? [{
+          selector: '[data-guide="quick-lists"]',
+          title: 'Lists Module',
+          description: 'Checklists, prep lists, and inventory workflows begin here.',
+          placement: 'top' as const
+        }]
+      : []),
+    ...(featureAccess.todo
+      ? [{
+          selector: '[data-guide="quick-todo"]',
+          title: 'ToDo Module',
+          description: 'Open the full ToDo board for assignment, status, and completion tracking.',
+          placement: 'top' as const
+        }]
+      : []),
+    ...(featureAccess.whiteboard
+      ? [{
+          selector: '[data-guide="quick-whiteboard"]',
+          title: 'Whiteboard Module',
+          description: 'Use Whiteboard for suggestions, process ideas, and team feedback.',
+          placement: 'top' as const
+        }]
+      : []),
+    ...(featureAccess.temps
+      ? [{
+          selector: '[data-guide="quick-temps"]',
+          title: 'Temps Module',
+          description: 'Open full sensor history and records for compliance checks and audits.',
+          placement: 'top' as const
+        }]
+      : [])
   ];
 
   function updateTime() {
@@ -189,7 +245,7 @@
   }
 
   async function refreshIdeas() {
-    const response = await fetch('/api/whiteboard');
+    const response = await fetch('/api/whiteboard?limit=3');
     if (!response.ok) return;
     const rows = (await response.json()) as Array<{ content: string; votes: number }>;
     topIdeas = (rows ?? []).slice(0, 3).map((row) => ({ text: row.content, votes: row.votes }));
@@ -209,8 +265,17 @@
     });
   }
 
+  async function markGuidedTourComplete() {
+    try {
+      await fetch('?/complete_guided_tour', { method: 'POST' });
+    } catch {
+      // Best-effort save only; do not block UI close.
+    }
+  }
+
   async function handleGuidedTourClose() {
     showGuidedTour = false;
+    await markGuidedTourComplete();
     await clearGuidedQuery();
   }
 
@@ -326,6 +391,7 @@
     <a
       href="/specials"
       class="tile specials-card"
+      data-guide="specials-focus"
       style="transform: translate({px * 2}px, {py * 2}px);"
       in:fly={{ y: 20, duration: 525 }}
     >
@@ -390,6 +456,7 @@
     {#if featureAccess.temps}
     <div
       class="tile temps"
+      data-guide="temps-overview"
       style="transform: translate({px * 4}px, {py * 4}px);"
       in:fly={{ y: 20, duration: 550 }}
     >
@@ -428,6 +495,7 @@
     {#if featureAccess.whiteboard}
     <div
       class="tile ideas"
+      data-guide="ideas-focus"
       style="transform: translate({px * 8}px, {py * 8}px);"
       in:fly={{ y: 20, duration: 600 }}
     >
@@ -477,22 +545,22 @@
       <small class="section-muted">Tap a card to continue</small>
     </div>
     {#if featureAccess.lists}
-      <a href="/lists" class="card-link">
+      <a href="/lists" class="card-link" data-guide="quick-lists">
         <DashboardCard title="Lists" />
       </a>
     {/if}
     {#if featureAccess.todo}
-      <a href="/todo" class="card-link">
+      <a href="/todo" class="card-link" data-guide="quick-todo">
         <DashboardCard title="ToDos" />
       </a>
     {/if}
     {#if featureAccess.whiteboard}
-      <a href="/whiteboard" class="card-link">
+      <a href="/whiteboard" class="card-link" data-guide="quick-whiteboard">
         <DashboardCard title="Whiteboard" />
       </a>
     {/if}
     {#if featureAccess.temps}
-      <a href="/temper" class="card-link">
+      <a href="/temper" class="card-link" data-guide="quick-temps">
         <DashboardCard title="Temps" />
       </a>
     {/if}

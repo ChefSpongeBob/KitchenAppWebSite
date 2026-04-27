@@ -1,6 +1,11 @@
 type D1 = App.Platform['env']['DB'];
 
 export type WelcomeTourVariant = 'admin' | 'user';
+export type FirstOpenTourVariant = 'user_home' | 'admin_dashboard';
+
+function guidedTourColumnForVariant(variant: FirstOpenTourVariant) {
+  return variant === 'admin_dashboard' ? 'admin_tour_completed_at' : 'user_home_tour_completed_at';
+}
 
 async function ensureOptionalColumn(db: D1, tableName: string, columnName: string, definition: string) {
   try {
@@ -30,6 +35,8 @@ export async function ensureUserPreferencesSchema(db: D1) {
 
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_completed_at', 'INTEGER');
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_variant', 'TEXT');
+  await ensureOptionalColumn(db, 'user_preferences', 'user_home_tour_completed_at', 'INTEGER');
+  await ensureOptionalColumn(db, 'user_preferences', 'admin_tour_completed_at', 'INTEGER');
 }
 
 export async function isWelcomeTourComplete(db: D1, userId: string) {
@@ -74,5 +81,50 @@ export async function markWelcomeTourComplete(db: D1, userId: string, variant: W
       `
     )
     .bind(userId, now, now, variant)
+    .run();
+}
+
+export async function isFirstOpenTourComplete(db: D1, userId: string, variant: FirstOpenTourVariant) {
+  await ensureUserPreferencesSchema(db);
+  const column = guidedTourColumnForVariant(variant);
+  const row = await db
+    .prepare(
+      `
+      SELECT ${column} AS completed_at
+      FROM user_preferences
+      WHERE user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId)
+    .first<{ completed_at: number | null }>();
+
+  // Keep existing teams uninterrupted: if no preference row exists, treat as complete.
+  if (!row) return true;
+  return Boolean(row.completed_at);
+}
+
+export async function markFirstOpenTourComplete(db: D1, userId: string, variant: FirstOpenTourVariant) {
+  await ensureUserPreferencesSchema(db);
+  const now = Math.floor(Date.now() / 1000);
+  const column = guidedTourColumnForVariant(variant);
+
+  await db
+    .prepare(
+      `
+      INSERT INTO user_preferences (
+        user_id,
+        email_updates,
+        updated_at,
+        ${column}
+      )
+      VALUES (?, 1, ?, ?)
+      ON CONFLICT(user_id)
+      DO UPDATE SET
+        updated_at = excluded.updated_at,
+        ${column} = excluded.${column}
+      `
+    )
+    .bind(userId, now, now)
     .run();
 }
