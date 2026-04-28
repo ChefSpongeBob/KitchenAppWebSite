@@ -51,24 +51,15 @@
     { label: "Admin Dashboard", route: "/admin", icon: "space_dashboard" },
     { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
     { label: "Creator Studio", route: "/admin/creator", icon: "build_circle" },
-    { label: "Category Creator", route: "/admin/category-creator", icon: "category" },
     { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" },
     { label: "Staff Manager", route: "/admin/users", icon: "groups" },
-    { label: "List Editor", route: "/admin/lists", icon: "list_alt", featureKey: "lists" },
-    { label: "Recipe Editor", route: "/admin/recipes", icon: "menu_book", featureKey: "recipes" },
-    { label: "Document Editor", route: "/admin/documents", icon: "description", featureKey: "documents" },
+    { label: "Camera & Sensors", route: "/admin/camera", icon: "videocam" },
     { label: "Schedule Settings", route: "/admin/schedule-settings", icon: "settings", featureKey: "scheduling" }
-  ];
-  const adminEditorLinks: FeatureAwareNavItem[] = [
-    { label: "Schedule", route: "/schedule", icon: "event_note", featureKey: "scheduling" },
-    { label: "Todo", route: "/todo", icon: "task_alt", featureKey: "todo" },
-    { label: "Whiteboard", route: "/whiteboard", icon: "draw", featureKey: "whiteboard" },
-    { label: "Menus", route: "/menu", icon: "restaurant_menu", featureKey: "menus" }
   ];
 
   function canSeeFeature(featureKey: AppFeatureKey | undefined) {
     if (!featureKey) return true;
-    const role = data.user?.role ?? null;
+    const role = data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
     const mode = (data.featureModes ?? defaultAppFeatureModes)[featureKey];
     return canRoleAccessFeature(mode, role);
   }
@@ -160,8 +151,7 @@
     "/pricing",
     "/register",
     "/login",
-    "/forgot-password",
-    "/onboarding"
+    "/forgot-password"
   ]);
   const marketingPrefixRoutes = ["/reset-password/"];
   const appChromePrefixes = [
@@ -181,32 +171,36 @@
     "/specials",
     "/billing"
   ];
-  $: isOnboardingRoute =
-    currentPath === "/onboarding" || currentPath.startsWith("/welcome") || currentPath === "/register";
+  $: isOnboardingRoute = currentPath === "/register";
   $: isMarketingRoute =
     marketingExactRoutes.has(currentPath) ||
     marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix));
   $: isAppChromeRoute = appChromePrefixes.some(
-    (prefix) => currentPath === prefix || currentPath.startsWith(`${prefix}/`)
+    (prefix) =>
+      currentPath === prefix ||
+      currentPath.startsWith(`${prefix}/`) ||
+      currentPath.startsWith("/app")
   );
   $: showRouteSplash =
     Boolean(data.user) &&
     Boolean($navigating) &&
     Boolean(navTargetPath) &&
-    !navTargetPath.startsWith("/onboarding") &&
-    !navTargetPath.startsWith("/welcome") &&
     !navTargetPath.startsWith("/register");
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
   $: filteredPrimaryNav = primaryNav.filter((item) => canSeeFeature(item.featureKey));
   $: visibleAdminControlLinks = adminControlLinks.filter((item) => canSeeFeature(item.featureKey));
-  $: visibleAdminEditorLinks = adminEditorLinks.filter((item) => canSeeFeature(item.featureKey));
-  $: navItems =
-    !data.user
-      ? publicNav
-      : data.user.role === "admin"
-        ? [...filteredPrimaryNav, adminNavItem]
-        : filteredPrimaryNav;
-  $: isAdminSidebar = Boolean(data.user && data.user.role === "admin" && currentPath.startsWith("/admin"));
+  $: normalizedUserRole = String(data.user?.role ?? "").trim().toLowerCase();
+  $: normalizedBusinessRole = String(data.user?.businessRole ?? "").trim().toLowerCase();
+  $: isAdminAccount = Boolean(
+    data.user &&
+      (normalizedUserRole === "admin" ||
+        normalizedBusinessRole === "owner" ||
+        normalizedBusinessRole === "admin" ||
+        normalizedBusinessRole === "manager")
+  );
+  $: isAdminRoute = currentPath.startsWith("/admin");
+  $: navItems = isAdminAccount || isAdminRoute ? [...filteredPrimaryNav, adminNavItem] : filteredPrimaryNav;
+  $: isAdminSidebar = isAdminRoute;
   $: if (currentPath) {
     sidebarOpen = false;
     marketingMenuOpen = false;
@@ -384,19 +378,6 @@
       {#if isAdminSidebar}
         <div class="side-section-label">Admin Controls</div>
         {#each visibleAdminControlLinks as item}
-          <a
-            href={item.route}
-            class="side-item tap"
-            class:active={isActive(item.route, currentPath)}
-            on:click={() => (sidebarOpen = false)}
-          >
-            <span class="active-indicator"></span>
-            <span class="material-icons">{item.icon}</span>
-            <span>{item.label}</span>
-          </a>
-        {/each}
-        <div class="side-section-label">Editor Quick Links</div>
-        {#each visibleAdminEditorLinks as item}
           <a
             href={item.route}
             class="side-item tap"

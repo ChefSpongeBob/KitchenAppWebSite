@@ -4,7 +4,6 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
-  import { cameraBetaEnabled } from '$lib/config/features';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type CameraEvent = {
@@ -29,9 +28,15 @@
     updated_at: number;
   };
 
+  type NodeName = {
+    sensor_id: number;
+    name: string;
+  };
+
   export let data: {
     events: CameraEvent[];
     sources: CameraSource[];
+    nodeNames: NodeName[];
   };
 
   let feedPlaying: Record<string, boolean> = {};
@@ -59,7 +64,7 @@
 
     return {
       slot: camera.slot,
-      title: camera.title,
+      title: source?.name ?? camera.title,
       id: source?.id ?? `static-${camera.slot}`,
       camera_id: source?.camera_id ?? camera.slot,
       live_url: source?.live_url ?? null,
@@ -95,31 +100,25 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Camera activity updated.', 'success');
+        pushToast('Camera & sensor settings updated.', 'success');
       } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'That camera action could not be completed.', 'error');
+        pushToast(result.data?.error ?? 'That camera or sensor action could not be completed.', 'error');
       }
       feedbackMessage =
         result.type === 'success'
-          ? 'Camera activity updated.'
+          ? 'Camera & sensor settings updated.'
           : result.type === 'failure'
-            ? result.data?.error ?? 'That camera action could not be completed.'
+            ? result.data?.error ?? 'That camera or sensor action could not be completed.'
             : '';
     };
   };
 </script>
 
 <Layout>
-  <PageHeader
-    title={cameraBetaEnabled ? 'Admin Camera Activity (Beta)' : 'Admin Camera Activity'}
-  />
+  <PageHeader title="Camera & Sensors" />
 
   {#if feedbackMessage}
     <p class="feedback-banner">{feedbackMessage}</p>
-  {/if}
-
-  {#if cameraBetaEnabled}
-    <p class="beta-banner">Camera is in beta. Use for testing and validation before production rollout.</p>
   {/if}
 
   <div class="page-actions">
@@ -127,6 +126,86 @@
       <button type="submit">Clear Clips</button>
     </form>
   </div>
+
+  <section class="device-registry">
+    <div class="registry-panel">
+      <header class="registry-head">
+        <div>
+          <span class="eyebrow">Cameras</span>
+          <h2>Camera Names</h2>
+        </div>
+        <span>{data.sources.length} saved</span>
+      </header>
+
+      <div class="camera-settings">
+        {#each cameraCards as camera}
+          <form method="POST" action="?/save_source" use:enhance={withFeedback} class="settings-row">
+            <input type="hidden" name="id" value={camera.id} />
+            <input type="hidden" name="camera_id" value={camera.camera_id} />
+            <label>
+              <span>{camera.slot}</span>
+              <input name="name" value={camera.title} placeholder="Camera name" required />
+            </label>
+            <label>
+              <span>Live URL</span>
+              <input name="live_url" value={camera.live_url ?? ''} placeholder="https://..." />
+            </label>
+            <label>
+              <span>Preview URL</span>
+              <input name="preview_image_url" value={camera.preview_image_url ?? ''} placeholder="https://..." />
+            </label>
+            <label class="switch-row">
+              <span>Active</span>
+              <select name="is_active" value={String(camera.is_active)}>
+                <option value="1">Live</option>
+                <option value="0">Idle</option>
+              </select>
+            </label>
+            <button type="submit">Save</button>
+          </form>
+        {/each}
+      </div>
+    </div>
+
+    <div class="registry-panel">
+      <header class="registry-head">
+        <div>
+          <span class="eyebrow">Sensors</span>
+          <h2>Node Names</h2>
+        </div>
+        <span>{data.nodeNames.length} saved</span>
+      </header>
+
+      <form method="POST" action="?/add_node_name" use:enhance={withFeedback} class="settings-row node-add-row">
+        <label>
+          <span>Node ID</span>
+          <input name="sensor_id" type="number" min="1" placeholder="1" required />
+        </label>
+        <label>
+          <span>Name</span>
+          <input name="name" placeholder="Walk-in cooler" required />
+        </label>
+        <button type="submit">Save</button>
+      </form>
+
+      <div class="node-list">
+        {#if data.nodeNames.length === 0}
+          <p>No node names yet.</p>
+        {:else}
+          {#each data.nodeNames as node}
+            <div class="node-row">
+              <span>#{node.sensor_id}</span>
+              <strong>{node.name}</strong>
+              <form method="POST" action="?/delete_node_name" use:enhance={withFeedback}>
+                <input type="hidden" name="sensor_id" value={node.sensor_id} />
+                <button type="submit" class="danger compact">Delete</button>
+              </form>
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+  </section>
 
   <section class="feed-grid">
     {#each cameraCards as camera}
@@ -243,6 +322,124 @@
     gap: 0.9rem;
   }
 
+  .device-registry {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+    gap: 0.9rem;
+    margin-bottom: 0.95rem;
+  }
+
+  .registry-panel {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
+      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    padding: 0.95rem;
+  }
+
+  .registry-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: end;
+    margin-bottom: 0.75rem;
+  }
+
+  .registry-head h2 {
+    margin: 0.12rem 0 0;
+    font-size: 1.05rem;
+  }
+
+  .registry-head > span {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .camera-settings,
+  .node-list {
+    display: grid;
+    gap: 0.62rem;
+  }
+
+  .settings-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+    align-items: end;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 0.62rem;
+    min-width: 0;
+  }
+
+  .settings-row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .settings-row label {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .settings-row label span {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .settings-row input,
+  .settings-row select {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.45rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--color-text);
+    padding: 0.52rem 0.62rem;
+  }
+
+  .settings-row button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .switch-row {
+    max-width: 11rem;
+  }
+
+  .node-add-row {
+    grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
+    border-top: 0;
+    padding-top: 0;
+    margin-bottom: 0.72rem;
+  }
+
+  .node-add-row button {
+    grid-column: 1 / -1;
+  }
+
+  .node-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 0.55rem 0.65rem;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .node-row span,
+  .node-list p {
+    color: var(--color-text-muted);
+  }
+
+  .node-row strong {
+    font-size: 0.9rem;
+  }
+
   .feed-card {
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -260,15 +457,6 @@
     border-radius: 12px;
     background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
     color: #bbf7d0;
-  }
-
-  .beta-banner {
-    margin: 0 0 0.9rem;
-    padding: 0.72rem 0.9rem;
-    border: 1px solid rgba(245, 158, 11, 0.32);
-    border-radius: 12px;
-    background: linear-gradient(180deg, rgba(120, 86, 10, 0.34), rgba(120, 86, 10, 0.14));
-    color: #fcd34d;
   }
 
   .feed-card::before {
@@ -478,9 +666,24 @@
     background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
   }
 
+  .compact {
+    min-height: 2rem;
+    padding: 0.35rem 0.58rem;
+  }
+
   @media (max-width: 900px) {
+    .device-registry,
     .feed-grid {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .settings-row,
+    .node-add-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .switch-row {
+      max-width: none;
     }
 
     .clip-card {

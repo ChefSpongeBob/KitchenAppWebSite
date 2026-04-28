@@ -1,7 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { ensureAnnouncementsSchema, loadHomepageAnnouncement } from '$lib/server/announcements';
+import {
+  ensureAnnouncementsSchema,
+  getHomepageAnnouncementId,
+  loadHomepageAnnouncement
+} from '$lib/server/announcements';
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
-import { ensureEmployeeSpotlightSchema, loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
+import {
+  ensureEmployeeSpotlightSchema,
+  getEmployeeSpotlightId,
+  loadEmployeeSpotlight
+} from '$lib/server/employeeSpotlight';
 import { normalizeRecipeCategory } from '$lib/assets/recipeCategories';
 import {
   ensureScheduleSchema,
@@ -13,6 +21,8 @@ import {
   type ScheduleDepartment
 } from '$lib/assets/schedule';
 import { isEmailConfigured, sendApprovalEmail, sendInviteEmail } from '$lib/server/email';
+import { ensureBusinessSchema } from '$lib/server/business';
+import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 type D1 = App.Platform['env']['DB'];
 
@@ -174,6 +184,40 @@ export function requireAdmin(role: string | undefined | null) {
   }
 }
 
+async function userBelongsToBusiness(db: D1, userId: string, businessId: string) {
+  await ensureBusinessSchema(db);
+  const row = await db
+    .prepare(
+      `
+      SELECT user_id
+      FROM business_users
+      WHERE business_id = ?
+        AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ user_id: string }>();
+  return Boolean(row?.user_id);
+}
+
+async function activeBusinessUserCount(db: D1, businessId: string, adminOnly = false) {
+  await ensureBusinessSchema(db);
+  const row = await db
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM business_users
+      WHERE business_id = ?
+        AND COALESCE(is_active, 1) = 1
+        ${adminOnly ? "AND role IN ('owner', 'admin', 'manager')" : ''}
+      `
+    )
+    .bind(businessId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
 export function normalizeSlug(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '-');
 }
@@ -281,6 +325,7 @@ async function ensureCreatorCategoryRegistry(db: D1) {
       `
       CREATE TABLE IF NOT EXISTS creator_category_registry (
         id TEXT PRIMARY KEY,
+        business_id TEXT,
         editor_type TEXT NOT NULL,
         category TEXT NOT NULL,
         created_at INTEGER NOT NULL
@@ -289,11 +334,13 @@ async function ensureCreatorCategoryRegistry(db: D1) {
     )
     .run();
 
+  await ensureOptionalColumn(db, 'creator_category_registry', 'business_id', 'TEXT');
+  await db.prepare(`DROP INDEX IF EXISTS idx_creator_category_registry_unique`).run();
   await db
     .prepare(
       `
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_category_registry_unique
-      ON creator_category_registry(editor_type, category)
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_category_registry_business_unique
+      ON creator_category_registry(business_id, editor_type, category)
       `
     )
     .run();
@@ -412,7 +459,8 @@ function generateInviteCode() {
   return `INV-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
 }
 
-export async function loadAdminSections(db: D1) {
+export async function loadAdminSections(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
   const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
   const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
   const sectionRows = await db
@@ -433,9 +481,11 @@ export async function loadAdminSections(db: D1) {
       FROM list_sections s
       LEFT JOIN list_items i ON i.section_id = s.id
       WHERE s.domain IN ('preplists', 'inventory', 'orders')
+        AND s.business_id = ?
       ORDER BY s.domain ASC, s.slug ASC, i.sort_order ASC, i.created_at ASC
       `
     )
+    .bind(businessId)
     .all<AdminSectionRow>();
 
   const grouped = new Map<string, AdminSectionGroup>();
@@ -471,10 +521,11 @@ export async function loadAdminSections(db: D1) {
   };
 }
 
-export async function loadAdminChecklists(db: D1) {
+export async function loadAdminChecklists(db: D1, businessId: string) {
   if (!(await tableExists(db, 'checklist_sections')) || !(await tableExists(db, 'checklist_items'))) {
     return [];
   }
+  await ensureTenantSchema(db);
 
   const rows = await db
     .prepare(
@@ -489,9 +540,11 @@ export async function loadAdminChecklists(db: D1) {
         i.sort_order
       FROM checklist_sections s
       LEFT JOIN checklist_items i ON i.section_id = s.id
+      WHERE s.business_id = ?
       ORDER BY s.slug ASC, i.sort_order ASC, i.created_at ASC
       `
     )
+    .bind(businessId)
     .all<{
       section_id: string;
       slug: string;
@@ -528,28 +581,24 @@ export async function loadAdminChecklists(db: D1) {
   return Array.from(grouped.values());
 }
 
-export async function loadAdminRecipes(db: D1) {
+export async function loadAdminRecipes(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
   const recipes = await db
     .prepare(
       `
       SELECT id, title, category, ingredients, instructions, created_at
       FROM recipes
+      WHERE business_id = ?
       ORDER BY created_at DESC
       `
     )
+    .bind(businessId)
     .all();
   return recipes.results ?? [];
 }
 
-function titleFromChecklistSlug(value: string) {
-  return value
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-export async function loadAdminCreatorCatalog(db: D1): Promise<AdminCreatorCatalog> {
+export async function loadAdminCreatorCatalog(db: D1, businessId: string): Promise<AdminCreatorCatalog> {
+  await ensureTenantSchema(db);
   const preplists = new Set<string>();
   const inventory = new Set<string>();
   const orders = new Set<string>();
@@ -563,9 +612,11 @@ export async function loadAdminCreatorCatalog(db: D1): Promise<AdminCreatorCatal
         SELECT domain, title
         FROM list_sections
         WHERE domain IN ('preplists', 'inventory', 'orders')
+          AND business_id = ?
         ORDER BY title ASC
         `
       )
+      .bind(businessId)
       .all<{ domain: 'preplists' | 'inventory' | 'orders'; title: string }>();
 
     for (const row of listRows.results ?? []) {
@@ -580,35 +631,17 @@ export async function loadAdminCreatorCatalog(db: D1): Promise<AdminCreatorCatal
   }
 
   try {
-    const checklistRows = await db
-      .prepare(
-        `
-        SELECT slug, title
-        FROM checklist_sections
-        ORDER BY slug ASC, title ASC
-        `
-      )
-      .all<{ slug: string; title: string }>();
-
-    for (const row of checklistRows.results ?? []) {
-      const baseSlug = String(row.slug ?? '').replace(/-(opening|midday|closing)$/i, '');
-      const normalized = titleFromChecklistSlug(baseSlug) || String(row.title ?? '').trim();
-      if (normalized) preplists.add(normalized);
-    }
-  } catch {
-    // Leave empty when checklist tables are unavailable.
-  }
-
-  try {
     const recipeRows = await db
       .prepare(
         `
         SELECT DISTINCT category
         FROM recipes
         WHERE TRIM(COALESCE(category, '')) != ''
+          AND business_id = ?
         ORDER BY category ASC
         `
       )
+      .bind(businessId)
       .all<{ category: string }>();
     for (const row of recipeRows.results ?? []) {
       const category = String(row.category ?? '').trim();
@@ -619,34 +652,17 @@ export async function loadAdminCreatorCatalog(db: D1): Promise<AdminCreatorCatal
   }
 
   try {
-    const documentRows = await db
-      .prepare(
-        `
-        SELECT DISTINCT category
-        FROM documents
-        WHERE TRIM(COALESCE(category, '')) != ''
-        ORDER BY category ASC
-        `
-      )
-      .all<{ category: string }>();
-    for (const row of documentRows.results ?? []) {
-      const category = String(row.category ?? '').trim();
-      if (category) documents.add(category);
-    }
-  } catch {
-    // Leave empty when documents table is unavailable.
-  }
-
-  try {
     await ensureCreatorCategoryRegistry(db);
     const registryRows = await db
       .prepare(
         `
         SELECT editor_type, category
         FROM creator_category_registry
+        WHERE business_id = ?
         ORDER BY category ASC
         `
       )
+      .bind(businessId)
       .all<{ editor_type: string; category: string }>();
 
     for (const row of registryRows.results ?? []) {
@@ -668,7 +684,8 @@ export async function loadAdminCreatorCatalog(db: D1): Promise<AdminCreatorCatal
   };
 }
 
-export async function loadAdminTodos(db: D1) {
+export async function loadAdminTodos(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
   const todos = await db
     .prepare(
       `
@@ -684,16 +701,20 @@ export async function loadAdminTodos(db: D1) {
       FROM todos t
       LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
       LEFT JOIN users u ON u.id = ta.user_id
+      WHERE t.business_id = ?
       ORDER BY t.created_at DESC
       `
     )
+    .bind(businessId)
     .all<AdminTodo>();
   return todos.results ?? [];
 }
 
-export async function loadAdminUsers(db: D1) {
+export async function loadAdminUsers(db: D1, businessId: string) {
+  await ensureBusinessSchema(db);
   await ensureDailySpecialsSchema(db);
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
 
   const hasIsActive = await usersHasIsActiveColumn(db);
   const result = hasIsActive
@@ -704,14 +725,17 @@ export async function loadAdminUsers(db: D1) {
             u.id,
             u.display_name,
             u.email,
-            COALESCE(u.role, 'user') AS role,
-            COALESCE(u.is_active, 1) AS is_active,
+            COALESCE(bu.role, u.role, 'user') AS role,
+            CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active,
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
-          FROM users u
-          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id
+          FROM business_users bu
+          JOIN users u ON u.id = bu.user_id
+          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND COALESCE(dse.business_id, ?) = ?
+          WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
+        .bind(businessId, businessId, businessId)
         .all<AdminUser>()
     : await db
         .prepare(
@@ -720,14 +744,17 @@ export async function loadAdminUsers(db: D1) {
             u.id,
             u.display_name,
             u.email,
-            COALESCE(u.role, 'user') AS role,
-            1 AS is_active,
+            COALESCE(bu.role, u.role, 'user') AS role,
+            COALESCE(bu.is_active, 1) AS is_active,
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
-          FROM users u
-          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id
+          FROM business_users bu
+          JOIN users u ON u.id = bu.user_id
+          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND COALESCE(dse.business_id, ?) = ?
+          WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
+        .bind(businessId, businessId, businessId)
         .all<AdminUser>();
 
   const users = result.results ?? [];
@@ -742,14 +769,15 @@ export async function loadAdminUsers(db: D1) {
   }));
 }
 
-export async function loadAdminInvites(db: D1) {
-  await ensureUserInvitesTable(db);
+export async function loadAdminInvites(db: D1, businessId: string) {
+  await ensureBusinessSchema(db);
 
   const invites = await db
     .prepare(
       `
       SELECT id, email, invite_code, created_at, expires_at, used_at, revoked_at
-      FROM user_invites
+      FROM business_invites
+      WHERE business_id = ?
       ORDER BY
         CASE
           WHEN revoked_at IS NULL AND used_at IS NULL THEN 0
@@ -759,6 +787,7 @@ export async function loadAdminInvites(db: D1) {
         created_at DESC
       `
     )
+    .bind(businessId)
     .all<AdminInvite>();
 
   return invites.results ?? [];
@@ -770,33 +799,42 @@ export function getAdminEmailStatus(env?: EmailEnv | null): AdminEmailStatus {
   };
 }
 
-export async function loadAdminAssignableUsers(db: D1) {
+export async function loadAdminAssignableUsers(db: D1, businessId: string) {
+  await ensureBusinessSchema(db);
   const hasIsActive = await usersHasIsActiveColumn(db);
   const users = hasIsActive
     ? await db
         .prepare(
           `
           SELECT
-            id,
+            u.id,
             display_name,
             email
-          FROM users
-          WHERE COALESCE(is_active, 1) = 1
+          FROM users u
+          JOIN business_users bu ON bu.user_id = u.id
+          WHERE bu.business_id = ?
+            AND COALESCE(bu.is_active, 1) = 1
+            AND COALESCE(u.is_active, 1) = 1
           ORDER BY COALESCE(display_name, email) ASC
           `
         )
+        .bind(businessId)
         .all<AdminAssignableUser>()
     : await db
         .prepare(
           `
           SELECT
-            id,
+            u.id,
             display_name,
             email
-          FROM users
+          FROM users u
+          JOIN business_users bu ON bu.user_id = u.id
+          WHERE bu.business_id = ?
+            AND COALESCE(bu.is_active, 1) = 1
           ORDER BY COALESCE(display_name, email) ASC
           `
         )
+        .bind(businessId)
         .all<AdminAssignableUser>();
 
   return users.results ?? [];
@@ -860,21 +898,25 @@ export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: stri
   return request ?? null;
 }
 
-export async function loadAdminNodeNames(db: D1) {
+export async function loadAdminNodeNames(db: D1, businessId: string) {
   if (!(await tableExists(db, 'sensor_nodes'))) return [];
+  await ensureTenantSchema(db, true);
   const nodeResult = await db
     .prepare(
       `
       SELECT sensor_id, name
       FROM sensor_nodes
+      WHERE business_id = ?
       ORDER BY sensor_id ASC
       `
     )
+    .bind(businessId)
     .all<AdminNodeName>();
   return nodeResult.results ?? [];
 }
 
-export async function loadAdminWhiteboardIdeas(db: D1) {
+export async function loadAdminWhiteboardIdeas(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
   const whiteboardReviewExists = await tableExists(db, 'whiteboard_review');
   const ideas = whiteboardReviewExists
     ? await db
@@ -891,6 +933,7 @@ export async function loadAdminWhiteboardIdeas(db: D1) {
           FROM whiteboard_posts p
           LEFT JOIN whiteboard_review r ON r.post_id = p.id
           LEFT JOIN users u ON u.id = p.created_by
+          WHERE p.business_id = ?
           ORDER BY
             CASE COALESCE(r.status, 'approved')
               WHEN 'pending' THEN 0
@@ -901,6 +944,7 @@ export async function loadAdminWhiteboardIdeas(db: D1) {
             p.created_at DESC
           `
         )
+        .bind(businessId)
         .all<AdminWhiteboardIdea>()
     : await db
         .prepare(
@@ -915,16 +959,19 @@ export async function loadAdminWhiteboardIdeas(db: D1) {
             u.email AS submitted_email
           FROM whiteboard_posts p
           LEFT JOIN users u ON u.id = p.created_by
+          WHERE p.business_id = ?
           ORDER BY p.votes DESC, p.created_at DESC
           `
         )
+        .bind(businessId)
         .all<AdminWhiteboardIdea>();
 
   return ideas.results ?? [];
 }
 
-export async function cleanupExpiredRejectedWhiteboardIdeas(db: D1) {
+export async function cleanupExpiredRejectedWhiteboardIdeas(db: D1, businessId: string) {
   if (!(await tableExists(db, 'whiteboard_review'))) return;
+  await ensureTenantSchema(db);
 
   const cutoff = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 7;
   const rejected = await db
@@ -934,44 +981,51 @@ export async function cleanupExpiredRejectedWhiteboardIdeas(db: D1) {
       FROM whiteboard_review
       WHERE status = 'rejected'
         AND COALESCE(reviewed_at, 0) < ?
+        AND business_id = ?
       `
     )
-    .bind(cutoff)
+    .bind(cutoff, businessId)
     .all<{ post_id: string }>();
 
   for (const row of rejected.results ?? []) {
-    await db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ?`).bind(row.post_id).run();
-    await db.prepare(`DELETE FROM whiteboard_posts WHERE id = ?`).bind(row.post_id).run();
+    await db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ? AND business_id = ?`).bind(row.post_id, businessId).run();
+    await db.prepare(`DELETE FROM whiteboard_posts WHERE id = ? AND business_id = ?`).bind(row.post_id, businessId).run();
   }
 }
 
-export async function loadAdminDocuments(db: D1) {
+export async function loadAdminDocuments(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
   const documents = await db
     .prepare(
       `
       SELECT id, slug, title, section, category, content, file_url, is_active
       FROM documents
+      WHERE business_id = ?
       ORDER BY updated_at DESC, title ASC
       `
     )
+    .bind(businessId)
     .all<AdminDocument>();
   return documents.results ?? [];
 }
 
-export async function loadAdminAnnouncement(db: D1) {
+export async function loadAdminAnnouncement(db: D1, businessId: string) {
   await ensureAnnouncementsSchema(db);
-  return loadHomepageAnnouncement(db);
+  await ensureTenantSchema(db, true);
+  return loadHomepageAnnouncement(db, businessId);
 }
 
-export async function loadAdminEmployeeSpotlight(db: D1) {
+export async function loadAdminEmployeeSpotlight(db: D1, businessId: string) {
   await ensureEmployeeSpotlightSchema(db);
-  return loadEmployeeSpotlight(db);
+  await ensureTenantSchema(db, true);
+  return loadEmployeeSpotlight(db, businessId);
 }
 
 export async function createCreatorCategory(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const editorType = String(formData.get('editor_type') ?? '').trim().toLowerCase();
@@ -988,11 +1042,11 @@ export async function createCreatorCategory(request: Request, locals: App.Locals
   await db
     .prepare(
       `
-      INSERT OR IGNORE INTO creator_category_registry (id, editor_type, category, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
+      VALUES (?, ?, ?, ?, ?)
       `
     )
-    .bind(crypto.randomUUID(), editorType, category, Math.floor(Date.now() / 1000))
+    .bind(crypto.randomUUID(), businessId, editorType, category, Math.floor(Date.now() / 1000))
     .run();
 
   return { success: true };
@@ -1002,6 +1056,7 @@ export async function updateCreatorCategory(request: Request, locals: App.Locals
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const editorType = String(formData.get('editor_type') ?? '').trim().toLowerCase();
@@ -1018,29 +1073,29 @@ export async function updateCreatorCategory(request: Request, locals: App.Locals
 
   if (editorType === 'recipe') {
     await db
-      .prepare(`UPDATE recipes SET category = ? WHERE TRIM(COALESCE(category, '')) = ?`)
-      .bind(nextCategory, previousCategory)
+      .prepare(`UPDATE recipes SET category = ? WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+      .bind(nextCategory, previousCategory, businessId)
       .run();
   } else {
     await db
-      .prepare(`UPDATE documents SET category = ? WHERE TRIM(COALESCE(category, '')) = ?`)
-      .bind(nextCategory, previousCategory)
+      .prepare(`UPDATE documents SET category = ? WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+      .bind(nextCategory, previousCategory, businessId)
       .run();
   }
 
   await ensureCreatorCategoryRegistry(db);
   await db
-    .prepare(`DELETE FROM creator_category_registry WHERE editor_type = ? AND category = ?`)
-    .bind(editorType, previousCategory)
+    .prepare(`DELETE FROM creator_category_registry WHERE business_id = ? AND editor_type = ? AND category = ?`)
+    .bind(businessId, editorType, previousCategory)
     .run();
   await db
     .prepare(
       `
-      INSERT OR IGNORE INTO creator_category_registry (id, editor_type, category, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
+      VALUES (?, ?, ?, ?, ?)
       `
     )
-    .bind(crypto.randomUUID(), editorType, nextCategory, Math.floor(Date.now() / 1000))
+    .bind(crypto.randomUUID(), businessId, editorType, nextCategory, Math.floor(Date.now() / 1000))
     .run();
 
   return { success: true };
@@ -1050,6 +1105,7 @@ export async function deleteCreatorCategory(request: Request, locals: App.Locals
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const editorType = String(formData.get('editor_type') ?? '').trim().toLowerCase();
@@ -1066,12 +1122,12 @@ export async function deleteCreatorCategory(request: Request, locals: App.Locals
   const inUse =
     editorType === 'recipe'
       ? await db
-          .prepare(`SELECT COUNT(*) AS total FROM recipes WHERE TRIM(COALESCE(category, '')) = ?`)
-          .bind(category)
+          .prepare(`SELECT COUNT(*) AS total FROM recipes WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+          .bind(category, businessId)
           .first<{ total: number }>()
       : await db
-          .prepare(`SELECT COUNT(*) AS total FROM documents WHERE TRIM(COALESCE(category, '')) = ?`)
-          .bind(category)
+          .prepare(`SELECT COUNT(*) AS total FROM documents WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+          .bind(category, businessId)
           .first<{ total: number }>();
 
   if ((inUse?.total ?? 0) > 0 && !deleteWithContent) {
@@ -1081,21 +1137,21 @@ export async function deleteCreatorCategory(request: Request, locals: App.Locals
   if (deleteWithContent) {
     if (editorType === 'recipe') {
       await db
-        .prepare(`DELETE FROM recipes WHERE TRIM(COALESCE(category, '')) = ?`)
-        .bind(category)
+        .prepare(`DELETE FROM recipes WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+        .bind(category, businessId)
         .run();
     } else {
       await db
-        .prepare(`DELETE FROM documents WHERE TRIM(COALESCE(category, '')) = ?`)
-        .bind(category)
+        .prepare(`DELETE FROM documents WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+        .bind(category, businessId)
         .run();
     }
   }
 
   await ensureCreatorCategoryRegistry(db);
   await db
-    .prepare(`DELETE FROM creator_category_registry WHERE editor_type = ? AND category = ?`)
-    .bind(editorType, category)
+    .prepare(`DELETE FROM creator_category_registry WHERE business_id = ? AND editor_type = ? AND category = ?`)
+    .bind(businessId, editorType, category)
     .run();
 
   return { success: true };
@@ -1105,6 +1161,8 @@ export async function createListSection(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const domain = String(formData.get('domain') ?? '').trim().toLowerCase();
@@ -1132,11 +1190,11 @@ export async function createListSection(request: Request, locals: App.Locals) {
       `
       SELECT id
       FROM list_sections
-      WHERE domain = ? AND slug = ?
+      WHERE domain = ? AND slug = ? AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(domain, slug)
+    .bind(domain, slug, businessId)
     .first<{ id: string }>();
   if (existing) {
     return fail(400, { error: `A ${domain} section already exists with slug "${slug}".` });
@@ -1147,11 +1205,11 @@ export async function createListSection(request: Request, locals: App.Locals) {
   await db
     .prepare(
       `
-      INSERT INTO list_sections (id, domain, slug, title, description, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO list_sections (id, domain, slug, title, description, created_at, updated_at, business_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(sectionId, domain, slug, title, description || null, now, now)
+    .bind(sectionId, domain, slug, title, description || null, now, now, businessId)
     .run();
 
   if (firstItem) {
@@ -1167,9 +1225,9 @@ export async function createListSection(request: Request, locals: App.Locals) {
           `
           INSERT INTO list_items (
             id, section_id, content, details, sort_order, is_checked,
-            amount, par_count, created_at, updated_at
+            amount, par_count, created_at, updated_at, business_id
           )
-          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
           `
         )
         .bind(
@@ -1180,7 +1238,8 @@ export async function createListSection(request: Request, locals: App.Locals) {
           (maxSort?.max_sort ?? -1) + 1,
           firstParCountRaw || 0,
           now,
-          now
+          now,
+          businessId
         )
         .run();
     } else {
@@ -1189,9 +1248,9 @@ export async function createListSection(request: Request, locals: App.Locals) {
           `
           INSERT INTO list_items (
             id, section_id, content, sort_order, is_checked,
-            amount, par_count, created_at, updated_at
+            amount, par_count, created_at, updated_at, business_id
           )
-          VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+          VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
           `
         )
         .bind(
@@ -1201,7 +1260,8 @@ export async function createListSection(request: Request, locals: App.Locals) {
           (maxSort?.max_sort ?? -1) + 1,
           firstParCountRaw || 0,
           now,
-          now
+          now,
+          businessId
         )
         .run();
     }
@@ -1214,6 +1274,8 @@ export async function updateListSection(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '').trim();
@@ -1228,10 +1290,10 @@ export async function updateListSection(request: Request, locals: App.Locals) {
       `
       UPDATE list_sections
       SET title = ?, description = ?, updated_at = ?
-      WHERE id = ?
+      WHERE id = ? AND business_id = ?
       `
     )
-    .bind(title, description || null, Math.floor(Date.now() / 1000), sectionId)
+    .bind(title, description || null, Math.floor(Date.now() / 1000), sectionId, businessId)
     .run();
 
   return { success: true };
@@ -1241,13 +1303,15 @@ export async function deleteListSection(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '').trim();
   if (!sectionId) return fail(400, { error: 'Missing section id.' });
 
-  await db.prepare(`DELETE FROM list_items WHERE section_id = ?`).bind(sectionId).run();
-  await db.prepare(`DELETE FROM list_sections WHERE id = ?`).bind(sectionId).run();
+  await db.prepare(`DELETE FROM list_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
+  await db.prepare(`DELETE FROM list_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId).run();
 
   return { success: true };
 }
@@ -1256,6 +1320,8 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const title = String(formData.get('title') ?? '').trim();
@@ -1287,11 +1353,11 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
         `
         SELECT id
         FROM checklist_sections
-        WHERE slug = ?
+        WHERE slug = ? AND business_id = ?
         LIMIT 1
         `
       )
-      .bind(section.slug)
+      .bind(section.slug, businessId)
       .first<{ id: string }>();
     if (existing) {
       return fail(400, { error: `Checklist section slug "${section.slug}" already exists.` });
@@ -1303,11 +1369,11 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
     await db
       .prepare(
         `
-        INSERT INTO checklist_sections (id, slug, title, description, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO checklist_sections (id, slug, title, description, created_at, updated_at, business_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), section.slug, section.title, description || null, now, now)
+      .bind(crypto.randomUUID(), section.slug, section.title, description || null, now, now, businessId)
       .run();
   }
 
@@ -1318,6 +1384,8 @@ export async function addListItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '');
@@ -1343,12 +1411,12 @@ export async function addListItem(request: Request, locals: App.Locals) {
         `
         INSERT INTO list_items (
           id, section_id, content, details, sort_order, is_checked,
-          amount, par_count, created_at, updated_at
+          amount, par_count, created_at, updated_at, business_id
         )
-        VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), sectionId, content, details, (maxSort?.max_sort ?? -1) + 1, parCount, now, now)
+      .bind(crypto.randomUUID(), sectionId, content, details, (maxSort?.max_sort ?? -1) + 1, parCount, now, now, businessId)
       .run();
   } else {
     await db
@@ -1356,12 +1424,12 @@ export async function addListItem(request: Request, locals: App.Locals) {
         `
         INSERT INTO list_items (
           id, section_id, content, sort_order, is_checked,
-          amount, par_count, created_at, updated_at
+          amount, par_count, created_at, updated_at, business_id
         )
-        VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+        VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, parCount, now, now)
+      .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, parCount, now, now, businessId)
       .run();
   }
 
@@ -1372,6 +1440,8 @@ export async function updateListItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
@@ -1387,13 +1457,13 @@ export async function updateListItem(request: Request, locals: App.Locals) {
 
   if (detailsEnabled) {
     await db
-      .prepare(`UPDATE list_items SET content = ?, details = ?, par_count = ?, updated_at = ? WHERE id = ?`)
-      .bind(content, details, parCount, Math.floor(Date.now() / 1000), id)
+      .prepare(`UPDATE list_items SET content = ?, details = ?, par_count = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+      .bind(content, details, parCount, Math.floor(Date.now() / 1000), id, businessId)
       .run();
   } else {
     await db
-      .prepare(`UPDATE list_items SET content = ?, par_count = ?, updated_at = ? WHERE id = ?`)
-      .bind(content, parCount, Math.floor(Date.now() / 1000), id)
+      .prepare(`UPDATE list_items SET content = ?, par_count = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+      .bind(content, parCount, Math.floor(Date.now() / 1000), id, businessId)
       .run();
   }
 
@@ -1404,12 +1474,14 @@ export async function deleteListItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing list item id.' });
 
-  await db.prepare(`DELETE FROM list_items WHERE id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM list_items WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
 
@@ -1417,6 +1489,8 @@ export async function addChecklistItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '');
@@ -1435,12 +1509,12 @@ export async function addChecklistItem(request: Request, locals: App.Locals) {
     .prepare(
       `
       INSERT INTO checklist_items (
-        id, section_id, content, sort_order, is_checked, created_at, updated_at
+        id, section_id, content, sort_order, is_checked, created_at, updated_at, business_id
       )
-      VALUES (?, ?, ?, ?, 0, ?, ?)
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?)
       `
     )
-    .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, now, now)
+    .bind(crypto.randomUUID(), sectionId, content, (maxSort?.max_sort ?? -1) + 1, now, now, businessId)
     .run();
 
   return { success: true };
@@ -1450,6 +1524,8 @@ export async function updateChecklistItem(request: Request, locals: App.Locals) 
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
@@ -1459,8 +1535,8 @@ export async function updateChecklistItem(request: Request, locals: App.Locals) 
   }
 
   await db
-    .prepare(`UPDATE checklist_items SET content = ?, updated_at = ? WHERE id = ?`)
-    .bind(content, Math.floor(Date.now() / 1000), id)
+    .prepare(`UPDATE checklist_items SET content = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+    .bind(content, Math.floor(Date.now() / 1000), id, businessId)
     .run();
 
   return { success: true };
@@ -1470,12 +1546,14 @@ export async function deleteChecklistItem(request: Request, locals: App.Locals) 
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing checklist item id.' });
 
-  await db.prepare(`DELETE FROM checklist_items WHERE id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM checklist_items WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
 
@@ -1483,6 +1561,8 @@ export async function createRecipe(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const f = await request.formData();
   const title = String(f.get('title') ?? '').trim();
@@ -1502,11 +1582,11 @@ export async function createRecipe(request: Request, locals: App.Locals) {
   await db
     .prepare(
       `
-      INSERT INTO recipes (title, category, ingredients, instructions, created_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
+      INSERT INTO recipes (title, category, ingredients, instructions, created_at, business_id)
+      VALUES (?, ?, ?, ?, datetime('now'), ?)
       `
     )
-    .bind(title, category, ingredients, instructions)
+    .bind(title, category, ingredients, instructions, businessId)
     .run();
 
   return { success: true };
@@ -1516,6 +1596,8 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const f = await request.formData();
   const id = Number(f.get('id'));
@@ -1541,10 +1623,10 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
       `
       UPDATE recipes
       SET title = ?, category = ?, ingredients = ?, instructions = ?
-      WHERE id = ?
+      WHERE id = ? AND business_id = ?
       `
     )
-    .bind(title, category, ingredients, instructions, id)
+    .bind(title, category, ingredients, instructions, id, businessId)
     .run();
 
   return { success: true };
@@ -1554,12 +1636,14 @@ export async function deleteRecipe(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const f = await request.formData();
   const id = Number(f.get('id'));
   if (!Number.isFinite(id)) return fail(400, { error: 'Invalid recipe id.' });
 
-  await db.prepare(`DELETE FROM recipes WHERE id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM recipes WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
 
@@ -1567,6 +1651,8 @@ export async function createTodo(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const title = String(formData.get('title') ?? '').trim();
@@ -1580,23 +1666,23 @@ export async function createTodo(request: Request, locals: App.Locals) {
     .prepare(
       `
       INSERT INTO todos (
-        id, title, description, created_by, created_at, updated_at
+        id, title, description, created_by, created_at, updated_at, business_id
       )
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(todoId, title, description, locals.userId, now, now)
+    .bind(todoId, title, description, locals.userId, now, now, businessId)
     .run();
 
   if (assignedTo) {
     await db
       .prepare(
         `
-        INSERT OR REPLACE INTO todo_assignments (todo_id, user_id, assigned_at)
-        VALUES (?, ?, ?)
+        INSERT OR REPLACE INTO todo_assignments (todo_id, user_id, assigned_at, business_id)
+        VALUES (?, ?, ?, ?)
         `
       )
-      .bind(todoId, assignedTo, now)
+      .bind(todoId, assignedTo, now, businessId)
       .run();
   }
 
@@ -1607,14 +1693,16 @@ export async function deleteTodo(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing todo id.' });
 
-  await db.prepare(`DELETE FROM todo_assignments WHERE todo_id = ?`).bind(id).run();
-  await db.prepare(`DELETE FROM todo_completion_log WHERE todo_id = ?`).bind(id).run();
-  await db.prepare(`DELETE FROM todos WHERE id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM todo_assignments WHERE todo_id = ? AND business_id = ?`).bind(id, businessId).run();
+  await db.prepare(`DELETE FROM todo_completion_log WHERE todo_id = ? AND business_id = ?`).bind(id, businessId).run();
+  await db.prepare(`DELETE FROM todos WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
 
@@ -1622,9 +1710,11 @@ export async function addNodeName(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
   if (!(await tableExists(db, 'sensor_nodes'))) {
     return fail(400, { error: 'sensor_nodes table missing. Run db:migrate:nodenames first.' });
   }
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const sensorId = Number(formData.get('sensor_id'));
@@ -1636,11 +1726,11 @@ export async function addNodeName(request: Request, locals: App.Locals) {
   await db
     .prepare(
       `
-      INSERT OR REPLACE INTO sensor_nodes (sensor_id, name, updated_at)
-      VALUES (?, ?, ?)
+      INSERT OR REPLACE INTO sensor_nodes (sensor_id, name, updated_at, business_id)
+      VALUES (?, ?, ?, ?)
       `
     )
-    .bind(sensorId, name, Math.floor(Date.now() / 1000))
+    .bind(sensorId, name, Math.floor(Date.now() / 1000), businessId)
     .run();
 
   return { success: true };
@@ -1650,9 +1740,11 @@ export async function deleteNodeName(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
   if (!(await tableExists(db, 'sensor_nodes'))) {
     return fail(400, { error: 'sensor_nodes table missing. Run db:migrate:nodenames first.' });
   }
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const sensorId = Number(formData.get('sensor_id'));
@@ -1660,7 +1752,7 @@ export async function deleteNodeName(request: Request, locals: App.Locals) {
     return fail(400, { error: 'Invalid sensor id.' });
   }
 
-  await db.prepare(`DELETE FROM sensor_nodes WHERE sensor_id = ?`).bind(sensorId).run();
+  await db.prepare(`DELETE FROM sensor_nodes WHERE sensor_id = ? AND business_id = ?`).bind(sensorId, businessId).run();
   return { success: true };
 }
 
@@ -1668,9 +1760,11 @@ export async function approveWhiteboard(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
   if (!(await tableExists(db, 'whiteboard_review'))) {
     return fail(400, { error: 'whiteboard_review table missing. Run db:migrate:whiteboardmod first.' });
   }
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
@@ -1680,11 +1774,11 @@ export async function approveWhiteboard(request: Request, locals: App.Locals) {
   await db
     .prepare(
       `
-      INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at)
-      VALUES (?, 'approved', ?, ?)
+      INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
+      VALUES (?, 'approved', ?, ?, ?)
       `
     )
-    .bind(id, locals.userId ?? null, now)
+    .bind(id, locals.userId ?? null, now, businessId)
     .run();
 
   return { success: true };
@@ -1694,9 +1788,11 @@ export async function rejectWhiteboard(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
   if (!(await tableExists(db, 'whiteboard_review'))) {
     return fail(400, { error: 'whiteboard_review table missing. Run db:migrate:whiteboardmod first.' });
   }
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
@@ -1706,11 +1802,11 @@ export async function rejectWhiteboard(request: Request, locals: App.Locals) {
   await db
     .prepare(
       `
-      INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at)
-      VALUES (?, 'rejected', ?, ?)
+      INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
+      VALUES (?, 'rejected', ?, ?, ?)
       `
     )
-    .bind(id, locals.userId ?? null, now)
+    .bind(id, locals.userId ?? null, now, businessId)
     .run();
 
   return { success: true };
@@ -1720,13 +1816,15 @@ export async function deleteWhiteboard(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing whiteboard id.' });
 
-  await db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ?`).bind(id).run();
-  await db.prepare(`DELETE FROM whiteboard_posts WHERE id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ? AND business_id = ?`).bind(id, businessId).run();
+  await db.prepare(`DELETE FROM whiteboard_posts WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
 
   return { success: true };
 }
@@ -1735,6 +1833,8 @@ export async function createDocument(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const rawSlug = String(formData.get('slug') ?? '');
@@ -1777,12 +1877,12 @@ export async function createDocument(request: Request, locals: App.Locals) {
     .prepare(
       `
       INSERT INTO documents (
-        id, slug, title, section, category, content, file_url, is_active, created_at, updated_at
+        id, slug, title, section, category, content, file_url, is_active, created_at, updated_at, business_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, isActive, now, now)
+    .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, isActive, now, now, businessId)
     .run();
 
   return { success: true };
@@ -1792,6 +1892,8 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '').trim();
@@ -1839,10 +1941,10 @@ export async function updateDocument(request: Request, locals: App.Locals) {
       `
       UPDATE documents
       SET slug = ?, title = ?, section = ?, category = ?, content = ?, file_url = ?, is_active = ?, updated_at = ?
-      WHERE id = ?
+      WHERE id = ? AND business_id = ?
       `
     )
-    .bind(slug, title, section, category, content || null, fileUrl || null, isActive, Math.floor(Date.now() / 1000), id)
+    .bind(slug, title, section, category, content || null, fileUrl || null, isActive, Math.floor(Date.now() / 1000), id, businessId)
     .run();
 
   return { success: true };
@@ -1852,17 +1954,19 @@ export async function deleteDocument(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '').trim();
   if (!id) return fail(400, { error: 'Missing document id.' });
 
   const existing = await db
-    .prepare(`SELECT file_url FROM documents WHERE id = ? LIMIT 1`)
-    .bind(id)
+    .prepare(`SELECT file_url FROM documents WHERE id = ? AND business_id = ? LIMIT 1`)
+    .bind(id, businessId)
     .first<{ file_url: string | null }>();
 
-  await db.prepare(`DELETE FROM documents WHERE id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM documents WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
 
   const mediaKey = documentMediaKeyFromUrl(existing?.file_url ?? '');
   if (mediaKey && locals.MEDIA_BUCKET) {
@@ -1876,8 +1980,10 @@ export async function saveAnnouncement(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   await ensureAnnouncementsSchema(db);
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const content = String(formData.get('content') ?? '').trim();
@@ -1886,15 +1992,16 @@ export async function saveAnnouncement(request: Request, locals: App.Locals) {
   await db
     .prepare(
       `
-      INSERT INTO announcements (id, content, updated_by, updated_at)
-      VALUES ('homepage', ?, ?, ?)
+      INSERT INTO announcements (id, content, updated_by, updated_at, business_id)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         content = excluded.content,
         updated_by = excluded.updated_by,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        business_id = excluded.business_id
       `
     )
-    .bind(content, locals.userId ?? null, now)
+    .bind(getHomepageAnnouncementId(businessId), content, locals.userId ?? null, now, businessId)
     .run();
 
   return { success: true };
@@ -1904,8 +2011,10 @@ export async function saveEmployeeSpotlight(request: Request, locals: App.Locals
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   await ensureEmployeeSpotlightSchema(db);
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const employeeName = String(formData.get('employee_name') ?? '').trim();
@@ -1915,16 +2024,17 @@ export async function saveEmployeeSpotlight(request: Request, locals: App.Locals
   await db
     .prepare(
       `
-      INSERT INTO employee_spotlight (id, employee_name, shoutout, updated_by, updated_at)
-      VALUES ('homepage', ?, ?, ?, ?)
+      INSERT INTO employee_spotlight (id, employee_name, shoutout, updated_by, updated_at, business_id)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         employee_name = excluded.employee_name,
         shoutout = excluded.shoutout,
         updated_by = excluded.updated_by,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        business_id = excluded.business_id
       `
     )
-    .bind(employeeName, shoutout, locals.userId ?? null, now)
+    .bind(getEmployeeSpotlightId(businessId), employeeName, shoutout, locals.userId ?? null, now, businessId)
     .run();
 
   return { success: true };
@@ -1934,10 +2044,14 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
 
   const target = await db
     .prepare(`SELECT id, COALESCE(role, 'user') AS role FROM users WHERE id = ? LIMIT 1`)
@@ -1945,11 +2059,16 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
     .first<{ id: string; role: string }>();
 
   if (!target) return fail(404, { error: 'User not found.' });
-  if (target.role === 'admin') return { success: true };
 
   await db
-    .prepare(`UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?`)
-    .bind(Math.floor(Date.now() / 1000), userId)
+    .prepare(
+      `
+      UPDATE business_users
+      SET role = 'admin', is_active = 1, updated_at = ?
+      WHERE business_id = ? AND user_id = ?
+      `
+    )
+    .bind(Math.floor(Date.now() / 1000), businessId, userId)
     .run();
 
   return { success: true };
@@ -1964,10 +2083,14 @@ export async function approveUser(
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
   if (!(await usersHasIsActiveColumn(db))) {
     return fail(400, { error: 'users.is_active column missing. Run auth migration first.' });
   }
@@ -1975,6 +2098,10 @@ export async function approveUser(
   await db
     .prepare(`UPDATE users SET is_active = 1, updated_at = ? WHERE id = ?`)
     .bind(Math.floor(Date.now() / 1000), userId)
+    .run();
+  await db
+    .prepare(`UPDATE business_users SET is_active = 1, updated_at = ? WHERE business_id = ? AND user_id = ?`)
+    .bind(Math.floor(Date.now() / 1000), businessId, userId)
     .run();
 
   const approvedUser = await db
@@ -2015,11 +2142,39 @@ async function getUserById(db: D1, userId: string) {
     .first<{ id: string; role: string; is_active: number }>();
 }
 
-async function countAdmins(db: D1) {
+async function countAdmins(db: D1, businessId: string) {
+  await ensureBusinessSchema(db);
   const result = await db
-    .prepare(`SELECT COUNT(*) AS count FROM users WHERE COALESCE(role, 'user') = 'admin'`)
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM business_users
+      WHERE business_id = ?
+        AND COALESCE(is_active, 1) = 1
+        AND role IN ('owner', 'admin', 'manager')
+      `
+    )
+    .bind(businessId)
     .first<{ count: number }>();
   return result?.count ?? 0;
+}
+
+async function hasOtherActiveBusinessMembership(db: D1, userId: string, businessId: string) {
+  await ensureBusinessSchema(db);
+  const row = await db
+    .prepare(
+      `
+      SELECT business_id
+      FROM business_users
+      WHERE user_id = ?
+        AND business_id != ?
+        AND COALESCE(is_active, 1) = 1
+      LIMIT 1
+      `
+    )
+    .bind(userId, businessId)
+    .first<{ business_id: string }>();
+  return Boolean(row?.business_id);
 }
 
 async function revokeUserAccess(db: D1, userId: string, now: number) {
@@ -2038,6 +2193,7 @@ export async function denyUser(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
@@ -2051,16 +2207,32 @@ export async function denyUser(request: Request, locals: App.Locals) {
 
   const target = await getUserById(db, userId);
   if (!target) return fail(404, { error: 'User not found.' });
-  if (target.role === 'admin' && (await countAdmins(db)) <= 1) {
-    return fail(400, { error: 'At least one admin must remain active.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
+  if ((await countAdmins(db, businessId)) <= 1) {
+    const businessUser = await db
+      .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+      .bind(businessId, userId)
+      .first<{ role: string }>();
+    if (['owner', 'admin', 'manager'].includes(businessUser?.role ?? '')) {
+      return fail(400, { error: 'At least one admin must remain active.' });
+    }
   }
 
   const now = Math.floor(Date.now() / 1000);
   await db
-    .prepare(`UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?`)
-    .bind(now, userId)
+    .prepare(`UPDATE business_users SET is_active = 0, updated_at = ? WHERE business_id = ? AND user_id = ?`)
+    .bind(now, businessId, userId)
     .run();
-  await revokeUserAccess(db, userId, now);
+
+  if (!(await hasOtherActiveBusinessMembership(db, userId, businessId))) {
+    await db
+      .prepare(`UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?`)
+      .bind(now, userId)
+      .run();
+    await revokeUserAccess(db, userId, now);
+  }
 
   return { success: true };
 }
@@ -2069,6 +2241,7 @@ export async function deleteUser(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
@@ -2079,13 +2252,29 @@ export async function deleteUser(request: Request, locals: App.Locals) {
 
   const target = await getUserById(db, userId);
   if (!target) return fail(404, { error: 'User not found.' });
-  if (target.role === 'admin' && (await countAdmins(db)) <= 1) {
-    return fail(400, { error: 'At least one admin must remain.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
+  if ((await countAdmins(db, businessId)) <= 1) {
+    const businessUser = await db
+      .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+      .bind(businessId, userId)
+      .first<{ role: string }>();
+    if (['owner', 'admin', 'manager'].includes(businessUser?.role ?? '')) {
+      return fail(400, { error: 'At least one admin must remain.' });
+    }
   }
 
   const now = Math.floor(Date.now() / 1000);
-  await revokeUserAccess(db, userId, now);
-  await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+  await db
+    .prepare(`DELETE FROM business_users WHERE business_id = ? AND user_id = ?`)
+    .bind(businessId, userId)
+    .run();
+
+  if (!(await hasOtherActiveBusinessMembership(db, userId, businessId))) {
+    await revokeUserAccess(db, userId, now);
+    await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+  }
 
   return { success: true };
 }
@@ -2094,31 +2283,46 @@ export async function toggleSpecialsAccess(request: Request, locals: App.Locals)
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   await ensureDailySpecialsSchema(db);
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
 
   const existing = await db
-    .prepare(`SELECT user_id FROM daily_specials_editors WHERE user_id = ? LIMIT 1`)
-    .bind(userId)
+    .prepare(
+      `
+      SELECT user_id
+      FROM daily_specials_editors
+      WHERE user_id = ? AND COALESCE(business_id, ?) = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId, businessId, businessId)
     .first<{ user_id: string }>();
 
   if (existing) {
-    await db.prepare(`DELETE FROM daily_specials_editors WHERE user_id = ?`).bind(userId).run();
+    await db
+      .prepare(`DELETE FROM daily_specials_editors WHERE user_id = ? AND COALESCE(business_id, ?) = ?`)
+      .bind(userId, businessId, businessId)
+      .run();
     return { success: true };
   }
 
   await db
     .prepare(
       `
-      INSERT INTO daily_specials_editors (user_id, granted_by, updated_at)
-      VALUES (?, ?, ?)
+      INSERT INTO daily_specials_editors (user_id, granted_by, updated_at, business_id)
+      VALUES (?, ?, ?, ?)
       `
     )
-    .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000))
+    .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000), businessId)
     .run();
 
   return { success: true };
@@ -2128,8 +2332,10 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
@@ -2139,20 +2345,8 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
   if (!isValidScheduleDepartment(department, departments)) {
     return fail(400, { error: 'Invalid schedule department.' });
   }
-
-  const user = await db
-    .prepare(
-      `
-      SELECT id
-      FROM users
-      WHERE id = ?
-      LIMIT 1
-      `
-    )
-    .bind(userId)
-    .first<{ id: string }>();
-  if (!user) {
-    return fail(404, { error: 'That user could not be found.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'That user could not be found in this business.' });
   }
 
   const existing = await db
@@ -2160,11 +2354,11 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
       `
       SELECT department
       FROM user_schedule_departments
-      WHERE user_id = ? AND department = ?
+      WHERE user_id = ? AND department = ? AND COALESCE(business_id, ?) = ?
       LIMIT 1
       `
     )
-    .bind(userId, department)
+    .bind(userId, department, businessId, businessId)
     .first<{ department: string }>();
 
   if (existing) {
@@ -2172,10 +2366,10 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
       .prepare(
         `
         DELETE FROM user_schedule_departments
-        WHERE user_id = ? AND department = ?
+        WHERE user_id = ? AND department = ? AND COALESCE(business_id, ?) = ?
         `
       )
-      .bind(userId, department)
+      .bind(userId, department, businessId, businessId)
       .run();
 
     return { success: true };
@@ -2184,11 +2378,11 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
   await db
     .prepare(
       `
-      INSERT INTO user_schedule_departments (user_id, department, updated_at)
-      VALUES (?, ?, ?)
+      INSERT INTO user_schedule_departments (user_id, department, updated_at, business_id)
+      VALUES (?, ?, ?, ?)
       `
     )
-    .bind(userId, department, Math.floor(Date.now() / 1000))
+    .bind(userId, department, Math.floor(Date.now() / 1000), businessId)
     .run();
 
   return { success: true };
@@ -2198,12 +2392,16 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
   await ensureEmployeeProfilesTable(db);
 
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
 
   const target = await getUserById(db, userId);
   if (!target) return fail(404, { error: 'Employee not found.' });
@@ -2293,8 +2491,9 @@ export async function createUserInvite(
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
-  await ensureUserInvitesTable(db);
+  await ensureBusinessSchema(db);
 
   const formData = await request.formData();
   const email = String(formData.get('email') ?? '').trim();
@@ -2310,13 +2509,13 @@ export async function createUserInvite(
   await db
     .prepare(
       `
-      INSERT INTO user_invites (
-        id, email, email_normalized, invite_code, invited_by, created_at, expires_at, revoked_at
+      INSERT INTO business_invites (
+        id, business_id, email, email_normalized, invite_code, role, invited_by, created_at, expires_at, revoked_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+      VALUES (?, ?, ?, ?, ?, 'staff', ?, ?, ?, NULL)
       `
     )
-    .bind(crypto.randomUUID(), email, emailNormalized, inviteCode, locals.userId ?? null, now, expiresAt)
+    .bind(crypto.randomUUID(), businessId, email, emailNormalized, inviteCode, locals.userId ?? null, now, expiresAt)
     .run();
 
   const emailResult = await sendInviteEmail({
@@ -2339,16 +2538,17 @@ export async function revokeUserInvite(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
 
-  await ensureUserInvitesTable(db);
+  await ensureBusinessSchema(db);
 
   const formData = await request.formData();
   const inviteId = String(formData.get('invite_id') ?? '').trim();
   if (!inviteId) return fail(400, { error: 'Missing invite id.' });
 
   await db
-    .prepare(`UPDATE user_invites SET revoked_at = ? WHERE id = ?`)
-    .bind(Math.floor(Date.now() / 1000), inviteId)
+    .prepare(`UPDATE business_invites SET revoked_at = ? WHERE id = ? AND business_id = ?`)
+    .bind(Math.floor(Date.now() / 1000), inviteId, businessId)
     .run();
 
   return { success: true };

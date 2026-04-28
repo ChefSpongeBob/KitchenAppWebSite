@@ -64,11 +64,14 @@
     recipes: RecipeRow[];
     documents: DocumentRow[];
     creatorCatalog: CreatorCatalog;
+    initialEditorType: EditorType;
+    initialListDomain: ListDomain;
   };
 
-  let editorType: EditorType = 'list';
-  let listDomain: ListDomain = 'preplists';
+  let editorType: EditorType = data.initialEditorType;
+  let listDomain: ListDomain = data.initialListDomain;
   let feedbackMessage = '';
+  let lastAppliedRouteSelection = '';
 
   function normalizeKey(value: string) {
     return value.trim().toLowerCase();
@@ -96,6 +99,12 @@
     ...data.sections.orders
   ] satisfies ListSection[];
   $: filteredListSections = listSections.filter((section) => section.domain === listDomain);
+  $: routeSelectionToken = `${data.initialEditorType}:${data.initialListDomain}`;
+  $: if (routeSelectionToken !== lastAppliedRouteSelection) {
+    editorType = data.initialEditorType;
+    listDomain = data.initialListDomain;
+    lastAppliedRouteSelection = routeSelectionToken;
+  }
   $: if (browser && editorType === 'category') {
     goto('/admin/category-creator');
   }

@@ -1,4 +1,5 @@
 import { fail } from '@sveltejs/kit';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type ItemRow = {
   id: string;
@@ -14,6 +15,7 @@ type DB = App.Platform['env']['DB'];
 type PreplistLocals = {
   DB?: DB;
   userRole?: string | null;
+  businessId?: string | null;
 };
 
 type Domain = 'preplists' | 'inventory' | 'orders';
@@ -42,23 +44,24 @@ function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: strin
   return { ok: true as const, value };
 }
 
-async function getSection(db: DB, domain: Domain, sectionSlug: string) {
+async function getSection(db: DB, domain: Domain, sectionSlug: string, businessId: string) {
   return db
-    .prepare(`SELECT id FROM list_sections WHERE domain = ? AND slug = ? LIMIT 1`)
-    .bind(domain, sectionSlug)
+    .prepare(`SELECT id FROM list_sections WHERE domain = ? AND slug = ? AND business_id = ? LIMIT 1`)
+    .bind(domain, sectionSlug, businessId)
     .first<{ id: string }>();
 }
 
 async function seedDefaultsIfMissing(
   db: DB,
   sectionId: string,
-  defaults: DefaultItem[] | undefined
+  defaults: DefaultItem[] | undefined,
+  businessId: string
 ) {
   if (!defaults?.length) return;
 
   const existing = await db
-    .prepare(`SELECT COUNT(*) AS count FROM list_items WHERE section_id = ?`)
-    .bind(sectionId)
+    .prepare(`SELECT COUNT(*) AS count FROM list_items WHERE section_id = ? AND business_id = ?`)
+    .bind(sectionId, businessId)
     .first<{ count: number }>();
 
   if ((existing?.count ?? 0) > 0) return;
@@ -70,12 +73,12 @@ async function seedDefaultsIfMissing(
         `
         INSERT INTO list_items (
           id, section_id, content, sort_order, is_checked,
-          amount, par_count, created_at, updated_at
+          amount, par_count, created_at, updated_at, business_id
         )
-        VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+        VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), sectionId, item.content, index, item.par_count ?? 0, now, now)
+      .bind(crypto.randomUUID(), sectionId, item.content, index, item.par_count ?? 0, now, now, businessId)
       .run();
   }
 }
@@ -118,8 +121,10 @@ export function createListPage(
         valueType: options.valueType ?? 'number'
       };
     }
+    await ensureTenantSchema(db);
+    const businessId = locals.businessId ?? '';
 
-    const section = await getSection(db, domain, sectionSlug);
+    const section = await getSection(db, domain, sectionSlug, businessId);
 
     if (!section) {
       return {
@@ -135,18 +140,18 @@ export function createListPage(
       };
     }
 
-    await seedDefaultsIfMissing(db, section.id, options.defaults);
+    await seedDefaultsIfMissing(db, section.id, options.defaults, businessId);
 
     const items = await db
       .prepare(
         `
         SELECT id, content, ${detailsEnabled ? 'details' : "'' AS details"}, amount, ${amountTextEnabled ? 'amount_text' : "'' AS amount_text"}, par_count, is_checked
         FROM list_items
-        WHERE section_id = ?
+        WHERE section_id = ? AND business_id = ?
         ORDER BY sort_order ASC, created_at ASC
       `
       )
-      .bind(section.id)
+      .bind(section.id, businessId)
       .all<ItemRow>();
 
     return {
@@ -173,14 +178,16 @@ export function createListPage(
     submit_prep_counts: async ({ request, locals }: { request: Request; locals: PreplistLocals }) => {
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
+      await ensureTenantSchema(db);
+      const businessId = locals.businessId ?? '';
 
-      const section = await getSection(db, domain, sectionSlug);
+      const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
 
       const formData = await request.formData();
       const items = await db
-        .prepare(`SELECT id FROM list_items WHERE section_id = ?`)
-        .bind(section.id)
+        .prepare(`SELECT id FROM list_items WHERE section_id = ? AND business_id = ?`)
+        .bind(section.id, businessId)
         .all<{ id: string }>();
 
       const now = Math.floor(Date.now() / 1000);
@@ -193,16 +200,16 @@ export function createListPage(
         if (useTextValues && amountTextEnabled) {
           const value = String(raw).trim();
           await db
-            .prepare(`UPDATE list_items SET amount_text = ?, updated_at = ? WHERE id = ?`)
-            .bind(value, now, item.id)
+            .prepare(`UPDATE list_items SET amount_text = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+            .bind(value, now, item.id, businessId)
             .run();
         } else {
           const parsed = parseNonNegativeNumber(raw, options.valueLabel);
           if (!parsed.ok) return fail(400, { error: parsed.error });
 
           await db
-            .prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ?`)
-            .bind(parsed.value, now, item.id)
+            .prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+            .bind(parsed.value, now, item.id, businessId)
             .run();
         }
         updatedCount += 1;
@@ -214,8 +221,10 @@ export function createListPage(
     new_prep_list: async ({ locals }: { locals: PreplistLocals }) => {
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
+      await ensureTenantSchema(db);
+      const businessId = locals.businessId ?? '';
 
-      const section = await getSection(db, domain, sectionSlug);
+      const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
 
       const now = Math.floor(Date.now() / 1000);
@@ -225,14 +234,14 @@ export function createListPage(
       if (useTextValues && amountTextEnabled) {
         await db
           .prepare(
-            `UPDATE list_items SET amount = 0, amount_text = '', is_checked = 0, updated_at = ? WHERE section_id = ?`
+            `UPDATE list_items SET amount = 0, amount_text = '', is_checked = 0, updated_at = ? WHERE section_id = ? AND business_id = ?`
           )
-          .bind(now, section.id)
+          .bind(now, section.id, businessId)
           .run();
       } else {
         await db
-          .prepare(`UPDATE list_items SET amount = 0, is_checked = 0, updated_at = ? WHERE section_id = ?`)
-          .bind(now, section.id)
+          .prepare(`UPDATE list_items SET amount = 0, is_checked = 0, updated_at = ? WHERE section_id = ? AND business_id = ?`)
+          .bind(now, section.id, businessId)
           .run();
       }
 
@@ -241,8 +250,10 @@ export function createListPage(
     toggle_checked: async ({ request, locals }: { request: Request; locals: PreplistLocals }) => {
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
+      await ensureTenantSchema(db);
+      const businessId = locals.businessId ?? '';
 
-      const section = await getSection(db, domain, sectionSlug);
+      const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
 
       const formData = await request.formData();
@@ -258,10 +269,10 @@ export function createListPage(
           `
           UPDATE list_items
           SET is_checked = ?, updated_at = ?
-          WHERE id = ? AND section_id = ?
+          WHERE id = ? AND section_id = ? AND business_id = ?
         `
         )
-        .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id)
+        .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
         .run();
 
       return { success: true };
@@ -270,14 +281,16 @@ export function createListPage(
       if (locals.userRole !== 'admin') return fail(403, { error: 'Admin only.' });
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
+      await ensureTenantSchema(db);
+      const businessId = locals.businessId ?? '';
 
-      const section = await getSection(db, domain, sectionSlug);
+      const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
 
       const formData = await request.formData();
       const items = await db
-        .prepare(`SELECT id FROM list_items WHERE section_id = ?`)
-        .bind(section.id)
+        .prepare(`SELECT id FROM list_items WHERE section_id = ? AND business_id = ?`)
+        .bind(section.id, businessId)
         .all<{ id: string }>();
 
       const now = Math.floor(Date.now() / 1000);
@@ -288,8 +301,8 @@ export function createListPage(
         if (!parsed.ok) return fail(400, { error: parsed.error });
 
         await db
-          .prepare(`UPDATE list_items SET par_count = ?, updated_at = ? WHERE id = ?`)
-          .bind(parsed.value, now, item.id)
+          .prepare(`UPDATE list_items SET par_count = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+          .bind(parsed.value, now, item.id, businessId)
           .run();
       }
 

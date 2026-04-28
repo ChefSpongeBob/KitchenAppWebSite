@@ -1,5 +1,6 @@
 <script>
 	export let form;
+	export let data;
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
@@ -14,7 +15,16 @@
 		<form method="POST" class="auth-card">
 			<div class="field">
 				<label for="login-email">Email</label>
-				<input id="login-email" name="email" type="email" required autocapitalize="none" autocorrect="off" spellcheck="false" />
+				<input
+					id="login-email"
+					name="email"
+					type="email"
+					required
+					value={form?.email ?? data?.activeSession?.email ?? ''}
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+				/>
 			</div>
 
 			<div class="field">
@@ -29,6 +39,18 @@
 
 			<button type="submit" class="submit">Login</button>
 		</form>
+
+		{#if data?.activeSession?.email}
+			<div class="session-inline">
+				<span>Signed in as {data.activeSession.email}</span>
+				<div class="session-inline-actions">
+					<a href="/app" class="mini-action">Continue</a>
+					<form method="POST" action="?/not_you">
+						<button type="submit" class="mini-action ghost">Not you?</button>
+					</form>
+				</div>
+			</div>
+		{/if}
 	</section>
 
 	{#if form?.error}
@@ -45,6 +67,8 @@
 		<p class="error">Trial ended without conversion. The workspace was closed and trial access is now locked.</p>
 	{:else if $page.url.searchParams.get('trial') === 'canceled'}
 		<p class="notice">Workspace canceled and closed. Future signup will require paid activation.</p>
+	{:else if $page.url.searchParams.get('switch') === '1'}
+		<p class="notice">Session cleared. You can sign in with a different account.</p>
 	{/if}
 
 	<p>
@@ -69,6 +93,29 @@
 	.auth-shell {
 		display: grid;
 		gap: 1rem;
+	}
+
+	.session-inline {
+		width: min(100%, 34rem);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		font-size: 0.86rem;
+		color: var(--color-text-muted);
+		padding: 0.1rem 0.1rem 0;
+	}
+
+	.session-inline-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
+	.session-inline-actions form {
+		width: auto;
+		display: inline;
 	}
 
 	.auth-card {
@@ -108,6 +155,23 @@
 		background: linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.15));
 		color: var(--color-primary-contrast);
 		font-weight: var(--weight-semibold);
+	}
+
+	.mini-action {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.38rem 0.58rem;
+		border-radius: 9px;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface-alt);
+		color: var(--color-text);
+		font-size: 0.79rem;
+		text-decoration: none;
+	}
+
+	.mini-action.ghost {
+		cursor: pointer;
 	}
 
 	p {

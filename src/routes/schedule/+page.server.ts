@@ -29,8 +29,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }
 
   const [schedule, approvalsByUser, departments] = await Promise.all([
-    loadScheduleWeek(db, weekStart, { publishedOnly: true }),
-    loadScheduleDepartmentApprovalsByUser(db, [locals.userId]),
+    loadScheduleWeek(db, weekStart, { publishedOnly: true, businessId: locals.businessId }),
+    loadScheduleDepartmentApprovalsByUser(db, [locals.userId], locals.businessId),
     loadScheduleDepartments(db)
   ]);
 

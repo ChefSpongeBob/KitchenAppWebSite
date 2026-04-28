@@ -6,8 +6,19 @@ import {
   ensureCameraSchema
 } from '$lib/server/camera';
 import { allowIoTIngest } from '$lib/server/iotIngest';
+import { ensureTenantSchema, singleActiveBusinessId } from '$lib/server/tenant';
 
-export async function POST({ request, platform }) {
+async function resolveBusinessId(db: App.Platform['env']['DB'], request: Request, url: URL) {
+  return (
+    request.headers.get('x-business-id')?.trim() ||
+    url.searchParams.get('business_id')?.trim() ||
+    url.searchParams.get('businessId')?.trim() ||
+    (await singleActiveBusinessId(db)) ||
+    ''
+  );
+}
+
+export async function POST({ request, platform, url }) {
   if (!cameraBetaEnabled) {
     return json({ error: 'Not found.' }, { status: 404 });
   }
@@ -20,7 +31,12 @@ export async function POST({ request, platform }) {
   }
 
   await ensureCameraSchema(db);
+  await ensureTenantSchema(db, true);
   await cleanupExpiredCameraMedia(db, platform?.env?.CAMERA_MEDIA);
+  const businessId = await resolveBusinessId(db, request, url);
+  if (!businessId) {
+    return json({ error: 'Business context is required for camera activity.' }, { status: 400 });
+  }
 
   const contentType = request.headers.get('content-type') ?? '';
   let payload: Record<string, unknown> = {};
@@ -44,7 +60,7 @@ export async function POST({ request, platform }) {
   const guardCameraKey = cameraId ?? cameraName ?? 'camera';
   const allowed = await allowIoTIngest(
     db,
-    `camera-activity:${guardCameraKey}:${eventType}:${normalizedCreatedAt}`,
+    `camera-activity:${businessId}:${guardCameraKey}:${eventType}:${normalizedCreatedAt}`,
     30
   );
 
@@ -72,9 +88,10 @@ export async function POST({ request, platform }) {
         image_url,
         clip_url,
         clip_duration_seconds,
-        created_at
+        created_at,
+        business_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
     .bind(
@@ -86,7 +103,8 @@ export async function POST({ request, platform }) {
       imageUrl,
       clipUrl,
       clipDurationSeconds,
-      normalizedCreatedAt
+      normalizedCreatedAt,
+      businessId
     )
     .run();
 

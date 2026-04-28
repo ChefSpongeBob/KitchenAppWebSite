@@ -9,6 +9,7 @@ type SectionRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { sections: [] };
+  const businessId = locals.businessId ?? '';
 
   const result = await db
     .prepare(
@@ -16,9 +17,11 @@ export const load: PageServerLoad = async ({ locals }) => {
       SELECT slug, title, description
       FROM list_sections
       WHERE domain = 'orders'
+        AND business_id = ?
       ORDER BY slug ASC
     `
     )
+    .bind(businessId)
     .all<SectionRow>();
 
   return {

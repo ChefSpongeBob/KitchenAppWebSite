@@ -1,3 +1,5 @@
+import { ensureTenantSchema } from '$lib/server/tenant';
+
 export const dailySpecialCategories = ['item-1', 'item-2', 'item-3', 'item-4'] as const;
 let dailySpecialsSchemaEnsured = false;
 
@@ -20,6 +22,18 @@ const labels: Record<DailySpecialCategory, string> = {
 
 export function getDailySpecialLabel(category: DailySpecialCategory) {
   return labels[category];
+}
+
+export function getDailySpecialStorageCategory(category: DailySpecialCategory, businessId?: string | null) {
+  return businessId ? `${businessId}:${category}` : category;
+}
+
+function displayDailySpecialCategory(category: string, businessId?: string | null) {
+  const prefix = businessId ? `${businessId}:` : '';
+  const normalized = prefix && category.startsWith(prefix) ? category.slice(prefix.length) : category;
+  return dailySpecialCategories.includes(normalized as DailySpecialCategory)
+    ? (normalized as DailySpecialCategory)
+    : null;
 }
 
 export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
@@ -57,10 +71,12 @@ export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
 export async function userCanEditDailySpecials(
   db: App.Platform['env']['DB'],
   userId: string | null | undefined,
-  role: string | null | undefined
+  role: string | null | undefined,
+  businessId?: string | null
 ) {
   if (!userId) return false;
   if (role === 'admin') return true;
+  await ensureTenantSchema(db, true);
 
   const row = await db
     .prepare(
@@ -68,25 +84,29 @@ export async function userCanEditDailySpecials(
       SELECT user_id
       FROM daily_specials_editors
       WHERE user_id = ?
+        AND (? IS NULL OR business_id = ?)
       LIMIT 1
       `
     )
-    .bind(userId)
+    .bind(userId, businessId ?? null, businessId ?? null)
     .first<{ user_id: string }>();
 
   return Boolean(row);
 }
 
-export async function loadDailySpecials(db: App.Platform['env']['DB']) {
+export async function loadDailySpecials(db: App.Platform['env']['DB'], businessId?: string | null) {
   await ensureDailySpecialsSchema(db);
+  await ensureTenantSchema(db, true);
 
   const result = await db
     .prepare(
       `
       SELECT category, content, updated_by, updated_at
       FROM daily_specials
+      WHERE (? IS NULL OR business_id = ?)
       `
     )
+    .bind(businessId ?? null, businessId ?? null)
     .all<{
       category: string;
       content: string;
@@ -94,12 +114,23 @@ export async function loadDailySpecials(db: App.Platform['env']['DB']) {
       updated_at: number;
     }>();
 
-  const rows = new Map(
-    (result.results ?? []).map((row) => [
-      row.category,
-      { content: row.content, updatedBy: row.updated_by, updatedAt: row.updated_at }
-    ])
-  );
+  const rows = new Map<
+    DailySpecialCategory,
+    { content: string; updatedBy: string | null; updatedAt: number; isBusinessKey: boolean }
+  >();
+  for (const row of result.results ?? []) {
+    const category = displayDailySpecialCategory(row.category, businessId);
+    if (!category) continue;
+    const isBusinessKey = Boolean(businessId && row.category.startsWith(`${businessId}:`));
+    const current = rows.get(category);
+    if (current?.isBusinessKey && !isBusinessKey) continue;
+    rows.set(category, {
+      content: row.content,
+      updatedBy: row.updated_by,
+      updatedAt: row.updated_at,
+      isBusinessKey
+    });
+  }
 
   return dailySpecialCategories.map((category) => {
     const current = rows.get(category);

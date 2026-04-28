@@ -4,6 +4,10 @@ export type HomepageAnnouncement = {
 };
 let announcementsSchemaEnsured = false;
 
+function homepageAnnouncementId(businessId?: string | null) {
+  return businessId ? `${businessId}:homepage` : 'homepage';
+}
+
 export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
   if (announcementsSchemaEnsured) return;
   await db
@@ -22,7 +26,7 @@ export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
   announcementsSchemaEnsured = true;
 }
 
-export async function loadHomepageAnnouncement(db: App.Platform['env']['DB']) {
+export async function loadHomepageAnnouncement(db: App.Platform['env']['DB'], businessId?: string | null) {
   await ensureAnnouncementsSchema(db);
 
   const row = await db
@@ -30,14 +34,19 @@ export async function loadHomepageAnnouncement(db: App.Platform['env']['DB']) {
       `
       SELECT content, updated_at
       FROM announcements
-      WHERE id = 'homepage'
+      WHERE id = ?
       LIMIT 1
       `
     )
+    .bind(homepageAnnouncementId(businessId))
     .first<{ content: string; updated_at: number }>();
 
   return {
     content: row?.content ?? '',
     updatedAt: row?.updated_at ?? 0
   } satisfies HomepageAnnouncement;
+}
+
+export function getHomepageAnnouncementId(businessId?: string | null) {
+  return homepageAnnouncementId(businessId);
 }

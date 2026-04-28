@@ -22,7 +22,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     throw error(503, 'Database not configured.');
   }
 
-  const users = await loadAdminUsers(db);
+  if (!locals.businessId) {
+    throw error(404, 'Employee not found.');
+  }
+
+  const users = await loadAdminUsers(db, locals.businessId);
   const employee = users.find((user) => user.id === params.id);
 
   if (!employee) {

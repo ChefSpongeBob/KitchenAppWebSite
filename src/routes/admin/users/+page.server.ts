@@ -26,8 +26,12 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
     };
   }
 
-  const users = await loadAdminUsers(db);
-  const invites = await loadAdminInvites(db);
+  if (!locals.businessId) {
+    return { users: [], invites: [], ...getAdminEmailStatus(platform?.env) };
+  }
+
+  const users = await loadAdminUsers(db, locals.businessId);
+  const invites = await loadAdminInvites(db, locals.businessId);
   return { users, invites, ...getAdminEmailStatus(platform?.env) };
 };
 

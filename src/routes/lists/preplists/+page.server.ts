@@ -10,6 +10,7 @@ type SectionRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) throw error(503, 'Database binding is missing.');
+  const businessId = locals.businessId ?? '';
 
   const result = await db
     .prepare(
@@ -17,9 +18,11 @@ export const load: PageServerLoad = async ({ locals }) => {
       SELECT slug, title, description
       FROM list_sections
       WHERE domain = 'preplists'
+        AND business_id = ?
       ORDER BY slug ASC
     `
     )
+    .bind(businessId)
     .all<SectionRow>();
 
   return {

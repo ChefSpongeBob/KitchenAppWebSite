@@ -22,10 +22,11 @@ export const load: PageServerLoad = async ({ locals }) => {
   if (!db) {
     return { preplists: [], inventory: [], orders: [], checklists: [], documents: [] };
   }
+  const businessId = locals.businessId ?? '';
 
-  const sections = await loadAdminSections(db);
-  const checklists = await loadAdminChecklists(db);
-  const documents = await loadAdminDocuments(db);
+  const sections = await loadAdminSections(db, businessId);
+  const checklists = await loadAdminChecklists(db, businessId);
+  const documents = await loadAdminDocuments(db, businessId);
   return { ...sections, checklists, documents };
 };
 

@@ -79,12 +79,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     : Promise.resolve(false);
   const nodeTablePromise = featureAccess.temps ? hasTable(db, 'sensor_nodes') : Promise.resolve(false);
   const announcementPromise = featureAccess.announcements
-    ? loadHomepageAnnouncement(db)
+    ? loadHomepageAnnouncement(db, locals.businessId)
     : Promise.resolve({ content: '', updatedAt: 0 });
   const employeeSpotlightPromise = featureAccess.employee_spotlight
-    ? loadEmployeeSpotlight(db)
+    ? loadEmployeeSpotlight(db, locals.businessId)
     : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 });
-  const dailySpecialsPromise = featureAccess.daily_specials ? loadDailySpecials(db) : Promise.resolve([]);
+  const dailySpecialsPromise = featureAccess.daily_specials ? loadDailySpecials(db, locals.businessId) : Promise.resolve([]);
   const userPromise = locals.userId
     ? db
         .prepare(`SELECT display_name, email FROM users WHERE id = ? LIMIT 1`)
@@ -107,16 +107,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           LEFT JOIN users au ON au.id = ta.user_id
           WHERE t.completed_at IS NULL
             AND (ta.user_id = ? OR ta.user_id IS NULL)
+            AND t.business_id = ?
           ORDER BY CASE WHEN ta.user_id = ? THEN 0 ELSE 1 END ASC, t.created_at DESC
           LIMIT 6
           `
         )
-        .bind(locals.userId, locals.userId)
+        .bind(locals.userId, locals.businessId ?? '', locals.userId)
         .all<HomeTask>()
     : Promise.resolve({ results: [] as HomeTask[] });
   const todaySchedulePromise =
     featureAccess.scheduling && locals.userId && db
-      ? loadTodayShifts(db, locals.userId)
+      ? loadTodayShifts(db, locals.userId, undefined, locals.businessId)
       : Promise.resolve([] as TodayShift[]);
   const tempsPromise = featureAccess.temps
     ? db
@@ -124,11 +125,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           `
           SELECT sensor_id, temperature, ts
           FROM temps
+          WHERE business_id = ?
           ORDER BY ts DESC
           LIMIT ?
           `
         )
-        .bind(HOMEPAGE_TEMP_LIMIT)
+        .bind(locals.businessId ?? '', HOMEPAGE_TEMP_LIMIT)
         .all<TempRow>()
     : Promise.resolve({ results: [] as TempRow[] });
   const [
@@ -168,20 +170,24 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             FROM whiteboard_posts p
             LEFT JOIN whiteboard_review r ON r.post_id = p.id
             WHERE COALESCE(r.status, 'approved') = 'approved'
+              AND p.business_id = ?
             ORDER BY p.votes DESC, p.created_at DESC
             LIMIT 3
             `
           )
+          .bind(locals.businessId ?? '')
           .all<IdeaRow>()
       : await db
           .prepare(
             `
             SELECT id, content, votes
             FROM whiteboard_posts
+            WHERE business_id = ?
             ORDER BY votes DESC, created_at DESC
             LIMIT 3
             `
           )
+          .bind(locals.businessId ?? '')
           .all<IdeaRow>()
     : { results: [] as IdeaRow[] };
 
@@ -198,7 +204,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const namesBySensor = new Map<number, string>();
   if (featureAccess.temps && nodeTable) {
     const nameRows = await db
-      .prepare(`SELECT sensor_id, name FROM sensor_nodes`)
+      .prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`)
+      .bind(locals.businessId ?? '')
       .all<NodeNameRow>();
     for (const row of nameRows.results ?? []) {
       namesBySensor.set(row.sensor_id, row.name);

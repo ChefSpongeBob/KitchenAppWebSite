@@ -175,7 +175,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         }>()
     : null;
 
-  const featureModes = await loadAppFeatureModes(db);
+  const featureModes = await loadAppFeatureModes(db, locals.businessId);
   return {
     branding: {
       businessName: branding?.name ?? locals.businessName ?? '',
@@ -380,8 +380,8 @@ export const actions: Actions = {
       nextModes[feature.key] = value;
     }
 
-    await saveAppFeatureModes(db, nextModes, locals.userId ?? null);
-    locals.featureModes = await loadAppFeatureModes(db);
+    await saveAppFeatureModes(db, nextModes, locals.userId ?? null, locals.businessId);
+    locals.featureModes = await loadAppFeatureModes(db, locals.businessId);
 
     return {
       success: true,

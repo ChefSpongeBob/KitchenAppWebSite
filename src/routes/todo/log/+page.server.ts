@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, fail } from '@sveltejs/kit';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.userRole !== 'admin') {
@@ -7,6 +8,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const db = locals.DB;
+	if (!db) return { logs: [] };
+	await ensureTenantSchema(db);
+	const businessId = locals.businessId ?? '';
 
 	const logs = await db.prepare(`
 		SELECT 
@@ -16,8 +20,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			u.display_name
 		FROM todo_completion_log l
 		LEFT JOIN users u ON u.id = l.completed_by
+		WHERE l.business_id = ?
 		ORDER BY l.completed_at DESC
 	`)
+	.bind(businessId)
 	.all();
 
 	return {
@@ -32,6 +38,9 @@ export const actions: Actions = {
 		}
 
 		const db = locals.DB;
+		if (!db) return fail(503, { error: 'Database not configured.' });
+		await ensureTenantSchema(db);
+		const businessId = locals.businessId ?? '';
 		const formData = await request.formData();
 		const id = String(formData.get('id') || '');
 
@@ -39,9 +48,9 @@ export const actions: Actions = {
 
 		await db.prepare(`
 			DELETE FROM todo_completion_log
-			WHERE id = ?
+			WHERE id = ? AND business_id = ?
 		`)
-		.bind(id)
+		.bind(id, businessId)
 		.run();
 
 		return { success: true };

@@ -7,6 +7,8 @@ import {
   weekdayIndexFromDate,
   type ScheduleDepartment
 } from '$lib/assets/schedule';
+import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { ensureBusinessSchema } from '$lib/server/business';
 
 type DB = App.Platform['env']['DB'];
 
@@ -284,8 +286,9 @@ function formatAssignableUserLabel(user: Pick<ScheduleAssignableUser, 'displayNa
   return user.displayName ?? user.email;
 }
 
-export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: string[]) {
+export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: string[], businessId?: string | null) {
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
 
   const requestedUserIds = userIds ? Array.from(new Set(userIds.filter((userId) => userId.length > 0))) : null;
   if (requestedUserIds && requestedUserIds.length === 0) {
@@ -293,16 +296,17 @@ export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: st
   }
 
   const placeholders = requestedUserIds?.map(() => '?').join(', ');
+  const userFilter = requestedUserIds ? `user_id IN (${placeholders}) AND` : '';
   const rows = await db
     .prepare(
       `
       SELECT user_id, department
       FROM user_schedule_departments
-      ${requestedUserIds ? `WHERE user_id IN (${placeholders})` : ''}
+      WHERE ${userFilter} business_id = ?
       ORDER BY department ASC
       `
     )
-    .bind(...(requestedUserIds ?? []))
+    .bind(...(requestedUserIds ?? []), businessId ?? '')
     .all<{ user_id: string; department: string }>();
 
   const approvals = new Map<string, ScheduleDepartment[]>();
@@ -778,19 +782,25 @@ export async function ensureScheduleSchema(db: DB) {
   }
 }
 
-export async function getOrCreateScheduleWeek(db: DB, weekStart: string, userId?: string | null) {
+export async function getOrCreateScheduleWeek(
+  db: DB,
+  weekStart: string,
+  userId?: string | null,
+  businessId = ''
+) {
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
 
   let week = await db
     .prepare(
       `
       SELECT id, week_start, status, published_at, updated_at
       FROM schedule_weeks
-      WHERE week_start = ?
+      WHERE week_start = ? AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(weekStart)
+    .bind(weekStart, businessId)
     .first<{
       id: string;
       week_start: string;
@@ -805,11 +815,11 @@ export async function getOrCreateScheduleWeek(db: DB, weekStart: string, userId?
     await db
       .prepare(
         `
-        INSERT INTO schedule_weeks (id, week_start, status, published_at, updated_at, updated_by)
-        VALUES (?, ?, 'draft', NULL, ?, ?)
+        INSERT INTO schedule_weeks (id, week_start, status, published_at, updated_at, updated_by, business_id)
+        VALUES (?, ?, 'draft', NULL, ?, ?, ?)
         `
       )
-      .bind(id, weekStart, now, userId ?? null)
+      .bind(id, weekStart, now, userId ?? null, businessId)
       .run();
 
     week = {
@@ -925,9 +935,11 @@ function roleIsAllowed(
 export async function loadScheduleWeek(
   db: DB,
   weekStart: string,
-  options?: { publishedOnly?: boolean; userId?: string | null; ensureWeek?: boolean }
+  options?: { publishedOnly?: boolean; userId?: string | null; ensureWeek?: boolean; businessId?: string | null }
 ) {
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = options?.businessId ?? '';
 
   const publishedClause = options?.publishedOnly ? `AND status = 'published'` : '';
   let week = await db
@@ -935,12 +947,12 @@ export async function loadScheduleWeek(
       `
       SELECT id, week_start, status, published_at, updated_at
       FROM schedule_weeks
-      WHERE week_start = ?
+      WHERE week_start = ? AND business_id = ?
       ${publishedClause}
       LIMIT 1
       `
     )
-    .bind(weekStart)
+    .bind(weekStart, businessId)
     .first<{
       id: string;
       week_start: string;
@@ -950,7 +962,7 @@ export async function loadScheduleWeek(
     }>();
 
   if (!week && !options?.publishedOnly && options?.ensureWeek) {
-    const created = await getOrCreateScheduleWeek(db, weekStart, options.userId ?? null);
+    const created = await getOrCreateScheduleWeek(db, weekStart, options.userId ?? null, businessId);
     week = {
       id: created.id,
       week_start: created.weekStart,
@@ -988,11 +1000,11 @@ export async function loadScheduleWeek(
         s.sort_order
       FROM schedule_shifts s
       JOIN users u ON u.id = s.user_id
-      WHERE s.week_id = ?
+      WHERE s.week_id = ? AND s.business_id = ?
       ORDER BY s.shift_date ASC, s.start_time ASC, s.sort_order ASC, COALESCE(u.display_name, u.email) ASC
       `
     )
-    .bind(week.id)
+    .bind(week.id, businessId)
     .all<{
       id: string;
       week_id: string;
@@ -1030,11 +1042,11 @@ export async function loadScheduleWeek(
       `
       SELECT user_id
       FROM schedule_week_team
-      WHERE week_id = ?
+      WHERE week_id = ? AND business_id = ?
       ORDER BY sort_order ASC, user_id ASC
       `
     )
-    .bind(week.id)
+    .bind(week.id, businessId)
     .all<{ user_id: string }>();
 
   const rosterUserIds = (teamRows.results ?? []).map((row) => String(row.user_id ?? '').trim()).filter(Boolean);
@@ -1055,8 +1067,8 @@ export async function loadScheduleWeek(
   };
 }
 
-export async function loadMyWeekSchedule(db: DB, weekStart: string, userId: string) {
-  const result = await loadScheduleWeek(db, weekStart, { publishedOnly: true });
+export async function loadMyWeekSchedule(db: DB, weekStart: string, userId: string, businessId?: string | null) {
+  const result = await loadScheduleWeek(db, weekStart, { publishedOnly: true, businessId });
   return {
     week: result.week,
     shifts: result.shifts.filter((shift) => shift.userId === userId),
@@ -1064,18 +1076,18 @@ export async function loadMyWeekSchedule(db: DB, weekStart: string, userId: stri
   };
 }
 
-export async function loadTodayShifts(db: DB, userId: string, date = isoDate(new Date())) {
+export async function loadTodayShifts(db: DB, userId: string, date = isoDate(new Date()), businessId?: string | null) {
   await ensureScheduleSchema(db);
   const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
-  const schedule = await loadMyWeekSchedule(db, weekStart, userId);
+  const schedule = await loadMyWeekSchedule(db, weekStart, userId, businessId);
   return schedule.shifts
     .filter((shift) => shift.shiftDate === date)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 }
 
-export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string) {
+export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string, businessId?: string | null) {
   await ensureScheduleSchema(db);
-  const week = await loadScheduleWeek(db, weekStart, { publishedOnly: false });
+  const week = await loadScheduleWeek(db, weekStart, { publishedOnly: false, businessId });
   if (!week.week) return [];
 
   const rows = await db
@@ -1113,11 +1125,11 @@ export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string) 
       JOIN users offered ON offered.id = o.offered_by_user_id
       LEFT JOIN users targeted ON targeted.id = o.target_user_id
       LEFT JOIN users requested ON requested.id = o.requested_by_user_id
-      WHERE s.week_id = ?
+      WHERE s.week_id = ? AND o.business_id = ?
       ORDER BY s.shift_date ASC, s.start_time ASC, COALESCE(u.display_name, u.email) ASC
       `
     )
-    .bind(week.week.id)
+    .bind(week.week.id, businessId ?? '')
     .all<{
       id: string;
       shift_id: string;
@@ -1175,22 +1187,28 @@ export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string) 
   })) satisfies ScheduleShiftOffer[];
 }
 
-export async function loadScheduleAssignableUsers(db: DB) {
+export async function loadScheduleAssignableUsers(db: DB, businessId?: string | null) {
   await ensureScheduleSchema(db);
+  await ensureBusinessSchema(db);
   const rows = await db
     .prepare(
       `
-      SELECT id, display_name, email
-      FROM users
-      WHERE COALESCE(is_active, 1) = 1
+      SELECT u.id, u.display_name, u.email
+      FROM business_users bu
+      JOIN users u ON u.id = bu.user_id
+      WHERE bu.business_id = ?
+        AND COALESCE(u.is_active, 1) = 1
+        AND COALESCE(bu.is_active, 1) = 1
       ORDER BY COALESCE(display_name, email) ASC
       `
     )
+    .bind(businessId ?? '')
     .all<{ id: string; display_name: string | null; email: string }>();
 
   const approvalsByUser = await loadScheduleDepartmentApprovalsByUser(
     db,
-    (rows.results ?? []).map((row) => row.id)
+    (rows.results ?? []).map((row) => row.id),
+    businessId
   );
 
   return (rows.results ?? []).map((row) => ({
@@ -1379,7 +1397,7 @@ async function loadAssignableUserById(db: DB, userId: string) {
   return users.get(userId) ?? null;
 }
 
-async function insertScheduleShifts(db: DB, weekId: string, rows: ShiftInsertRow[], now: number) {
+async function insertScheduleShifts(db: DB, weekId: string, rows: ShiftInsertRow[], now: number, businessId: string) {
   if (rows.length === 0) return;
 
   const chunkSize = 100;
@@ -1392,9 +1410,9 @@ async function insertScheduleShifts(db: DB, weekId: string, rows: ShiftInsertRow
             `
             INSERT INTO schedule_shifts (
               id, week_id, shift_date, user_id, department, role, detail,
-              start_time, end_label, notes, sort_order, created_at, updated_at
+              start_time, end_label, notes, sort_order, created_at, updated_at, business_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `
           )
           .bind(
@@ -1410,15 +1428,16 @@ async function insertScheduleShifts(db: DB, weekId: string, rows: ShiftInsertRow
             row.notes,
             row.sortOrder,
             now,
-            now
+            now,
+            businessId
           )
       )
     );
   }
 }
 
-async function replaceWeekTeamRoster(db: DB, weekId: string, userIds: string[], now: number) {
-  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ?`).bind(weekId).run();
+async function replaceWeekTeamRoster(db: DB, weekId: string, userIds: string[], now: number, businessId: string) {
+  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ? AND business_id = ?`).bind(weekId, businessId).run();
   const uniqueUserIds = Array.from(new Set(userIds));
   if (uniqueUserIds.length === 0) return;
 
@@ -1427,11 +1446,11 @@ async function replaceWeekTeamRoster(db: DB, weekId: string, userIds: string[], 
       db
         .prepare(
           `
-          INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at, business_id)
+          VALUES (?, ?, ?, ?, ?, ?)
           `
         )
-        .bind(weekId, userId, index, now, now)
+        .bind(weekId, userId, index, now, now, businessId)
     )
   );
 }
@@ -2134,6 +2153,8 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
   if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
 
   const form = await request.formData();
   const id = String(form.get('id') ?? '').trim();
@@ -2166,7 +2187,7 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
     return fail(400, { error: assignmentError });
   }
 
-  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
+  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
   const now = Math.floor(Date.now() / 1000);
 
   if (id) {
@@ -2184,15 +2205,15 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
           end_label = ?,
           notes = ?,
           updated_at = ?
-        WHERE id = ? AND week_id = ?
+        WHERE id = ? AND week_id = ? AND business_id = ?
         `
       )
-      .bind(shiftDate, userId, department, role, detail, startTime, endLabel, notes, now, id, week.id)
+      .bind(shiftDate, userId, department, role, detail, startTime, endLabel, notes, now, id, week.id, businessId)
       .run();
   } else {
     const maxSort = await db
-      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM schedule_shifts WHERE week_id = ? AND shift_date = ?`)
-      .bind(week.id, shiftDate)
+      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM schedule_shifts WHERE week_id = ? AND shift_date = ? AND business_id = ?`)
+      .bind(week.id, shiftDate, businessId)
       .first<{ max_sort: number }>();
 
     await db
@@ -2200,9 +2221,9 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
         `
         INSERT INTO schedule_shifts (
           id, week_id, shift_date, user_id, department, role, detail,
-          start_time, end_label, notes, sort_order, created_at, updated_at
+          start_time, end_label, notes, sort_order, created_at, updated_at, business_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       )
       .bind(
@@ -2218,7 +2239,8 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
         notes,
         (maxSort?.max_sort ?? -1) + 1,
         now,
-        now
+        now,
+        businessId
       )
       .run();
   }
@@ -2237,6 +2259,8 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
 
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
@@ -2327,7 +2351,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     }
   }
 
-  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId);
+  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
   const now = Math.floor(Date.now() / 1000);
   const shiftUserIds = rows.map((row) => row.userId);
   const rosterUserIds = Array.from(new Set([...rosterUserIdsFromPayload, ...shiftUserIds]));
@@ -2340,10 +2364,10 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     }
   }
 
-  await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ?`).bind(week.id).run();
-  await insertScheduleShifts(db, week.id, toShiftInsertRows(rows), now);
+  await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ? AND business_id = ?`).bind(week.id, businessId).run();
+  await insertScheduleShifts(db, week.id, toShiftInsertRows(rows), now, businessId);
 
-  await replaceWeekTeamRoster(db, week.id, rosterUserIds, now);
+  await replaceWeekTeamRoster(db, week.id, rosterUserIds, now, businessId);
 
   await db
     .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)

@@ -6,6 +6,10 @@ export type EmployeeSpotlight = {
 
 let employeeSpotlightSchemaEnsured = false;
 
+function employeeSpotlightId(businessId?: string | null) {
+  return businessId ? `${businessId}:homepage` : 'homepage';
+}
+
 export async function ensureEmployeeSpotlightSchema(db: App.Platform['env']['DB']) {
   if (employeeSpotlightSchemaEnsured) return;
 
@@ -27,7 +31,7 @@ export async function ensureEmployeeSpotlightSchema(db: App.Platform['env']['DB'
   employeeSpotlightSchemaEnsured = true;
 }
 
-export async function loadEmployeeSpotlight(db: App.Platform['env']['DB']) {
+export async function loadEmployeeSpotlight(db: App.Platform['env']['DB'], businessId?: string | null) {
   await ensureEmployeeSpotlightSchema(db);
 
   const row = await db
@@ -35,10 +39,11 @@ export async function loadEmployeeSpotlight(db: App.Platform['env']['DB']) {
       `
       SELECT employee_name, shoutout, updated_at
       FROM employee_spotlight
-      WHERE id = 'homepage'
+      WHERE id = ?
       LIMIT 1
       `
     )
+    .bind(employeeSpotlightId(businessId))
     .first<{ employee_name: string; shoutout: string; updated_at: number }>();
 
   return {
@@ -46,4 +51,8 @@ export async function loadEmployeeSpotlight(db: App.Platform['env']['DB']) {
     shoutout: row?.shoutout ?? '',
     updatedAt: row?.updated_at ?? 0
   } satisfies EmployeeSpotlight;
+}
+
+export function getEmployeeSpotlightId(businessId?: string | null) {
+  return employeeSpotlightId(businessId);
 }

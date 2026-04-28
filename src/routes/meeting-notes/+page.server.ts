@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type MeetingNoteRow = {
   id: string;
@@ -49,18 +50,19 @@ async function ensureMeetingNotesTable(db: App.Platform['env']['DB']) {
 async function getNoteForAuthor(
   db: App.Platform['env']['DB'],
   noteId: string,
-  authorId: string
+  authorId: string,
+  businessId: string
 ) {
   return db
     .prepare(
       `
       SELECT id, author_id
       FROM meeting_notes
-      WHERE id = ? AND author_id = ?
+      WHERE id = ? AND author_id = ? AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(noteId, authorId)
+    .bind(noteId, authorId, businessId)
     .first<{ id: string; author_id: string }>();
 }
 
@@ -72,6 +74,8 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   await ensureMeetingNotesTable(db);
+  await ensureTenantSchema(db, true);
+  const businessId = locals.businessId ?? '';
 
   const result = await db
     .prepare(
@@ -86,9 +90,11 @@ export const load: PageServerLoad = async ({ locals }) => {
         u.email AS author_email
       FROM meeting_notes n
       LEFT JOIN users u ON u.id = n.author_id
+      WHERE n.business_id = ?
       ORDER BY n.updated_at DESC, n.created_at DESC
       `
     )
+    .bind(businessId)
     .all<MeetingNoteRow>();
 
   return {
@@ -114,6 +120,8 @@ export const actions: Actions = {
     }
 
     await ensureMeetingNotesTable(db);
+    await ensureTenantSchema(db, true);
+    const businessId = locals.businessId ?? '';
 
     const formData = await request.formData();
     const content = String(formData.get('content') ?? '').trim();
@@ -125,11 +133,11 @@ export const actions: Actions = {
     await db
       .prepare(
         `
-        INSERT INTO meeting_notes (id, author_id, content, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO meeting_notes (id, author_id, content, created_at, updated_at, business_id)
+        VALUES (?, ?, ?, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), locals.userId, content, now, now)
+      .bind(crypto.randomUUID(), locals.userId, content, now, now, businessId)
       .run();
 
     return { createSuccess: true };
@@ -143,6 +151,8 @@ export const actions: Actions = {
     }
 
     await ensureMeetingNotesTable(db);
+    await ensureTenantSchema(db, true);
+    const businessId = locals.businessId ?? '';
 
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
@@ -151,7 +161,7 @@ export const actions: Actions = {
       return fail(400, { updateError: 'A note id and content are required.' });
     }
 
-    const note = await getNoteForAuthor(db, id, locals.userId);
+    const note = await getNoteForAuthor(db, id, locals.userId, businessId);
     if (!note) {
       return fail(403, { updateError: 'You can only edit your own meeting notes.' });
     }
@@ -161,10 +171,10 @@ export const actions: Actions = {
         `
         UPDATE meeting_notes
         SET content = ?, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND business_id = ?
         `
       )
-      .bind(content, Math.floor(Date.now() / 1000), id)
+      .bind(content, Math.floor(Date.now() / 1000), id, businessId)
       .run();
 
     return { updateSuccess: true };
@@ -178,6 +188,8 @@ export const actions: Actions = {
     }
 
     await ensureMeetingNotesTable(db);
+    await ensureTenantSchema(db, true);
+    const businessId = locals.businessId ?? '';
 
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
@@ -185,12 +197,12 @@ export const actions: Actions = {
       return fail(400, { deleteError: 'A note id is required.' });
     }
 
-    const note = await getNoteForAuthor(db, id, locals.userId);
+    const note = await getNoteForAuthor(db, id, locals.userId, businessId);
     if (!note) {
       return fail(403, { deleteError: 'You can only delete your own meeting notes.' });
     }
 
-    await db.prepare(`DELETE FROM meeting_notes WHERE id = ?`).bind(id).run();
+    await db.prepare(`DELETE FROM meeting_notes WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
     return { deleteSuccess: true };
   }
 };

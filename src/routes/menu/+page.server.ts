@@ -11,6 +11,7 @@ type DocRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { menuDocs: [] };
+  const businessId = locals.businessId ?? '';
 
   const result = await db
     .prepare(
@@ -18,6 +19,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       SELECT id, slug, title, content, file_url
       FROM documents
       WHERE is_active = 1
+        AND business_id = ?
         AND (
           LOWER(slug) LIKE 'menu%'
           OR LOWER(section) = 'menu'
@@ -26,6 +28,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       ORDER BY title ASC
       `
     )
+    .bind(businessId)
     .all<DocRow>();
 
   return {

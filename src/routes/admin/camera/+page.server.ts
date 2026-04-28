@@ -1,12 +1,12 @@
-import { error, fail } from '@sveltejs/kit';
+import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
-import { cameraBetaEnabled } from '$lib/config/features';
+import { addNodeName, deleteNodeName, loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
 import {
   cleanupExpiredCameraMedia,
   deleteCameraEventAssets,
   ensureCameraSchema
 } from '$lib/server/camera';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type CameraEvent = {
   id: string;
@@ -30,24 +30,19 @@ type CameraSource = {
   updated_at: number;
 };
 
-function requireCameraBeta() {
-  if (!cameraBetaEnabled) {
-    throw error(404, 'Not found');
-  }
-}
-
-export const load: PageServerLoad = async ({ locals, url, platform }) => {
+export const load: PageServerLoad = async ({ locals, platform }) => {
   requireAdmin(locals.userRole);
-  requireCameraBeta();
   const db = locals.DB;
   if (!db) {
-    return { events: [], sources: [] };
+    return { events: [], sources: [], nodeNames: [] };
   }
+  const businessId = locals.businessId ?? '';
 
   await ensureCameraSchema(db);
+  await ensureTenantSchema(db, true);
   await cleanupExpiredCameraMedia(db, platform?.env?.CAMERA_MEDIA);
 
-  const [events, sources] = await Promise.all([
+  const [events, sources, nodeNames] = await Promise.all([
     db
       .prepare(
         `
@@ -62,79 +57,89 @@ export const load: PageServerLoad = async ({ locals, url, platform }) => {
           clip_duration_seconds,
           created_at
         FROM camera_events
+        WHERE business_id = ?
         ORDER BY created_at DESC
         LIMIT 40
         `
       )
+      .bind(businessId)
       .all<CameraEvent>(),
     db
       .prepare(
         `
         SELECT id, camera_id, name, live_url, preview_image_url, is_active, updated_at
         FROM camera_sources
+        WHERE business_id = ?
         ORDER BY is_active DESC, updated_at DESC, name ASC
         `
       )
-      .all<CameraSource>()
+      .bind(businessId)
+      .all<CameraSource>(),
+    loadAdminNodeNames(db, businessId)
   ]);
 
   return {
     events: events.results ?? [],
-    sources: sources.results ?? []
+    sources: sources.results ?? [],
+    nodeNames
   };
 };
 
 export const actions: Actions = {
   clear_events: async ({ locals, platform }) => {
     requireAdmin(locals.userRole);
-    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = locals.businessId ?? '';
 
     await ensureCameraSchema(db);
+    await ensureTenantSchema(db, true);
     const events = await db
-      .prepare(`SELECT image_url, clip_url FROM camera_events`)
+      .prepare(`SELECT image_url, clip_url FROM camera_events WHERE business_id = ?`)
+      .bind(businessId)
       .all<{ image_url: string | null; clip_url: string | null }>();
 
     for (const event of events.results ?? []) {
       await deleteCameraEventAssets(platform?.env?.CAMERA_MEDIA, event.image_url, event.clip_url);
     }
 
-    await db.prepare(`DELETE FROM camera_events`).run();
+    await db.prepare(`DELETE FROM camera_events WHERE business_id = ?`).bind(businessId).run();
     return { success: true };
   },
 
   delete_event: async ({ request, locals, platform }) => {
     requireAdmin(locals.userRole);
-    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = locals.businessId ?? '';
 
     await ensureCameraSchema(db);
+    await ensureTenantSchema(db, true);
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
     if (!id) return fail(400, { error: 'Missing event id.' });
 
     const event = await db
-      .prepare(`SELECT image_url, clip_url FROM camera_events WHERE id = ? LIMIT 1`)
-      .bind(id)
+      .prepare(`SELECT image_url, clip_url FROM camera_events WHERE id = ? AND business_id = ? LIMIT 1`)
+      .bind(id, businessId)
       .first<{ image_url: string | null; clip_url: string | null }>();
 
     if (event) {
       await deleteCameraEventAssets(platform?.env?.CAMERA_MEDIA, event.image_url, event.clip_url);
     }
 
-    await db.prepare(`DELETE FROM camera_events WHERE id = ?`).bind(id).run();
+    await db.prepare(`DELETE FROM camera_events WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
     return { success: true };
   },
 
   save_source: async ({ request, locals }) => {
     requireAdmin(locals.userRole);
-    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = locals.businessId ?? '';
 
     await ensureCameraSchema(db);
+    await ensureTenantSchema(db, true);
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim() || crypto.randomUUID();
     const cameraId = String(formData.get('camera_id') ?? '').trim();
@@ -148,15 +153,16 @@ export const actions: Actions = {
     await db
       .prepare(
         `
-        INSERT INTO camera_sources (id, camera_id, name, live_url, preview_image_url, is_active, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO camera_sources (id, camera_id, name, live_url, preview_image_url, is_active, updated_at, business_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           camera_id = excluded.camera_id,
           name = excluded.name,
           live_url = excluded.live_url,
           preview_image_url = excluded.preview_image_url,
           is_active = excluded.is_active,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          business_id = excluded.business_id
         `
       )
       .bind(
@@ -166,7 +172,8 @@ export const actions: Actions = {
         liveUrl || null,
         previewImageUrl || null,
         isActive,
-        Math.floor(Date.now() / 1000)
+        Math.floor(Date.now() / 1000),
+        businessId
       )
       .run();
 
@@ -175,16 +182,27 @@ export const actions: Actions = {
 
   delete_source: async ({ request, locals }) => {
     requireAdmin(locals.userRole);
-    requireCameraBeta();
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = locals.businessId ?? '';
 
     await ensureCameraSchema(db);
+    await ensureTenantSchema(db, true);
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
     if (!id) return fail(400, { error: 'Missing source id.' });
 
-    await db.prepare(`DELETE FROM camera_sources WHERE id = ?`).bind(id).run();
+    await db.prepare(`DELETE FROM camera_sources WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
     return { success: true };
+  },
+
+  add_node_name: ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    return addNodeName(request, locals);
+  },
+
+  delete_node_name: ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    return deleteNodeName(request, locals);
   }
 };

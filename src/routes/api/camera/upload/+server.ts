@@ -7,6 +7,17 @@ import {
   extensionFromContentType
 } from '$lib/server/camera';
 import { allowIoTIngest } from '$lib/server/iotIngest';
+import { ensureTenantSchema, singleActiveBusinessId } from '$lib/server/tenant';
+
+async function resolveBusinessId(db: App.Platform['env']['DB'], request: Request, url: URL) {
+  return (
+    request.headers.get('x-business-id')?.trim() ||
+    url.searchParams.get('business_id')?.trim() ||
+    url.searchParams.get('businessId')?.trim() ||
+    (await singleActiveBusinessId(db)) ||
+    ''
+  );
+}
 
 export async function POST({ request, platform, url }) {
   if (!cameraBetaEnabled) {
@@ -38,11 +49,15 @@ export async function POST({ request, platform, url }) {
   const ext = explicitExt || extensionFromContentType(contentType, kind === 'clip' ? 'mp4' : 'jpg');
   const timestamp = Math.floor(Date.now() / 1000);
   const safeCameraId = cameraId.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+  const businessId = db ? await resolveBusinessId(db, request, url) : '';
+  if (db && !businessId) {
+    return json({ error: 'Business context is required for camera uploads.' }, { status: 400 });
+  }
   if (db) {
     const guardSuffix = Number.isFinite(explicitTimestamp)
       ? `${Math.floor(explicitTimestamp)}`
       : `${Math.floor(timestamp / 15)}`;
-    const allowed = await allowIoTIngest(db, `camera-upload:${safeCameraId}:${kind}:${guardSuffix}`, 15);
+    const allowed = await allowIoTIngest(db, `camera-upload:${businessId}:${safeCameraId}:${kind}:${guardSuffix}`, 15);
 
     if (!allowed) {
       return json(
@@ -67,6 +82,7 @@ export async function POST({ request, platform, url }) {
 
   if (logEvent && db) {
     await ensureCameraSchema(db);
+    await ensureTenantSchema(db, true);
     await cleanupExpiredCameraMedia(db, bucket);
 
     await db
@@ -81,9 +97,10 @@ export async function POST({ request, platform, url }) {
           image_url,
           clip_url,
           clip_duration_seconds,
-          created_at
+          created_at,
+          business_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       )
       .bind(
@@ -100,7 +117,8 @@ export async function POST({ request, platform, url }) {
         kind === 'still' ? mediaUrl : null,
         kind === 'clip' ? mediaUrl : null,
         kind === 'clip' ? 60 : null,
-        timestamp
+        timestamp,
+        businessId
       )
       .run();
   }

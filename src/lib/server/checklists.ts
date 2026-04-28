@@ -1,8 +1,10 @@
 import { fail } from '@sveltejs/kit';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type DB = App.Platform['env']['DB'];
 type ChecklistLocals = {
   DB?: DB;
+  businessId?: string | null;
 };
 
 type ChecklistItem = {
@@ -28,17 +30,17 @@ type ChecklistPageOptions = {
   replaceDefaults?: boolean;
 };
 
-async function getSection(db: DB, slug: string) {
+async function getSection(db: DB, slug: string, businessId: string) {
   return db
-    .prepare(`SELECT id FROM checklist_sections WHERE slug = ? LIMIT 1`)
-    .bind(slug)
+    .prepare(`SELECT id FROM checklist_sections WHERE slug = ? AND business_id = ? LIMIT 1`)
+    .bind(slug, businessId)
     .first<{ id: string }>();
 }
 
-async function seedDefaultsIfMissing(db: DB, sectionId: string, defaults: DefaultItem[]) {
+async function seedDefaultsIfMissing(db: DB, sectionId: string, defaults: DefaultItem[], businessId: string) {
   const existing = await db
-    .prepare(`SELECT COUNT(*) AS count FROM checklist_items WHERE section_id = ?`)
-    .bind(sectionId)
+    .prepare(`SELECT COUNT(*) AS count FROM checklist_items WHERE section_id = ? AND business_id = ?`)
+    .bind(sectionId, businessId)
     .first<{ count: number }>();
 
   if ((existing?.count ?? 0) > 0) return;
@@ -50,26 +52,27 @@ async function seedDefaultsIfMissing(db: DB, sectionId: string, defaults: Defaul
         `
         INSERT INTO checklist_items (
           id, section_id, content, sort_order, is_checked, created_at, updated_at
+          , business_id
         )
-        VALUES (?, ?, ?, ?, 0, ?, ?)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), sectionId, item.content, index, now, now)
+      .bind(crypto.randomUUID(), sectionId, item.content, index, now, now, businessId)
       .run();
   }
 }
 
-async function replaceDefaults(db: DB, sectionId: string, defaults: DefaultItem[]) {
+async function replaceDefaults(db: DB, sectionId: string, defaults: DefaultItem[], businessId: string) {
   const rows = await db
     .prepare(
       `
       SELECT id, content
       FROM checklist_items
-      WHERE section_id = ?
+      WHERE section_id = ? AND business_id = ?
       ORDER BY sort_order ASC, created_at ASC
       `
     )
-    .bind(sectionId)
+    .bind(sectionId, businessId)
     .all<{ id: string; content: string }>();
 
   const existing = rows.results ?? [];
@@ -79,7 +82,7 @@ async function replaceDefaults(db: DB, sectionId: string, defaults: DefaultItem[
 
   if (matchesDefaults) return;
 
-  await db.prepare(`DELETE FROM checklist_items WHERE section_id = ?`).bind(sectionId).run();
+  await db.prepare(`DELETE FROM checklist_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
 
   const now = Math.floor(Date.now() / 1000);
   for (const [index, item] of defaults.entries()) {
@@ -88,11 +91,12 @@ async function replaceDefaults(db: DB, sectionId: string, defaults: DefaultItem[
         `
         INSERT INTO checklist_items (
           id, section_id, content, sort_order, is_checked, created_at, updated_at
+          , business_id
         )
-        VALUES (?, ?, ?, ?, 0, ?, ?)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?)
         `
       )
-      .bind(crypto.randomUUID(), sectionId, item.content, index, now, now)
+      .bind(crypto.randomUUID(), sectionId, item.content, index, now, now, businessId)
       .run();
   }
 }
@@ -111,8 +115,10 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         items: []
       };
     }
+    await ensureTenantSchema(db);
+    const businessId = locals.businessId ?? '';
 
-    const section = await getSection(db, sectionSlug);
+    const section = await getSection(db, sectionSlug, businessId);
     if (!section) {
       return {
         title: pageTitle,
@@ -126,9 +132,9 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
     }
 
     if (options.replaceDefaults) {
-      await replaceDefaults(db, section.id, options.defaults);
+      await replaceDefaults(db, section.id, options.defaults, businessId);
     } else {
-      await seedDefaultsIfMissing(db, section.id, options.defaults);
+      await seedDefaultsIfMissing(db, section.id, options.defaults, businessId);
     }
 
     const items = await db
@@ -136,11 +142,11 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         `
         SELECT id, content, is_checked
         FROM checklist_items
-        WHERE section_id = ?
+        WHERE section_id = ? AND business_id = ?
         ORDER BY sort_order ASC, created_at ASC
         `
       )
-      .bind(section.id)
+      .bind(section.id, businessId)
       .all<ChecklistItem>();
 
     return {
@@ -158,8 +164,10 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
     toggle_checked: async ({ request, locals }: { request: Request; locals: ChecklistLocals }) => {
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
+      await ensureTenantSchema(db);
+      const businessId = locals.businessId ?? '';
 
-      const section = await getSection(db, sectionSlug);
+      const section = await getSection(db, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'Checklist not found.' });
 
       const formData = await request.formData();
@@ -176,10 +184,10 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
           `
           UPDATE checklist_items
           SET is_checked = ?, updated_at = ?
-          WHERE id = ? AND section_id = ?
+          WHERE id = ? AND section_id = ? AND business_id = ?
           `
         )
-        .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id)
+        .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
         .run();
 
       return { success: true };
@@ -187,13 +195,15 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
     reset_checklist: async ({ locals }: { locals: ChecklistLocals }) => {
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
+      await ensureTenantSchema(db);
+      const businessId = locals.businessId ?? '';
 
-      const section = await getSection(db, sectionSlug);
+      const section = await getSection(db, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'Checklist not found.' });
 
       await db
-        .prepare(`UPDATE checklist_items SET is_checked = 0, updated_at = ? WHERE section_id = ?`)
-        .bind(Math.floor(Date.now() / 1000), section.id)
+        .prepare(`UPDATE checklist_items SET is_checked = 0, updated_at = ? WHERE section_id = ? AND business_id = ?`)
+        .bind(Math.floor(Date.now() / 1000), section.id, businessId)
         .run();
 
       return { success: true };

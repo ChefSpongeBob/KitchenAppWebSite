@@ -20,15 +20,18 @@ function toTitle(value: string) {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { sections: [] };
+  const businessId = locals.businessId ?? '';
 
   const rows = await db
     .prepare(
       `
       SELECT slug, title
       FROM checklist_sections
+      WHERE business_id = ?
       ORDER BY slug ASC
       `
     )
+    .bind(businessId)
     .all<ChecklistSectionRow>();
 
   const prefixMap = new Map<string, string>();

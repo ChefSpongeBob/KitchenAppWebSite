@@ -1,4 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type WhiteboardRow = {
   id: string;
@@ -40,9 +41,11 @@ async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
   whiteboardVotesSchemaEnsured = true;
 }
 
-export const GET: RequestHandler = async ({ platform, url }) => {
+export const GET: RequestHandler = async ({ platform, url, locals }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
+  await ensureTenantSchema(db);
+  const businessId = locals.businessId ?? '';
   const requestedLimit = Number(url.searchParams.get('limit') ?? 100);
   const limit = Number.isFinite(requestedLimit)
     ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
@@ -57,22 +60,24 @@ export const GET: RequestHandler = async ({ platform, url }) => {
           FROM whiteboard_posts p
           LEFT JOIN whiteboard_review r ON r.post_id = p.id
           WHERE COALESCE(r.status, 'approved') = 'approved'
+            AND p.business_id = ?
           ORDER BY p.votes DESC, p.created_at DESC
           LIMIT ?
         `
         )
-        .bind(limit)
+        .bind(businessId, limit)
         .all<WhiteboardRow>()
     : await db
         .prepare(
           `
           SELECT id, content, votes
           FROM whiteboard_posts
+          WHERE business_id = ?
           ORDER BY votes DESC, created_at DESC
           LIMIT ?
         `
         )
-        .bind(limit)
+        .bind(businessId, limit)
         .all<WhiteboardRow>();
 
   return json(result.results ?? [], {
@@ -83,6 +88,8 @@ export const GET: RequestHandler = async ({ platform, url }) => {
 export const POST: RequestHandler = async ({ platform, request, locals }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
+  await ensureTenantSchema(db);
+  const businessId = locals.businessId ?? '';
 
   let body: unknown;
   try {
@@ -100,6 +107,7 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
     }
 
     await ensureWhiteboardVotesTable(db);
+    await ensureTenantSchema(db, true);
 
     const id = String(payload.id ?? '');
     if (!id) return json({ error: 'Missing id' }, { status: 400 });
@@ -109,11 +117,11 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
         `
         SELECT post_id
         FROM whiteboard_votes
-        WHERE post_id = ? AND user_id = ?
+        WHERE post_id = ? AND user_id = ? AND business_id = ?
         LIMIT 1
         `
       )
-      .bind(id, locals.userId)
+      .bind(id, locals.userId, businessId)
       .first<{ post_id: string }>();
 
     if (existingVote) {
@@ -122,10 +130,10 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
           `
           SELECT id, content, votes
           FROM whiteboard_posts
-          WHERE id = ?
+          WHERE id = ? AND business_id = ?
           `
         )
-        .bind(id)
+        .bind(id, businessId)
         .first<WhiteboardRow>();
       return json({ ...current, alreadyVoted: true }, { status: 409 });
     }
@@ -135,11 +143,11 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
     await db
       .prepare(
         `
-        INSERT INTO whiteboard_votes (post_id, user_id, created_at)
-        VALUES (?, ?, ?)
+        INSERT INTO whiteboard_votes (post_id, user_id, created_at, business_id)
+        VALUES (?, ?, ?, ?)
         `
       )
-      .bind(id, locals.userId, now)
+      .bind(id, locals.userId, now, businessId)
       .run();
 
     await db
@@ -147,10 +155,10 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
         `
         UPDATE whiteboard_posts
         SET votes = votes + 1, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND business_id = ?
       `
       )
-      .bind(now, id)
+      .bind(now, id, businessId)
       .run();
 
     const updated = await db
@@ -158,10 +166,10 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
         `
         SELECT id, content, votes
         FROM whiteboard_posts
-        WHERE id = ?
+        WHERE id = ? AND business_id = ?
       `
       )
-      .bind(id)
+      .bind(id, businessId)
       .first<WhiteboardRow>();
 
     return json(updated ?? null);
@@ -177,11 +185,11 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
     await db
       .prepare(
         `
-        INSERT INTO whiteboard_posts (id, content, votes, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO whiteboard_posts (id, content, votes, created_by, created_at, updated_at, business_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `
       )
-      .bind(id, content, locals.userRole === 'admin' ? 1 : 0, locals.userId ?? null, now, now)
+      .bind(id, content, locals.userRole === 'admin' ? 1 : 0, locals.userId ?? null, now, now, businessId)
       .run();
 
     const reviewEnabled = await hasReviewTable(db);
@@ -190,11 +198,11 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
       await db
         .prepare(
           `
-          INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at)
-          VALUES (?, ?, ?, ?)
+          INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
+          VALUES (?, ?, ?, ?, ?)
         `
         )
-        .bind(id, status, locals.userRole === 'admin' ? locals.userId ?? null : null, now)
+        .bind(id, status, locals.userRole === 'admin' ? locals.userId ?? null : null, now, businessId)
         .run();
     }
 

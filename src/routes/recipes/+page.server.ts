@@ -6,19 +6,23 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   if (!db) {
     return { categories: [], recipeIndex: [], query };
   }
+  const businessId = locals.businessId ?? '';
 
-  const { results: categories } = await db.prepare(
-    `SELECT DISTINCT category FROM recipes ORDER BY category ASC`
-  ).all();
+  const { results: categories } = await db
+    .prepare(`SELECT DISTINCT category FROM recipes WHERE business_id = ? ORDER BY category ASC`)
+    .bind(businessId)
+    .all();
 
   const { results: recipeRows } = await db
     .prepare(
       `
       SELECT id, title, category
       FROM recipes
+      WHERE business_id = ?
       ORDER BY title ASC
       `
     )
+    .bind(businessId)
     .all<{ id: number; title: string; category: string }>();
 
   const dbCategories = (categories?.map((c) => String(c.category || '').trim().toLowerCase()) ?? [])

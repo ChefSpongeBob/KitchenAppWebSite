@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { cleanupExpiredTemps } from '$lib/server/retention';
 import { allowIoTIngest } from '$lib/server/iotIngest';
+import { ensureTenantSchema, singleActiveBusinessId } from '$lib/server/tenant';
 
 type TempRow = {
   sensor_id: number;
@@ -19,6 +20,20 @@ async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
   tempsIndexesEnsured = true;
 }
 
+async function resolveBusinessId(
+  db: App.Platform['env']['DB'],
+  request: Request | null,
+  url: URL,
+  localsBusinessId?: string | null
+) {
+  const explicit =
+    localsBusinessId ||
+    request?.headers.get('x-business-id') ||
+    url.searchParams.get('business_id') ||
+    url.searchParams.get('businessId');
+  return explicit?.trim() || (await singleActiveBusinessId(db)) || '';
+}
+
 function normalizeReading(input: Record<string, unknown>): TempRow | null {
   const sensorRaw = input.sensor_id ?? input.sensorId ?? input.node;
   const tempRaw = input.temperature ?? input.temp;
@@ -35,12 +50,14 @@ function normalizeReading(input: Record<string, unknown>): TempRow | null {
   return { sensor_id, temperature, ts };
 }
 
-export const GET: RequestHandler = async ({ platform, url }) => {
+export const GET: RequestHandler = async ({ platform, url, request, locals }) => {
   const db = platform?.env?.DB;
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
   await ensureTempsIndexes(db);
+  await ensureTenantSchema(db);
+  const businessId = await resolveBusinessId(db, request, url, locals.businessId);
 
   const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit') ?? 500)));
   const sensor = url.searchParams.get('sensor');
@@ -52,12 +69,12 @@ export const GET: RequestHandler = async ({ platform, url }) => {
         `
         SELECT sensor_id, temperature, ts
         FROM temps
-        WHERE sensor_id = ?
+        WHERE sensor_id = ? AND business_id = ?
         ORDER BY ts DESC
         LIMIT ?
       `
       )
-      .bind(sensorId, limit)
+      .bind(sensorId, businessId, limit)
       .all<TempRow>();
     return json(result.results ?? [], {
       headers: { 'cache-control': 'public, max-age=10, s-maxage=10, stale-while-revalidate=20' }
@@ -69,11 +86,12 @@ export const GET: RequestHandler = async ({ platform, url }) => {
       `
       SELECT sensor_id, temperature, ts
       FROM temps
+      WHERE business_id = ?
       ORDER BY ts DESC
       LIMIT ?
     `
     )
-    .bind(limit)
+    .bind(businessId, limit)
     .all<TempRow>();
 
   return json(result.results ?? [], {
@@ -81,12 +99,17 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ platform, request }) => {
+export const POST: RequestHandler = async ({ platform, request, url, locals }) => {
   const db = platform?.env?.DB;
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
   await ensureTempsIndexes(db);
+  await ensureTenantSchema(db);
+  const businessId = await resolveBusinessId(db, request, url, locals.businessId);
+  if (!businessId) {
+    return json({ error: 'Business context is required for temperature ingestion.' }, { status: 400 });
+  }
 
   const apiKey = platform?.env?.IOT_API_KEY;
   if (apiKey) {
@@ -119,7 +142,7 @@ export const POST: RequestHandler = async ({ platform, request }) => {
   const timestampSignature = Array.from(new Set(items.map((row) => row.ts)))
     .sort((a, b) => a - b)
     .join(',');
-  const guardKey = `temps:${sensorSignature}:${timestampSignature}`;
+  const guardKey = `temps:${businessId}:${sensorSignature}:${timestampSignature}`;
   const allowed = await allowIoTIngest(db, guardKey, 60);
 
   if (!allowed) {
@@ -137,11 +160,11 @@ export const POST: RequestHandler = async ({ platform, request }) => {
     db
       .prepare(
         `
-        INSERT INTO temps (sensor_id, temperature, ts)
-        VALUES (?, ?, ?)
+        INSERT INTO temps (sensor_id, temperature, ts, business_id)
+        VALUES (?, ?, ?, ?)
       `
       )
-      .bind(row.sensor_id, row.temperature, row.ts)
+      .bind(row.sensor_id, row.temperature, row.ts, businessId)
   );
 
   await db.batch(statements);

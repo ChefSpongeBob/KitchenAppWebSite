@@ -24,11 +24,6 @@
     email: string;
   };
 
-  type NodeName = {
-    sensor_id: number;
-    name: string;
-  };
-
   type WhiteboardIdea = {
     id: string;
     content: string;
@@ -61,7 +56,6 @@
     guided?: boolean;
     todos: Todo[];
     users: UserOption[];
-    nodeNames: NodeName[];
     whiteboardIdeas: WhiteboardIdea[];
     announcement: Announcement;
     employeeSpotlight: EmployeeSpotlight;
@@ -690,54 +684,6 @@
             {/each}
           {/if}
         </div>
-      </details>
-    </div>
-    {/if}
-
-    {#if data.featureAccess.temps}
-    <div class="stack">
-      <details class="panel" id="nodes">
-        <summary>
-          <div>
-            <span class="panel-kicker">Temper</span>
-            <h2>Node Names</h2>
-          </div>
-          <span>{data.nodeNames.length} saved</span>
-        </summary>
-
-        <form method="POST" action="?/add_node_name" use:enhance={withAdminFeedback} class="add-row">
-          <input name="sensor_id" type="number" min="1" placeholder="Node ID" required />
-          <input name="name" placeholder="Display name" required />
-          <button type="submit">Save Node</button>
-        </form>
-
-        <table class="sheet action-sheet">
-          <thead>
-            <tr>
-              <th>Node ID</th>
-              <th>Name</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#if data.nodeNames.length === 0}
-              <tr><td colspan="3">No node names yet.</td></tr>
-            {:else}
-              {#each data.nodeNames as node}
-                <tr>
-                  <td>{node.sensor_id}</td>
-                  <td>{node.name}</td>
-                  <td>
-                    <form method="POST" action="?/delete_node_name" use:enhance={withAdminFeedback} class="inline">
-                      <input type="hidden" name="sensor_id" value={node.sensor_id} />
-                      <button type="submit" class="danger text-action" aria-label="Delete node name">Delete</button>
-                    </form>
-                  </td>
-                </tr>
-              {/each}
-            {/if}
-          </tbody>
-        </table>
       </details>
     </div>
     {/if}

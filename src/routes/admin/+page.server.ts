@@ -1,14 +1,12 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import {
-  addNodeName,
   loadAdminAssignableUsers,
   approveUser,
   approveWhiteboard,
   cleanupExpiredRejectedWhiteboardIdeas,
   createTodo,
   deleteUser,
-  deleteNodeName,
   deleteTodo,
   deleteWhiteboard,
   denyUser,
@@ -135,18 +133,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     };
   }
 
-  await cleanupExpiredRejectedWhiteboardIdeas(db);
+  const businessId = locals.businessId ?? '';
+  await cleanupExpiredRejectedWhiteboardIdeas(db, businessId);
 
   const [todos, users, nodeNames, whiteboardIdeas, announcement, employeeSpotlight, hasIsActive] = await Promise.all([
-    featureAccess.todo ? loadAdminTodos(db) : Promise.resolve([]),
-    loadAdminAssignableUsers(db),
-    featureAccess.temps ? loadAdminNodeNames(db) : Promise.resolve([]),
-    featureAccess.whiteboard ? loadAdminWhiteboardIdeas(db) : Promise.resolve([]),
+    featureAccess.todo ? loadAdminTodos(db, businessId) : Promise.resolve([]),
+    locals.businessId ? loadAdminAssignableUsers(db, locals.businessId) : Promise.resolve([]),
+    featureAccess.temps ? loadAdminNodeNames(db, businessId) : Promise.resolve([]),
+    featureAccess.whiteboard ? loadAdminWhiteboardIdeas(db, businessId) : Promise.resolve([]),
     featureAccess.announcements
-      ? loadAdminAnnouncement(db)
+      ? loadAdminAnnouncement(db, businessId)
       : Promise.resolve({ content: '', updatedAt: 0 }),
     featureAccess.employee_spotlight
-      ? loadAdminEmployeeSpotlight(db)
+      ? loadAdminEmployeeSpotlight(db, businessId)
       : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 }),
     usersHasIsActiveColumn(db)
   ]);
@@ -154,7 +153,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const pendingUsers = hasIsActive
     ? (
         await db
-          .prepare(`SELECT COUNT(*) AS count FROM users WHERE COALESCE(is_active, 1) != 1`)
+          .prepare(
+            `
+            SELECT COUNT(*) AS count
+            FROM business_users bu
+            JOIN users u ON u.id = bu.user_id
+            WHERE bu.business_id = ?
+              AND (COALESCE(u.is_active, 1) != 1 OR COALESCE(bu.is_active, 1) != 1)
+            `
+          )
+          .bind(businessId)
           .first<{ count: number }>()
       )?.count ?? 0
     : 0;
@@ -176,10 +184,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
               FROM schedule_shifts s
               JOIN users u ON u.id = s.user_id
               WHERE s.shift_date = ?
+                AND s.business_id = ?
                 ${hasIsActive ? 'AND COALESCE(u.is_active, 1) = 1' : ''}
               `
             )
-            .bind(today)
+            .bind(today, businessId)
             .first<{ count: number }>()
         )?.count ?? 0;
     } catch {
@@ -194,8 +203,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       nodesOperational =
         (
           await db
-            .prepare(`SELECT COUNT(DISTINCT sensor_id) AS count FROM temps WHERE ts >= ?`)
-            .bind(telemetryCutoff)
+            .prepare(`SELECT COUNT(DISTINCT sensor_id) AS count FROM temps WHERE ts >= ? AND business_id = ?`)
+            .bind(telemetryCutoff, businessId)
             .first<{ count: number }>()
         )?.count ?? 0;
     } catch {
@@ -214,11 +223,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           FROM schedule_shifts s
           JOIN users u ON u.id = s.user_id
           WHERE s.shift_date BETWEEN ? AND ?
+            AND s.business_id = ?
             ${hasIsActive ? 'AND COALESCE(u.is_active, 1) = 1' : ''}
           GROUP BY s.shift_date
           `
         )
-        .bind(startIso, endIso)
+        .bind(startIso, endIso, businessId)
         .all<{ day: string; staffed: number }>();
       for (const row of rows.results ?? []) {
         if (staffingByDay.has(row.day)) staffingByDay.set(row.day, row.staffed ?? 0);
@@ -247,10 +257,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             SELECT date(created_at, 'unixepoch') AS day, COUNT(*) AS count
             FROM todos
             WHERE created_at >= ? AND created_at < ?
+              AND business_id = ?
             GROUP BY date(created_at, 'unixepoch')
             `
           )
-          .bind(startTs, endExclusiveTs)
+          .bind(startTs, endExclusiveTs, businessId)
           .all<{ day: string; count: number }>(),
         db
           .prepare(
@@ -259,15 +270,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             FROM todos
             WHERE completed_at IS NOT NULL
               AND completed_at >= ? AND completed_at < ?
+              AND business_id = ?
             GROUP BY date(completed_at, 'unixepoch')
             `
           )
-          .bind(startTs, endExclusiveTs)
+          .bind(startTs, endExclusiveTs, businessId)
           .all<{ day: string; count: number }>(),
-        db.prepare(`SELECT COUNT(*) AS count FROM todos WHERE created_at < ?`).bind(startTs).first<{ count: number }>(),
         db
-          .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NOT NULL AND completed_at < ?`)
-          .bind(startTs)
+          .prepare(`SELECT COUNT(*) AS count FROM todos WHERE created_at < ? AND business_id = ?`)
+          .bind(startTs, businessId)
+          .first<{ count: number }>(),
+        db
+          .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NOT NULL AND completed_at < ? AND business_id = ?`)
+          .bind(startTs, businessId)
           .first<{ count: number }>(),
         db
           .prepare(
@@ -276,9 +291,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             FROM todos
             WHERE completed_at IS NOT NULL
               AND completed_at >= ? AND completed_at < ?
+              AND business_id = ?
             `
           )
-          .bind(prevStartTs, prevEndExclusiveTs)
+          .bind(prevStartTs, prevEndExclusiveTs, businessId)
           .first<{ count: number }>()
       ]);
 
@@ -328,10 +344,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
               SUM(CASE WHEN temperature >= 42 THEN 1 ELSE 0 END) AS high_count
             FROM temps
             WHERE ts >= ? AND ts < ?
+              AND business_id = ?
             GROUP BY date(ts, 'unixepoch')
             `
           )
-          .bind(startTs, endExclusiveTs)
+          .bind(startTs, endExclusiveTs, businessId)
           .all<{ day: string; avg_temp: number; high_count: number }>(),
         db
           .prepare(
@@ -339,9 +356,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             SELECT SUM(CASE WHEN temperature >= 42 THEN 1 ELSE 0 END) AS count
             FROM temps
             WHERE ts >= ? AND ts < ?
+              AND business_id = ?
             `
           )
-          .bind(prevStartTs, prevEndExclusiveTs)
+          .bind(prevStartTs, prevEndExclusiveTs, businessId)
           .first<{ count: number | null }>()
       ]);
 
@@ -462,10 +480,6 @@ export const actions: Actions = {
     adminFeatureEnabled(locals, 'todo') ? createTodo(request, locals) : blockedFeatureError('ToDo'),
   delete_todo: ({ request, locals }) =>
     adminFeatureEnabled(locals, 'todo') ? deleteTodo(request, locals) : blockedFeatureError('ToDo'),
-  add_node_name: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'temps') ? addNodeName(request, locals) : blockedFeatureError('Temps'),
-  delete_node_name: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'temps') ? deleteNodeName(request, locals) : blockedFeatureError('Temps'),
   approve_whiteboard: ({ request, locals }) =>
     adminFeatureEnabled(locals, 'whiteboard')
       ? approveWhiteboard(request, locals)

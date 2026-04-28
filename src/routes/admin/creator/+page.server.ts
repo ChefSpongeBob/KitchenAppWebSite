@@ -22,9 +22,25 @@ import {
   updateRecipe
 } from '$lib/server/admin';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
+
+  const editorParam = url.searchParams.get('editor')?.trim().toLowerCase() ?? '';
+  const domainParam = url.searchParams.get('domain')?.trim().toLowerCase() ?? '';
+
+  const initialEditorType: 'category' | 'list' | 'recipe' | 'document' =
+    editorParam === 'category' ||
+    editorParam === 'recipe' ||
+    editorParam === 'document' ||
+    editorParam === 'list'
+      ? editorParam
+      : 'list';
+
+  const initialListDomain: 'preplists' | 'inventory' | 'orders' =
+    domainParam === 'inventory' || domainParam === 'orders' || domainParam === 'preplists'
+      ? domainParam
+      : 'preplists';
 
   if (!db) {
     return {
@@ -41,18 +57,21 @@ export const load: PageServerLoad = async ({ locals }) => {
         orders: [],
         recipes: [],
         documents: []
-      }
+      },
+      initialEditorType,
+      initialListDomain
     };
   }
+  const businessId = locals.businessId ?? '';
 
   const [sections, recipes, documents, creatorCatalog] = await Promise.all([
-    loadAdminSections(db),
-    loadAdminRecipes(db),
-    loadAdminDocuments(db),
-    loadAdminCreatorCatalog(db)
+    loadAdminSections(db, businessId),
+    loadAdminRecipes(db, businessId),
+    loadAdminDocuments(db, businessId),
+    loadAdminCreatorCatalog(db, businessId)
   ]);
 
-  return { sections, recipes, documents, creatorCatalog };
+  return { sections, recipes, documents, creatorCatalog, initialEditorType, initialListDomain };
 };
 
 export const actions: Actions = {

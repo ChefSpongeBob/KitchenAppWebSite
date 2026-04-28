@@ -32,7 +32,11 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   }
 
-  const [sections, creatorCatalog] = await Promise.all([loadAdminSections(db), loadAdminCreatorCatalog(db)]);
+  const businessId = locals.businessId ?? '';
+  const [sections, creatorCatalog] = await Promise.all([
+    loadAdminSections(db, businessId),
+    loadAdminCreatorCatalog(db, businessId)
+  ]);
   return { sections, creatorCatalog };
 };
 

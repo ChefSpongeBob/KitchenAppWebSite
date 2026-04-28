@@ -114,7 +114,7 @@
     {/if}
 
     <section class="panel-block">
-      <h3>Create Category</h3>
+      <h3>{editorType === 'recipe' ? 'Create Recipe Category' : 'Create Category'}</h3>
       {#if editorType === 'list'}
         <form method="POST" action="?/create_list_section" use:enhance={withFeedback} class="grid-form">
           <input type="hidden" name="domain" value={listDomain} />

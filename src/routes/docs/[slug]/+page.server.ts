@@ -14,17 +14,18 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   if (!db) {
     throw error(503, 'Database is not configured.');
   }
+  const businessId = locals.businessId ?? '';
 
   const doc = await db
     .prepare(
       `
       SELECT title, content, file_url, category, slug
       FROM documents
-      WHERE slug = ? AND is_active = 1
+      WHERE slug = ? AND is_active = 1 AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(params.slug)
+    .bind(params.slug, businessId)
     .first<DocRow>();
 
   if (!doc) {

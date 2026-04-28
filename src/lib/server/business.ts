@@ -97,6 +97,7 @@ export async function ensureBusinessSchema(db: D1) {
         business_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'staff',
+        is_active INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (business_id, user_id),
@@ -106,6 +107,8 @@ export async function ensureBusinessSchema(db: D1) {
       `
     )
     .run();
+
+  await ensureOptionalColumn(db, 'business_users', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
 
   await db
     .prepare(
@@ -182,6 +185,7 @@ export async function getUserBusinessContext(db: D1, userId: string) {
       FROM business_users bu
       JOIN businesses b ON b.id = bu.business_id
       WHERE bu.user_id = ?
+        AND COALESCE(bu.is_active, 1) = 1
         AND COALESCE(b.status, 'active') = 'active'
       ORDER BY
         CASE bu.role

@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
 import { hasTable } from '$lib/server/dbSchema';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type TodoRow = {
 	id: string;
@@ -21,6 +22,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!db) {
 		return { active: [], completed: [] };
 	}
+	await ensureTenantSchema(db);
+	const businessId = locals.businessId ?? '';
 	const now = Math.floor(Date.now() / 1000);
 	const isAdmin = locals.userRole === 'admin';
 	const hasAssignmentsTable = await hasTable(db, 'todo_assignments');
@@ -32,8 +35,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			DELETE FROM todos
 			WHERE completed_at IS NOT NULL
 			AND completed_at < ?
+			AND business_id = ?
 		`)
-		.bind(threeDaysAgo)
+		.bind(threeDaysAgo, businessId)
 		.run();
 		lastTodoCleanupAt = now;
 	}
@@ -54,11 +58,12 @@ export const load: PageServerLoad = async ({ locals }) => {
           LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
           LEFT JOIN users au ON au.id = ta.user_id
           WHERE t.completed_at IS NULL
+            AND t.business_id = ?
             AND (? = 1 OR ta.user_id = ? OR ta.user_id IS NULL)
           ORDER BY t.created_at DESC
         `
 				)
-				.bind(isAdmin ? 1 : 0, locals.userId ?? '')
+				.bind(businessId, isAdmin ? 1 : 0, locals.userId ?? '')
 				.all<TodoRow>()
 		: await db
 				.prepare(
@@ -73,9 +78,11 @@ export const load: PageServerLoad = async ({ locals }) => {
             NULL AS assigned_email
           FROM todos t
           WHERE t.completed_at IS NULL
+            AND t.business_id = ?
           ORDER BY t.created_at DESC
         `
 				)
+				.bind(businessId)
 				.all<TodoRow>();
 
 	const completed = hasAssignmentsTable
@@ -96,11 +103,12 @@ export const load: PageServerLoad = async ({ locals }) => {
           LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
           LEFT JOIN users au ON au.id = ta.user_id
           WHERE t.completed_at IS NOT NULL
+            AND t.business_id = ?
             AND (? = 1 OR ta.user_id = ? OR ta.user_id IS NULL)
           ORDER BY t.completed_at DESC
         `
 				)
-				.bind(isAdmin ? 1 : 0, locals.userId ?? '')
+				.bind(businessId, isAdmin ? 1 : 0, locals.userId ?? '')
 				.all<TodoRow>()
 		: await db
 				.prepare(
@@ -117,9 +125,11 @@ export const load: PageServerLoad = async ({ locals }) => {
           FROM todos t
           LEFT JOIN users u ON u.id = t.completed_by
           WHERE t.completed_at IS NOT NULL
+            AND t.business_id = ?
           ORDER BY t.completed_at DESC
         `
 				)
+				.bind(businessId)
 				.all<TodoRow>();
 
 	return {
@@ -132,6 +142,8 @@ export const actions: Actions = {
 	complete: async ({ request, locals }) => {
 		const db = locals.DB;
 		if (!db) return fail(503, { error: 'Database not configured.' });
+		await ensureTenantSchema(db);
+		const businessId = locals.businessId ?? '';
 		const formData = await request.formData();
 		const id = String(formData.get('id') || '');
 
@@ -150,9 +162,9 @@ export const actions: Actions = {
 				ta.user_id AS assigned_to
 			FROM todos t
 			LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
-			WHERE t.id = ?
+			WHERE t.id = ? AND t.business_id = ?
 		`)
-					.bind(id)
+					.bind(id, businessId)
 					.first<{ id: string; title: string; completed_at: number | null; assigned_to: string | null }>()
 			: await db
 					.prepare(
@@ -163,10 +175,10 @@ export const actions: Actions = {
               t.completed_at,
               NULL AS assigned_to
             FROM todos t
-            WHERE t.id = ?
+            WHERE t.id = ? AND t.business_id = ?
           `
 					)
-					.bind(id)
+					.bind(id, businessId)
 					.first<{ id: string; title: string; completed_at: number | null; assigned_to: string | null }>();
 
 		if (!todo) return fail(404);
@@ -179,9 +191,9 @@ export const actions: Actions = {
 			.prepare(`
 			UPDATE todos
 			SET completed_by = ?, completed_at = ?, updated_at = ?
-			WHERE id = ?
+			WHERE id = ? AND business_id = ?
 		`)
-			.bind(locals.userId, now, now, id)
+			.bind(locals.userId, now, now, id, businessId)
 			.run();
 
 		if (!updateResult.success || (updateResult.meta?.changes ?? 0) < 1) {
@@ -193,11 +205,11 @@ export const actions: Actions = {
 			await db
 				.prepare(`
 				INSERT INTO todo_completion_log (
-					id, todo_id, title, completed_by, completed_at
+					id, todo_id, title, completed_by, completed_at, business_id
 				)
-				VALUES (?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?)
 			`)
-				.bind(crypto.randomUUID(), id, todo.title, locals.userId, now)
+				.bind(crypto.randomUUID(), id, todo.title, locals.userId, now, businessId)
 				.run();
 		}
 

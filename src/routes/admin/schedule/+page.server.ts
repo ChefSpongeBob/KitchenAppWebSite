@@ -48,9 +48,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   }
 
   const [users, schedule, offers, settings, timeOffRequests] = await Promise.all([
-    loadScheduleAssignableUsers(db),
-    loadScheduleWeek(db, weekStart, { ensureWeek: true, userId: locals.userId ?? null }),
-    loadScheduleShiftOffersForWeek(db, weekStart),
+    loadScheduleAssignableUsers(db, locals.businessId),
+    loadScheduleWeek(db, weekStart, { ensureWeek: true, userId: locals.userId ?? null, businessId: locals.businessId }),
+    loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
     loadScheduleSettings(db),
     loadScheduleTimeOffRequestsForRange(db, weekStart, addDays(weekStart, 6))
   ]);

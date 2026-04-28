@@ -36,9 +36,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   }
 
   const [schedule, offers, employees] = await Promise.all([
-    loadMyWeekSchedule(db, weekStart, locals.userId),
-    loadScheduleShiftOffersForWeek(db, weekStart),
-    loadScheduleAssignableUsers(db)
+    loadMyWeekSchedule(db, weekStart, locals.userId, locals.businessId),
+    loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
+    loadScheduleAssignableUsers(db, locals.businessId)
   ]);
 
   const currentUser = employees.find((employee) => employee.id === locals.userId);

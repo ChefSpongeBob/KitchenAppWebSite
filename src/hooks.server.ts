@@ -2,12 +2,12 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { hashSessionToken } from '$lib/server/auth';
 import { canRoleAccessFeature, resolveFeatureKeyForPath } from '$lib/features/appFeatures';
 import { loadAppFeatureModes } from '$lib/server/appFeatures';
+import { ensureTenantSchema } from '$lib/server/tenant';
 import {
 	bootstrapBusinessForUser,
 	getUserBusinessContext,
 	isBusinessOnboardingComplete
 } from '$lib/server/business';
-import { isWelcomeTourComplete } from '$lib/server/userPreferences';
 import {
 	cancelTrialAndPurgeBusiness,
 	getBusinessTrialAccess,
@@ -18,6 +18,17 @@ import {
 	getSessionCookieName,
 	getSessionCookieOptions
 } from '$lib/server/authCookies';
+
+function normalizeRole(role: string | null | undefined) {
+	return String(role ?? '')
+		.trim()
+		.toLowerCase();
+}
+
+function isBusinessAdminRole(role: string | null | undefined) {
+	const normalized = normalizeRole(role);
+	return normalized === 'owner' || normalized === 'admin' || normalized === 'manager';
+}
 
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const cookieName = getSessionCookieName();
@@ -39,7 +50,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA ?? event.platform?.env?.CAMERA_MEDIA;
 
 	const { pathname } = event.url;
-	const isOnboardingRoute = pathname === '/onboarding';
 	const isAuthRoute =
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||
@@ -58,7 +68,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/camera/upload') ||
 		pathname.startsWith('/api/camera/activity');
-	const isWelcomeRoute = pathname.startsWith('/welcome');
 	const isBillingRoute = pathname.startsWith('/billing');
 
 	const isPrivateRoute = !isAuthRoute && !isPublicMarketingRoute && !isPublicApiRoute;
@@ -69,10 +78,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		response.headers.set('expires', '0');
 		return response;
 	};
-
-	if (!isPrivateRoute) {
-		return isAuthRoute ? resolveWithNoStore() : resolve(event);
-	}
+	const resolvePublicOrAuthRoute = async () => (isAuthRoute ? resolveWithNoStore() : resolve(event));
 
 	const db = event.locals.DB;
 	const primaryCookie = getSessionCookieName();
@@ -81,9 +87,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.cookies.get('session_id') ??
 		event.cookies.get('session_id_pwa');
 
-	if (!db || !sessionToken) {
-		clearSessionCookies(event);
-		throw redirect(303, '/login');
+	if (!db) {
+		if (isPrivateRoute) {
+			clearSessionCookies(event);
+			throw redirect(303, '/login');
+		}
+		return resolvePublicOrAuthRoute();
+	}
+
+	if (!sessionToken) {
+		if (isPrivateRoute) {
+			clearSessionCookies(event);
+			throw redirect(303, '/login');
+		}
+		return resolvePublicOrAuthRoute();
 	}
 	try {
 		const now = Math.floor(Date.now() / 1000);
@@ -131,20 +148,24 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		if (!session || session.revoked_at !== null || session.expires_at < now) {
 			clearSessionCookies(event);
-			throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			return resolvePublicOrAuthRoute();
 		}
 
 		if (session.device_id && (!session.found_device_id || session.device_revoked_at !== null)) {
 			clearSessionCookies(event);
-			throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			return resolvePublicOrAuthRoute();
 		}
 		if (!session.found_user_id) {
 			clearSessionCookies(event);
-			throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			return resolvePublicOrAuthRoute();
 		}
 		if (session.user_is_active !== 1) {
 			clearSessionCookies(event);
-			throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			return resolvePublicOrAuthRoute();
 		}
 
 		// Upgrade legacy plaintext token storage to hashed token.
@@ -183,87 +204,72 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
-		event.locals.userId = session.found_user_id;
-		event.locals.userRole = session.user_role ?? 'user';
-		event.locals.featureModes = await loadAppFeatureModes(db);
-
-		const gatedFeature = resolveFeatureKeyForPath(pathname);
-		if (gatedFeature) {
-			const featureMode = event.locals.featureModes[gatedFeature];
-			if (!canRoleAccessFeature(featureMode, event.locals.userRole)) {
-				throw redirect(303, event.locals.userRole === 'admin' ? '/admin' : '/app');
-			}
-		}
-
 		const businessContext =
 			(await getUserBusinessContext(db, session.found_user_id)) ??
 			(await bootstrapBusinessForUser(db, session.found_user_id, session.user_role, null));
+		await ensureTenantSchema(db);
+
+		event.locals.userId = session.found_user_id;
+		event.locals.userRole = normalizeRole(session.user_role) === 'admin' ? 'admin' : 'user';
 		event.locals.businessId = businessContext.businessId;
 		event.locals.businessName = businessContext.businessName;
 		event.locals.businessLogoUrl = businessContext.businessLogoUrl;
 		event.locals.businessSlug = businessContext.businessSlug;
 		event.locals.businessPlan = businessContext.businessPlan;
 		event.locals.businessRole = businessContext.businessRole;
+		if (event.locals.userRole !== 'admin' && isBusinessAdminRole(businessContext.businessRole)) {
+			event.locals.userRole = 'admin';
+		}
 		event.locals.businessOnboardingComplete = await isBusinessOnboardingComplete(
 			db,
 			businessContext.businessId
 		);
+		event.locals.featureModes = await loadAppFeatureModes(db, businessContext.businessId);
 
-		const trialAccess = await getBusinessTrialAccess(db, businessContext.businessId, now);
-		if (!trialAccess.allowApp) {
-			if (trialAccess.shouldPurge) {
-				const user = await db
-					.prepare(
+		const gatedFeature = resolveFeatureKeyForPath(pathname);
+		if (isPrivateRoute && gatedFeature) {
+			const featureMode = event.locals.featureModes[gatedFeature];
+			if (!canRoleAccessFeature(featureMode, event.locals.userRole)) {
+				throw redirect(303, event.locals.userRole === 'admin' ? '/admin' : '/app');
+			}
+		}
+
+		if (isPrivateRoute) {
+			const trialAccess = await getBusinessTrialAccess(db, businessContext.businessId, now);
+			if (!trialAccess.allowApp) {
+				if (trialAccess.shouldPurge) {
+					const user = await db
+						.prepare(
+							`
+							SELECT email
+							FROM users
+							WHERE id = ?
+							LIMIT 1
 						`
-						SELECT email
-						FROM users
-						WHERE id = ?
-						LIMIT 1
-					`
-					)
-					.bind(session.found_user_id)
-					.first<{ email: string }>();
+						)
+						.bind(session.found_user_id)
+						.first<{ email: string }>();
 
-				await cancelTrialAndPurgeBusiness(db, {
-					businessId: businessContext.businessId,
-					source: 'expired',
-					reason: 'trial_expired_without_conversion',
-					now,
-					identity: {
-						emailNormalized: user?.email ?? '',
-						businessName: businessContext.businessName,
-						ipAddress: getRequestIpAddress(event.request),
-						userAgent: event.request.headers.get('user-agent') ?? ''
-					}
-				});
-				clearSessionCookies(event);
-				throw redirect(303, '/login?trial=expired');
+					await cancelTrialAndPurgeBusiness(db, {
+						businessId: businessContext.businessId,
+						source: 'expired',
+						reason: 'trial_expired_without_conversion',
+						now,
+						identity: {
+							emailNormalized: user?.email ?? '',
+							businessName: businessContext.businessName,
+							ipAddress: getRequestIpAddress(event.request),
+							userAgent: event.request.headers.get('user-agent') ?? ''
+						}
+					});
+					clearSessionCookies(event);
+					throw redirect(303, '/login?trial=expired');
+				}
+
+				if (!isBillingRoute && !pathname.startsWith('/api/')) {
+					throw redirect(303, '/billing?trial=required');
+				}
 			}
-
-			if (!isBillingRoute && !pathname.startsWith('/api/')) {
-				throw redirect(303, '/billing?trial=required');
-			}
-		}
-
-		const needsOnboarding =
-			(businessContext.businessRole === 'owner' || businessContext.businessRole === 'admin') &&
-			!event.locals.businessOnboardingComplete &&
-			!isOnboardingRoute &&
-			!isBillingRoute &&
-			!pathname.startsWith('/api/');
-		if (needsOnboarding) {
-			throw redirect(303, '/onboarding');
-		}
-
-		const welcomeTourComplete = await isWelcomeTourComplete(db, session.found_user_id);
-		const welcomeVariant =
-			businessContext.businessRole === 'owner' ||
-			businessContext.businessRole === 'admin' ||
-			businessContext.businessRole === 'manager'
-				? 'admin'
-				: 'user';
-		if (!welcomeTourComplete && !isWelcomeRoute && !isBillingRoute && !pathname.startsWith('/api/')) {
-			throw redirect(303, `/welcome/${welcomeVariant}`);
 		}
 
 		return resolveWithNoStore();
@@ -272,6 +278,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw error;
 		}
 		clearSessionCookies(event);
-		throw redirect(303, '/login?error=session');
+		if (isPrivateRoute) {
+			throw redirect(303, '/login?error=session');
+		}
+		return resolvePublicOrAuthRoute();
 	}
 };
