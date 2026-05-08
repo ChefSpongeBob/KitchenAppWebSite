@@ -24,16 +24,18 @@
   }
 
   const menuItems: AdminRoute[] = [
-    { href: '/admin', label: 'Dashboard', matches: exact('/admin') },
     { href: '/admin/app-editor', label: 'App Editor', matches: prefix('/admin/app-editor') },
-    { href: '/admin/creator', label: 'Creator Studio', matches: prefix('/admin/creator') },
-    { href: '/admin/category-creator', label: 'Category Creator', matches: prefix('/admin/category-creator') },
     { href: '/admin/app-editor#business-registry', label: 'Business Registry', matches: prefix('/admin/app-editor') },
-    { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
+    { href: '/admin/category-creator', label: 'Category Creator', matches: prefix('/admin/category-creator') },
+    { href: '/admin/creator', label: 'Creator Studio', matches: prefix('/admin/creator') },
+    { href: '/admin', label: 'Dashboard', matches: exact('/admin') },
+    { href: '/admin/documents', label: 'Documents', matches: prefix('/admin/documents'), featureKey: 'documents' },
+    { href: '/admin/onboarding', label: 'Employee Onboarding', matches: prefix('/admin/onboarding') },
     { href: '/admin/users', label: 'Employees', matches: prefix('/admin/users') },
     { href: '/admin/lists', label: 'Lists', matches: prefix('/admin/lists'), featureKey: 'lists' },
+    { href: '/admin/menus', label: 'Menus', matches: prefix('/admin/menus'), featureKey: 'menus' },
     { href: '/admin/recipes', label: 'Recipes', matches: prefix('/admin/recipes'), featureKey: 'recipes' },
-    { href: '/admin/documents', label: 'Documents', matches: prefix('/admin/documents'), featureKey: 'documents' },
+    { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
     { href: '/admin/schedule-settings', label: 'Schedule Settings', matches: prefix('/admin/schedule-settings'), featureKey: 'scheduling' },
     { href: '/admin/schedule-roles', label: 'Schedule Roles', matches: prefix('/admin/schedule-roles'), featureKey: 'scheduling' },
     ...(cameraBetaEnabled

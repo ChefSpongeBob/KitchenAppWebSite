@@ -420,21 +420,14 @@
     position: relative;
     margin-top: 0.95rem;
     padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--surface-outline);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008) 42%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-sm);
   }
 
   .panel::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
+    content: none;
   }
 
   .panel-header {
@@ -470,12 +463,10 @@
 
   .category-tile {
     text-align: left;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 0.72rem;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    background: color-mix(in srgb, var(--color-surface-alt) 36%, transparent);
     display: grid;
     gap: 0.2rem;
     cursor: pointer;
@@ -495,8 +486,9 @@
   .category-tile:hover,
   .category-tile:focus-visible,
   .category-tile.active {
-    border-color: rgba(132, 146, 166, 0.34);
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--color-text-muted) 42%, transparent);
+    background: color-mix(in srgb, var(--color-surface-alt) 62%, transparent);
+    transform: none;
     outline: none;
   }
 
@@ -505,11 +497,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.7rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-divider);
     border-radius: 12px;
     padding: 0.65rem 0.75rem;
     margin-bottom: 0.8rem;
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent;
   }
 
   .editor-launch h3 {
@@ -530,6 +522,10 @@
 
   .editor-block h3 {
     margin: 0 0 0.75rem;
+  }
+
+  .editor-block {
+    overflow-x: auto;
   }
 
   .section-block + .section-block {
@@ -567,7 +563,7 @@
   .sheet td {
     text-align: left;
     padding: 0.48rem 0.42rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--color-divider);
     vertical-align: top;
     overflow-wrap: anywhere;
   }
@@ -577,7 +573,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--color-text-muted);
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--color-surface-alt) 28%, transparent);
   }
 
   .add-row,
@@ -638,9 +634,9 @@
   .feedback-banner {
     margin: 0 0 0.8rem;
     padding: 0.72rem 0.9rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
+    border: 1px solid color-mix(in srgb, #16a34a 34%, var(--color-border));
     border-radius: 12px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    background: color-mix(in srgb, #16a34a 14%, transparent);
     color: #bbf7d0;
   }
 
@@ -652,19 +648,19 @@
   input,
   textarea,
   select {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.42rem 0.55rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.82rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
     color: var(--color-primary-contrast);
     padding: 0.4rem 0.62rem;
     cursor: pointer;
@@ -678,9 +674,9 @@
   }
 
   .danger {
-    border-color: rgba(239, 68, 68, 0.3);
+    border-color: color-mix(in srgb, #ef4444 36%, var(--color-border));
     color: #ffb6b6;
-    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
+    background: color-mix(in srgb, #7f1d1d 34%, var(--color-surface));
   }
 
   @media (max-width: 900px) {

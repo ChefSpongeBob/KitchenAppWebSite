@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 type MeetingNoteRow = {
   id: string;
@@ -75,7 +75,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   await ensureMeetingNotesTable(db);
   await ensureTenantSchema(db, true);
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const result = await db
     .prepare(
@@ -121,7 +121,7 @@ export const actions: Actions = {
 
     await ensureMeetingNotesTable(db);
     await ensureTenantSchema(db, true);
-    const businessId = locals.businessId ?? '';
+    const businessId = requireBusinessId(locals);
 
     const formData = await request.formData();
     const content = String(formData.get('content') ?? '').trim();
@@ -152,7 +152,7 @@ export const actions: Actions = {
 
     await ensureMeetingNotesTable(db);
     await ensureTenantSchema(db, true);
-    const businessId = locals.businessId ?? '';
+    const businessId = requireBusinessId(locals);
 
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();
@@ -189,7 +189,7 @@ export const actions: Actions = {
 
     await ensureMeetingNotesTable(db);
     await ensureTenantSchema(db, true);
-    const businessId = locals.businessId ?? '';
+    const businessId = requireBusinessId(locals);
 
     const formData = await request.formData();
     const id = String(formData.get('id') ?? '').trim();

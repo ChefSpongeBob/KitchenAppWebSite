@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { cleanupExpiredTemps } from '$lib/server/retention';
-import { allowIoTIngest } from '$lib/server/iotIngest';
-import { ensureTenantSchema, singleActiveBusinessId } from '$lib/server/tenant';
+import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 type TempRow = {
   sensor_id: number;
@@ -18,20 +18,6 @@ async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
     .prepare(`CREATE INDEX IF NOT EXISTS idx_temps_sensor_ts_desc ON temps(sensor_id, ts DESC)`)
     .run();
   tempsIndexesEnsured = true;
-}
-
-async function resolveBusinessId(
-  db: App.Platform['env']['DB'],
-  request: Request | null,
-  url: URL,
-  localsBusinessId?: string | null
-) {
-  const explicit =
-    localsBusinessId ||
-    request?.headers.get('x-business-id') ||
-    url.searchParams.get('business_id') ||
-    url.searchParams.get('businessId');
-  return explicit?.trim() || (await singleActiveBusinessId(db)) || '';
 }
 
 function normalizeReading(input: Record<string, unknown>): TempRow | null {
@@ -57,7 +43,10 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
   }
   await ensureTempsIndexes(db);
   await ensureTenantSchema(db);
-  const businessId = await resolveBusinessId(db, request, url, locals.businessId);
+  const businessId = String(locals.businessId ?? '').trim();
+  if (!businessId) {
+    return json({ error: 'Workspace required.' }, { status: 401 });
+  }
 
   const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit') ?? 500)));
   const sensor = url.searchParams.get('sensor');
@@ -106,18 +95,11 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   }
   await ensureTempsIndexes(db);
   await ensureTenantSchema(db);
-  const businessId = await resolveBusinessId(db, request, url, locals.businessId);
-  if (!businessId) {
-    return json({ error: 'Business context is required for temperature ingestion.' }, { status: 400 });
+  const device = await authenticateIoTDevice(db, request, 'sensor');
+  if (!device) {
+    return json({ error: 'Device credentials required.' }, { status: 401 });
   }
-
-  const apiKey = platform?.env?.IOT_API_KEY;
-  if (apiKey) {
-    const headerKey = request.headers.get('x-api-key');
-    if (headerKey !== apiKey) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  const businessId = device.businessId;
 
   let body: unknown;
   try {

@@ -1,18 +1,24 @@
 import type { Actions, PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import {
+  approveEmployeeOnboardingItem,
   approveUser,
   deleteUser,
   denyUser,
+  loadEmployeeOnboarding,
   loadAdminEmployeeProfile,
   loadAdminUsers,
   makeUserAdmin,
+  requestEmployeeOnboardingChanges,
   requireAdmin,
+  revokeEmployeeSessions,
   saveEmployeeProfile,
+  sendEmployeeOnboardingPackage,
   toggleScheduleDepartmentApproval,
   toggleSpecialsAccess
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
+import { listUserSessions } from '$lib/server/security';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
   requireAdmin(locals.userRole);
@@ -35,8 +41,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
   return {
     employee,
-    profile: await loadAdminEmployeeProfile(db, employee.id),
-    departments: await loadScheduleDepartments(db)
+    profile: await loadAdminEmployeeProfile(db, employee.id, locals.businessId),
+    onboarding: await loadEmployeeOnboarding(db, employee.id, locals.businessId),
+    sessions: await listUserSessions(db, employee.id),
+    departments: await loadScheduleDepartments(db, locals.businessId)
   };
 };
 
@@ -48,5 +56,9 @@ export const actions: Actions = {
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
   toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),
-  save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals)
+  save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals),
+  send_onboarding_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
+  approve_onboarding_item: ({ request, locals }) => approveEmployeeOnboardingItem(request, locals),
+  request_onboarding_changes: ({ request, locals }) => requestEmployeeOnboardingChanges(request, locals),
+  revoke_employee_sessions: ({ request, locals }) => revokeEmployeeSessions(request, locals)
 };

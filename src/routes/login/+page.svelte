@@ -1,219 +1,213 @@
-<script>
-	export let form;
-	export let data;
-	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+<script lang="ts">
 	import { page } from '$app/stores';
+	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
+	import AuthShell from '$lib/components/ui/AuthShell.svelte';
+
+	export let form:
+		| {
+				error?: string;
+				email?: string;
+		  }
+		| undefined;
+	export let data:
+		| {
+				activeSession?: {
+					email: string;
+					displayName?: string | null;
+					businessName?: string | null;
+					businessRole?: string | null;
+					role?: string | null;
+					continuePath?: string | null;
+				} | null;
+		  }
+		| undefined;
+
 	let showPassword = false;
+
+	$: activeSession = data?.activeSession ?? null;
+	$: emailValue = form?.email ?? activeSession?.email ?? '';
+	$: statusMessage = (() => {
+		const params = $page.url.searchParams;
+		if (form?.error) return { tone: 'error', text: form.error };
+		if (params.get('error') === 'session') return { tone: 'error', text: 'Your session ended. Sign in again to continue.' };
+		if (params.get('registered') === 'success' && params.get('purchase') === 'pending') {
+			return { tone: 'notice', text: 'Account created. Paid activation is pending app-store billing setup.' };
+		}
+		if (params.get('registered') === 'success') return { tone: 'notice', text: 'Account created. You can sign in now.' };
+		if (params.get('reset') === 'success') return { tone: 'notice', text: 'Password reset. Sign in with your new password.' };
+		if (params.get('trial') === 'expired') return { tone: 'error', text: 'Trial access ended. This workspace now requires paid activation.' };
+		if (params.get('trial') === 'canceled') return { tone: 'notice', text: 'Workspace canceled. Future signup will require paid activation.' };
+		if (params.get('switch') === '1') return { tone: 'notice', text: 'Session cleared. Sign in with the account you want to use.' };
+		return null;
+	})();
 </script>
 
-<Layout>
-	<PageHeader title="Login" />
+<AuthShell
+	eyebrow=""
+	title="Welcome back"
+	subtitle=""
+	supportText=""
+>
+	<div class="auth-stack">
+		<form method="POST" class="auth-form">
+			<div class="auth-form-head">
+				<h2>Sign in</h2>
+			</div>
 
-	<section class="auth-shell">
-		<form method="POST" class="auth-card">
-			<div class="field">
+			{#if statusMessage}
+				<p class="auth-alert" class:error={statusMessage.tone === 'error'}>{statusMessage.text}</p>
+			{/if}
+
+			<div class="auth-field">
 				<label for="login-email">Email</label>
 				<input
+					class="auth-input"
 					id="login-email"
 					name="email"
 					type="email"
 					required
-					value={form?.email ?? data?.activeSession?.email ?? ''}
+					value={emailValue}
+					autocomplete="email"
 					autocapitalize="none"
 					autocorrect="off"
 					spellcheck="false"
 				/>
 			</div>
 
-			<div class="field">
-				<label for="login-password">Password</label>
+			<div class="auth-field">
+				<div class="auth-label-row">
+					<label for="login-password">Password</label>
+					<a href="/forgot-password">Forgot?</a>
+				</div>
 				<div class="password-row">
-					<input id="login-password" name="password" type={showPassword ? 'text' : 'password'} required autocapitalize="none" autocorrect="off" spellcheck="false" />
-					<button type="button" class="toggle" on:click={() => (showPassword = !showPassword)}>
+					<input
+						id="login-password"
+						name="password"
+						type={showPassword ? 'text' : 'password'}
+						required
+						autocomplete="current-password"
+						autocapitalize="none"
+						autocorrect="off"
+						spellcheck="false"
+					/>
+					<button type="button" class="auth-secondary-button" on:click={() => (showPassword = !showPassword)}>
 						{showPassword ? 'Hide' : 'Show'}
 					</button>
 				</div>
 			</div>
 
-			<button type="submit" class="submit">Login</button>
+			<button type="submit" class="auth-button">Sign in</button>
 		</form>
 
-		{#if data?.activeSession?.email}
-			<div class="session-inline">
-				<span>Signed in as {data.activeSession.email}</span>
-				<div class="session-inline-actions">
-					<a href="/app" class="mini-action">Continue</a>
+		{#if activeSession?.email}
+			<div class="auth-divider"></div>
+			<div class="signed-in-strip">
+				<div>
+					<span>Currently signed in</span>
+					<strong>{activeSession.displayName || activeSession.email}</strong>
+					{#if activeSession.businessName}
+						<small>{activeSession.businessName}</small>
+					{/if}
+				</div>
+				<div class="session-actions">
+					<a href={activeSession.continuePath || '/app'} class="auth-secondary-button">Continue</a>
 					<form method="POST" action="?/not_you">
-						<button type="submit" class="mini-action ghost">Not you?</button>
+						<button type="submit" class="auth-link-button">Not you?</button>
 					</form>
 				</div>
 			</div>
 		{/if}
-	</section>
 
-	{#if form?.error}
-		<p class="error">{form.error}</p>
-	{:else if $page.url.searchParams.get('error') === 'session'}
-		<p class="error">Your session could not be restored. Please sign in again.</p>
-	{:else if $page.url.searchParams.get('registered') === 'success'}
-		<p class="notice">Account created. You can sign in now.</p>
-	{:else if $page.url.searchParams.get('purchase') === 'pending'}
-		<p class="notice">Account created. Paid activation is pending app-store billing setup.</p>
-	{:else if $page.url.searchParams.get('reset') === 'success'}
-		<p class="notice">Password reset. You can sign in now.</p>
-	{:else if $page.url.searchParams.get('trial') === 'expired'}
-		<p class="error">Trial ended without conversion. The workspace was closed and trial access is now locked.</p>
-	{:else if $page.url.searchParams.get('trial') === 'canceled'}
-		<p class="notice">Workspace canceled and closed. Future signup will require paid activation.</p>
-	{:else if $page.url.searchParams.get('switch') === '1'}
-		<p class="notice">Session cleared. You can sign in with a different account.</p>
-	{/if}
+		<div class="auth-footer-row">
+			<p class="auth-footer">No account yet?</p>
+			<a href="/register#onboarding-slideshow" class="auth-link-button">Create workspace</a>
+		</div>
 
-	<p>
-		<a href="/forgot-password">Forgot password?</a>
-	</p>
-
-	<p>
-		No account?
-		<a href="/register#onboarding-slideshow">Create one here</a>
-	</p>
-
-	<AppInstallCard compact />
-</Layout>
+		<div class="install-wrap">
+			<AppInstallCard compact />
+		</div>
+	</div>
+</AuthShell>
 
 <style>
-	form {
-		width: min(100%, 34rem);
+	.auth-stack {
 		display: grid;
 		gap: 0.95rem;
 	}
 
-	.auth-shell {
-		display: grid;
-		gap: 1rem;
-	}
-
-	.session-inline {
-		width: min(100%, 34rem);
+	.auth-label-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 0.6rem;
-		flex-wrap: wrap;
-		font-size: 0.86rem;
+		gap: 0.75rem;
+	}
+
+	.auth-label-row a {
 		color: var(--color-text-muted);
-		padding: 0.1rem 0.1rem 0;
-	}
-
-	.session-inline-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.45rem;
-	}
-
-	.session-inline-actions form {
-		width: auto;
-		display: inline;
-	}
-
-	.auth-card {
-		padding: 1.15rem;
-		border: 1px solid rgba(255,255,255,0.08);
-		border-radius: var(--radius-lg);
-		background:
-			linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-			color-mix(in srgb, var(--color-surface) 94%, black 6%);
-		box-shadow: 0 18px 38px rgba(4, 5, 7, 0.2);
-	}
-
-	.field {
-		display: grid;
-		gap: 0.35rem;
-	}
-
-	label {
-		display: block;
-		font-size: 0.83rem;
-		color: var(--color-text-muted);
-	}
-
-	input {
-		width: 100%;
-		padding: 0.55rem 0.65rem;
-		border-radius: 10px;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
-		color: var(--color-text);
-	}
-
-	.submit {
-		padding: 0.72rem 0.85rem;
-		border-radius: 12px;
-		border: 1px solid rgba(122, 132, 148, 0.24);
-		background: linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.15));
-		color: var(--color-primary-contrast);
+		font-size: 0.82rem;
 		font-weight: var(--weight-semibold);
-	}
-
-	.mini-action {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.38rem 0.58rem;
-		border-radius: 9px;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
-		color: var(--color-text);
-		font-size: 0.79rem;
 		text-decoration: none;
 	}
 
-	.mini-action.ghost {
-		cursor: pointer;
-	}
-
-	p {
-		margin: 0.5rem 0 0;
-		color: var(--color-text-muted);
-	}
-
-	a {
+	.auth-label-row a:hover {
 		color: var(--color-text);
 	}
 
-	.notice {
-		color: var(--color-text-muted);
-		margin-top: 0.5rem;
-	}
-
-	.error {
-		color: #ff8d92;
-		margin-top: 0.5rem;
-	}
-
-	.password-row {
+	.signed-in-strip {
 		display: flex;
-		gap: 0.5rem;
 		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem;
+		flex-wrap: wrap;
+		border-radius: 16px;
+		background: color-mix(in srgb, var(--color-surface-alt) 82%, transparent);
+		border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+		padding: 0.78rem;
 	}
 
-	.password-row input {
-		flex: 1;
+	.signed-in-strip div:first-child {
+		display: grid;
+		gap: 0.12rem;
 	}
 
-	.toggle {
-		min-width: 4.4rem;
-		padding: 0.58rem 0.72rem;
+	.signed-in-strip span,
+	.signed-in-strip small {
+		color: var(--color-text-muted);
+		font-size: 0.76rem;
 	}
 
-	@media (max-width: 760px) {
-		.password-row {
-			flex-direction: column;
+	.signed-in-strip strong {
+		color: var(--color-text);
+		font-size: 0.92rem;
+	}
+
+	.session-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+
+	.session-actions form {
+		display: inline;
+	}
+
+	.install-wrap {
+		margin-top: 0.1rem;
+	}
+
+	@media (max-width: 520px) {
+		.signed-in-strip,
+		.session-actions {
 			align-items: stretch;
+		}
+
+		.signed-in-strip,
+		.session-actions,
+		.session-actions .auth-secondary-button,
+		.session-actions form,
+		.session-actions button {
+			width: 100%;
 		}
 	}
 </style>
-
-

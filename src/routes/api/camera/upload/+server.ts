@@ -2,22 +2,11 @@ import { json } from '@sveltejs/kit';
 import { cameraBetaEnabled } from '$lib/config/features';
 import {
   cleanupExpiredCameraMedia,
-  cameraIngestAuthorized,
   ensureCameraSchema,
   extensionFromContentType
 } from '$lib/server/camera';
-import { allowIoTIngest } from '$lib/server/iotIngest';
-import { ensureTenantSchema, singleActiveBusinessId } from '$lib/server/tenant';
-
-async function resolveBusinessId(db: App.Platform['env']['DB'], request: Request, url: URL) {
-  return (
-    request.headers.get('x-business-id')?.trim() ||
-    url.searchParams.get('business_id')?.trim() ||
-    url.searchParams.get('businessId')?.trim() ||
-    (await singleActiveBusinessId(db)) ||
-    ''
-  );
-}
+import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
 export async function POST({ request, platform, url }) {
   if (!cameraBetaEnabled) {
@@ -28,9 +17,8 @@ export async function POST({ request, platform, url }) {
   if (!bucket) {
     return json({ error: 'Camera media bucket not configured.' }, { status: 503 });
   }
-  if (!cameraIngestAuthorized(request, platform?.env?.IOT_API_KEY)) {
-    return json({ error: 'Unauthorized.' }, { status: 401 });
-  }
+  const device = db ? await authenticateIoTDevice(db, request, 'camera') : null;
+  if (!device) return json({ error: 'Device credentials required.' }, { status: 401 });
 
   const contentType = request.headers.get('content-type') ?? 'application/octet-stream';
   const fileBuffer = await request.arrayBuffer();
@@ -49,10 +37,7 @@ export async function POST({ request, platform, url }) {
   const ext = explicitExt || extensionFromContentType(contentType, kind === 'clip' ? 'mp4' : 'jpg');
   const timestamp = Math.floor(Date.now() / 1000);
   const safeCameraId = cameraId.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
-  const businessId = db ? await resolveBusinessId(db, request, url) : '';
-  if (db && !businessId) {
-    return json({ error: 'Business context is required for camera uploads.' }, { status: 400 });
-  }
+  const businessId = device.businessId;
   if (db) {
     const guardSuffix = Number.isFinite(explicitTimestamp)
       ? `${Math.floor(explicitTimestamp)}`
@@ -70,7 +55,7 @@ export async function POST({ request, platform, url }) {
       );
     }
   }
-  const key = `${safeCameraId}/${kind}/${timestamp}-${crypto.randomUUID()}.${ext}`;
+  const key = `businesses/${businessId}/camera/${safeCameraId}/${kind}/${timestamp}-${crypto.randomUUID()}.${ext}`;
 
   await bucket.put(key, fileBuffer, {
     httpMetadata: {

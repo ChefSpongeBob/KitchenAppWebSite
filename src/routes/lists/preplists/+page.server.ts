@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
+import { requireBusinessId } from '$lib/server/tenant';
 
 type SectionRow = {
   slug: string;
@@ -10,7 +11,7 @@ type SectionRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) throw error(503, 'Database binding is missing.');
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const result = await db
     .prepare(

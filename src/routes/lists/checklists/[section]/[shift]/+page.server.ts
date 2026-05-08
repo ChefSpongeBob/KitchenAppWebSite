@@ -2,8 +2,6 @@ import { error } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { createChecklistPage } from '$lib/server/checklists';
 
-const ALLOWED_SHIFTS = new Set(['opening', 'midday', 'closing']);
-
 function toTitle(value: string) {
   return value
     .replace(/[-_]+/g, ' ')
@@ -13,12 +11,8 @@ function toTitle(value: string) {
 }
 
 function handlersFor(section: string, shift: string) {
-  if (!ALLOWED_SHIFTS.has(shift)) {
-    throw error(404, 'Checklist shift not found.');
-  }
-
-  const sectionSlug = `${section}-${shift}`;
-  const title = `${toTitle(section)} ${toTitle(shift)}`;
+  const sectionSlug = shift === section ? section : `${section}-${shift}`;
+  const title = shift === section ? toTitle(section) : `${toTitle(section)} ${toTitle(shift)}`;
 
   return createChecklistPage(sectionSlug, title, {
     subtitle: 'Work through the checklist and reset when needed.',

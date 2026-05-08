@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { hashSessionToken } from '$lib/server/auth';
 import { canRoleAccessFeature, resolveFeatureKeyForPath } from '$lib/features/appFeatures';
@@ -9,26 +10,24 @@ import {
 	isBusinessOnboardingComplete
 } from '$lib/server/business';
 import {
+	ACTIVE_BUSINESS_COOKIE,
+	getActiveBusinessCookieDeleteOptions,
+	getActiveBusinessCookieOptions
+} from '$lib/server/activeBusiness';
+import {
 	cancelTrialAndPurgeBusiness,
 	getBusinessTrialAccess,
 	getRequestIpAddress
 } from '$lib/server/trial';
+import { loadEmployeeOnboardingAccessStatus } from '$lib/server/admin';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName,
 	getSessionCookieOptions
 } from '$lib/server/authCookies';
-
-function normalizeRole(role: string | null | undefined) {
-	return String(role ?? '')
-		.trim()
-		.toLowerCase();
-}
-
-function isBusinessAdminRole(role: string | null | undefined) {
-	const normalized = normalizeRole(role);
-	return normalized === 'owner' || normalized === 'admin' || normalized === 'manager';
-}
+import { effectiveAppRoleFromBusinessRole } from '$lib/server/permissions';
+import { wrapProductionSchemaGuard } from '$lib/server/schemaGuard';
+import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
 
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const cookieName = getSessionCookieName();
@@ -43,11 +42,18 @@ function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
 	event.cookies.delete(cookieName, deleteOptions);
 	event.cookies.delete('session_id', { path: '/' });
 	event.cookies.delete('session_id_pwa', { path: '/' });
+	event.cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(event.request));
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	event.locals.DB = event.platform?.env?.DB as App.Platform['env']['DB'];
-	event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA ?? event.platform?.env?.CAMERA_MEDIA;
+	const rawDb = event.platform?.env?.DB as App.Platform['env']['DB'];
+	event.locals.DB = rawDb
+		? wrapProductionSchemaGuard(
+				rawDb,
+				dev || event.platform?.env?.ALLOW_RUNTIME_SCHEMA_MUTATION === 'true'
+			)
+		: rawDb;
+	event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA;
 
 	const { pathname } = event.url;
 	const isAuthRoute =
@@ -58,12 +64,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname.startsWith('/logout');
 	const isPublicMarketingRoute =
 		pathname === '/' ||
+		pathname === '/about' ||
 		pathname === '/features' ||
 		pathname === '/how-it-works' ||
 		pathname === '/pricing';
 
 	const isPublicApiRoute =
 		pathname.startsWith('/api/internal/smoke') ||
+		pathname.startsWith('/api/internal/schema-readiness') ||
 		pathname.startsWith('/api/smoke-session') ||
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/camera/upload') ||
@@ -89,6 +97,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	if (!db) {
 		if (isPrivateRoute) {
+			logOperationalEvent({
+				level: 'error',
+				event: 'db_unavailable_private_route',
+				request: event.request,
+				route: pathname,
+				status: 503
+			});
 			clearSessionCookies(event);
 			throw redirect(303, '/login');
 		}
@@ -147,22 +162,57 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}>();
 
 		if (!session || session.revoked_at !== null || session.expires_at < now) {
+			logOperationalEvent({
+				level: 'warn',
+				event: 'session_rejected',
+				request: event.request,
+				route: pathname,
+				status: 401,
+				metadata: { reason: !session ? 'missing' : session.revoked_at !== null ? 'revoked' : 'expired' }
+			});
 			clearSessionCookies(event);
 			if (isPrivateRoute) throw redirect(303, '/login?error=session');
 			return resolvePublicOrAuthRoute();
 		}
 
 		if (session.device_id && (!session.found_device_id || session.device_revoked_at !== null)) {
+			logOperationalEvent({
+				level: 'warn',
+				event: 'session_device_rejected',
+				request: event.request,
+				userId: session.found_user_id,
+				sessionId: session.id,
+				route: pathname,
+				status: 401,
+				metadata: { reason: !session.found_device_id ? 'missing_device' : 'revoked_device' }
+			});
 			clearSessionCookies(event);
 			if (isPrivateRoute) throw redirect(303, '/login?error=session');
 			return resolvePublicOrAuthRoute();
 		}
 		if (!session.found_user_id) {
+			logOperationalEvent({
+				level: 'warn',
+				event: 'session_user_missing',
+				request: event.request,
+				sessionId: session.id,
+				route: pathname,
+				status: 401
+			});
 			clearSessionCookies(event);
 			if (isPrivateRoute) throw redirect(303, '/login?error=session');
 			return resolvePublicOrAuthRoute();
 		}
 		if (session.user_is_active !== 1) {
+			logOperationalEvent({
+				level: 'warn',
+				event: 'session_user_inactive',
+				request: event.request,
+				userId: session.found_user_id,
+				sessionId: session.id,
+				route: pathname,
+				status: 401
+			});
 			clearSessionCookies(event);
 			if (isPrivateRoute) throw redirect(303, '/login?error=session');
 			return resolvePublicOrAuthRoute();
@@ -204,22 +254,28 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
+		const requestedBusinessId = event.cookies.get(ACTIVE_BUSINESS_COOKIE) ?? null;
 		const businessContext =
-			(await getUserBusinessContext(db, session.found_user_id)) ??
+			(await getUserBusinessContext(db, session.found_user_id, requestedBusinessId)) ??
 			(await bootstrapBusinessForUser(db, session.found_user_id, session.user_role, null));
 		await ensureTenantSchema(db);
 
+		if (requestedBusinessId !== businessContext.businessId) {
+			event.cookies.set(
+				ACTIVE_BUSINESS_COOKIE,
+				businessContext.businessId,
+				getActiveBusinessCookieOptions(event.request)
+			);
+		}
+
 		event.locals.userId = session.found_user_id;
-		event.locals.userRole = normalizeRole(session.user_role) === 'admin' ? 'admin' : 'user';
+		event.locals.userRole = effectiveAppRoleFromBusinessRole(businessContext.businessRole);
 		event.locals.businessId = businessContext.businessId;
 		event.locals.businessName = businessContext.businessName;
 		event.locals.businessLogoUrl = businessContext.businessLogoUrl;
 		event.locals.businessSlug = businessContext.businessSlug;
 		event.locals.businessPlan = businessContext.businessPlan;
 		event.locals.businessRole = businessContext.businessRole;
-		if (event.locals.userRole !== 'admin' && isBusinessAdminRole(businessContext.businessRole)) {
-			event.locals.userRole = 'admin';
-		}
 		event.locals.businessOnboardingComplete = await isBusinessOnboardingComplete(
 			db,
 			businessContext.businessId
@@ -230,6 +286,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (isPrivateRoute && gatedFeature) {
 			const featureMode = event.locals.featureModes[gatedFeature];
 			if (!canRoleAccessFeature(featureMode, event.locals.userRole)) {
+				logOperationalEvent({
+					level: 'warn',
+					event: 'tenant_access_denied',
+					request: event.request,
+					businessId: businessContext.businessId,
+					userId: session.found_user_id,
+					sessionId: session.id,
+					route: pathname,
+					status: 403,
+					metadata: { feature: gatedFeature, reason: 'feature_mode' }
+				});
 				throw redirect(303, event.locals.userRole === 'admin' ? '/admin' : '/app');
 			}
 		}
@@ -238,6 +305,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 			const trialAccess = await getBusinessTrialAccess(db, businessContext.businessId, now);
 			if (!trialAccess.allowApp) {
 				if (trialAccess.shouldPurge) {
+					logOperationalEvent({
+						level: 'warn',
+						event: 'trial_expired_purge_started',
+						request: event.request,
+						businessId: businessContext.businessId,
+						userId: session.found_user_id,
+						sessionId: session.id,
+						route: pathname,
+						status: 403,
+						metadata: { reason: trialAccess.denialReason ?? 'trial_expired' }
+					});
 					const user = await db
 						.prepare(
 							`
@@ -267,8 +345,47 @@ export const handle: Handle = async ({ event, resolve }) => {
 				}
 
 				if (!isBillingRoute && !pathname.startsWith('/api/')) {
+					logOperationalEvent({
+						level: 'warn',
+						event: 'billing_access_required',
+						request: event.request,
+						businessId: businessContext.businessId,
+						userId: session.found_user_id,
+						sessionId: session.id,
+						route: pathname,
+						status: 402,
+						metadata: { status: trialAccess.mode }
+					});
 					throw redirect(303, '/billing?trial=required');
 				}
+			}
+		}
+
+		if (
+			isPrivateRoute &&
+			event.locals.userRole !== 'admin' &&
+			!pathname.startsWith('/settings') &&
+			!pathname.startsWith('/api/') &&
+			!pathname.startsWith('/logout')
+		) {
+			const onboardingAccess = await loadEmployeeOnboardingAccessStatus(
+				db,
+				businessContext.businessId,
+				session.found_user_id
+			);
+			if (onboardingAccess.required && !onboardingAccess.approved) {
+				logOperationalEvent({
+					level: 'info',
+					event: 'employee_onboarding_gate',
+					request: event.request,
+					businessId: businessContext.businessId,
+					userId: session.found_user_id,
+					sessionId: session.id,
+					route: pathname,
+					status: 302,
+					metadata: { reason: 'onboarding_required' }
+				});
+				throw redirect(303, '/settings?tab=onboarding');
 			}
 		}
 
@@ -277,6 +394,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (isRedirect(error)) {
 			throw error;
 		}
+		logOperationalError({
+			event: 'request_guard_error',
+			request: event.request,
+			route: pathname,
+			status: 500,
+			error
+		});
 		clearSessionCookies(event);
 		if (isPrivateRoute) {
 			throw redirect(303, '/login?error=session');

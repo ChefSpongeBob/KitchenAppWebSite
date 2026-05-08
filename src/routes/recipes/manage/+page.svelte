@@ -76,14 +76,39 @@
     gap: 1rem;
   }
 
-  input, select {
+  form {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  form + form {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  input,
+  select {
     display: block;
     width: 100%;
-    margin-bottom: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 0.48rem 0.6rem;
+    background: var(--surface-wash), var(--color-surface-alt);
+    color: var(--color-text);
+    font-size: 0.84rem;
   }
 
   button {
     margin-top: 0.25rem;
+    min-height: 2.35rem;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
+    color: var(--color-primary-contrast);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: var(--weight-medium);
   }
 </style>
 

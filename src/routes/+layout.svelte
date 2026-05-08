@@ -17,6 +17,21 @@
     featureKey?: AppFeatureKey;
   };
 
+  type AdminControlGroup = {
+    label: string;
+    icon: string;
+    items: FeatureAwareNavItem[];
+  };
+
+  type BusinessMembership = {
+    businessId: string;
+    businessName: string;
+    businessSlug: string;
+    businessPlan: string;
+    businessRole: string;
+    businessLogoUrl: string | null;
+  };
+
   export let data: {
     user:
       | {
@@ -27,6 +42,7 @@
           businessLogoUrl?: string | null;
           businessRole?: string | null;
           businessOnboardingComplete?: boolean;
+          businesses?: BusinessMembership[];
         }
       | null;
     featureModes?: AppFeatureModes;
@@ -46,15 +62,50 @@
     route: "/admin",
     icon: "admin_panel_settings"
   };
-  const adminControlLinks: FeatureAwareNavItem[] = [
-    { label: "Home", route: "/app", icon: "home" },
-    { label: "Admin Dashboard", route: "/admin", icon: "space_dashboard" },
-    { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
-    { label: "Creator Studio", route: "/admin/creator", icon: "build_circle" },
-    { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" },
-    { label: "Staff Manager", route: "/admin/users", icon: "groups" },
-    { label: "Camera & Sensors", route: "/admin/camera", icon: "videocam" },
-    { label: "Schedule Settings", route: "/admin/schedule-settings", icon: "settings", featureKey: "scheduling" }
+  const adminControlGroups: AdminControlGroup[] = [
+    {
+      label: "General",
+      icon: "space_dashboard",
+      items: [
+        { label: "Home", route: "/app", icon: "home" },
+        { label: "Admin Dashboard", route: "/admin", icon: "space_dashboard" }
+      ]
+    },
+    {
+      label: "Workspace",
+      icon: "tune",
+      items: [
+        { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
+        { label: "Creator Studio", route: "/admin/creator", icon: "build_circle" },
+        { label: "Category Creator", route: "/admin/category-creator", icon: "category" },
+        { label: "Documents", route: "/admin/documents", icon: "description", featureKey: "documents" },
+        { label: "Lists", route: "/admin/lists", icon: "checklist", featureKey: "lists" },
+        { label: "Menus", route: "/admin/menus", icon: "restaurant_menu", featureKey: "menus" },
+        { label: "Recipes", route: "/admin/recipes", icon: "menu_book", featureKey: "recipes" }
+      ]
+    },
+    {
+      label: "Scheduling",
+      icon: "calendar_view_week",
+      items: [
+        { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" },
+        { label: "Schedule Settings", route: "/admin/schedule-settings", icon: "settings", featureKey: "scheduling" },
+        { label: "Schedule Roles", route: "/admin/schedule-roles", icon: "badge", featureKey: "scheduling" }
+      ]
+    },
+    {
+      label: "People",
+      icon: "groups",
+      items: [
+        { label: "Staff Manager", route: "/admin/users", icon: "groups" },
+        { label: "Employee Onboarding", route: "/admin/onboarding", icon: "assignment_ind" }
+      ]
+    },
+    {
+      label: "Systems",
+      icon: "videocam",
+      items: [{ label: "Camera & Sensors", route: "/admin/camera", icon: "videocam" }]
+    }
   ];
 
   function canSeeFeature(featureKey: AppFeatureKey | undefined) {
@@ -104,7 +155,17 @@
 
   function isActive(route: string, path: string) {
     if (route === "/") return path === "/";
+    if (route === "/admin") return path === "/admin";
     return path === route || path.startsWith(`${route}/`);
+  }
+
+  function isAdminGroupActive(group: AdminControlGroup) {
+    return group.items.some((item) => isActive(item.route, currentPath));
+  }
+
+  function submitWorkspaceSwitch(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    select.form?.requestSubmit();
   }
 
   function setupScrollReveal() {
@@ -188,7 +249,13 @@
     !navTargetPath.startsWith("/register");
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
   $: filteredPrimaryNav = primaryNav.filter((item) => canSeeFeature(item.featureKey));
-  $: visibleAdminControlLinks = adminControlLinks.filter((item) => canSeeFeature(item.featureKey));
+  $: visibleAdminControlGroups = adminControlGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canSeeFeature(item.featureKey))
+    }))
+    .filter((group) => group.items.length > 0);
+  $: userBusinesses = data.user?.businesses ?? [];
   $: normalizedUserRole = String(data.user?.role ?? "").trim().toLowerCase();
   $: normalizedBusinessRole = String(data.user?.businessRole ?? "").trim().toLowerCase();
   $: isAdminAccount = Boolean(
@@ -374,20 +441,42 @@
           <strong>{data.user?.businessName?.trim() || 'Kitchen Hub'}</strong>
           <small>Service Workspace</small>
         </div>
+        {#if userBusinesses.length > 1}
+          <form method="POST" action="/workspace/switch" class="workspace-switch-form">
+            <select name="business_id" aria-label="Workspace" on:change={submitWorkspaceSwitch}>
+              {#each userBusinesses as business}
+                <option value={business.businessId} selected={business.businessId === data.user?.businessId}>
+                  {business.businessName}
+                </option>
+              {/each}
+            </select>
+          </form>
+        {/if}
       </div>
       {#if isAdminSidebar}
         <div class="side-section-label">Admin Controls</div>
-        {#each visibleAdminControlLinks as item}
-          <a
-            href={item.route}
-            class="side-item tap"
-            class:active={isActive(item.route, currentPath)}
-            on:click={() => (sidebarOpen = false)}
-          >
-            <span class="active-indicator"></span>
-            <span class="material-icons">{item.icon}</span>
-            <span>{item.label}</span>
-          </a>
+        {#each visibleAdminControlGroups as group}
+          <details class="side-group" open={isAdminGroupActive(group)}>
+            <summary class="side-group-summary tap" class:active={isAdminGroupActive(group)}>
+              <span class="material-icons">{group.icon}</span>
+              <span>{group.label}</span>
+              <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
+            </summary>
+            <div class="side-group-items">
+              {#each group.items as item}
+                <a
+                  href={item.route}
+                  class="side-item side-sub-item tap"
+                  class:active={isActive(item.route, currentPath)}
+                  on:click={() => (sidebarOpen = false)}
+                >
+                  <span class="active-indicator"></span>
+                  <span class="material-icons">{item.icon}</span>
+                  <span>{item.label}</span>
+                </a>
+              {/each}
+            </div>
+          </details>
         {/each}
       {:else}
         {#each navItems as item}
@@ -832,7 +921,7 @@
     left: calc(0.75rem + var(--safe-left));
     z-index: 1001;
 
-    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-sm);
     width: 2.7rem;
@@ -841,14 +930,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
     color: var(--color-text);
     transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
   }
 
   .hamburger:hover {
-    border-color: rgba(132, 146, 166, 0.28);
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+    background: color-mix(in srgb, var(--color-surface-alt) 92%, transparent);
   }
 
   .menu-icon {
@@ -868,7 +957,7 @@
     right: calc(0.75rem + var(--safe-right));
     z-index: 1001;
 
-    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-sm);
     width: 2.7rem;
@@ -877,7 +966,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
     color: var(--color-text);
   }
 
@@ -888,7 +977,7 @@
 
   .hamburger.open,
   .hamburger:focus-visible {
-    border-color: rgba(132, 146, 166, 0.3);
+    border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
   }
 
   /* ===== Overlay ===== */
@@ -908,11 +997,9 @@
     bottom: 0;
     width: min(82vw, 300px);
 
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
-    border-right: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 18px 0 40px rgba(0,0,0,0.28);
+    background: var(--surface-wash), color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    border-right: 1px solid var(--color-border);
+    box-shadow: 12px 0 30px rgba(0,0,0,0.22);
     backdrop-filter: blur(16px);
 
     transform: translateX(-100%);
@@ -945,6 +1032,7 @@
   .sidebar-brand {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 10px;
     padding: 0 8px 10px;
@@ -952,8 +1040,7 @@
     position: sticky;
     top: 0;
     z-index: 1;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 96%, black 4%), rgba(33, 37, 42, 0.94));
+    background: color-mix(in srgb, var(--color-surface) 96%, black 4%);
     backdrop-filter: blur(12px);
   }
 
@@ -964,10 +1051,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background:
-      linear-gradient(145deg, rgba(132, 146, 166, 0.26), rgba(216, 192, 166, 0.08)),
-      var(--color-surface-alt);
-    border: 1px solid rgba(122, 132, 148, 0.25);
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, var(--color-primary) 12%);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
     color: var(--color-primary-contrast);
     font-weight: var(--weight-bold);
     letter-spacing: 0.03em;
@@ -996,7 +1081,84 @@
     font-size: 0.73rem;
   }
 
+  .workspace-switch-form {
+    flex: 1 0 100%;
+    margin-left: 50px;
+  }
+
+  .workspace-switch-form select {
+    width: 100%;
+    border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+    color: var(--color-text);
+    padding: 0.42rem 0.55rem;
+    font: inherit;
+    font-size: 0.78rem;
+    outline: none;
+  }
+
+  .workspace-switch-form select:focus {
+    border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+  }
+
   /* ===== Sidebar Items ===== */
+  .side-group {
+    display: grid;
+    gap: 4px;
+  }
+
+  .side-group-summary {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: var(--text-md);
+    font-weight: var(--weight-medium);
+    list-style: none;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+
+  .side-group-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .side-group-summary:hover,
+  .side-group-summary.active {
+    background: color-mix(in srgb, var(--color-surface-alt) 84%, transparent);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .side-group-summary:hover {
+    transform: translateX(2px);
+  }
+
+  .side-group-summary .material-icons {
+    font-size: 20px;
+  }
+
+  .expand-icon {
+    margin-left: auto;
+    font-size: 18px;
+    transition: transform 160ms ease;
+  }
+
+  .side-group[open] .expand-icon {
+    transform: rotate(180deg);
+  }
+
+  .side-group-items {
+    display: grid;
+    gap: 3px;
+    padding-left: 0.6rem;
+  }
+
   .side-item {
     position: relative;
     display: flex;
@@ -1017,13 +1179,22 @@
 
   .side-item:hover {
     background: color-mix(in srgb, var(--color-surface-alt) 84%, transparent);
-    border-color: rgba(255,255,255,0.06);
+    border-color: var(--color-border);
     color: var(--color-text);
     transform: translateX(2px);
   }
 
   .side-item .material-icons {
     font-size: 20px;
+  }
+
+  .side-sub-item {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .side-sub-item .material-icons {
+    font-size: 18px;
   }
 
   .side-section-label {
@@ -1051,10 +1222,8 @@
 
   .side-item.active {
     color: var(--color-text);
-    background:
-      linear-gradient(90deg, rgba(132, 146, 166, 0.12), transparent 65%),
-      var(--color-surface-alt);
-    border-color: rgba(122, 132, 148, 0.18);
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, var(--color-primary) 12%);
+    border-color: color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
   }
 
   .side-item.active .active-indicator {
@@ -1064,26 +1233,18 @@
   .app-footer {
     margin-top: auto;
     position: relative;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid var(--color-divider);
     color: var(--color-text-muted);
     font-size: 0.78rem;
     padding: 1rem 1rem calc(0.95rem + var(--safe-bottom));
-    background:
-      radial-gradient(circle at top center, rgba(132, 146, 166, 0.14), transparent 50%),
-      linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-bg) 90%, black 10%);
+    background: var(--surface-wash), color-mix(in srgb, var(--color-bg) 92%, black 8%);
     backdrop-filter: blur(14px);
-    box-shadow:
-      0 -10px 26px rgba(132, 146, 166, 0.08),
-      inset 0 1px 0 rgba(255,255,255,0.03);
+    box-shadow: none;
   }
 
   .app-footer.marketing-footer {
     margin-top: 2rem;
-    background:
-      radial-gradient(circle at top center, rgba(132, 146, 166, 0.08), transparent 56%),
-      linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-bg) 93%, black 7%);
+    background: var(--surface-wash), color-mix(in srgb, var(--color-bg) 94%, black 6%);
   }
 
   .app-footer::before {
@@ -1095,8 +1256,8 @@
     top: -1px;
     height: 2px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(132, 146, 166, 0.06), rgba(132, 146, 166, 0.55), rgba(132, 146, 166, 0.06));
-    box-shadow: 0 0 18px rgba(132, 146, 166, 0.22);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-primary) 35%, transparent), transparent);
+    box-shadow: none;
   }
 
   .footer-shell {

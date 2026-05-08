@@ -118,18 +118,19 @@
         "
       >
         <button
-          class="bubble"
+          class="cloud-puff"
           type="button"
           style="
-            width:{size(idea.votes)}px;
-            height:{size(idea.votes)}px;
-            --glow:{idea.votes};
+            --cloud-size:{size(idea.votes)}px;
             --floatDur:{motions[idea.id]?.floatDur || 6}s;
             --pulseDur:{motions[idea.id]?.pulseDur || 4}s;
             --delay:{motions[idea.id]?.delay || 0}s;
           "
           on:click={() => upvote(idea.id)}
         >
+          <svg class="cloud-shape" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 19A1.5 1.5 0 0 1 5 20.5A1.5 1.5 0 0 1 3.5 22A1.5 1.5 0 0 1 2 20.5A1.5 1.5 0 0 1 3.5 19m5-3a2.5 2.5 0 0 1 2.5 2.5A2.5 2.5 0 0 1 8.5 21A2.5 2.5 0 0 1 6 18.5A2.5 2.5 0 0 1 8.5 16m6-1c-1.19 0-2.27-.5-3-1.35c-.73.85-1.81 1.35-3 1.35c-1.96 0-3.59-1.41-3.93-3.26A4.02 4.02 0 0 1 2 8a4 4 0 0 1 4-4c.26 0 .5.03.77.07C7.5 3.41 8.45 3 9.5 3c1.19 0 2.27.5 3 1.35c.73-.85 1.81-1.35 3-1.35c1.96 0 3.59 1.41 3.93 3.26A4.02 4.02 0 0 1 22 10a4 4 0 0 1-4 4l-.77-.07c-.73.66-1.68 1.07-2.73 1.07" />
+          </svg>
           <span>{idea.text}</span>
           <small>{idea.votes}</small>
         </button>
@@ -144,12 +145,10 @@
     display: grid;
     gap: 0.9rem;
     padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: var(--surface-outline);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-xs);
     overflow: hidden;
   }
 
@@ -158,7 +157,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
+    background: color-mix(in srgb, var(--color-primary) 45%, transparent);
   }
 
   .input-row {
@@ -170,14 +169,22 @@
   input {
     flex: 1;
     padding: 10px 12px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
+    border: var(--surface-outline);
+    background: var(--color-surface);
+    color: var(--color-text);
   }
 
-  button {
+  .input-row button {
     padding: 10px 14px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 42%, var(--color-border) 58%);
+    background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+    color: var(--color-text);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
   }
+
   .board {
     display: flex;
     flex-wrap: wrap;
@@ -185,54 +192,76 @@
     gap: 28px;
     min-height: 280px;
     padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 18px;
+    border: var(--surface-outline);
+    border-radius: var(--radius-lg);
     background:
-      radial-gradient(circle at top, rgba(132, 146, 166, 0.08), transparent 36%),
-      linear-gradient(180deg, color-mix(in srgb, var(--color-surface-alt) 80%, black 20%), var(--color-surface));
+      radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 32%),
+      color-mix(in srgb, var(--color-surface-alt) 74%, var(--color-surface) 26%);
   }
+
   .wrap { display: inline-block; }
-  .bubble {
+
+  .cloud-puff {
     position: relative;
-    border-radius: 50%;
-    padding: 16px;
+    width: calc(var(--cloud-size) * 1.62);
+    min-height: calc(var(--cloud-size) * 1.28);
+    padding: calc(var(--cloud-size) * 0.22) calc(var(--cloud-size) * 0.28) calc(var(--cloud-size) * 0.38);
     cursor: pointer;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    background:
-      radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.22), transparent 36%),
-      radial-gradient(circle at 70% 78%, rgba(132, 146, 166, 0.16), transparent 42%),
-      linear-gradient(180deg, color-mix(in srgb, var(--color-surface-soft) 84%, var(--color-primary) 16%), color-mix(in srgb, var(--color-surface) 94%, black 6%));
-    border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border) 64%);
-    backdrop-filter: blur(8px);
-    animation: float var(--floatDur) ease-in-out infinite, glowPulse var(--pulseDur) ease-in-out infinite;
+    border: 0;
+    background: transparent;
+    animation: cloudFloat var(--floatDur) ease-in-out infinite, cloudBreathe var(--pulseDur) ease-in-out infinite;
     animation-delay: var(--delay);
-    box-shadow:
-      0 12px 32px rgba(9, 10, 12, 0.32),
-      inset -6px -6px 14px rgba(255, 255, 255, 0.04);
-    overflow: hidden;
+    isolation: isolate;
   }
-  .bubble::before {
-    content: '';
+
+  .cloud-shape {
     position: absolute;
-    inset: 12% 16% auto auto;
-    width: 30%;
-    height: 30%;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.18);
-    opacity: 0.42;
+    inset: -5% -5% -8%;
+    width: 110%;
+    height: 113%;
+    z-index: -1;
+    overflow: visible;
+    color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border) 68%);
+    filter: drop-shadow(0 1px 2px rgba(4, 5, 7, 0.18));
   }
-  @keyframes float { 0% { transform: translateY(0) } 50% { transform: translateY(-14px) } 100% { transform: translateY(0) } }
-  @keyframes glowPulse {
-    0% { box-shadow: 0 10px 22px rgba(8, 9, 12, 0.24); }
-    50% { box-shadow: 0 16px 38px rgba(132, 146, 166, 0.18); }
-    100% { box-shadow: 0 10px 22px rgba(8, 9, 12, 0.24); }
+
+  .cloud-shape path {
+    fill: color-mix(in srgb, var(--color-surface-soft) 90%, white 10%);
+    stroke: currentColor;
+    stroke-width: 0.55;
+    stroke-linejoin: round;
   }
-  span { position: relative; z-index: 1; font-size: 0.85rem; line-height: 1.2; color: var(--color-text); }
-  small { position: relative; z-index: 1; opacity: 0.78; font-size: 0.75rem; margin-top: 6px; color: var(--color-text-muted); }
+
+  @keyframes cloudFloat { 0% { transform: translateY(0) } 50% { transform: translateY(-8px) } 100% { transform: translateY(0) } }
+  @keyframes cloudBreathe {
+    0% { filter: saturate(1); }
+    50% { filter: saturate(1.08); }
+    100% { filter: saturate(1); }
+  }
+
+  span {
+    position: relative;
+    z-index: 1;
+    max-width: min(calc(var(--cloud-size) * 1.02), 16ch);
+    font-size: 0.85rem;
+    line-height: 1.18;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+  }
+
+  small {
+    position: relative;
+    z-index: 1;
+    opacity: 0.78;
+    font-size: 0.75rem;
+    margin-top: 4px;
+    color: var(--color-text-muted);
+  }
 
   @media (max-width: 760px) {
     .whiteboard-shell {
@@ -255,9 +284,9 @@
       border-radius: 14px;
     }
 
-    .bubble {
+    .cloud-puff {
       min-width: 96px;
-      min-height: 96px;
+      min-height: 106px;
       animation-duration: 5s, 4s;
     }
   }

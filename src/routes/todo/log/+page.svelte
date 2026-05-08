@@ -19,7 +19,7 @@
 
 	<div class="card-list">
 		{#if logs.length === 0}
-			<p style="padding: 1rem;">No completed tasks yet.</p>
+			<p class="empty-log">No completed tasks yet.</p>
 		{/if}
 
 		{#each logs as log (log.id)}
@@ -50,5 +50,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
+	}
+
+	.empty-log {
+		margin: 0;
+		padding: 1rem;
+		border: var(--surface-outline);
+		border-radius: var(--radius-lg);
+		background: var(--surface-wash), var(--color-surface);
+		color: var(--color-text-muted);
 	}
 </style>

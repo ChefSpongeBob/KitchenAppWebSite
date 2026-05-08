@@ -32,6 +32,7 @@ import {
   defaultAppFeatureModes
 } from '$lib/features/appFeatures';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
+import { requireBusinessId } from '$lib/server/tenant';
 
 function isoDate(date = new Date()) {
   const y = date.getFullYear();
@@ -133,12 +134,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     };
   }
 
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
   await cleanupExpiredRejectedWhiteboardIdeas(db, businessId);
 
   const [todos, users, nodeNames, whiteboardIdeas, announcement, employeeSpotlight, hasIsActive] = await Promise.all([
     featureAccess.todo ? loadAdminTodos(db, businessId) : Promise.resolve([]),
-    locals.businessId ? loadAdminAssignableUsers(db, locals.businessId) : Promise.resolve([]),
+    loadAdminAssignableUsers(db, businessId),
     featureAccess.temps ? loadAdminNodeNames(db, businessId) : Promise.resolve([]),
     featureAccess.whiteboard ? loadAdminWhiteboardIdeas(db, businessId) : Promise.resolve([]),
     featureAccess.announcements

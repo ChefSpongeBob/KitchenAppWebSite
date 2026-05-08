@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
   export let src = '';
   export let title = 'Document';
@@ -164,9 +165,9 @@
 
 <div class="pdf-stack" bind:this={container} aria-label={title}>
   {#if loading}
-    <div class="state">Loading document...</div>
+    <EmptyState tone="loading" icon="hourglass_empty" title="Loading document..." compact />
   {:else if failed}
-    <div class="state">Document preview could not be loaded.</div>
+    <EmptyState tone="error" icon="warning" title="Document preview could not be loaded." compact />
   {:else}
     {#each pages as pageSrc, index}
       <figure
@@ -202,11 +203,11 @@
 
   .page-frame {
     margin: 0;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--surface-outline);
     border-radius: var(--radius-md);
     overflow: hidden;
     background: white;
-    box-shadow: 0 14px 30px rgba(4, 5, 7, 0.18);
+    box-shadow: var(--shadow-sm);
   }
 
   .page-frame.zoomed {
@@ -227,13 +228,5 @@
     transition: transform 160ms var(--ease-out);
     user-select: none;
     -webkit-user-drag: none;
-  }
-
-  .state {
-    padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-md);
-    color: var(--color-text-muted);
-    background: color-mix(in srgb, var(--color-surface) 94%, black 6%);
   }
 </style>

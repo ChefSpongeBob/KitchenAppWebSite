@@ -13,6 +13,37 @@ const origin = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 const cookieJar = new Map();
 let failed = false;
 
+const publicRoutes = [
+  ['/', 'Marketing homepage'],
+  ['/features', 'Features'],
+  ['/how-it-works', 'How it works'],
+  ['/pricing', 'Pricing'],
+  ['/about', 'Marketing about'],
+  ['/login', 'Login page'],
+  ['/forgot-password', 'Forgot password page']
+];
+
+const privateRoutes = [
+  ['/app', 'App homepage'],
+  ['/schedule', 'Team schedule'],
+  ['/my-schedule', 'My schedule'],
+  ['/settings', 'Profile/settings'],
+  ['/lists', 'Lists hub'],
+  ['/recipes', 'Recipes'],
+  ['/docs', 'Documents'],
+  ['/menu', 'Menu'],
+  ['/todo', 'ToDo'],
+  ['/whiteboard', 'Whiteboard']
+];
+
+const adminRoutes = [
+  ['/admin', 'Admin dashboard'],
+  ['/admin/creator', 'Creator'],
+  ['/admin/users', 'Admin users'],
+  ['/admin/schedule', 'Admin schedule builder'],
+  ['/admin/camera', 'Camera and sensors']
+];
+
 function logPass(message) {
   console.log(`OK: ${message}`);
 }
@@ -71,9 +102,25 @@ async function assertGetOk(path, label) {
   return false;
 }
 
+async function assertSchemaReady() {
+  if (!internalToken) return;
+  const response = await request('/api/internal/schema-readiness', {
+    headers: {
+      'x-smoke-token': internalToken
+    }
+  });
+  if (response.status >= 200 && response.status < 300) {
+    logPass(`Schema readiness (${response.status})`);
+    return;
+  }
+  logFail(`Schema readiness expected 2xx, got ${response.status}`);
+}
+
 async function main() {
-  await assertGetOk('/login', 'Login page');
-  await assertGetOk('/forgot-password', 'Forgot password page');
+  for (const [path, label] of publicRoutes) {
+    await assertGetOk(path, label);
+  }
+  await assertSchemaReady();
 
   if (internalToken) {
     const smokeSessionResponse = await request('/api/smoke-session', {
@@ -90,14 +137,14 @@ async function main() {
       logFail(`Internal smoke session expected 2xx, got ${smokeSessionResponse.status}`);
     }
 
-    await assertGetOk('/', 'Homepage after login');
-    await assertGetOk('/schedule', 'Team schedule');
-    await assertGetOk('/my-schedule', 'My schedule');
-    await assertGetOk('/settings', 'My profile/settings');
+    for (const [path, label] of privateRoutes) {
+      await assertGetOk(path, label);
+    }
 
     if (runAdminChecks) {
-      await assertGetOk('/admin', 'Admin dashboard');
-      await assertGetOk('/admin/schedule', 'Admin schedule builder');
+      for (const [path, label] of adminRoutes) {
+        await assertGetOk(path, label);
+      }
     }
 
     const internalLogout = await request('/api/smoke-session', {
@@ -124,10 +171,9 @@ async function main() {
       logFail(`Login action expected redirect, got ${loginResponse.status}`);
     }
 
-    await assertGetOk('/', 'Homepage after login');
-    await assertGetOk('/schedule', 'Team schedule');
-    await assertGetOk('/my-schedule', 'My schedule');
-    await assertGetOk('/settings', 'My profile/settings');
+    for (const [path, label] of privateRoutes) {
+      await assertGetOk(path, label);
+    }
 
     const forgotBody = new URLSearchParams({ email }).toString();
     const forgotResponse = await request('/forgot-password', {
@@ -142,8 +188,9 @@ async function main() {
     }
 
     if (runAdminChecks) {
-      await assertGetOk('/admin', 'Admin dashboard');
-      await assertGetOk('/admin/schedule', 'Admin schedule builder');
+      for (const [path, label] of adminRoutes) {
+        await assertGetOk(path, label);
+      }
     }
 
     const logoutResponse = await request('/logout');

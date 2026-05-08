@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { requireBusinessId } from '$lib/server/tenant';
 
 type SectionRow = {
   slug: string;
@@ -9,7 +10,7 @@ type SectionRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { sections: [] };
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const result = await db
     .prepare(

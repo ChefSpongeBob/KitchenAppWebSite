@@ -4,6 +4,7 @@ import {
 	defaultAppFeatureModes,
 	type AppFeatureModes
 } from '$lib/features/appFeatures';
+import { loadUserBusinessMemberships } from '$lib/server/business';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const featureModes: AppFeatureModes = locals.featureModes ?? defaultAppFeatureModes;
@@ -15,6 +16,9 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		};
 	}
 
+	const businesses =
+		locals.DB && locals.userId ? await loadUserBusinessMemberships(locals.DB, locals.userId) : [];
+
 	return {
 		user: {
 			id: locals.userId,
@@ -23,7 +27,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			businessName: locals.businessName ?? null,
 			businessLogoUrl: locals.businessLogoUrl ?? null,
 			businessRole: locals.businessRole ?? null,
-			businessOnboardingComplete: locals.businessOnboardingComplete ?? false
+			businessOnboardingComplete: locals.businessOnboardingComplete ?? false,
+			businesses
 		},
 		featureModes,
 		featureAccess: buildFeatureAccess(featureModes, locals.userRole)

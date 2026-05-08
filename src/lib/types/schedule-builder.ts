@@ -18,6 +18,7 @@ export type Shift = {
   detail: string;
   startTime: string;
   endLabel: string;
+  breakMinutes: number;
   notes: string;
 };
 
@@ -39,6 +40,7 @@ export type ShiftOffer = {
   detail: string;
   startTime: string;
   endLabel: string;
+  breakMinutes: number;
   notes: string;
   offeredByUserId: string;
   offeredByUserName: string | null;
@@ -80,6 +82,7 @@ export type DraftShift = {
   detail: string;
   startTime: string;
   endLabel: string;
+  breakMinutes: number;
   notes: string;
   isEditing: boolean;
   duplicateDates: string[];

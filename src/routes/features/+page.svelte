@@ -90,7 +90,13 @@
 			module: 'Temperature nodes + trend visibility',
 			starter: 'Optional add-on',
 			growth: 'Optional add-on',
-			enterprise: 'Optional add-on'
+			enterprise: 'Included'
+		},
+		{
+			module: 'Camera monitoring',
+			starter: 'Optional add-on',
+			growth: 'Optional add-on',
+			enterprise: 'Included'
 		}
 	];
 
@@ -332,12 +338,8 @@
 		margin-top: 0.95rem;
 		display: grid;
 		gap: 0.5rem;
-		border: 1px solid var(--color-border);
-		border-radius: 14px;
-		padding: 0.8rem;
-		background:
-			linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 60%),
-			var(--color-surface);
+		padding-block: 0.95rem;
+		border-block: 1px solid var(--color-divider);
 	}
 
 	.capability-map {
@@ -351,10 +353,8 @@
 
 	.table-shell {
 		margin-top: 0.62rem;
-		border: 1px solid var(--color-border);
-		border-radius: 14px;
 		overflow-x: auto;
-		background: var(--color-surface);
+		border-top: 1px solid var(--color-divider);
 	}
 
 	table {
@@ -384,16 +384,12 @@
 
 	.bottom-cta {
 		margin-top: 1rem;
-		padding: 0.9rem;
+		padding-block: 1rem;
 		display: flex;
 		align-items: flex-end;
 		justify-content: space-between;
 		gap: 0.8rem;
-		background:
-			linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 58%),
-			var(--color-surface);
-		border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
-		border-radius: 16px;
+		border-top: 1px solid var(--color-divider);
 	}
 
 	.bottom-cta h2 {

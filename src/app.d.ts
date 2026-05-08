@@ -17,6 +17,7 @@ declare global {
 				APP_BASE_URL?: string;
 				SMOKE_INTERNAL_TOKEN?: string;
 				SMOKE_DEFAULT_EMAIL?: string;
+				ALLOW_RUNTIME_SCHEMA_MUTATION?: string;
 			};
 		}
 

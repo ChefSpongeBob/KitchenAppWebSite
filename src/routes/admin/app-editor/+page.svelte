@@ -319,12 +319,10 @@
 
 <style>
   .panel {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--surface-outline);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-sm);
   }
 
   .editor-tile {
@@ -370,19 +368,19 @@
     width: 0.62rem;
     height: 0.62rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 1px solid var(--color-border);
     display: inline-block;
     flex: 0 0 auto;
   }
 
   .dot.live {
     background: #16a34a;
-    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
+    box-shadow: none;
   }
 
   .dot.off {
     background: #dc2626;
-    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.14);
+    box-shadow: none;
   }
 
   .tile-form {
@@ -436,30 +434,30 @@
 
   .branding-field input[type='text'] {
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.5rem 0.6rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.85rem;
   }
 
   .branding-field input[type='email'] {
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.5rem 0.6rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.85rem;
   }
 
   .branding-field input[type='file'] {
     width: 100%;
-    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border: 1px dashed var(--color-border);
     border-radius: 10px;
     padding: 0.42rem 0.48rem;
-    background: rgba(255, 255, 255, 0.01);
+    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
     color: var(--color-text);
     font-size: 0.78rem;
   }
@@ -481,9 +479,9 @@
     height: 3rem;
     border-radius: 11px;
     overflow: hidden;
-    border: 1px solid rgba(122, 132, 148, 0.28);
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, black 12%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
+    box-shadow: none;
     display: grid;
     place-items: center;
   }
@@ -519,9 +517,9 @@
     gap: 0.65rem;
     align-items: center;
     padding: 0.5rem 0.6rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 11px;
-    background: rgba(255, 255, 255, 0.015);
+    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
   }
 
   .feature-main {
@@ -563,10 +561,10 @@
 
   .mode-field select {
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.42rem 0.52rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.8rem;
   }
@@ -577,9 +575,9 @@
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.28);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.24), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
     color: var(--color-primary-contrast);
     padding: 0.44rem 0.72rem;
     cursor: pointer;

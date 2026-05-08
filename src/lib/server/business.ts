@@ -1,5 +1,8 @@
 type D1 = App.Platform['env']['DB'];
 
+let businessSchemaEnsured = false;
+let businessSchemaPromise: Promise<void> | null = null;
+
 export type BusinessContext = {
   businessId: string;
   businessName: string;
@@ -8,6 +11,8 @@ export type BusinessContext = {
   businessRole: string;
   businessLogoUrl: string | null;
 };
+
+export type BusinessMembershipSummary = BusinessContext;
 
 async function ensureOptionalColumn(db: D1, tableName: string, columnName: string, definition: string) {
   try {
@@ -57,6 +62,13 @@ export async function reserveBusinessSlug(db: D1, requestedName: string) {
 }
 
 export async function ensureBusinessSchema(db: D1) {
+  if (businessSchemaEnsured) return;
+  if (businessSchemaPromise) {
+    await businessSchemaPromise;
+    return;
+  }
+
+  businessSchemaPromise = (async () => {
   await db
     .prepare(
       `
@@ -151,6 +163,11 @@ export async function ensureBusinessSchema(db: D1) {
       `
     )
     .run();
+
+    businessSchemaEnsured = true;
+  })();
+
+  await businessSchemaPromise;
 }
 
 export async function isBusinessOnboardingComplete(db: D1, businessId: string) {
@@ -169,8 +186,60 @@ export async function isBusinessOnboardingComplete(db: D1, businessId: string) {
   return Boolean(row?.onboarding_completed_at);
 }
 
-export async function getUserBusinessContext(db: D1, userId: string) {
+function mapBusinessContextRow(row: {
+  business_id: string;
+  business_name: string;
+  business_slug: string;
+  business_plan: string;
+  business_logo_url: string | null;
+  business_role: string;
+}) {
+  return {
+    businessId: row.business_id,
+    businessName: row.business_name,
+    businessSlug: row.business_slug,
+    businessPlan: row.business_plan,
+    businessRole: row.business_role,
+    businessLogoUrl: row.business_logo_url
+  } satisfies BusinessContext;
+}
+
+export async function getUserBusinessContext(db: D1, userId: string, preferredBusinessId?: string | null) {
   await ensureBusinessSchema(db);
+
+  const selectedBusinessId = preferredBusinessId?.trim();
+  if (selectedBusinessId) {
+    const selectedMembership = await db
+      .prepare(
+        `
+        SELECT
+          b.id AS business_id,
+          b.name AS business_name,
+          b.slug AS business_slug,
+          b.plan_tier AS business_plan,
+          b.sidebar_logo_url AS business_logo_url,
+          bu.role AS business_role
+        FROM business_users bu
+        JOIN businesses b ON b.id = bu.business_id
+        WHERE bu.user_id = ?
+          AND bu.business_id = ?
+          AND COALESCE(bu.is_active, 1) = 1
+          AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')
+        LIMIT 1
+        `
+      )
+      .bind(userId, selectedBusinessId)
+      .first<{
+        business_id: string;
+        business_name: string;
+        business_slug: string;
+        business_plan: string;
+        business_logo_url: string | null;
+        business_role: string;
+      }>();
+
+    if (selectedMembership) return mapBusinessContextRow(selectedMembership);
+  }
 
   const membership = await db
     .prepare(
@@ -186,7 +255,7 @@ export async function getUserBusinessContext(db: D1, userId: string) {
       JOIN businesses b ON b.id = bu.business_id
       WHERE bu.user_id = ?
         AND COALESCE(bu.is_active, 1) = 1
-        AND COALESCE(b.status, 'active') = 'active'
+        AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')
       ORDER BY
         CASE bu.role
           WHEN 'owner' THEN 0
@@ -210,14 +279,48 @@ export async function getUserBusinessContext(db: D1, userId: string) {
 
   if (!membership) return null;
 
-  return {
-    businessId: membership.business_id,
-    businessName: membership.business_name,
-    businessSlug: membership.business_slug,
-    businessPlan: membership.business_plan,
-    businessRole: membership.business_role,
-    businessLogoUrl: membership.business_logo_url
-  } satisfies BusinessContext;
+  return mapBusinessContextRow(membership);
+}
+
+export async function loadUserBusinessMemberships(db: D1, userId: string) {
+  await ensureBusinessSchema(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        b.id AS business_id,
+        b.name AS business_name,
+        b.slug AS business_slug,
+        b.plan_tier AS business_plan,
+        b.sidebar_logo_url AS business_logo_url,
+        bu.role AS business_role
+      FROM business_users bu
+      JOIN businesses b ON b.id = bu.business_id
+      WHERE bu.user_id = ?
+        AND COALESCE(bu.is_active, 1) = 1
+        AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')
+      ORDER BY
+        CASE bu.role
+          WHEN 'owner' THEN 0
+          WHEN 'admin' THEN 1
+          WHEN 'manager' THEN 2
+          ELSE 3
+        END ASC,
+        b.created_at ASC
+      `
+    )
+    .bind(userId)
+    .all<{
+      business_id: string;
+      business_name: string;
+      business_slug: string;
+      business_plan: string;
+      business_logo_url: string | null;
+      business_role: string;
+    }>();
+
+  return (rows.results ?? []).map(mapBusinessContextRow) satisfies BusinessMembershipSummary[];
 }
 
 export async function bootstrapBusinessForUser(

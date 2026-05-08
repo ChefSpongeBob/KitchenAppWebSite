@@ -218,8 +218,8 @@
 	];
 
 	const rolloutNotes = [
-		'Temperature monitoring available as an optional add-on (+$30/mo).',
-		'Camera monitoring available as an optional add-on (+$30/mo).',
+		'Temperature monitoring is optional on Small and Medium, included on Large.',
+		'Camera monitoring is optional on Small and Medium, included on Large.',
 		'All tiers include guided rollout for managers and admins.'
 	];
 
@@ -606,12 +606,8 @@
 	}
 
 	.target-copy {
-		border: 1px solid var(--color-border);
-		border-radius: 12px;
-		padding: 0.56rem 0.62rem;
-		background:
-			linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 70%),
-			var(--color-surface);
+		padding-block: 0.62rem;
+		border-block: 1px solid var(--color-divider);
 	}
 
 	.target-copy h3 {
@@ -812,16 +808,12 @@
 
 	.bottom-cta {
 		margin-top: 1rem;
-		padding: 0.9rem;
+		padding-block: 1rem;
 		display: flex;
 		align-items: flex-end;
 		justify-content: space-between;
 		gap: 0.8rem;
-		background:
-			linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 58%),
-			var(--color-surface);
-		border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
-		border-radius: 16px;
+		border-top: 1px solid var(--color-divider);
 	}
 
 	.bottom-cta h2 {

@@ -49,7 +49,9 @@ You can preview the production build with `npm run preview`.
 - Manual auth smoke fallback: `docs/prod-auth-smoke-manual.md`
 - Run release validation: `npm run mobile:check`
 - Run Android release pass: `npm run android:release:check`
+- Run local route smoke pass: `npm run smoke:local`
 - Run production smoke pass: `npm run smoke:prod`
+- Test readiness checklist: `docs/test-readiness-checklist.md`
 - Production smoke auth (preferred):
   - Env var: `SMOKE_INTERNAL_TOKEN`
   - Optional user selection: `SMOKE_EMAIL` (falls back to `SMOKE_DEFAULT_EMAIL` on server)

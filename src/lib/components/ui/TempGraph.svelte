@@ -36,7 +36,7 @@
     <path
       d={buildPath(vals)}
       fill="none"
-      stroke="cyan"
+      stroke="var(--color-accent)"
       stroke-width="2"
       stroke-linecap="round"
     />

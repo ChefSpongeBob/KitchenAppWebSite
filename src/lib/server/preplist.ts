@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
 type ItemRow = {
@@ -34,6 +34,12 @@ type ListPageOptions = {
   defaults?: DefaultItem[];
   valueType?: 'number' | 'text';
 };
+
+function requireScopedBusinessId(locals: PreplistLocals) {
+  const businessId = String(locals.businessId ?? '').trim();
+  if (!businessId) throw error(401, 'Business workspace required.');
+  return businessId;
+}
 
 function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: string) {
   if (raw === null) return { ok: false as const, error: `${fieldName} is required.` };
@@ -122,22 +128,12 @@ export function createListPage(
       };
     }
     await ensureTenantSchema(db);
-    const businessId = locals.businessId ?? '';
+    const businessId = requireScopedBusinessId(locals);
 
     const section = await getSection(db, domain, sectionSlug, businessId);
 
     if (!section) {
-      return {
-        title: pageTitle,
-        subtitle: options.subtitle,
-        items: [],
-        isAdmin: locals.userRole === 'admin',
-        valueLabel: options.valueLabel,
-        submitLabel: options.submitLabel,
-        resetLabel: options.resetLabel,
-        adminSummaryLabel: options.adminSummaryLabel,
-        valueType: options.valueType ?? 'number'
-      };
+      throw error(404, 'List section not found.');
     }
 
     await seedDefaultsIfMissing(db, section.id, options.defaults, businessId);
@@ -179,7 +175,7 @@ export function createListPage(
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);
-      const businessId = locals.businessId ?? '';
+      const businessId = requireScopedBusinessId(locals);
 
       const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
@@ -222,7 +218,7 @@ export function createListPage(
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);
-      const businessId = locals.businessId ?? '';
+      const businessId = requireScopedBusinessId(locals);
 
       const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
@@ -251,7 +247,7 @@ export function createListPage(
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);
-      const businessId = locals.businessId ?? '';
+      const businessId = requireScopedBusinessId(locals);
 
       const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });
@@ -282,7 +278,7 @@ export function createListPage(
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);
-      const businessId = locals.businessId ?? '';
+      const businessId = requireScopedBusinessId(locals);
 
       const section = await getSection(db, domain, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'List section not found.' });

@@ -101,7 +101,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Menus',
     description: 'Menu document page and menu viewer.',
     userRoutePrefixes: ['/menu'],
-    adminRoutePrefixes: []
+    adminRoutePrefixes: ['/admin/menus']
   },
   {
     key: 'meeting_notes',

@@ -1,7 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
 import { hasTable } from '$lib/server/dbSchema';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 type TodoRow = {
 	id: string;
@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		return { active: [], completed: [] };
 	}
 	await ensureTenantSchema(db);
-	const businessId = locals.businessId ?? '';
+	const businessId = requireBusinessId(locals);
 	const now = Math.floor(Date.now() / 1000);
 	const isAdmin = locals.userRole === 'admin';
 	const hasAssignmentsTable = await hasTable(db, 'todo_assignments');
@@ -143,7 +143,7 @@ export const actions: Actions = {
 		const db = locals.DB;
 		if (!db) return fail(503, { error: 'Database not configured.' });
 		await ensureTenantSchema(db);
-		const businessId = locals.businessId ?? '';
+		const businessId = requireBusinessId(locals);
 		const formData = await request.formData();
 		const id = String(formData.get('id') || '');
 

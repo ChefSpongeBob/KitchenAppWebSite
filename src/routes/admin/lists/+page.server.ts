@@ -14,6 +14,7 @@ import {
   updateChecklistItem,
   updateListItem
 } from '$lib/server/admin';
+import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
@@ -22,7 +23,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   if (!db) {
     return { preplists: [], inventory: [], orders: [], checklists: [], documents: [] };
   }
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const sections = await loadAdminSections(db, businessId);
   const checklists = await loadAdminChecklists(db, businessId);

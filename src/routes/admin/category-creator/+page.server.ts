@@ -10,6 +10,7 @@ import {
   updateCreatorCategory,
   updateListSection
 } from '$lib/server/admin';
+import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
@@ -32,7 +33,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   }
 
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
   const [sections, creatorCatalog] = await Promise.all([
     loadAdminSections(db, businessId),
     loadAdminCreatorCatalog(db, businessId)

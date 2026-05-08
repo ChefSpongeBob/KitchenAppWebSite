@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 type NodeNameRow = {
   sensor_id: number;
@@ -9,7 +9,7 @@ type NodeNameRow = {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { nodeNames: [] };
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const table = await db
     .prepare(

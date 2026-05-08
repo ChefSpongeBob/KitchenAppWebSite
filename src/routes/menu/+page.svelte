@@ -1,8 +1,8 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
   type MenuDoc = {
     id: string;
@@ -22,137 +22,181 @@
 </script>
 
 <Layout>
-  <PageHeader title="Menu" />
+  <PageHeader title="Menus" />
 
   {#if menuDocs.length === 0}
-    <p class="empty">No menu documents are configured yet.</p>
+    <EmptyState title="No menus yet." compact />
   {:else}
-    <section class="grid">
-      {#each menuDocs as item}
-        <div class="doc-card">
+    <section class="menu-layout">
+      <aside class="menu-list" aria-label="Menu list">
+        {#each menuDocs as item}
           <button
             type="button"
-            class="menu-select"
             class:active={activeMenu?.id === item.id}
             on:click={() => (activeMenu = item)}
           >
-            <DashboardCard title={item.title} />
+            <span>{item.title}</span>
+            <small>{item.file_url ? 'Uploaded' : 'No file'}</small>
           </button>
-        </div>
-      {/each}
-    </section>
+        {/each}
+      </aside>
 
-    {#if activeMenu}
-      <section class="viewer-shell" aria-label="Menu viewer">
-        <div class="viewer-head">
-          <div>
-            <span class="viewer-kicker">Menu Document</span>
+      {#if activeMenu}
+        <section class="viewer" aria-label="Menu viewer">
+          <header>
             <h2>{activeMenu.title}</h2>
-          </div>
-        </div>
-        {#if activeMenu.content}
-          <p class="menu-content">{activeMenu.content}</p>
-        {/if}
-        {#if activeMenu.file_url}
-          <div class="document-stage">
-            {#if isPdf(activeMenu.file_url)}
-              <PdfPageStack src={activeMenu.file_url} title={activeMenu.title} />
-            {:else}
-              <img src={activeMenu.file_url} alt={activeMenu.title} class="menu-image" loading="lazy" />
+            {#if activeMenu.file_url}
+              <a href={activeMenu.file_url} target="_blank" rel="noreferrer">Open file</a>
             {/if}
-          </div>
-        {/if}
-      </section>
-    {/if}
+          </header>
+
+          {#if activeMenu.content}
+            <p>{activeMenu.content}</p>
+          {/if}
+
+          {#if activeMenu.file_url}
+            <div class="document-stage">
+              {#if isPdf(activeMenu.file_url)}
+                <PdfPageStack src={activeMenu.file_url} title={activeMenu.title} />
+              {:else}
+                <img src={activeMenu.file_url} alt={activeMenu.title} loading="lazy" />
+              {/if}
+            </div>
+          {:else}
+            <EmptyState title="No menu file uploaded yet." compact />
+          {/if}
+        </section>
+      {/if}
+    </section>
   {/if}
 </Layout>
 
 <style>
-  .empty {
+  .menu-list small,
+  .viewer p {
     color: var(--color-text-muted);
   }
 
-  .grid {
+  .menu-layout {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
+    grid-template-columns: minmax(210px, 0.34fr) minmax(0, 1fr);
+    gap: 1.1rem;
+    align-items: start;
   }
 
-  .doc-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
+  .menu-list {
+    position: sticky;
+    top: 1rem;
+    display: grid;
+    gap: 0.3rem;
+    border-right: 1px solid var(--color-divider);
+    padding-right: 0.8rem;
   }
 
-  .menu-select {
-    display: block;
-    padding: 0;
-    background: transparent;
+  .menu-list button {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.7rem 0.65rem;
     border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--color-text);
     text-align: left;
+    cursor: pointer;
   }
 
-  .menu-select :global(.card) {
-    transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
+  .menu-list button:hover,
+  .menu-list button:focus-visible,
+  .menu-list button.active {
+    background: color-mix(in srgb, var(--color-surface-alt) 58%, transparent);
+    outline: none;
   }
 
-  .menu-select:hover :global(.card),
-  .menu-select:focus-visible :global(.card) {
-    transform: translateY(-2px);
-    border-color: rgba(132, 146, 166, 0.18);
-    box-shadow: var(--shadow-md);
+  .menu-list span {
+    font-weight: var(--weight-semibold);
   }
 
-  .menu-select.active :global(.card) {
-    border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border) 45%);
-    box-shadow: 0 0 0 1px rgba(132, 146, 166, 0.12), var(--shadow-md);
-  }
-
-  .viewer-shell {
-    margin-top: 1rem;
+  .viewer {
     display: grid;
-    gap: 0.85rem;
-    padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    gap: 0.8rem;
   }
 
-  .viewer-kicker {
-    display: inline-flex;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
+  .viewer header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: center;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid var(--color-divider);
   }
 
-  .viewer-head h2 {
-    margin: 0.25rem 0 0;
-    font-size: 1.05rem;
-  }
-
-  .menu-content {
+  .viewer h2,
+  .viewer p {
     margin: 0;
-    color: var(--color-text-muted);
-    line-height: 1.5;
+  }
+
+  .viewer a {
+    color: var(--color-text);
+    text-decoration: none;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.42rem 0.7rem;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .viewer a:hover {
+    color: var(--color-primary);
   }
 
   .document-stage {
     display: grid;
   }
 
-  .menu-image {
+  .document-stage img {
     width: 100%;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-height: 78vh;
+    object-fit: contain;
+    border-radius: 14px;
+    border: 1px solid var(--color-divider);
   }
 
-  @media (max-width: 760px) {
-    .viewer-shell {
-      padding: 0.85rem;
+  @media (max-width: 820px) {
+    .menu-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .menu-list {
+      position: static;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(150px, 1fr);
+      overflow-x: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--color-divider);
+      padding-right: 0;
+      padding-bottom: 0.65rem;
+      scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .menu-list button {
+      scroll-snap-align: start;
+    }
+
+    .viewer header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .menu-list {
+      grid-auto-columns: minmax(132px, 0.82fr);
+    }
+
+    .viewer a {
+      width: 100%;
+      justify-content: center;
     }
   }
 </style>

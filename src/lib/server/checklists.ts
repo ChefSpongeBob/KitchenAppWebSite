@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
 type DB = App.Platform['env']['DB'];
@@ -29,6 +29,12 @@ type ChecklistPageOptions = {
   }>;
   replaceDefaults?: boolean;
 };
+
+function requireScopedBusinessId(locals: ChecklistLocals) {
+  const businessId = String(locals.businessId ?? '').trim();
+  if (!businessId) throw error(401, 'Business workspace required.');
+  return businessId;
+}
 
 async function getSection(db: DB, slug: string, businessId: string) {
   return db
@@ -116,19 +122,11 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       };
     }
     await ensureTenantSchema(db);
-    const businessId = locals.businessId ?? '';
+    const businessId = requireScopedBusinessId(locals);
 
     const section = await getSection(db, sectionSlug, businessId);
     if (!section) {
-      return {
-        title: pageTitle,
-        subtitle: options.subtitle,
-        resetLabel: options.resetLabel,
-        infoCardTitle: options.infoCardTitle ?? '',
-        infoCardIntro: options.infoCardIntro ?? '',
-        infoCardSections: options.infoCardSections ?? [],
-        items: []
-      };
+      throw error(404, 'Checklist not found.');
     }
 
     if (options.replaceDefaults) {
@@ -165,7 +163,7 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);
-      const businessId = locals.businessId ?? '';
+      const businessId = requireScopedBusinessId(locals);
 
       const section = await getSection(db, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'Checklist not found.' });
@@ -196,7 +194,7 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);
-      const businessId = locals.businessId ?? '';
+      const businessId = requireScopedBusinessId(locals);
 
       const section = await getSection(db, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'Checklist not found.' });

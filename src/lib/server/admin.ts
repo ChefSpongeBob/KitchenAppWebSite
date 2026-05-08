@@ -23,6 +23,12 @@ import {
 import { isEmailConfigured, sendApprovalEmail, sendInviteEmail } from '$lib/server/email';
 import { ensureBusinessSchema } from '$lib/server/business';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import {
+  checkRateLimit,
+  rateLimitFailure,
+  revokeUserSessions,
+  writeAuditLog
+} from '$lib/server/security';
 
 type D1 = App.Platform['env']['DB'];
 
@@ -31,6 +37,7 @@ export type AdminSectionRow = {
   domain: 'preplists' | 'inventory' | 'orders';
   slug: string;
   title: string;
+  description: string | null;
   item_id: string | null;
   content: string | null;
   details: string | null;
@@ -55,6 +62,7 @@ export type AdminSectionGroup = {
   domain: 'preplists' | 'inventory' | 'orders';
   slug: string;
   title: string;
+  description: string;
   items: AdminSectionItem[];
 };
 
@@ -170,6 +178,86 @@ export type EmployeeProfileEditRequest = {
   resolved_by: string | null;
 };
 
+export type EmployeeOnboardingPackage = {
+  id: string;
+  business_id: string;
+  user_id: string;
+  status: 'sent' | 'in_progress' | 'submitted' | 'approved';
+  payroll_classification: 'employee' | 'contractor';
+  sent_at: number;
+  completed_at: number | null;
+  approved_at: number | null;
+  approved_by: string | null;
+  created_by: string | null;
+  updated_at: number;
+  manager_note: string;
+};
+
+export type EmployeeOnboardingItem = {
+  id: string;
+  package_id: string;
+  business_id: string;
+  user_id: string;
+  item_type: 'form' | 'document' | 'acknowledgement';
+  form_key: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'submitted' | 'approved' | 'needs_changes';
+  file_url: string;
+  file_name: string;
+  form_payload: string;
+  source_file_url: string;
+  source_file_name: string;
+  signed_name: string;
+  manager_note: string;
+  sort_order: number;
+  created_at: number;
+  submitted_at: number | null;
+  reviewed_at: number | null;
+  reviewed_by: string | null;
+};
+
+export type EmployeeOnboardingState = {
+  package: EmployeeOnboardingPackage | null;
+  items: EmployeeOnboardingItem[];
+};
+
+export type EmployeeOnboardingTemplateItem = {
+  id: string;
+  business_id: string;
+  item_type: EmployeeOnboardingItem['item_type'];
+  form_key: string;
+  title: string;
+  description: string;
+  source_file_url: string;
+  source_file_name: string;
+  sort_order: number;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+  created_by: string | null;
+};
+
+export type AdminOnboardingDashboardRow = {
+  user_id: string;
+  display_name: string | null;
+  email: string;
+  role: string;
+  is_active: number;
+  package_id: string | null;
+  package_status: EmployeeOnboardingPackage['status'] | 'not_sent';
+  payroll_classification: EmployeeOnboardingPackage['payroll_classification'] | null;
+  sent_at: number | null;
+  completed_at: number | null;
+  approved_at: number | null;
+  updated_at: number | null;
+  total_items: number;
+  pending_items: number;
+  submitted_items: number;
+  approved_items: number;
+  needs_changes_items: number;
+};
+
 export type AdminCreatorCatalog = {
   preplists: string[];
   inventory: string[];
@@ -262,6 +350,7 @@ function isAllowedDocumentUpload(contentType: string, extension: string) {
 
 async function uploadDocumentMedia(
   bucket: NonNullable<App.Locals['MEDIA_BUCKET']>,
+  businessId: string,
   slug: string,
   file: File
 ) {
@@ -270,13 +359,50 @@ async function uploadDocumentMedia(
   const typeExtension = extensionFromContentType(contentType);
   const extension = filenameExtension || typeExtension || 'bin';
   const normalizedSlug = normalizeSlug(slug) || 'document';
-  const key = `documents/${normalizedSlug}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+  const key = `businesses/${businessId}/documents/${normalizedSlug}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
   const body = await file.arrayBuffer();
 
   await bucket.put(key, body, {
     httpMetadata: {
       contentType,
-      cacheControl: 'public, max-age=31536000, immutable'
+      cacheControl: 'private, max-age=0'
+    }
+  });
+
+  const encodedKey = key
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+
+  return {
+    key,
+    url: `/api/documents/media/${encodedKey}`
+  };
+}
+
+async function uploadEmployeeOnboardingMedia(
+  bucket: NonNullable<App.Locals['MEDIA_BUCKET']>,
+  businessId: string,
+  userId: string,
+  file: File
+) {
+  const contentType = file.type || 'application/octet-stream';
+  const filenameExtension = extensionFromFilename(file.name);
+  const typeExtension = extensionFromContentType(contentType);
+  const extension = filenameExtension || typeExtension || 'bin';
+
+  if (!isAllowedDocumentUpload(contentType, extension)) {
+    throw new Error('Unsupported onboarding document type.');
+  }
+
+  const normalizedUserId = normalizeSlug(userId) || 'employee';
+  const key = `businesses/${businessId}/employee-onboarding/${normalizedUserId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+  const body = await file.arrayBuffer();
+
+  await bucket.put(key, body, {
+    httpMetadata: {
+      contentType,
+      cacheControl: 'private, max-age=0'
     }
   });
 
@@ -351,7 +477,8 @@ export async function ensureEmployeeProfilesTable(db: D1) {
     .prepare(
       `
       CREATE TABLE IF NOT EXISTS employee_profiles (
-        user_id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL,
         real_name TEXT NOT NULL DEFAULT '',
         phone TEXT NOT NULL DEFAULT '',
         birthday TEXT NOT NULL DEFAULT '',
@@ -365,6 +492,7 @@ export async function ensureEmployeeProfilesTable(db: D1) {
         emergency_contact_relationship TEXT NOT NULL DEFAULT '',
         updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
         updated_by TEXT,
+        PRIMARY KEY (business_id, user_id),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
       )
@@ -372,7 +500,16 @@ export async function ensureEmployeeProfilesTable(db: D1) {
     )
     .run();
 
+  await ensureOptionalColumn(db, 'employee_profiles', 'business_id', "TEXT NOT NULL DEFAULT ''");
   await ensureOptionalColumn(db, 'employee_profiles', 'real_name', "TEXT NOT NULL DEFAULT ''");
+  await db
+    .prepare(
+      `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_profiles_business_user
+      ON employee_profiles(business_id, user_id)
+      `
+    )
+    .run();
 }
 
 export async function ensureEmployeeProfileEditRequestsTable(db: D1) {
@@ -381,6 +518,7 @@ export async function ensureEmployeeProfileEditRequestsTable(db: D1) {
       `
       CREATE TABLE IF NOT EXISTS employee_profile_edit_requests (
         id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL DEFAULT '',
         user_id TEXT NOT NULL,
         requested_real_name TEXT NOT NULL DEFAULT '',
         requested_birthday TEXT NOT NULL DEFAULT '',
@@ -395,6 +533,130 @@ export async function ensureEmployeeProfileEditRequestsTable(db: D1) {
       `
     )
     .run();
+
+  await ensureOptionalColumn(db, 'employee_profile_edit_requests', 'business_id', "TEXT NOT NULL DEFAULT ''");
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_profile_edit_requests_business
+      ON employee_profile_edit_requests(business_id, status, requested_at)
+      `
+    )
+    .run();
+}
+
+export async function ensureEmployeeOnboardingTables(db: D1) {
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_onboarding_packages (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'sent',
+        payroll_classification TEXT NOT NULL DEFAULT 'employee',
+        sent_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        approved_at INTEGER,
+        approved_by TEXT,
+        created_by TEXT,
+        updated_at INTEGER NOT NULL,
+        manager_note TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_onboarding_packages_user
+      ON employee_onboarding_packages(business_id, user_id, status, updated_at)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_onboarding_items (
+        id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL,
+        business_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL,
+        item_type TEXT NOT NULL DEFAULT 'acknowledgement',
+        form_key TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        file_url TEXT NOT NULL DEFAULT '',
+        file_name TEXT NOT NULL DEFAULT '',
+        form_payload TEXT NOT NULL DEFAULT '',
+        signed_name TEXT NOT NULL DEFAULT '',
+        manager_note TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        submitted_at INTEGER,
+        reviewed_at INTEGER,
+        reviewed_by TEXT,
+        FOREIGN KEY (package_id) REFERENCES employee_onboarding_packages(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await ensureOptionalColumn(db, 'employee_onboarding_items', 'source_file_url', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'employee_onboarding_items', 'source_file_name', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'employee_onboarding_items', 'form_key', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'employee_onboarding_items', 'form_payload', "TEXT NOT NULL DEFAULT ''");
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_onboarding_items_package
+      ON employee_onboarding_items(package_id, sort_order, status)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_onboarding_template_items (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL DEFAULT '',
+        item_type TEXT NOT NULL DEFAULT 'acknowledgement',
+        form_key TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        source_file_url TEXT NOT NULL DEFAULT '',
+        source_file_name TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_by TEXT,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_onboarding_template_business
+      ON employee_onboarding_template_items(business_id, is_active, sort_order)
+      `
+    )
+    .run();
+
+  await ensureOptionalColumn(db, 'employee_onboarding_template_items', 'form_key', "TEXT NOT NULL DEFAULT ''");
 }
 
 function emptyEmployeeProfile(userId: string): AdminEmployeeProfile {
@@ -471,6 +733,7 @@ export async function loadAdminSections(db: D1, businessId: string) {
         s.domain,
         s.slug,
         s.title,
+        s.description,
         i.id AS item_id,
         i.content,
         ${detailsEnabled ? 'i.details,' : "'' AS details,"}
@@ -496,6 +759,7 @@ export async function loadAdminSections(db: D1, businessId: string) {
         domain: row.domain,
         slug: row.slug,
         title: row.title,
+        description: row.description ?? '',
         items: []
       });
     }
@@ -725,7 +989,7 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.id,
             u.display_name,
             u.email,
-            COALESCE(bu.role, u.role, 'user') AS role,
+            COALESCE(bu.role, 'staff') AS role,
             CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active,
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
           FROM business_users bu
@@ -744,7 +1008,7 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.id,
             u.display_name,
             u.email,
-            COALESCE(bu.role, u.role, 'user') AS role,
+            COALESCE(bu.role, 'staff') AS role,
             COALESCE(bu.is_active, 1) AS is_active,
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
           FROM business_users bu
@@ -760,7 +1024,8 @@ export async function loadAdminUsers(db: D1, businessId: string) {
   const users = result.results ?? [];
   const approvalsByUser = await loadScheduleDepartmentApprovalsByUser(
     db,
-    users.map((user) => user.id)
+    users.map((user) => user.id),
+    businessId
   );
 
   return users.map((user) => ({
@@ -840,7 +1105,7 @@ export async function loadAdminAssignableUsers(db: D1, businessId: string) {
   return users.results ?? [];
 }
 
-export async function loadAdminEmployeeProfile(db: D1, userId: string) {
+export async function loadAdminEmployeeProfile(db: D1, userId: string, businessId = '') {
   await ensureEmployeeProfilesTable(db);
 
   const profile = await db
@@ -860,17 +1125,17 @@ export async function loadAdminEmployeeProfile(db: D1, userId: string) {
         emergency_contact_phone,
         emergency_contact_relationship
       FROM employee_profiles
-      WHERE user_id = ?
+      WHERE user_id = ? AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(userId)
+    .bind(userId, businessId)
     .first<AdminEmployeeProfile>();
 
   return profile ?? emptyEmployeeProfile(userId);
 }
 
-export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: string) {
+export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: string, businessId = '') {
   await ensureEmployeeProfileEditRequestsTable(db);
 
   const request = await db
@@ -887,15 +1152,940 @@ export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: stri
         resolved_at,
         resolved_by
       FROM employee_profile_edit_requests
-      WHERE user_id = ? AND status = 'pending'
+      WHERE user_id = ? AND business_id = ? AND status = 'pending'
       ORDER BY requested_at DESC
       LIMIT 1
       `
     )
-    .bind(userId)
+    .bind(userId, businessId)
     .first<EmployeeProfileEditRequest>();
 
   return request ?? null;
+}
+
+function defaultEmployeeOnboardingItems() {
+  return [
+    {
+      item_type: 'form',
+      form_key: 'personal_information',
+      title: 'Personal information',
+      description: 'Complete legal name, birthday, phone, and home address.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 0
+    },
+    {
+      item_type: 'form',
+      form_key: 'emergency_contact',
+      title: 'Emergency contact',
+      description: 'Add the emergency contact the business should use if needed.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 1
+    },
+    {
+      item_type: 'form',
+      form_key: 'payroll_setup',
+      title: 'Payroll setup',
+      description: 'Confirm worker classification, start date, pay type, and direct deposit authorization details.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 2
+    },
+    {
+      item_type: 'document',
+      form_key: '',
+      title: 'I-9 employment eligibility',
+      description: 'Upload completed employment eligibility documentation for manager review.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 3
+    },
+    {
+      item_type: 'document',
+      form_key: '',
+      title: 'Tax withholding document',
+      description: 'Upload the completed W-4 or applicable tax withholding document.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 4
+    },
+    {
+      item_type: 'acknowledgement',
+      form_key: '',
+      title: 'Handbook acknowledgement',
+      description: 'Review the employee handbook or attached policy document, then acknowledge and sign.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 5
+    },
+    {
+      item_type: 'acknowledgement',
+      form_key: '',
+      title: 'Food safety acknowledgement',
+      description: 'Review food safety and restaurant operating policies, then acknowledge and sign.',
+      source_file_url: '',
+      source_file_name: '',
+      sort_order: 6
+    }
+  ] satisfies Array<{
+    item_type: EmployeeOnboardingItem['item_type'];
+    form_key: string;
+    title: string;
+    description: string;
+    source_file_url: string;
+    source_file_name: string;
+    sort_order: number;
+  }>;
+}
+
+function isAdminBusinessRole(role: string | null | undefined) {
+  const normalized = String(role ?? '').trim().toLowerCase();
+  return normalized === 'owner' || normalized === 'admin' || normalized === 'manager';
+}
+
+function normalizeOnboardingItemType(value: string): EmployeeOnboardingItem['item_type'] | null {
+  if (value === 'form' || value === 'document' || value === 'acknowledgement') return value;
+  if (value === 'profile') return 'form';
+  return null;
+}
+
+function normalizeOnboardingFormKey(value: string, itemType: EmployeeOnboardingItem['item_type']) {
+  if (itemType !== 'form') return '';
+  const normalized = value.trim().toLowerCase();
+  if (['personal_information', 'emergency_contact', 'payroll_setup'].includes(normalized)) return normalized;
+  return 'personal_information';
+}
+
+function formString(formData: FormData, key: string, maxLength = 180) {
+  return String(formData.get(key) ?? '').trim().slice(0, maxLength);
+}
+
+function requireFormFields(fields: Record<string, string>, required: string[]) {
+  const missing = required.find((key) => !fields[key]);
+  return missing ? false : true;
+}
+
+function buildOnboardingFormPayload(formData: FormData, formKey: string) {
+  if (formKey === 'personal_information') {
+    const fields = {
+      legal_name: formString(formData, 'legal_name', 120),
+      preferred_name: formString(formData, 'preferred_name', 120),
+      birthday: formString(formData, 'birthday', 10),
+      phone: formString(formData, 'phone', 48),
+      address_line_1: formString(formData, 'address_line_1', 120),
+      address_line_2: formString(formData, 'address_line_2', 120),
+      city: formString(formData, 'city', 80),
+      state: formString(formData, 'state', 80),
+      postal_code: formString(formData, 'postal_code', 24)
+    };
+    if (!requireFormFields(fields, ['legal_name', 'birthday', 'phone', 'address_line_1', 'city', 'state', 'postal_code'])) {
+      return { error: 'Complete every required personal information field.' };
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.birthday)) {
+      return { error: 'Birthday must use a valid date.' };
+    }
+    return { payload: fields };
+  }
+
+  if (formKey === 'emergency_contact') {
+    const fields = {
+      emergency_contact_name: formString(formData, 'emergency_contact_name', 120),
+      emergency_contact_phone: formString(formData, 'emergency_contact_phone', 48),
+      emergency_contact_relationship: formString(formData, 'emergency_contact_relationship', 80)
+    };
+    if (!requireFormFields(fields, ['emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship'])) {
+      return { error: 'Complete every emergency contact field.' };
+    }
+    return { payload: fields };
+  }
+
+  if (formKey === 'payroll_setup') {
+    const directDepositAuthorized = String(formData.get('direct_deposit_authorized') ?? '0') === '1';
+    const fields = {
+      worker_classification:
+        formString(formData, 'worker_classification', 32) === 'contractor' ? 'contractor' : 'employee',
+      start_date: formString(formData, 'start_date', 10),
+      pay_type: formString(formData, 'pay_type', 32) === 'salary' ? 'salary' : 'hourly',
+      direct_deposit_authorized: directDepositAuthorized ? 'yes' : 'no',
+      bank_name: formString(formData, 'bank_name', 120),
+      routing_last_four: formString(formData, 'routing_last_four', 4),
+      account_last_four: formString(formData, 'account_last_four', 4)
+    };
+    if (!requireFormFields(fields, ['worker_classification', 'start_date', 'pay_type'])) {
+      return { error: 'Complete every required payroll setup field.' };
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.start_date)) {
+      return { error: 'Start date must use a valid date.' };
+    }
+    if (directDepositAuthorized && !requireFormFields(fields, ['bank_name', 'routing_last_four', 'account_last_four'])) {
+      return { error: 'Add the direct deposit authorization details or turn direct deposit authorization off.' };
+    }
+    if (
+      directDepositAuthorized &&
+      (!/^\d{4}$/.test(fields.routing_last_four) || !/^\d{4}$/.test(fields.account_last_four))
+    ) {
+      return { error: 'Direct deposit routing and account references must be the last four digits.' };
+    }
+    return { payload: fields };
+  }
+
+  return { error: 'This onboarding form is not configured correctly.' };
+}
+
+async function applyOnboardingFormPayloadToProfile(
+  db: D1,
+  businessId: string,
+  userId: string,
+  formKey: string,
+  payload: Record<string, string>,
+  updatedBy: string | null
+) {
+  if (formKey !== 'personal_information' && formKey !== 'emergency_contact') return;
+
+  await ensureEmployeeProfilesTable(db);
+  const current = await loadAdminEmployeeProfile(db, userId, businessId);
+  const now = Math.floor(Date.now() / 1000);
+  const next = {
+    real_name: formKey === 'personal_information' ? payload.legal_name : current.real_name,
+    phone: formKey === 'personal_information' ? payload.phone : current.phone,
+    birthday: formKey === 'personal_information' ? payload.birthday : current.birthday,
+    address_line_1: formKey === 'personal_information' ? payload.address_line_1 : current.address_line_1,
+    address_line_2: formKey === 'personal_information' ? payload.address_line_2 : current.address_line_2,
+    city: formKey === 'personal_information' ? payload.city : current.city,
+    state: formKey === 'personal_information' ? payload.state : current.state,
+    postal_code: formKey === 'personal_information' ? payload.postal_code : current.postal_code,
+    emergency_contact_name:
+      formKey === 'emergency_contact' ? payload.emergency_contact_name : current.emergency_contact_name,
+    emergency_contact_phone:
+      formKey === 'emergency_contact' ? payload.emergency_contact_phone : current.emergency_contact_phone,
+    emergency_contact_relationship:
+      formKey === 'emergency_contact'
+        ? payload.emergency_contact_relationship
+        : current.emergency_contact_relationship
+  };
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_profiles (
+        business_id,
+        user_id,
+        real_name,
+        phone,
+        birthday,
+        address_line_1,
+        address_line_2,
+        city,
+        state,
+        postal_code,
+        emergency_contact_name,
+        emergency_contact_phone,
+        emergency_contact_relationship,
+        updated_at,
+        updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, user_id) DO UPDATE SET
+        real_name = excluded.real_name,
+        phone = excluded.phone,
+        birthday = excluded.birthday,
+        address_line_1 = excluded.address_line_1,
+        address_line_2 = excluded.address_line_2,
+        city = excluded.city,
+        state = excluded.state,
+        postal_code = excluded.postal_code,
+        emergency_contact_name = excluded.emergency_contact_name,
+        emergency_contact_phone = excluded.emergency_contact_phone,
+        emergency_contact_relationship = excluded.emergency_contact_relationship,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(
+      businessId,
+      userId,
+      next.real_name,
+      next.phone,
+      next.birthday,
+      next.address_line_1,
+      next.address_line_2,
+      next.city,
+      next.state,
+      next.postal_code,
+      next.emergency_contact_name,
+      next.emergency_contact_phone,
+      next.emergency_contact_relationship,
+      now,
+      updatedBy
+    )
+    .run();
+}
+
+async function resolveOnboardingTemplateSourceFile(
+  formData: FormData,
+  locals: App.Locals,
+  sourceName: string,
+  existingUrl = ''
+) {
+  let sourceFileUrl = String(formData.get('source_file_url') ?? existingUrl).trim();
+  let sourceFileName = String(formData.get('existing_source_file_name') ?? '').trim();
+  const upload = formData.get(sourceName);
+
+  if (upload instanceof File && upload.size > 0) {
+    if (upload.size > 15 * 1024 * 1024) {
+      return { error: 'Onboarding source documents must be 15MB or smaller.' };
+    }
+
+    const contentType = upload.type || 'application/octet-stream';
+    const extension = extensionFromFilename(upload.name);
+    if (!isAllowedDocumentUpload(contentType, extension)) {
+      return { error: 'Only PDF or image documents can be uploaded.' };
+    }
+
+    if (!locals.MEDIA_BUCKET) {
+      return { error: 'Document storage is not configured.' };
+    }
+
+    try {
+      const uploaded = await uploadEmployeeOnboardingMedia(
+        locals.MEDIA_BUCKET,
+        requireBusinessId(locals),
+        `template-${locals.businessId ?? 'business'}`,
+        upload
+      );
+      const previousKey = documentMediaKeyFromUrl(existingUrl);
+      if (previousKey && previousKey !== uploaded.key) {
+        await locals.MEDIA_BUCKET.delete(previousKey);
+      }
+      sourceFileUrl = uploaded.url;
+      sourceFileName = upload.name;
+    } catch {
+      return { error: 'Only PDF or image documents can be uploaded.' };
+    }
+  } else if (!sourceFileUrl) {
+    sourceFileName = '';
+  }
+
+  return { sourceFileUrl, sourceFileName };
+}
+
+export async function loadEmployeeOnboardingTemplate(db: D1, businessId: string) {
+  await ensureEmployeeOnboardingTables(db);
+  const template = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        business_id,
+        CASE WHEN item_type = 'profile' THEN 'form' ELSE item_type END AS item_type,
+        CASE
+          WHEN item_type = 'profile' AND COALESCE(form_key, '') = '' THEN 'personal_information'
+          ELSE form_key
+        END AS form_key,
+        title,
+        description,
+        source_file_url,
+        source_file_name,
+        sort_order,
+        is_active,
+        created_at,
+        updated_at,
+        created_by
+      FROM employee_onboarding_template_items
+      WHERE business_id = ?
+      ORDER BY sort_order ASC, created_at ASC
+      `
+    )
+    .bind(businessId)
+    .all<EmployeeOnboardingTemplateItem>();
+
+  return template.results ?? [];
+}
+
+export async function createEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const itemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
+  const formKey = normalizeOnboardingFormKey(String(formData.get('form_key') ?? '').trim(), itemType ?? 'acknowledgement');
+  const title = String(formData.get('title') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const sortOrder = Number(formData.get('sort_order') ?? 0);
+  const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
+
+  if (!itemType) return fail(400, { error: 'Choose a valid onboarding item type.' });
+  if (!title) return fail(400, { error: 'Title is required.' });
+
+  const sourceResult = await resolveOnboardingTemplateSourceFile(formData, locals, 'source_file');
+  if ('error' in sourceResult) return fail(400, { error: sourceResult.error });
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_onboarding_template_items (
+        id,
+        business_id,
+        item_type,
+        form_key,
+        title,
+        description,
+        source_file_url,
+        source_file_name,
+        sort_order,
+        is_active,
+        created_at,
+        updated_at,
+        created_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    )
+    .bind(
+      crypto.randomUUID(),
+      businessId,
+      itemType,
+      formKey,
+      title,
+      description,
+      sourceResult.sourceFileUrl,
+      sourceResult.sourceFileName,
+      Number.isFinite(sortOrder) ? sortOrder : 0,
+      isActive,
+      now,
+      now,
+      locals.userId ?? null
+    )
+    .run();
+
+  return { success: true, message: 'Onboarding item added.' };
+}
+
+export async function updateEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const id = String(formData.get('id') ?? '').trim();
+  const itemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
+  const formKey = normalizeOnboardingFormKey(String(formData.get('form_key') ?? '').trim(), itemType ?? 'acknowledgement');
+  const title = String(formData.get('title') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const sortOrder = Number(formData.get('sort_order') ?? 0);
+  const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
+  const existingUrl = String(formData.get('existing_source_file_url') ?? '').trim();
+
+  if (!id) return fail(400, { error: 'Missing onboarding item id.' });
+  if (!itemType) return fail(400, { error: 'Choose a valid onboarding item type.' });
+  if (!title) return fail(400, { error: 'Title is required.' });
+
+  const sourceResult = await resolveOnboardingTemplateSourceFile(formData, locals, 'source_file', existingUrl);
+  if ('error' in sourceResult) return fail(400, { error: sourceResult.error });
+
+  await db
+    .prepare(
+      `
+      UPDATE employee_onboarding_template_items
+      SET item_type = ?,
+        form_key = ?,
+        title = ?,
+        description = ?,
+        source_file_url = ?,
+        source_file_name = ?,
+        sort_order = ?,
+        is_active = ?,
+        updated_at = ?
+      WHERE id = ? AND business_id = ?
+      `
+    )
+    .bind(
+      itemType,
+      formKey,
+      title,
+      description,
+      sourceResult.sourceFileUrl,
+      sourceResult.sourceFileName,
+      Number.isFinite(sortOrder) ? sortOrder : 0,
+      isActive,
+      Math.floor(Date.now() / 1000),
+      id,
+      businessId
+    )
+    .run();
+
+  return { success: true, message: 'Onboarding item saved.' };
+}
+
+export async function deleteEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) return fail(400, { error: 'Missing onboarding item id.' });
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT source_file_url
+      FROM employee_onboarding_template_items
+      WHERE id = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(id, businessId)
+    .first<{ source_file_url: string }>();
+
+  await db
+    .prepare(`DELETE FROM employee_onboarding_template_items WHERE id = ? AND business_id = ?`)
+    .bind(id, businessId)
+    .run();
+
+  const mediaKey = documentMediaKeyFromUrl(existing?.source_file_url ?? '');
+  if (mediaKey && locals.MEDIA_BUCKET) {
+    await locals.MEDIA_BUCKET.delete(mediaKey);
+  }
+
+  return { success: true, message: 'Onboarding item deleted.' };
+}
+
+async function refreshEmployeeOnboardingPackageStatus(
+  db: D1,
+  packageId: string,
+  businessId: string,
+  approvedBy?: string | null
+) {
+  const counts = await db
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN status = 'needs_changes' THEN 1 ELSE 0 END) AS needs_changes_count,
+        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count
+      FROM employee_onboarding_items
+      WHERE package_id = ? AND business_id = ?
+      `
+    )
+    .bind(packageId, businessId)
+    .first<{
+      total: number;
+      pending_count: number | null;
+      needs_changes_count: number | null;
+      submitted_count: number | null;
+      approved_count: number | null;
+    }>();
+
+  const total = counts?.total ?? 0;
+  const pendingCount = counts?.pending_count ?? 0;
+  const needsChangesCount = counts?.needs_changes_count ?? 0;
+  const submittedCount = counts?.submitted_count ?? 0;
+  const approvedCount = counts?.approved_count ?? 0;
+  const now = Math.floor(Date.now() / 1000);
+
+  let status: EmployeeOnboardingPackage['status'] = 'sent';
+  let completedAt: number | null = null;
+  let approvedAt: number | null = null;
+  let reviewer: string | null = null;
+
+  if (total > 0 && approvedCount === total) {
+    status = 'approved';
+    completedAt = now;
+    approvedAt = now;
+    reviewer = approvedBy ?? null;
+  } else if (total > 0 && pendingCount === 0 && needsChangesCount === 0) {
+    status = 'submitted';
+    completedAt = now;
+  } else if (submittedCount > 0 || approvedCount > 0 || needsChangesCount > 0) {
+    status = 'in_progress';
+  }
+
+  await db
+    .prepare(
+      `
+      UPDATE employee_onboarding_packages
+      SET status = ?,
+        completed_at = CASE WHEN ? IS NULL THEN completed_at ELSE ? END,
+        approved_at = CASE WHEN ? IS NULL THEN approved_at ELSE ? END,
+        approved_by = CASE WHEN ? IS NULL THEN approved_by ELSE ? END,
+        updated_at = ?
+      WHERE id = ? AND business_id = ?
+      `
+    )
+    .bind(status, completedAt, completedAt, approvedAt, approvedAt, reviewer, reviewer, now, packageId, businessId)
+    .run();
+}
+
+export async function loadEmployeeOnboarding(
+  db: D1,
+  userId: string,
+  businessId: string
+): Promise<EmployeeOnboardingState> {
+  await ensureEmployeeOnboardingTables(db);
+
+  const onboardingPackage = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        business_id,
+        user_id,
+        status,
+        payroll_classification,
+        sent_at,
+        completed_at,
+        approved_at,
+        approved_by,
+        created_by,
+        updated_at,
+        manager_note
+      FROM employee_onboarding_packages
+      WHERE user_id = ? AND business_id = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+      `
+    )
+    .bind(userId, businessId)
+    .first<EmployeeOnboardingPackage>();
+
+  if (!onboardingPackage) {
+    return { package: null, items: [] };
+  }
+
+  const items = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        package_id,
+        business_id,
+        user_id,
+        CASE WHEN item_type = 'profile' THEN 'form' ELSE item_type END AS item_type,
+        CASE
+          WHEN item_type = 'profile' AND COALESCE(form_key, '') = '' THEN 'personal_information'
+          ELSE form_key
+        END AS form_key,
+        title,
+        description,
+        status,
+        file_url,
+        file_name,
+        form_payload,
+        source_file_url,
+        source_file_name,
+        signed_name,
+        manager_note,
+        sort_order,
+        created_at,
+        submitted_at,
+        reviewed_at,
+        reviewed_by
+      FROM employee_onboarding_items
+      WHERE package_id = ? AND business_id = ?
+      ORDER BY sort_order ASC, created_at ASC
+      `
+    )
+    .bind(onboardingPackage.id, businessId)
+    .all<EmployeeOnboardingItem>();
+
+  return {
+    package: onboardingPackage,
+    items: items.results ?? []
+  };
+}
+
+async function createEmployeeOnboardingPackageForUser(
+  db: D1,
+  options: {
+    businessId: string;
+    userId: string;
+    payrollClassification?: EmployeeOnboardingPackage['payroll_classification'];
+    createdBy?: string | null;
+  }
+) {
+  await ensureEmployeeOnboardingTables(db);
+
+  const existingActive = await db
+    .prepare(
+      `
+      SELECT id, status
+      FROM employee_onboarding_packages
+      WHERE user_id = ? AND business_id = ? AND status != 'approved'
+      ORDER BY updated_at DESC
+      LIMIT 1
+      `
+    )
+    .bind(options.userId, options.businessId)
+    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
+
+  if (existingActive) {
+    return { created: false, packageId: existingActive.id, status: existingActive.status };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const packageId = crypto.randomUUID();
+  const payrollClassification = options.payrollClassification === 'contractor' ? 'contractor' : 'employee';
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_onboarding_packages (
+        id,
+        business_id,
+        user_id,
+        status,
+        payroll_classification,
+        sent_at,
+        completed_at,
+        approved_at,
+        approved_by,
+        created_by,
+        updated_at,
+        manager_note
+      )
+      VALUES (?, ?, ?, 'sent', ?, ?, NULL, NULL, NULL, ?, ?, '')
+      `
+    )
+    .bind(packageId, options.businessId, options.userId, payrollClassification, now, options.createdBy ?? null, now)
+    .run();
+
+  const templateItems = (await loadEmployeeOnboardingTemplate(db, options.businessId)).filter(
+    (item) => item.is_active === 1
+  );
+  const onboardingItems = templateItems.length > 0 ? templateItems : defaultEmployeeOnboardingItems();
+
+  for (const item of onboardingItems) {
+    await db
+      .prepare(
+        `
+        INSERT INTO employee_onboarding_items (
+          id,
+          package_id,
+          business_id,
+          user_id,
+          item_type,
+          form_key,
+          title,
+          description,
+          status,
+          file_url,
+          file_name,
+          form_payload,
+          source_file_url,
+          source_file_name,
+          signed_name,
+          manager_note,
+          sort_order,
+          created_at,
+          submitted_at,
+          reviewed_at,
+          reviewed_by
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', '', '', ?, ?, '', '', ?, ?, NULL, NULL, NULL)
+        `
+      )
+      .bind(
+        crypto.randomUUID(),
+        packageId,
+        options.businessId,
+        options.userId,
+        item.item_type,
+        item.form_key,
+        item.title,
+        item.description,
+        item.source_file_url,
+        item.source_file_name,
+        item.sort_order,
+        now
+      )
+      .run();
+  }
+
+  return { created: true, packageId, status: 'sent' as const };
+}
+
+export async function ensureEmployeeOnboardingRequirement(
+  db: D1,
+  businessId: string,
+  userId: string,
+  createdBy?: string | null
+) {
+  if (!businessId || !userId) return { required: false, approved: true, status: 'not_required' as const };
+
+  await ensureBusinessSchema(db);
+  const membership = await db
+    .prepare(
+      `
+      SELECT role, COALESCE(is_active, 1) AS is_active
+      FROM business_users
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ role: string | null; is_active: number }>();
+
+  if (!membership || membership.is_active !== 1 || isAdminBusinessRole(membership.role)) {
+    return { required: false, approved: true, status: 'not_required' as const };
+  }
+
+  await ensureEmployeeOnboardingTables(db);
+  const latest = await db
+    .prepare(
+      `
+      SELECT id, status
+      FROM employee_onboarding_packages
+      WHERE business_id = ? AND user_id = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
+
+  if (latest?.status === 'approved') {
+    return { required: true, approved: true, status: latest.status, packageId: latest.id };
+  }
+
+  if (latest) {
+    return { required: true, approved: false, status: latest.status, packageId: latest.id };
+  }
+
+  const created = await createEmployeeOnboardingPackageForUser(db, {
+    businessId,
+    userId,
+    createdBy: createdBy ?? null
+  });
+
+  return {
+    required: true,
+    approved: false,
+    status: created.status,
+    packageId: created.packageId
+  };
+}
+
+export async function loadEmployeeOnboardingAccessStatus(db: D1, businessId: string, userId: string) {
+  return ensureEmployeeOnboardingRequirement(db, businessId, userId, null);
+}
+
+export async function loadEmployeeOnboardingDashboard(
+  db: D1,
+  businessId: string
+): Promise<AdminOnboardingDashboardRow[]> {
+  await ensureEmployeeOnboardingTables(db);
+
+  const users = await loadAdminUsers(db, businessId);
+  const packages = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        business_id,
+        user_id,
+        status,
+        payroll_classification,
+        sent_at,
+        completed_at,
+        approved_at,
+        approved_by,
+        created_by,
+        updated_at,
+        manager_note
+      FROM employee_onboarding_packages
+      WHERE business_id = ?
+      ORDER BY updated_at DESC
+      `
+    )
+    .bind(businessId)
+    .all<EmployeeOnboardingPackage>();
+
+  const itemCounts = await db
+    .prepare(
+      `
+      SELECT
+        package_id,
+        COUNT(*) AS total_items,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_items,
+        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted_items,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_items,
+        SUM(CASE WHEN status = 'needs_changes' THEN 1 ELSE 0 END) AS needs_changes_items
+      FROM employee_onboarding_items
+      WHERE business_id = ?
+      GROUP BY package_id
+      `
+    )
+    .bind(businessId)
+    .all<{
+      package_id: string;
+      total_items: number;
+      pending_items: number | null;
+      submitted_items: number | null;
+      approved_items: number | null;
+      needs_changes_items: number | null;
+    }>();
+
+  const latestPackageByUser = new Map<string, EmployeeOnboardingPackage>();
+  for (const packet of packages.results ?? []) {
+    if (!latestPackageByUser.has(packet.user_id)) {
+      latestPackageByUser.set(packet.user_id, packet);
+    }
+  }
+
+  const countsByPackage = new Map(
+    (itemCounts.results ?? []).map((row) => [
+      row.package_id,
+      {
+        total_items: row.total_items ?? 0,
+        pending_items: row.pending_items ?? 0,
+        submitted_items: row.submitted_items ?? 0,
+        approved_items: row.approved_items ?? 0,
+        needs_changes_items: row.needs_changes_items ?? 0
+      }
+    ])
+  );
+
+  return users
+    .filter((user) => !isAdminBusinessRole(user.role))
+    .map((user) => {
+      const packet = latestPackageByUser.get(user.id) ?? null;
+      const counts = packet ? countsByPackage.get(packet.id) : null;
+
+      return {
+        user_id: user.id,
+        display_name: user.display_name,
+        email: user.email,
+        role: user.role,
+        is_active: user.is_active,
+        package_id: packet?.id ?? null,
+        package_status: packet?.status ?? 'not_sent',
+        payroll_classification: packet?.payroll_classification ?? null,
+        sent_at: packet?.sent_at ?? null,
+        completed_at: packet?.completed_at ?? null,
+        approved_at: packet?.approved_at ?? null,
+        updated_at: packet?.updated_at ?? null,
+        total_items: counts?.total_items ?? 0,
+        pending_items: counts?.pending_items ?? 0,
+        submitted_items: counts?.submitted_items ?? 0,
+        approved_items: counts?.approved_items ?? 0,
+        needs_changes_items: counts?.needs_changes_items ?? 0
+      };
+    });
 }
 
 export async function loadAdminNodeNames(db: D1, businessId: string) {
@@ -1214,8 +2404,8 @@ export async function createListSection(request: Request, locals: App.Locals) {
 
   if (firstItem) {
     const maxSort = await db
-      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM list_items WHERE section_id = ?`)
-      .bind(sectionId)
+      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM list_items WHERE section_id = ? AND business_id = ?`)
+      .bind(sectionId, businessId)
       .first<{ max_sort: number }>();
     const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
     const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
@@ -1396,10 +2586,23 @@ export async function addListItem(request: Request, locals: App.Locals) {
     return fail(400, { error: 'Invalid list item input.' });
   }
 
+  const section = await db
+    .prepare(
+      `
+      SELECT id
+      FROM list_sections
+      WHERE id = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(sectionId, businessId)
+    .first<{ id: string }>();
+  if (!section) return fail(404, { error: 'List section not found.' });
+
   const now = Math.floor(Date.now() / 1000);
   const maxSort = await db
-    .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM list_items WHERE section_id = ?`)
-    .bind(sectionId)
+    .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM list_items WHERE section_id = ? AND business_id = ?`)
+    .bind(sectionId, businessId)
     .first<{ max_sort: number }>();
 
   const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
@@ -1499,10 +2702,23 @@ export async function addChecklistItem(request: Request, locals: App.Locals) {
     return fail(400, { error: 'Invalid checklist item input.' });
   }
 
+  const section = await db
+    .prepare(
+      `
+      SELECT id
+      FROM checklist_sections
+      WHERE id = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(sectionId, businessId)
+    .first<{ id: string }>();
+  if (!section) return fail(404, { error: 'Checklist section not found.' });
+
   const now = Math.floor(Date.now() / 1000);
   const maxSort = await db
-    .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM checklist_items WHERE section_id = ?`)
-    .bind(sectionId)
+    .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM checklist_items WHERE section_id = ? AND business_id = ?`)
+    .bind(sectionId, businessId)
     .first<{ max_sort: number }>();
 
   await db
@@ -1867,8 +3083,12 @@ export async function createDocument(request: Request, locals: App.Locals) {
       return fail(503, { error: 'Document media bucket is not configured. Use File URL for now.' });
     }
 
-    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, slug, upload);
+    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
     fileUrl = uploaded.url;
+  }
+
+  if (!fileUrl) {
+    return fail(400, { error: 'Upload a PDF or image file before saving.' });
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -1928,7 +3148,7 @@ export async function updateDocument(request: Request, locals: App.Locals) {
       return fail(503, { error: 'Document media bucket is not configured. Use File URL for now.' });
     }
 
-    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, slug, upload);
+    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
     const previousKey = documentMediaKeyFromUrl(existingFileUrl);
     if (previousKey && previousKey !== uploaded.key) {
       await locals.MEDIA_BUCKET.delete(previousKey);
@@ -2071,6 +3291,14 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
     .bind(Math.floor(Date.now() / 1000), businessId, userId)
     .run();
 
+  await writeAuditLog(db, {
+    action: 'admin_role_granted',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
   return { success: true };
 }
 
@@ -2103,6 +3331,16 @@ export async function approveUser(
     .prepare(`UPDATE business_users SET is_active = 1, updated_at = ? WHERE business_id = ? AND user_id = ?`)
     .bind(Math.floor(Date.now() / 1000), businessId, userId)
     .run();
+
+  await writeAuditLog(db, {
+    action: 'user_access_approved',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
+  await ensureEmployeeOnboardingRequirement(db, businessId, userId, locals.userId ?? null);
 
   const approvedUser = await db
     .prepare(`SELECT email, display_name FROM users WHERE id = ? LIMIT 1`)
@@ -2178,15 +3416,8 @@ async function hasOtherActiveBusinessMembership(db: D1, userId: string, business
 }
 
 async function revokeUserAccess(db: D1, userId: string, now: number) {
-  await db
-    .prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
-    .bind(now, userId)
-    .run();
-
-  await db
-    .prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
-    .bind(now, now, userId)
-    .run();
+  void now;
+  await revokeUserSessions(db, userId, { revokeDevices: true });
 }
 
 export async function denyUser(request: Request, locals: App.Locals) {
@@ -2234,6 +3465,14 @@ export async function denyUser(request: Request, locals: App.Locals) {
     await revokeUserAccess(db, userId, now);
   }
 
+  await writeAuditLog(db, {
+    action: 'user_access_restricted',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
   return { success: true };
 }
 
@@ -2275,6 +3514,14 @@ export async function deleteUser(request: Request, locals: App.Locals) {
     await revokeUserAccess(db, userId, now);
     await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
   }
+
+  await writeAuditLog(db, {
+    action: 'user_deleted_from_business',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
 
   return { success: true };
 }
@@ -2341,7 +3588,7 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
   const userId = String(formData.get('user_id') ?? '').trim();
   const department = String(formData.get('department') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
-  const departments = await loadScheduleDepartments(db);
+  const departments = await loadScheduleDepartments(db, businessId);
   if (!isValidScheduleDepartment(department, departments)) {
     return fail(400, { error: 'Invalid schedule department.' });
   }
@@ -2429,6 +3676,7 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
     .prepare(
       `
       INSERT INTO employee_profiles (
+        business_id,
         user_id,
         real_name,
         phone,
@@ -2444,8 +3692,8 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
         updated_at,
         updated_by
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, user_id) DO UPDATE SET
         real_name = excluded.real_name,
         phone = excluded.phone,
         birthday = excluded.birthday,
@@ -2462,6 +3710,7 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
       `
     )
     .bind(
+      businessId,
       userId,
       profile.real_name,
       profile.phone,
@@ -2481,6 +3730,259 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
 
   return { success: true, message: 'Employee profile saved.' };
 }
+
+export async function sendEmployeeOnboardingPackage(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  const payrollClassification =
+    String(formData.get('payroll_classification') ?? 'employee') === 'contractor' ? 'contractor' : 'employee';
+
+  if (!userId) return fail(400, { error: 'Missing employee id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
+
+  const membership = await db
+    .prepare(
+      `
+      SELECT role, COALESCE(is_active, 1) AS is_active
+      FROM business_users
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ role: string | null; is_active: number }>();
+
+  if (!membership || membership.is_active !== 1) {
+    return fail(400, { error: 'Employee must be active before onboarding.' });
+  }
+
+  if (isAdminBusinessRole(membership.role)) {
+    return fail(400, { error: 'Onboarding is for employee accounts.' });
+  }
+
+  const created = await createEmployeeOnboardingPackageForUser(db, {
+    businessId,
+    userId,
+    payrollClassification,
+    createdBy: locals.userId ?? null
+  });
+
+  if (!created.created) {
+    return fail(400, { error: 'This employee already has an active onboarding package.' });
+  }
+
+  return { success: true, message: 'Onboarding package sent.' };
+}
+
+export async function submitEmployeeOnboardingItem(request: Request, locals: App.Locals) {
+  if (!locals.userId) throw redirect(303, '/login');
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const itemId = String(formData.get('item_id') ?? '').trim();
+  const signedName = String(formData.get('signed_name') ?? '').trim();
+  const upload = formData.get('file');
+
+  if (!itemId) return fail(400, { error: 'Missing onboarding item.' });
+
+  const item = await db
+    .prepare(
+      `
+      SELECT
+        i.id,
+        i.package_id,
+        i.business_id,
+        i.user_id,
+        CASE WHEN i.item_type = 'profile' THEN 'form' ELSE i.item_type END AS item_type,
+        CASE
+          WHEN i.item_type = 'profile' AND COALESCE(i.form_key, '') = '' THEN 'personal_information'
+          ELSE i.form_key
+        END AS form_key,
+        i.title,
+        i.description,
+        i.status,
+        i.file_url,
+        i.file_name,
+        i.form_payload,
+        i.signed_name,
+        i.manager_note,
+        i.sort_order,
+        i.created_at,
+        i.submitted_at,
+        i.reviewed_at,
+        i.reviewed_by,
+        p.status AS package_status
+      FROM employee_onboarding_items i
+      JOIN employee_onboarding_packages p ON p.id = i.package_id
+      WHERE i.id = ? AND i.user_id = ? AND i.business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(itemId, locals.userId, businessId)
+    .first<EmployeeOnboardingItem & { package_status: EmployeeOnboardingPackage['status'] }>();
+
+  if (!item) return fail(404, { error: 'Onboarding item not found.' });
+  if (item.package_status === 'approved') {
+    return fail(400, { error: 'This onboarding package is already approved.' });
+  }
+
+  let fileUrl = item.file_url;
+  let fileName = item.file_name;
+  let formPayload = item.form_payload;
+
+  if (item.item_type === 'document') {
+    if (upload instanceof File && upload.size > 0) {
+      if (upload.size > 15 * 1024 * 1024) {
+        return fail(400, { error: 'Document uploads must be 15MB or smaller.' });
+      }
+      if (!locals.MEDIA_BUCKET) {
+        return fail(503, { error: 'Document storage is not configured.' });
+      }
+
+      try {
+        const uploaded = await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET, businessId, locals.userId, upload);
+        const previousKey = documentMediaKeyFromUrl(item.file_url);
+        if (previousKey) {
+          await locals.MEDIA_BUCKET.delete(previousKey);
+        }
+        fileUrl = uploaded.url;
+        fileName = upload.name;
+      } catch {
+        return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
+      }
+    }
+
+    if (!fileUrl) {
+      return fail(400, { error: 'Upload the requested document before submitting.' });
+    }
+  } else if (item.item_type === 'form') {
+    const formResult = buildOnboardingFormPayload(formData, item.form_key);
+    if ('error' in formResult) return fail(400, { error: formResult.error });
+    if (!signedName) return fail(400, { error: 'Typed name is required.' });
+    await applyOnboardingFormPayloadToProfile(
+      db,
+      businessId,
+      locals.userId,
+      item.form_key,
+      formResult.payload,
+      locals.userId
+    );
+    formPayload = JSON.stringify(formResult.payload);
+  } else if (String(formData.get('acknowledged') ?? '0') !== '1') {
+    return fail(400, { error: 'Confirm the acknowledgement before submitting.' });
+  } else if (!signedName) {
+    return fail(400, { error: 'Typed name is required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      UPDATE employee_onboarding_items
+      SET status = 'submitted',
+        file_url = ?,
+        file_name = ?,
+        form_payload = ?,
+        signed_name = ?,
+        manager_note = '',
+        submitted_at = ?,
+        reviewed_at = NULL,
+        reviewed_by = NULL
+      WHERE id = ? AND user_id = ? AND business_id = ?
+      `
+    )
+    .bind(fileUrl, fileName, formPayload, signedName, now, item.id, locals.userId, businessId)
+    .run();
+
+  await refreshEmployeeOnboardingPackageStatus(db, item.package_id, businessId);
+
+  return { success: true, message: 'Onboarding item submitted.' };
+}
+
+async function reviewEmployeeOnboardingItem(
+  request: Request,
+  locals: App.Locals,
+  status: Extract<EmployeeOnboardingItem['status'], 'approved' | 'needs_changes'>
+) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const itemId = String(formData.get('item_id') ?? '').trim();
+  const managerNote = String(formData.get('manager_note') ?? '').trim();
+
+  if (!itemId) return fail(400, { error: 'Missing onboarding item.' });
+  if (status === 'needs_changes' && !managerNote) {
+    return fail(400, { error: 'Add a note so the employee knows what to fix.' });
+  }
+
+  const item = await db
+    .prepare(
+      `
+      SELECT id, package_id, user_id
+      FROM employee_onboarding_items
+      WHERE id = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(itemId, businessId)
+    .first<{ id: string; package_id: string; user_id: string }>();
+
+  if (!item) return fail(404, { error: 'Onboarding item not found.' });
+  if (!(await userBelongsToBusiness(db, item.user_id, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      UPDATE employee_onboarding_items
+      SET status = ?,
+        manager_note = ?,
+        reviewed_at = ?,
+        reviewed_by = ?
+      WHERE id = ? AND business_id = ?
+      `
+    )
+    .bind(status, managerNote, now, locals.userId ?? null, item.id, businessId)
+    .run();
+
+  await refreshEmployeeOnboardingPackageStatus(
+    db,
+    item.package_id,
+    businessId,
+    status === 'approved' ? (locals.userId ?? null) : null
+  );
+
+  return {
+    success: true,
+    message: status === 'approved' ? 'Onboarding item approved.' : 'Changes requested.'
+  };
+}
+
+export const approveEmployeeOnboardingItem = (request: Request, locals: App.Locals) =>
+  reviewEmployeeOnboardingItem(request, locals, 'approved');
+
+export const requestEmployeeOnboardingChanges = (request: Request, locals: App.Locals) =>
+  reviewEmployeeOnboardingItem(request, locals, 'needs_changes');
 
 export async function createUserInvite(
   request: Request,
@@ -2502,6 +4004,41 @@ export async function createUserInvite(
     return fail(400, { error: 'A valid email is required.' });
   }
 
+  const [businessLimit, adminLimit, emailLimit] = await Promise.all([
+    checkRateLimit(db, {
+      action: 'invite_business',
+      identifier: businessId,
+      limit: 40,
+      windowSeconds: 60 * 60,
+      blockSeconds: 60 * 60
+    }),
+    checkRateLimit(db, {
+      action: 'invite_admin',
+      identifier: `${businessId}:${locals.userId ?? 'unknown'}`,
+      limit: 20,
+      windowSeconds: 60 * 60,
+      blockSeconds: 60 * 60
+    }),
+    checkRateLimit(db, {
+      action: 'invite_email',
+      identifier: `${businessId}:${emailNormalized}`,
+      limit: 3,
+      windowSeconds: 24 * 60 * 60,
+      blockSeconds: 24 * 60 * 60
+    })
+  ]);
+
+  if (!businessLimit.allowed || !adminLimit.allowed || !emailLimit.allowed) {
+    await writeAuditLog(db, {
+      action: 'invite_rate_limited',
+      request,
+      businessId,
+      actorUserId: locals.userId ?? null,
+      email
+    });
+    return rateLimitFailure();
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + 60 * 60 * 24 * 14;
   const inviteCode = generateInviteCode();
@@ -2517,6 +4054,14 @@ export async function createUserInvite(
     )
     .bind(crypto.randomUUID(), businessId, email, emailNormalized, inviteCode, locals.userId ?? null, now, expiresAt)
     .run();
+
+  await writeAuditLog(db, {
+    action: 'invite_created',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    email
+  });
 
   const emailResult = await sendInviteEmail({
     env,
@@ -2551,5 +4096,41 @@ export async function revokeUserInvite(request: Request, locals: App.Locals) {
     .bind(Math.floor(Date.now() / 1000), inviteId, businessId)
     .run();
 
+  await writeAuditLog(db, {
+    action: 'invite_revoked',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    metadata: { inviteId }
+  });
+
   return { success: true };
+}
+
+export async function revokeEmployeeSessions(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (userId === locals.userId) {
+    return fail(400, { error: 'Use Profile & Settings to manage your own sessions.' });
+  }
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
+
+  await revokeUserSessions(db, userId, { revokeDevices: false });
+  await writeAuditLog(db, {
+    action: 'admin_revoked_user_sessions',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
+  return { success: true, message: 'Active sessions revoked.' };
 }

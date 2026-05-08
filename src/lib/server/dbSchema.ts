@@ -7,6 +7,13 @@ function cacheKey(tableName: string) {
   return tableName.toLowerCase();
 }
 
+function safeIdentifier(value: string) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
+    throw new Error(`Unsafe SQL identifier: ${value}`);
+  }
+  return value;
+}
+
 export async function hasTable(db: DB, tableName: string) {
   const key = cacheKey(tableName);
   if (tableExistsCache.has(key)) {
@@ -31,11 +38,12 @@ export async function hasTable(db: DB, tableName: string) {
 }
 
 export async function getTableColumns(db: DB, tableName: string) {
+  const table = safeIdentifier(tableName);
   const key = cacheKey(tableName);
   const cached = tableColumnsCache.get(key);
   if (cached) return cached;
 
-  const columns = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
+  const columns = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
   const result = new Set((columns.results ?? []).map((column) => column.name));
   tableColumnsCache.set(key, result);
   return result;

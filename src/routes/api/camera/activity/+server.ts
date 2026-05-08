@@ -1,24 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { cameraBetaEnabled } from '$lib/config/features';
 import {
-  cameraIngestAuthorized,
   cleanupExpiredCameraMedia,
   ensureCameraSchema
 } from '$lib/server/camera';
-import { allowIoTIngest } from '$lib/server/iotIngest';
-import { ensureTenantSchema, singleActiveBusinessId } from '$lib/server/tenant';
+import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
+import { ensureTenantSchema } from '$lib/server/tenant';
 
-async function resolveBusinessId(db: App.Platform['env']['DB'], request: Request, url: URL) {
-  return (
-    request.headers.get('x-business-id')?.trim() ||
-    url.searchParams.get('business_id')?.trim() ||
-    url.searchParams.get('businessId')?.trim() ||
-    (await singleActiveBusinessId(db)) ||
-    ''
-  );
-}
-
-export async function POST({ request, platform, url }) {
+export async function POST({ request, platform }) {
   if (!cameraBetaEnabled) {
     return json({ error: 'Not found.' }, { status: 404 });
   }
@@ -26,17 +15,15 @@ export async function POST({ request, platform, url }) {
   if (!db) {
     return json({ error: 'Database not configured.' }, { status: 503 });
   }
-  if (!cameraIngestAuthorized(request, platform?.env?.IOT_API_KEY)) {
-    return json({ error: 'Unauthorized.' }, { status: 401 });
-  }
 
   await ensureCameraSchema(db);
   await ensureTenantSchema(db, true);
   await cleanupExpiredCameraMedia(db, platform?.env?.CAMERA_MEDIA);
-  const businessId = await resolveBusinessId(db, request, url);
-  if (!businessId) {
-    return json({ error: 'Business context is required for camera activity.' }, { status: 400 });
+  const device = await authenticateIoTDevice(db, request, 'camera');
+  if (!device) {
+    return json({ error: 'Device credentials required.' }, { status: 401 });
   }
+  const businessId = device.businessId;
 
   const contentType = request.headers.get('content-type') ?? '';
   let payload: Record<string, unknown> = {};

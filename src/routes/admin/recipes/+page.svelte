@@ -4,6 +4,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type Recipe = {
@@ -17,9 +18,7 @@
   export let data: { recipes: Recipe[] };
 
   let feedbackMessage = '';
-  $: recipeCategoryOptions = Array.from(
-    new Set(data.recipes.map((recipe) => recipe.category).filter(Boolean))
-  );
+  $: recipeCategoryOptions = Array.from(new Set(data.recipes.map((recipe) => recipe.category).filter(Boolean)));
   $: recipesByCategory = recipeCategoryOptions.map((category) => ({
     category,
     recipes: data.recipes.filter((recipe) => recipe.category === category)
@@ -31,243 +30,208 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Recipe changes saved.', 'success');
+        pushToast('Recipe saved.', 'success');
       } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'That recipe change could not be saved.', 'error');
+        pushToast(result.data?.error ?? 'That recipe could not be saved.', 'error');
       }
       feedbackMessage =
         result.type === 'success'
-          ? 'Recipe changes saved.'
+          ? 'Recipe saved.'
           : result.type === 'failure'
-            ? result.data?.error ?? 'That recipe change could not be saved.'
+            ? result.data?.error ?? 'That recipe could not be saved.'
             : '';
     };
   };
 </script>
 
 <Layout>
-  <PageHeader
-    title="Admin Recipes"
-  />
+  <PageHeader title="Admin Recipes" />
 
-  <section class="panel">
-    <header class="panel-header">
-      <div>
-        <span class="eyebrow">Create</span>
-        <h2>Recipes</h2>
-      </div>
-      <p>{data.recipes.length} total recipes</p>
+  <section class="workspace">
+    <header class="workspace-head">
+      <h2>Recipes</h2>
+      <span>{data.recipes.length} total</span>
     </header>
 
     {#if feedbackMessage}
       <p class="feedback-banner">{feedbackMessage}</p>
     {/if}
 
-    <form method="POST" action="?/create_recipe" use:enhance={withFeedback} class="add-row recipe-add">
-      <input name="category" list="recipe-category-options" placeholder="Category" required />
-      <datalist id="recipe-category-options">
-        {#each recipeCategoryOptions as category}
-          <option value={category}></option>
-        {/each}
-      </datalist>
-      <input name="title" placeholder="Title" required />
-      <textarea name="materials_needed" placeholder="Materials needed" rows="3" required></textarea>
-      <textarea name="ingredients" placeholder="Ingredients" rows="3" required></textarea>
-      <textarea name="instruction" placeholder="Instruction" rows="3" required></textarea>
-      <button type="submit">Add Recipe</button>
-    </form>
+    <details class="creator" open>
+      <summary>Add recipe</summary>
+      <form method="POST" action="?/create_recipe" use:enhance={withFeedback} class="recipe-form">
+        <div class="field-grid">
+          <input name="category" list="recipe-category-options" placeholder="Category" required />
+          <datalist id="recipe-category-options">
+            {#each recipeCategoryOptions as category}
+              <option value={category}></option>
+            {/each}
+          </datalist>
+          <input name="title" placeholder="Title" required />
+        </div>
+        <textarea name="materials_needed" placeholder="Materials needed" rows="3" required></textarea>
+        <textarea name="ingredients" placeholder="Ingredients" rows="4" required></textarea>
+        <textarea name="instruction" placeholder="Instruction" rows="5" required></textarea>
+        <button type="submit">Add Recipe</button>
+      </form>
+    </details>
 
-    <div class="recipe-tabs">
-      {#each recipesByCategory as bucket}
-        <details class="section-block">
-          <summary>
-            <h3>{bucket.category}</h3>
-            <span>{bucket.recipes.length} recipes</span>
-          </summary>
-          {#if bucket.recipes.length === 0}
-            <p class="muted">No recipes in this category yet.</p>
-          {:else}
-            <table class="sheet">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each bucket.recipes as recipe}
-                  <tr>
-                    <td>{recipe.title}</td>
-                    <td>
-                      <form method="POST" action="?/delete_recipe" use:enhance={withFeedback} class="inline">
-                        <input type="hidden" name="id" value={recipe.id} />
-                        <button type="submit" class="icon-btn danger" aria-label="Remove recipe">X</button>
-                      </form>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {/if}
-        </details>
-      {/each}
-    </div>
+    <section class="records">
+      {#if recipesByCategory.length === 0}
+        <EmptyState title="No recipes yet." compact />
+      {:else}
+        {#each recipesByCategory as bucket}
+          <section class="bucket">
+            <header>
+              <h3>{bucket.category}</h3>
+              <span>{bucket.recipes.length}</span>
+            </header>
+
+            <div class="recipe-list">
+              {#each bucket.recipes as recipe}
+                <div class="recipe-row">
+                  <span>{recipe.title}</span>
+                  <form method="POST" action="?/delete_recipe" use:enhance={withFeedback}>
+                    <input type="hidden" name="id" value={recipe.id} />
+                    <button type="submit" class="danger" aria-label="Remove recipe">Delete</button>
+                  </form>
+                </div>
+              {/each}
+            </div>
+          </section>
+        {/each}
+      {/if}
+    </section>
   </section>
 </Layout>
 
 <style>
-  .panel {
-    position: relative;
-    padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008) 42%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
+  .workspace {
+    display: grid;
+    gap: 0.9rem;
   }
 
-  .panel::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
-  }
-
-  .panel-header {
+  .workspace-head,
+  .bucket header,
+  .recipe-row {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
-    align-items: end;
-    margin-bottom: 0.8rem;
+    align-items: center;
+    gap: 0.8rem;
   }
 
-  .panel-header h2,
-  h3 {
+  .workspace-head,
+  .creator,
+  .bucket {
+    border-bottom: 1px solid var(--color-divider);
+    padding-bottom: 0.7rem;
+  }
+
+  h2,
+  h3,
+  p {
     margin: 0;
   }
 
-  .panel-header p,
-  .eyebrow,
-  summary span,
-  .muted {
+  .workspace-head span,
+  .bucket header span {
     color: var(--color-text-muted);
   }
 
-  .add-row,
-  .inline {
-    display: flex;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .recipe-add textarea,
-  .recipe-add input {
-    width: 100%;
-  }
-
   .feedback-banner {
-    margin: 0 0 0.8rem;
-    padding: 0.72rem 0.9rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
-    border-radius: 12px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
-    color: #bbf7d0;
-  }
-
-  .recipe-tabs {
-    margin-top: 0.85rem;
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .section-block {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding-top: 0.55rem;
+    color: #86efac;
   }
 
   summary {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     cursor: pointer;
     list-style: none;
-    padding: 0.2rem 0;
+    font-weight: var(--weight-semibold);
   }
 
   summary::-webkit-details-marker {
     display: none;
   }
 
-  .sheet {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 0.55rem;
+  .recipe-form {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.7rem;
   }
 
-  .sheet th,
-  .sheet td {
-    text-align: left;
-    padding: 0.48rem 0.42rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  .field-grid {
+    display: grid;
+    grid-template-columns: 0.35fr 1fr;
+    gap: 0.55rem;
   }
 
-  .sheet th {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
-    background: rgba(255, 255, 255, 0.02);
+  .recipe-list {
+    display: grid;
+    margin-top: 0.4rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
+  }
+
+  .recipe-row {
+    min-height: 3rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
+  }
+
+  .recipe-row span {
+    font-weight: var(--weight-medium);
   }
 
   input,
   textarea {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    width: 100%;
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    padding: 0.42rem 0.55rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    padding: 0.52rem 0.62rem;
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
-    font-size: 0.82rem;
+    font-size: 0.84rem;
+  }
+
+  textarea {
+    resize: vertical;
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
     color: var(--color-primary-contrast);
-    padding: 0.4rem 0.62rem;
+    min-height: 2.35rem;
+    padding: 0.48rem 0.75rem;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
+    font-weight: var(--weight-medium);
   }
 
-  .icon-btn {
-    width: 1.9rem;
-    height: 1.9rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
+  .recipe-form > button {
+    justify-self: end;
   }
 
   .danger {
-    border-color: rgba(239, 68, 68, 0.3);
-    color: #ffb6b6;
-    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
+    border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
+    background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
+    color: #fecaca;
   }
 
-  @media (max-width: 900px) {
-    .panel-header {
-      flex-direction: column;
-      align-items: start;
+  @media (max-width: 820px) {
+    .field-grid,
+    .recipe-row {
+      grid-template-columns: 1fr;
     }
 
-    .sheet {
-      min-width: 520px;
+    .recipe-row {
+      align-items: flex-start;
+      flex-direction: column;
+      padding-block: 0.65rem;
+    }
+
+    button,
+    .recipe-form > button,
+    .recipe-row form {
+      width: 100%;
     }
   }
 </style>
-
-

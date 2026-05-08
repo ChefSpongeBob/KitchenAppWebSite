@@ -32,31 +32,33 @@
     emailConfigured: boolean;
   };
 
-  $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
-  $: activeUsers = data.users.filter((user) => user.is_active === 1);
-  $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
-  $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
   let staffSearch = '';
 
+  $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
+  $: activeUsers = data.users.filter((user) => user.is_active === 1);
+  $: adminUsers = activeUsers.filter((user) => user.role === 'admin');
+  $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
+  $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
   $: filteredStaff = activeUsers.filter((user) => {
     const query = staffSearch.trim().toLowerCase();
     if (!query) return true;
-    const haystack = [
-      user.display_name ?? '',
-      user.email,
-      user.role,
-      ...user.approved_departments
-    ]
+    const haystack = [user.display_name ?? '', user.email, user.role, ...user.approved_departments]
       .join(' ')
       .toLowerCase();
     return haystack.includes(query);
   });
 
-  const formatDate = (value: number | null) =>
-    value ? new Date(value * 1000).toLocaleDateString() : 'None';
+  const formatDate = (value: number | null) => (value ? new Date(value * 1000).toLocaleDateString() : 'None');
 
   const departmentSummary = (user: UserOption) =>
     user.approved_departments.length > 0 ? user.approved_departments.join(', ') : 'No schedule departments';
+
+  const displayName = (user: UserOption) => user.display_name?.trim() || 'Unnamed User';
+
+  const initialsFor = (user: UserOption) => {
+    const source = displayName(user) === 'Unnamed User' ? user.email : displayName(user);
+    return source.trim().charAt(0).toUpperCase();
+  };
 
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
@@ -72,567 +74,586 @@
 </script>
 
 <Layout>
-  <PageHeader
-    title="Employees"
-  />
+  <PageHeader title="Employees" />
 
-  <section class="summary-grid" aria-label="User summary">
-    <article class="summary-card">
-      <span class="eyebrow">Restricted</span>
-      <strong>{restrictedUsers.length}</strong>
-      <p>Accounts currently blocked from signing in.</p>
-    </article>
-    <article class="summary-card">
-      <span class="eyebrow">Active</span>
-      <strong>{activeUsers.length}</strong>
-      <p>Accounts currently allowed to sign in.</p>
-    </article>
-    <article class="summary-card">
-      <span class="eyebrow">Invites</span>
-      <strong>{activeInvites.length}</strong>
-      <p>Pre-authorized registrations ready to use.</p>
-    </article>
-  </section>
-
-  <section class="stack">
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <span class="panel-kicker">Invites</span>
-          <h2>Registration Invites</h2>
-        </div>
-        <span>{activeInvites.length} active</span>
-      </header>
-
-      {#if !data.emailConfigured}
-        <p class="config-banner">
-          Invite and approval emails are not configured yet. Add `RESEND_API_KEY` and
-          `RESEND_FROM_EMAIL` to enable sending.
-        </p>
-      {/if}
-
-      <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
-        <input
-          name="email"
-          type="email"
-          placeholder="staff@email.com"
-          aria-label="Invite email"
-          required
-        />
-        <button type="submit">Create Invite</button>
-      </form>
-
-      <div class="user-grid">
-        {#if activeInvites.length === 0}
-          <article class="user-card empty-card">No active invites.</article>
-        {:else}
-          {#each activeInvites as invite}
-            <article class="user-card">
-              <div class="user-head">
-                <div>
-                  <h3>{invite.email}</h3>
-                  <p>Expires {formatDate(invite.expires_at)}</p>
-                </div>
-                <span class="status status-approved">Ready</span>
-              </div>
-
-              <dl class="meta">
-                <div>
-                  <dt>Invite Code</dt>
-                  <dd class="code-value">{invite.invite_code}</dd>
-                </div>
-                <div>
-                  <dt>Created</dt>
-                  <dd>{formatDate(invite.created_at)}</dd>
-                </div>
-              </dl>
-
-              <div class="actions">
-                <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
-                  <input type="hidden" name="invite_id" value={invite.id} />
-                  <button type="submit" class="warn-action">Revoke Invite</button>
-                </form>
-              </div>
-            </article>
-          {/each}
-        {/if}
+  <section class="people-board">
+    <section class="people-hero" aria-label="People overview">
+      <div>
+        <span class="kicker">People Operations</span>
+        <h2>Staff access, invites, and employee records</h2>
+        <p>Manage who can enter the workspace, review restricted accounts, and open employee profiles from one cleaner roster.</p>
       </div>
 
-      {#if usedInvites.length > 0}
-        <details class="used-invites">
-          <summary>Used Invites ({usedInvites.length})</summary>
-          <div class="user-grid compact-grid">
-            {#each usedInvites as invite}
-              <article class="user-card compact-card">
-                <div class="user-head">
-                  <div>
-                    <h3>{invite.email}</h3>
-                    <p>Used {formatDate(invite.used_at)}</p>
-                  </div>
-                  <span class="status">Used</span>
-                </div>
-              </article>
-            {/each}
+      <div class="people-metrics">
+        <div>
+          <span>Active</span>
+          <strong>{activeUsers.length}</strong>
+        </div>
+        <div>
+          <span>Admins</span>
+          <strong>{adminUsers.length}</strong>
+        </div>
+        <div>
+          <span>Restricted</span>
+          <strong>{restrictedUsers.length}</strong>
+        </div>
+        <div>
+          <span>Invites</span>
+          <strong>{activeInvites.length}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="people-workspace">
+      <div class="roster-region">
+        <header class="section-toolbar">
+          <div>
+            <span class="kicker">Roster</span>
+            <h2>Current Staff</h2>
           </div>
-        </details>
-      {/if}
-    </section>
+          <label class="search-box">
+            <span>Search employees</span>
+            <input bind:value={staffSearch} type="search" placeholder="Name, email, role, department" aria-label="Search employees" />
+          </label>
+        </header>
 
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <span class="panel-kicker">Restricted</span>
-          <h2>Restricted Users</h2>
-        </div>
-        <span>{restrictedUsers.length} users</span>
-      </header>
+        <div class="staff-table" aria-label="Staff roster">
+          <div class="table-header" aria-hidden="true">
+            <span>Employee</span>
+            <span>Role</span>
+            <span>Departments</span>
+            <span>Actions</span>
+          </div>
 
-      <div class="user-grid">
-        {#if restrictedUsers.length === 0}
-          <article class="user-card empty-card">No restricted users.</article>
-        {:else}
-          {#each restrictedUsers as user}
-            <article class="user-card">
-              <div class="user-head">
-                <div>
-                  <h3>{user.display_name ?? 'Unnamed User'}</h3>
-                  <p>{user.email}</p>
+          {#if filteredStaff.length === 0}
+            <p class="empty table-empty">{activeUsers.length === 0 ? 'No staff yet.' : 'No staff match that search.'}</p>
+          {:else}
+            {#each filteredStaff as user}
+              <div class="staff-row">
+                <a href={`/admin/users/${user.id}`} class="staff-identity">
+                  <span class="avatar" aria-hidden="true">{initialsFor(user)}</span>
+                  <span class="identity-copy">
+                    <strong>{displayName(user)}</strong>
+                    <small>{user.email}</small>
+                  </span>
+                </a>
+                <span class="role-pill" class:role-admin={user.role === 'admin'}>{user.role === 'admin' ? 'Admin' : 'Staff'}</span>
+                <span class="department-copy">{departmentSummary(user)}</span>
+                <div class="row-actions">
+                  <a href={`/admin/users/${user.id}`} class="inline-action">Open</a>
+                  <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
+                    <input type="hidden" name="user_id" value={user.id} />
+                    <button type="submit" class="warn-action">Restrict</button>
+                  </form>
                 </div>
-                <span class="status status-restricted">Restricted</span>
               </div>
-
-              <dl class="meta">
-                <div>
-                  <dt>Role</dt>
-                  <dd>{user.role}</dd>
-                </div>
-                <div>
-                  <dt>Schedule</dt>
-                  <dd>{departmentSummary(user)}</dd>
-                </div>
-              </dl>
-
-              <div class="actions">
-                <a href={`/admin/users/${user.id}`} class="inline-link">Open Employee</a>
-                <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit">Allow Access</button>
-                </form>
-              </div>
-            </article>
-          {/each}
-        {/if}
-      </div>
-    </section>
-
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <h2>Staff</h2>
+            {/each}
+          {/if}
         </div>
-        <span>{filteredStaff.length} staff</span>
-      </header>
-
-      <div class="staff-search">
-        <input
-          bind:value={staffSearch}
-          type="search"
-          placeholder="Search employees"
-          aria-label="Search employees"
-        />
       </div>
 
-      <div class="staff-list">
-        {#if filteredStaff.length === 0}
-          <article class="user-card empty-card">
-            {activeUsers.length === 0 ? 'No staff yet.' : 'No staff match that search.'}
-          </article>
-        {:else}
-          {#each filteredStaff as user}
-            <article class="staff-row">
-              <a href={`/admin/users/${user.id}`} class="staff-link">
-                <div class="staff-main">
-                  <div class="staff-name-block">
-                    <strong>{user.display_name ?? 'Unnamed User'}</strong>
+      <aside class="people-side" aria-label="Invite and review tools">
+        <section class="side-section invite-section">
+          <header class="side-head">
+            <div>
+              <span class="kicker">Invites</span>
+              <h2>Registration Access</h2>
+            </div>
+            <span>{activeInvites.length} active</span>
+          </header>
+
+          {#if !data.emailConfigured}
+            <p class="config-banner">Invite emails are not configured. Add `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to send automatically.</p>
+          {/if}
+
+          <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
+            <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
+            <button type="submit">Invite</button>
+          </form>
+
+          <div class="invite-list">
+            {#if activeInvites.length === 0}
+              <p class="empty">No active invites.</p>
+            {:else}
+              {#each activeInvites as invite}
+                <div class="invite-row">
+                  <div>
+                    <strong>{invite.email}</strong>
+                    <span>Expires {formatDate(invite.expires_at)}</span>
+                  </div>
+                  <code>{invite.invite_code}</code>
+                  <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
+                    <input type="hidden" name="invite_id" value={invite.id} />
+                    <button type="submit" class="text-action warn-text">Revoke</button>
+                  </form>
+                </div>
+              {/each}
+            {/if}
+          </div>
+
+          {#if usedInvites.length > 0}
+            <details class="used-invites">
+              <summary>Used invites ({usedInvites.length})</summary>
+              <div class="used-list">
+                {#each usedInvites as invite}
+                  <div>
+                    <strong>{invite.email}</strong>
+                    <span>Used {formatDate(invite.used_at)}</span>
+                  </div>
+                {/each}
+              </div>
+            </details>
+          {/if}
+        </section>
+
+        <section class="side-section attention-section">
+          <header class="side-head">
+            <div>
+              <span class="kicker">Access Review</span>
+              <h2>Restricted Accounts</h2>
+            </div>
+            <span>{restrictedUsers.length}</span>
+          </header>
+
+          {#if restrictedUsers.length === 0}
+            <p class="empty">No accounts need review.</p>
+          {:else}
+            <div class="restricted-list">
+              {#each restrictedUsers as user}
+                <div class="restricted-row">
+                  <div>
+                    <strong>{displayName(user)}</strong>
                     <span>{user.email}</span>
                   </div>
-                  <div class="staff-inline-meta">
-                    <span>{departmentSummary(user)}</span>
-                    <span>{user.role === 'admin' ? 'Admin' : 'Staff'}</span>
+                  <div class="restricted-actions">
+                    <a href={`/admin/users/${user.id}`} class="inline-action">Open</a>
+                    <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
+                      <input type="hidden" name="user_id" value={user.id} />
+                      <button type="submit">Allow</button>
+                    </form>
                   </div>
                 </div>
-              </a>
-              <div class="staff-actions">
-                <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <button type="submit" class="warn-action">Restrict</button>
-                </form>
-              </div>
-            </article>
-          {/each}
-        {/if}
-      </div>
+              {/each}
+            </div>
+          {/if}
+        </section>
+      </aside>
     </section>
   </section>
 </Layout>
 
 <style>
-  .summary-grid,
-  .user-grid {
+  .people-board {
     display: grid;
-    gap: 0.8rem;
+    gap: 1rem;
+    margin-top: 0.65rem;
   }
 
-  .summary-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin: 0.5rem 0 1rem;
+  .people-hero,
+  .people-workspace {
+    border: 1px solid var(--surface-outline);
+    border-radius: 24px;
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-sm);
   }
 
-  .summary-card,
-  .panel,
-  .user-card {
-    position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+  .people-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.78fr);
+    gap: 1rem;
+    align-items: end;
+    padding: clamp(1rem, 2vw, 1.35rem);
   }
 
-  .summary-card,
-  .user-card {
-    overflow: hidden;
-    padding: 1rem;
+  .people-hero h2,
+  .section-toolbar h2,
+  .side-head h2 {
+    margin: 0.18rem 0 0;
+    color: var(--color-text);
+    line-height: 1.1;
   }
 
-  .summary-card::before,
-  .panel::before,
-  .user-card::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
+  .people-hero h2 {
+    font-size: clamp(1.45rem, 3vw, 2.1rem);
+    letter-spacing: -0.045em;
   }
 
-  .eyebrow,
-  .panel-kicker {
-    display: inline-flex;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  .people-hero p {
+    margin: 0.45rem 0 0;
+    max-width: 48rem;
     color: var(--color-text-muted);
+    line-height: 1.5;
   }
 
-  .summary-card strong {
-    display: block;
-    margin-top: 0.45rem;
-    font-size: 2rem;
+  .kicker,
+  .search-box span,
+  .table-header,
+  .people-metrics span {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .people-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--color-divider);
+    border-radius: 18px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+  }
+
+  .people-metrics div {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.78rem;
+    border-right: 1px solid var(--color-divider);
+  }
+
+  .people-metrics div:last-child {
+    border-right: 0;
+  }
+
+  .people-metrics strong {
+    font-size: 1.45rem;
     line-height: 1;
   }
 
-  .summary-card p {
-    margin: 0.45rem 0 0;
-    color: var(--color-text-muted);
-  }
-
-  .stack {
+  .people-workspace {
     display: grid;
-    gap: 0.9rem;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+    gap: 0;
+    overflow: hidden;
   }
 
-  .panel {
-    padding: 1rem;
+  .roster-region,
+  .people-side {
+    min-width: 0;
+    padding: clamp(0.9rem, 1.8vw, 1.15rem);
   }
 
-  .config-banner {
-    margin: 0 0 0.9rem;
-    padding: 0.72rem 0.9rem;
-    border-radius: 12px;
+  .people-side {
+    border-left: 1px solid var(--color-divider);
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+    background: color-mix(in srgb, var(--color-surface-alt) 18%, transparent);
   }
 
-  .config-banner {
-    border: 1px solid rgba(245, 158, 11, 0.26);
-    background: linear-gradient(180deg, rgba(120, 86, 10, 0.3), rgba(120, 86, 10, 0.12));
-    color: #fde68a;
-  }
-
-  .panel-head {
+  .section-toolbar,
+  .side-head {
     display: flex;
+    align-items: end;
     justify-content: space-between;
     gap: 1rem;
-    align-items: end;
     margin-bottom: 0.9rem;
   }
 
-  .panel-head h2,
-  .user-head h3 {
-    margin: 0.2rem 0 0;
-  }
-
-  .panel-head > span {
+  .side-head > span,
+  .invite-row span,
+  .restricted-row span,
+  .used-list span,
+  .identity-copy small,
+  .department-copy,
+  .empty {
     color: var(--color-text-muted);
-    font-size: 0.8rem;
   }
 
-  .user-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .staff-search {
-    margin-bottom: 0.9rem;
-  }
-
-  .staff-list {
+  .search-box {
+    width: min(100%, 23rem);
     display: grid;
-    gap: 0.65rem;
+    gap: 0.3rem;
   }
 
+  input {
+    width: 100%;
+    min-height: 2.45rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 0.58rem 0.72rem;
+    background: var(--surface-wash), var(--color-surface-alt);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 0.84rem;
+  }
+
+  .staff-table {
+    display: grid;
+    border: 1px solid var(--color-divider);
+    border-radius: 18px;
+    overflow: hidden;
+  }
+
+  .table-header,
   .staff-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(15rem, 1.15fr) minmax(6rem, 0.35fr) minmax(12rem, 1fr) auto;
     gap: 0.75rem;
     align-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.03);
-    padding: 0.8rem 0.9rem;
+    padding: 0.72rem 0.82rem;
+    border-bottom: 1px solid var(--color-divider);
   }
 
-  .staff-link {
-    min-width: 0;
+  .table-header {
+    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
+  }
+
+  .staff-row:last-child {
+    border-bottom: 0;
+  }
+
+  .staff-identity {
     display: grid;
-    gap: 0.45rem;
+    grid-template-columns: 2.35rem minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
     color: inherit;
     text-decoration: none;
+    min-width: 0;
   }
 
-  .staff-link:hover strong,
-  .staff-link:focus-visible strong {
-    color: var(--color-primary-contrast);
-  }
-
-  .staff-main {
+  .avatar {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 14px;
     display: grid;
-    gap: 0.55rem;
+    place-items: center;
+    background: color-mix(in srgb, var(--color-surface-alt) 74%, var(--color-text) 10%);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-weight: var(--weight-bold);
   }
 
-  .staff-name-block {
+  .identity-copy {
     display: grid;
-    gap: 0.18rem;
+    gap: 0.12rem;
+    min-width: 0;
   }
 
-  .staff-main strong {
-    font-size: 0.95rem;
-  }
-
-  .staff-main span {
-    color: var(--color-text-muted);
+  .identity-copy strong,
+  .identity-copy small,
+  .department-copy {
     overflow-wrap: anywhere;
   }
 
-  .staff-inline-meta {
-    display: flex;
-    gap: 0.7rem;
-    flex-wrap: wrap;
+  .role-pill {
+    width: fit-content;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.25rem 0.58rem;
+    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
     color: var(--color-text-muted);
-    font-size: 0.82rem;
+    font-size: 0.74rem;
+    font-weight: var(--weight-semibold);
   }
 
-  .staff-inline-meta span {
-    display: inline-flex;
+  .role-pill.role-admin {
+    border-color: color-mix(in srgb, #60a5fa 34%, var(--color-border));
+    color: #bfdbfe;
   }
 
-  .staff-actions {
+  .row-actions,
+  .restricted-actions {
     display: flex;
     align-items: center;
+    gap: 0.45rem;
   }
 
-  .staff-actions form {
-    min-width: 8rem;
-  }
-
-  .user-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
-    align-items: start;
-  }
-
-  .user-head p {
-    margin: 0.2rem 0 0;
-    color: var(--color-text-muted);
-    overflow-wrap: anywhere;
-  }
-
-  .meta {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.6rem;
-    margin: 0.9rem 0;
-  }
-
-  .meta div {
-    padding: 0.6rem 0.7rem;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .meta dt {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
-    margin-bottom: 0.22rem;
-  }
-
-  .meta dd {
-    margin: 0;
-    color: var(--color-text);
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    align-items: stretch;
-  }
-
-  .actions form {
-    flex: 1 1 150px;
-  }
-
-  .inline-link {
+  button,
+  .inline-action {
+    min-height: 2.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
+    color: var(--color-primary-contrast);
+    padding: 0.48rem 0.68rem;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+    text-decoration: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 1 1 150px;
-    min-height: 2.6rem;
-    padding: 0.55rem 0.78rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--color-text);
-    text-decoration: none;
-    font-size: 0.78rem;
-    font-weight: var(--weight-medium);
-    line-height: 1.2;
-    text-align: center;
+    white-space: nowrap;
+  }
+
+  .warn-action {
+    border-color: color-mix(in srgb, #f59e0b 38%, var(--color-border));
+    color: #fcd34d;
+    background: color-mix(in srgb, #78350f 28%, var(--color-surface));
+  }
+
+  .text-action {
+    min-height: auto;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: var(--color-text-muted);
+  }
+
+  .warn-text {
+    color: #fcd34d;
+  }
+
+  .side-section {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .config-banner {
+    margin: 0;
+    padding: 0.68rem 0.78rem;
+    border: 1px solid color-mix(in srgb, #f59e0b 34%, var(--color-border));
+    border-radius: 14px;
+    background: color-mix(in srgb, #f59e0b 12%, transparent);
+    color: #fde68a;
+    font-size: 0.84rem;
+    line-height: 1.45;
   }
 
   .invite-form {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.6rem;
-    margin-bottom: 0.9rem;
+    gap: 0.5rem;
   }
 
-  .code-value {
+  .invite-list,
+  .restricted-list,
+  .used-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .invite-row,
+  .restricted-row,
+  .used-list div {
+    display: grid;
+    gap: 0.48rem;
+    padding: 0.72rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .invite-row div,
+  .restricted-row div:first-child,
+  .used-list div {
+    min-width: 0;
+  }
+
+  .invite-row strong,
+  .restricted-row strong,
+  .used-list strong {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
+  code {
+    color: var(--color-text);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    letter-spacing: 0.04em;
-  }
-
-  .used-invites {
-    margin-top: 0.9rem;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
   }
 
   .used-invites summary {
-    cursor: pointer;
     color: var(--color-text-muted);
-  }
-
-  .compact-grid {
-    margin-top: 0.75rem;
-  }
-
-  .compact-card {
-    padding: 0.8rem;
-  }
-
-  button {
-    width: 100%;
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-primary-contrast);
-    min-height: 2.6rem;
-    padding: 0.55rem 0.78rem;
     cursor: pointer;
-    font-size: 0.78rem;
-    font-weight: var(--weight-medium);
-    line-height: 1.2;
+    font-size: 0.85rem;
   }
 
-  .warn-action {
-    border-color: rgba(245, 158, 11, 0.28);
-    color: #fcd34d;
-    background: linear-gradient(180deg, rgba(120, 86, 10, 0.42), rgba(120, 86, 10, 0.14));
+  .empty {
+    margin: 0;
+    padding: 0.35rem 0;
+    line-height: 1.45;
   }
 
-  .status {
-    display: inline-flex;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 0.18rem 0.5rem;
-    font-size: 0.72rem;
-    background: rgba(255, 255, 255, 0.03);
+  .table-empty {
+    padding: 0.9rem;
   }
 
-  .status-restricted {
-    border-color: #f59e0b;
-    color: #f59e0b;
-  }
+  @media (max-width: 1080px) {
+    .people-hero,
+    .people-workspace {
+      grid-template-columns: 1fr;
+    }
 
-  .status-approved {
-    border-color: #16a34a;
-    color: #16a34a;
-  }
-
-  .empty-card {
-    color: var(--color-text-muted);
-  }
-
-  @media (max-width: 900px) {
-    .user-grid,
-    .summary-grid {
-      grid-template-columns: minmax(0, 1fr);
+    .people-side {
+      border-left: 0;
+      border-top: 1px solid var(--color-divider);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 640px) {
-    .panel {
-      padding: 0.9rem;
-    }
-
-    .panel-head,
-    .user-head {
+  @media (max-width: 820px) {
+    .section-toolbar,
+    .side-head {
+      align-items: stretch;
       flex-direction: column;
-      align-items: start;
     }
 
-    .meta {
-      grid-template-columns: minmax(0, 1fr);
+    .search-box {
+      width: 100%;
     }
 
-    .actions form {
-      flex-basis: 100%;
+    .people-side {
+      grid-template-columns: 1fr;
     }
 
-    .invite-form {
-      grid-template-columns: minmax(0, 1fr);
+    .people-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .people-metrics div:nth-child(2) {
+      border-right: 0;
+    }
+
+    .people-metrics div:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .table-header {
+      display: none;
     }
 
     .staff-row {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: 1fr;
+      align-items: start;
     }
 
-    .staff-actions form {
-      min-width: 0;
+    .row-actions,
+    .restricted-actions {
+      width: 100%;
+      align-items: stretch;
+    }
+
+    .row-actions form,
+    .restricted-actions form,
+    .row-actions button,
+    .restricted-actions button,
+    .inline-action {
       width: 100%;
     }
   }
+
+  @media (max-width: 560px) {
+    .people-metrics,
+    .invite-form {
+      grid-template-columns: 1fr;
+    }
+
+    .people-metrics div {
+      border-right: 0;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .people-metrics div:last-child {
+      border-bottom: 0;
+    }
+
+    .row-actions,
+    .restricted-actions {
+      flex-direction: column;
+    }
+  }
 </style>
-
-

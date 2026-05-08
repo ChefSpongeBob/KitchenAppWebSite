@@ -30,106 +30,47 @@
     title="Schedule Settings"
   />
 
-  <section class="stack">
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <span class="panel-kicker">Builder</span>
-          <h2>Autofill Schedule</h2>
-        </div>
-      </header>
+  <section class="settings-shell">
+    <header class="settings-head">
+      <h2>Builder</h2>
+      <a href="/admin/schedule-roles" class="settings-link">Department Roles</a>
+    </header>
 
-      <p class="panel-note">
-        When enabled, new weeks treat last week as the default source for fast schedule building.
-      </p>
-
-      <form method="POST" action="?/save_autofill" use:enhance={withFeedback} class="settings-form">
-        <input type="hidden" name="autofill_new_weeks" value={data.settings.autofillNewWeeks ? '0' : '1'} />
-        <div class="setting-row">
-          <div class="setting-copy">
-            <strong>{data.settings.autofillNewWeeks ? 'Autofill Enabled' : 'Autofill Disabled'}</strong>
-            <span>
-              {data.settings.autofillNewWeeks
-                ? 'New schedules default to autofill behavior.'
-                : 'New schedules start without autofill by default.'}
-            </span>
-          </div>
-          <button type="submit">
-            {data.settings.autofillNewWeeks ? 'Disable Autofill' : 'Enable Autofill'}
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <span class="panel-kicker">Roles</span>
-          <h2>Department Roles</h2>
-        </div>
-      </header>
-
+    <form method="POST" action="?/save_autofill" use:enhance={withFeedback} class="settings-form">
+      <input type="hidden" name="autofill_new_weeks" value={data.settings.autofillNewWeeks ? '0' : '1'} />
       <div class="setting-row">
         <div class="setting-copy">
-          <strong>Manage schedule role options</strong>
-          <span>Edit the role lists used for your active departments.</span>
+          <strong>Autofill</strong>
+          <span>{data.settings.autofillNewWeeks ? 'Enabled' : 'Disabled'}</span>
         </div>
-        <a href="/admin/schedule-roles" class="settings-link">Open</a>
+        <button type="submit">
+          {data.settings.autofillNewWeeks ? 'Disable Autofill' : 'Enable Autofill'}
+        </button>
       </div>
-    </section>
+    </form>
   </section>
 </Layout>
 
 <style>
-  .stack {
+  .settings-shell {
     display: grid;
-    gap: 0.9rem;
-  }
-
-  .panel {
-    position: relative;
-    overflow: hidden;
+    gap: 0.85rem;
     padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
   }
 
-  .panel::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
-  }
-
-  .panel-head {
+  .settings-head {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    align-items: end;
-    margin-bottom: 0.9rem;
+    align-items: center;
   }
 
-  .panel-kicker {
-    display: inline-flex;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
-  }
-
-  .panel-head h2 {
-    margin: 0.2rem 0 0;
-  }
-
-  .panel-note {
-    margin: 0 0 0.9rem;
-    color: var(--color-text-muted);
-    max-width: 46rem;
+  .settings-head h2 {
+    margin: 0;
+    font-size: 1rem;
   }
 
   .settings-form {
@@ -142,10 +83,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.85rem 0.9rem;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--color-divider);
   }
 
   .setting-copy {
@@ -174,11 +113,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 2.5rem;
-    padding: 0.6rem 0.9rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: 2.2rem;
+    padding: 0.5rem 0.78rem;
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: transparent;
     color: var(--color-text);
     text-decoration: none;
     font-size: 0.8rem;

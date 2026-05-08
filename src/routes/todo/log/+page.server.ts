@@ -1,6 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, fail } from '@sveltejs/kit';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.userRole !== 'admin') {
@@ -10,7 +10,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const db = locals.DB;
 	if (!db) return { logs: [] };
 	await ensureTenantSchema(db);
-	const businessId = locals.businessId ?? '';
+	const businessId = requireBusinessId(locals);
 
 	const logs = await db.prepare(`
 		SELECT 
@@ -40,7 +40,7 @@ export const actions: Actions = {
 		const db = locals.DB;
 		if (!db) return fail(503, { error: 'Database not configured.' });
 		await ensureTenantSchema(db);
-		const businessId = locals.businessId ?? '';
+		const businessId = requireBusinessId(locals);
 		const formData = await request.formData();
 		const id = String(formData.get('id') || '');
 

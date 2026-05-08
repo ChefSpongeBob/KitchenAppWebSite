@@ -6,6 +6,7 @@ type ColumnInfo = {
 };
 
 let lastCameraCleanupAt = 0;
+const CAMERA_CLEANUP_BATCH_SIZE = 100;
 
 async function tableColumns(db: D1, table: string) {
   const columns = await db.prepare(`PRAGMA table_info(${table})`).all<ColumnInfo>();
@@ -73,8 +74,7 @@ export async function ensureCameraSchema(db: D1) {
 }
 
 export function cameraIngestAuthorized(request: Request, apiKey?: string) {
-  if (!apiKey) return true;
-  return request.headers.get('x-api-key') === apiKey;
+  return Boolean(apiKey) && request.headers.get('x-api-key') === apiKey;
 }
 
 export function extensionFromContentType(contentType: string, fallback = 'bin') {
@@ -110,9 +110,11 @@ export async function cleanupExpiredCameraMedia(
       SELECT id, image_url, clip_url
       FROM camera_events
       WHERE created_at < ?
+      ORDER BY created_at ASC
+      LIMIT ?
       `
     )
-    .bind(cutoff)
+    .bind(cutoff, CAMERA_CLEANUP_BATCH_SIZE)
     .all<{ id: string; image_url: string | null; clip_url: string | null }>();
 
   for (const event of expired.results ?? []) {
@@ -124,7 +126,10 @@ export async function cleanupExpiredCameraMedia(
     }
   }
 
-  await db.prepare(`DELETE FROM camera_events WHERE created_at < ?`).bind(cutoff).run();
+  const ids = expired.results ?? [];
+  if (!ids.length) return;
+
+  await db.batch(ids.map((event) => db.prepare(`DELETE FROM camera_events WHERE id = ?`).bind(event.id)));
 }
 
 export async function deleteCameraEventAssets(

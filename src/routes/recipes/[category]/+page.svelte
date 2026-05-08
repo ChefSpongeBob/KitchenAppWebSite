@@ -1,7 +1,5 @@
 <script lang="ts">
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
-  import { fade } from 'svelte/transition';
   import { goto } from '$app/navigation';
 
   type Recipe = {
@@ -53,10 +51,6 @@
     };
   }
 
-  function parseIngredients(raw: string): string[] {
-    return splitIngredients(raw ?? '');
-  }
-
   function parseIngredientSections(raw: string): Array<{ heading: string | null; items: string[] }> {
     const normalized = normalizeBreaks(raw ?? '').trim();
     if (!normalized) return [];
@@ -71,17 +65,11 @@
       )
       .filter((block) => block.length > 0);
 
-    if (blocks.length <= 1) {
-      return [{ heading: null, items: splitIngredients(normalized) }];
-    }
+    if (blocks.length <= 1) return [{ heading: null, items: splitIngredients(normalized) }];
 
     return blocks.map((block) => {
       const [first, ...rest] = block;
-      if (rest.length === 0) {
-        return { heading: null, items: block };
-      }
-
-      return { heading: first, items: rest };
+      return rest.length === 0 ? { heading: null, items: block } : { heading: first, items: rest };
     });
   }
 
@@ -89,7 +77,6 @@
     if (/^(quick tip|veg stock procedure|chicken stock procedure|final cook procedure)$/i.test(line)) {
       return 'heading';
     }
-
     return 'paragraph';
   }
 
@@ -101,43 +88,43 @@
 
   async function syncSearch(value: string) {
     const next = value.trim();
-    await goto(
-      next
-        ? `/recipes/${category}?q=${encodeURIComponent(next)}`
-        : `/recipes/${category}`,
-      {
-        replaceState: true,
-        noScroll: true,
-        keepFocus: true
-      }
-    );
+    await goto(next ? `/recipes/${category}?q=${encodeURIComponent(next)}` : `/recipes/${category}`, {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true
+    });
   }
 </script>
 
-<PageHeader title={`Recipes: ${category}`} />
+<PageHeader title={category} />
 
-<section class="search">
-  <input
-    type="search"
-    placeholder="Search recipe by title..."
-    bind:value={search}
-    on:input={(event) => syncSearch((event.currentTarget as HTMLInputElement).value)}
-    aria-label="Search recipe by title"
-  />
-</section>
+<section class="recipe-category">
+  <div class="top-row">
+    <a href="/recipes">Back to recipes</a>
+    <input
+      type="search"
+      placeholder="Search this category"
+      bind:value={search}
+      on:input={(event) => syncSearch((event.currentTarget as HTMLInputElement).value)}
+      aria-label="Search this category"
+    />
+  </div>
 
-{#if visibleRecipes.length > 0}
-  <section class="grid">
-    {#each visibleRecipes as r, index}
-      <div in:fade={{ delay: index * 80, duration: 180 }}>
+  {#if visibleRecipes.length > 0}
+    <div class="recipe-list">
+      {#each visibleRecipes as recipe}
         <details class="recipe-details">
-          <summary>{r.title}</summary>
-          <DashboardCard title={r.title}>
-            <div class="recipe-body">
-              <h4>Ingredients</h4>
-              {#each parseIngredientSections(r.ingredients) as section}
+          <summary>
+            <span>{recipe.title}</span>
+            <small>Open</small>
+          </summary>
+
+          <div class="recipe-body">
+            <section>
+              <h3>Ingredients</h3>
+              {#each parseIngredientSections(recipe.ingredients) as section}
                 {#if section.heading}
-                  <h5>{section.heading}</h5>
+                  <h4>{section.heading}</h4>
                 {/if}
                 <ul>
                   {#each section.items as item}
@@ -145,93 +132,133 @@
                   {/each}
                 </ul>
               {/each}
+            </section>
 
-              <h4>Materials needed</h4>
+            <section>
+              <h3>Materials</h3>
               <ul>
-                {#if parseInstructionSections(r.instructions).materials.length > 0}
-                  {#each parseInstructionSections(r.instructions).materials as item}
+                {#if parseInstructionSections(recipe.instructions).materials.length > 0}
+                  {#each parseInstructionSections(recipe.instructions).materials as item}
                     <li>{item}</li>
                   {/each}
                 {:else}
                   <li>No materials listed.</li>
                 {/if}
               </ul>
+            </section>
 
-              <hr class="section-divider" />
-
-              <h4>Instruction</h4>
-              <div class="instruction-flow">
-                {#each parseInstructionSections(r.instructions).instruction as step}
-                  {#if classifyInstructionLine(step) === 'heading'}
-                    <h5>{step}</h5>
-                  {:else}
-                    <p>{step}</p>
-                  {/if}
-                {/each}
-              </div>
-            </div>
-          </DashboardCard>
+            <section class="instructions">
+              <h3>Instruction</h3>
+              {#each parseInstructionSections(recipe.instructions).instruction as step}
+                {#if classifyInstructionLine(step) === 'heading'}
+                  <h4>{step}</h4>
+                {:else}
+                  <p>{step}</p>
+                {/if}
+              {/each}
+            </section>
+          </div>
         </details>
-      </div>
-    {/each}
-  </section>
-{:else}
-  <p class="search-empty">
-    {#if normalizedSearch.length >= 2}
-      No recipes found for this search.
-    {:else}
-      No recipes found for this category.
-    {/if}
-  </p>
-{/if}
+      {/each}
+    </div>
+  {:else}
+    <p class="empty">
+      {#if normalizedSearch.length >= 2}
+        No recipes found for this search.
+      {:else}
+        No recipes found for this category.
+      {/if}
+    </p>
+  {/if}
+</section>
 
 <style>
-  .search {
-    margin: 0.35rem 0 0.8rem;
+  .recipe-category {
+    display: grid;
+    gap: 1rem;
   }
 
-  .search input {
-    width: 100%;
-    max-width: 560px;
+  .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  .top-row a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+
+  .top-row a:hover {
+    color: var(--color-primary);
+  }
+
+  .top-row input {
+    width: min(100%, 420px);
     border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.5rem 0.65rem;
-    background: var(--color-surface-alt);
+    border-radius: 999px;
+    padding: 0.62rem 0.85rem;
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
   }
 
-  .grid {
+  .recipe-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
+    border-top: 1px solid var(--color-divider);
   }
 
   .recipe-details {
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    background: var(--color-surface);
-    padding: 0.35rem 0.45rem;
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .recipe-details > summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    min-height: 3.3rem;
     list-style: none;
     cursor: pointer;
-    font-weight: 600;
-    color: var(--color-text);
-    padding: 0.25rem 0.2rem;
   }
 
   .recipe-details > summary::-webkit-details-marker {
     display: none;
   }
 
-  .recipe-body h4 {
-    margin: 0.5rem 0 0.25rem;
+  .recipe-details summary span {
+    font-weight: var(--weight-semibold);
+  }
+
+  .recipe-details summary small,
+  .empty {
+    color: var(--color-text-muted);
+  }
+
+  .recipe-body {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.32fr) minmax(180px, 0.28fr) minmax(0, 1fr);
+    gap: 1.2rem;
+    padding: 0.35rem 0 1.1rem;
+  }
+
+  .recipe-body h3,
+  .recipe-body h4,
+  .recipe-body p {
+    margin: 0;
+  }
+
+  .recipe-body h3 {
+    margin-bottom: 0.45rem;
     font-size: 0.82rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
     color: var(--color-text-muted);
+  }
+
+  .recipe-body h4 {
+    margin: 0.65rem 0 0.25rem;
+    font-size: 0.9rem;
   }
 
   .recipe-body ul {
@@ -240,52 +267,32 @@
   }
 
   .recipe-body li {
-    margin: 0.15rem 0;
+    margin: 0.18rem 0;
   }
 
-  .instruction-flow {
+  .instructions {
     display: grid;
     gap: 0.55rem;
   }
 
-  .instruction-flow h5 {
-    margin: 0.45rem 0 0;
-    font-size: 0.84rem;
-    color: var(--color-text);
-    font-weight: var(--weight-semibold);
-    letter-spacing: 0.02em;
-  }
-
-  .instruction-flow p {
-    margin: 0;
+  .instructions p {
     color: var(--color-text-muted);
-    line-height: 1.55;
+    line-height: 1.6;
   }
 
-  .section-divider {
-    border: none;
-    border-top: 1px solid var(--color-border);
-    margin: 0.7rem 0;
-  }
-
-  .search-empty {
-    margin: 0.45rem 0 0;
-    color: var(--color-text-muted);
-    font-size: 0.86rem;
-  }
-
-  @media (max-width: 760px) {
-    .search {
-      margin-top: 0.2rem;
+  @media (max-width: 900px) {
+    .top-row {
+      align-items: stretch;
+      flex-direction: column;
     }
 
-    .grid {
+    .top-row input {
+      width: 100%;
+    }
+
+    .recipe-body {
       grid-template-columns: 1fr;
-      gap: 0.75rem;
-    }
-
-    .recipe-details {
-      padding: 0.25rem 0.35rem;
+      gap: 0.9rem;
     }
   }
 </style>

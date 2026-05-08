@@ -33,14 +33,30 @@
     name: string;
   };
 
+  type IoTDevice = {
+    id: string;
+    businessId: string;
+    deviceType: 'sensor' | 'camera';
+    externalDeviceId: string;
+    displayName: string;
+    keyPrefix: string;
+    isActive: number;
+    lastSeenAt: number | null;
+    revokedAt: number | null;
+    createdAt: number;
+    updatedAt: number;
+  };
+
   export let data: {
     events: CameraEvent[];
     sources: CameraSource[];
     nodeNames: NodeName[];
+    iotDevices: IoTDevice[];
   };
 
   let feedPlaying: Record<string, boolean> = {};
   let feedbackMessage = '';
+  let generatedDeviceKey = '';
 
   const fixedCameras = [
     { slot: 'walkin', title: 'Walkin' },
@@ -73,13 +89,24 @@
       download_url: latestEvent?.clip_url ?? latestEvent?.image_url ?? source?.preview_image_url ?? null,
       is_active: source?.is_active ?? 0,
       latestLabel: latestEvent?.clip_url ? 'Latest clip' : latestEvent?.image_url ? 'Latest still' : 'No media yet',
+      latestAt: latestEvent?.created_at ?? null,
+      saved: Boolean(source),
       events
     };
   });
 
-  function formatTimestamp(value: number) {
-    if (!value) return 'Unknown';
+  $: activeCameraCount = cameraCards.filter((camera) => camera.is_active === 1).length;
+  $: mediaEventCount = data.events.filter((event) => event.clip_url || event.image_url).length;
+  $: latestCameraEvent = data.events[0]?.created_at ?? null;
+
+  function formatTimestamp(value: number | null) {
+    if (!value) return 'None';
     return new Date(value * 1000).toLocaleString();
+  }
+
+  function formatShortTime(value: number | null) {
+    if (!value) return 'None';
+    return new Date(value * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   function startFeed(id: string) {
@@ -99,9 +126,11 @@
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
+        generatedDeviceKey = String(result.data?.deviceKey ?? '');
         await invalidateAll();
         pushToast('Camera & sensor settings updated.', 'success');
       } else if (result.type === 'failure') {
+        generatedDeviceKey = '';
         pushToast(result.data?.error ?? 'That camera or sensor action could not be completed.', 'error');
       }
       feedbackMessage =
@@ -121,99 +150,180 @@
     <p class="feedback-banner">{feedbackMessage}</p>
   {/if}
 
-  <div class="page-actions">
-    <form method="POST" action="?/clear_events" use:enhance={withFeedback}>
-      <button type="submit">Clear Clips</button>
-    </form>
-  </div>
-
-  <section class="device-registry">
-    <div class="registry-panel">
-      <header class="registry-head">
-        <div>
-          <span class="eyebrow">Cameras</span>
-          <h2>Camera Names</h2>
-        </div>
-        <span>{data.sources.length} saved</span>
-      </header>
-
-      <div class="camera-settings">
-        {#each cameraCards as camera}
-          <form method="POST" action="?/save_source" use:enhance={withFeedback} class="settings-row">
-            <input type="hidden" name="id" value={camera.id} />
-            <input type="hidden" name="camera_id" value={camera.camera_id} />
-            <label>
-              <span>{camera.slot}</span>
-              <input name="name" value={camera.title} placeholder="Camera name" required />
-            </label>
-            <label>
-              <span>Live URL</span>
-              <input name="live_url" value={camera.live_url ?? ''} placeholder="https://..." />
-            </label>
-            <label>
-              <span>Preview URL</span>
-              <input name="preview_image_url" value={camera.preview_image_url ?? ''} placeholder="https://..." />
-            </label>
-            <label class="switch-row">
-              <span>Active</span>
-              <select name="is_active" value={String(camera.is_active)}>
-                <option value="1">Live</option>
-                <option value="0">Idle</option>
-              </select>
-            </label>
-            <button type="submit">Save</button>
-          </form>
-        {/each}
-      </div>
+  <section class="signal-strip" aria-label="Camera and sensor status">
+    <div>
+      <span>Active Cameras</span>
+      <strong>{activeCameraCount}/{cameraCards.length}</strong>
     </div>
-
-    <div class="registry-panel">
-      <header class="registry-head">
-        <div>
-          <span class="eyebrow">Sensors</span>
-          <h2>Node Names</h2>
-        </div>
-        <span>{data.nodeNames.length} saved</span>
-      </header>
-
-      <form method="POST" action="?/add_node_name" use:enhance={withFeedback} class="settings-row node-add-row">
-        <label>
-          <span>Node ID</span>
-          <input name="sensor_id" type="number" min="1" placeholder="1" required />
-        </label>
-        <label>
-          <span>Name</span>
-          <input name="name" placeholder="Walk-in cooler" required />
-        </label>
-        <button type="submit">Save</button>
-      </form>
-
-      <div class="node-list">
-        {#if data.nodeNames.length === 0}
-          <p>No node names yet.</p>
-        {:else}
-          {#each data.nodeNames as node}
-            <div class="node-row">
-              <span>#{node.sensor_id}</span>
-              <strong>{node.name}</strong>
-              <form method="POST" action="?/delete_node_name" use:enhance={withFeedback}>
-                <input type="hidden" name="sensor_id" value={node.sensor_id} />
-                <button type="submit" class="danger compact">Delete</button>
-              </form>
-            </div>
-          {/each}
-        {/if}
-      </div>
+    <div>
+      <span>Sensor Nodes</span>
+      <strong>{data.nodeNames.length}</strong>
+    </div>
+    <div>
+      <span>Saved Media</span>
+      <strong>{mediaEventCount}</strong>
+    </div>
+    <div>
+      <span>Latest Event</span>
+      <strong>{formatShortTime(latestCameraEvent)}</strong>
     </div>
   </section>
 
-  <section class="feed-grid">
+  <div class="monitor-workspace">
+    <aside class="setup-rail" aria-label="Camera and sensor setup">
+      <details class="setup-panel" open>
+        <summary>
+          <span>Cameras</span>
+          <small>{data.sources.length} saved</small>
+        </summary>
+
+        <div class="camera-settings">
+          {#each cameraCards as camera}
+            <form method="POST" action="?/save_source" use:enhance={withFeedback} class="settings-block">
+              <input type="hidden" name="id" value={camera.id} />
+              <input type="hidden" name="camera_id" value={camera.camera_id} />
+
+              <div class="settings-title">
+                <strong>{camera.slot}</strong>
+                <span class:offline={camera.is_active !== 1}>{camera.is_active === 1 ? 'Live' : 'Idle'}</span>
+              </div>
+
+              <label>
+                <span>Name</span>
+                <input name="name" value={camera.title} placeholder="Camera name" required />
+              </label>
+              <label>
+                <span>Live URL</span>
+                <input name="live_url" value={camera.live_url ?? ''} placeholder="https://..." />
+              </label>
+              <label>
+                <span>Preview URL</span>
+                <input name="preview_image_url" value={camera.preview_image_url ?? ''} placeholder="https://..." />
+              </label>
+              <label>
+                <span>Status</span>
+                <select name="is_active" value={String(camera.is_active)}>
+                  <option value="1">Live</option>
+                  <option value="0">Idle</option>
+                </select>
+              </label>
+
+              <div class="form-actions">
+                <button type="submit">Save</button>
+                {#if camera.saved}
+                  <button type="submit" formaction="?/delete_source" class="danger ghost">Remove</button>
+                {/if}
+              </div>
+            </form>
+          {/each}
+        </div>
+      </details>
+
+      <details class="setup-panel" open>
+        <summary>
+          <span>Sensors</span>
+          <small>{data.nodeNames.length} saved</small>
+        </summary>
+
+        <form method="POST" action="?/add_node_name" use:enhance={withFeedback} class="node-form">
+          <label>
+            <span>Node ID</span>
+            <input name="sensor_id" type="number" min="1" placeholder="1" required />
+          </label>
+          <label>
+            <span>Name</span>
+            <input name="name" placeholder="Walk-in cooler" required />
+          </label>
+          <button type="submit">Save</button>
+        </form>
+
+        <div class="node-list">
+          {#if data.nodeNames.length === 0}
+            <p>No node names yet.</p>
+          {:else}
+            {#each data.nodeNames as node}
+              <div class="node-row">
+                <span>#{node.sensor_id}</span>
+                <strong>{node.name}</strong>
+                <form method="POST" action="?/delete_node_name" use:enhance={withFeedback}>
+                  <input type="hidden" name="sensor_id" value={node.sensor_id} />
+                  <button type="submit" class="danger compact">Delete</button>
+                </form>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </details>
+
+      <details class="setup-panel">
+        <summary>
+          <span>Device Keys</span>
+          <small>{data.iotDevices.filter((device) => device.isActive === 1).length} active</small>
+        </summary>
+
+        {#if generatedDeviceKey}
+          <div class="key-output">
+            <span>New key</span>
+            <code>{generatedDeviceKey}</code>
+          </div>
+        {/if}
+
+        <form method="POST" action="?/provision_iot_device" use:enhance={withFeedback} class="device-form">
+          <label>
+            <span>Type</span>
+            <select name="device_type">
+              <option value="sensor">Sensor</option>
+              <option value="camera">Camera</option>
+            </select>
+          </label>
+          <label>
+            <span>Device ID</span>
+            <input name="external_device_id" placeholder="walkin-01" required />
+          </label>
+          <label>
+            <span>Name</span>
+            <input name="display_name" placeholder="Walk-in cooler" required />
+          </label>
+          <button type="submit">Generate Key</button>
+        </form>
+
+        <div class="device-list">
+          {#if data.iotDevices.length === 0}
+            <p>No device keys yet.</p>
+          {:else}
+            {#each data.iotDevices as device}
+              <div class="device-row" class:revoked={device.isActive !== 1}>
+                <div>
+                  <strong>{device.displayName}</strong>
+                  <span>{device.deviceType} · {device.externalDeviceId}</span>
+                  <small>{device.keyPrefix}… · Last seen {formatShortTime(device.lastSeenAt)}</small>
+                </div>
+                {#if device.isActive === 1}
+                  <form method="POST" action="?/revoke_iot_device" use:enhance={withFeedback}>
+                    <input type="hidden" name="id" value={device.id} />
+                    <button type="submit" class="danger compact">Revoke</button>
+                  </form>
+                {:else}
+                  <span class="revoked-pill">Revoked</span>
+                {/if}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </details>
+
+      <form method="POST" action="?/clear_events" use:enhance={withFeedback} class="clear-form">
+        <button type="submit" class="danger ghost">Clear Clips</button>
+      </form>
+    </aside>
+
+    <section class="feed-grid">
     {#each cameraCards as camera}
       <article class="feed-card">
         <header class="feed-head">
           <div>
-            <span class="eyebrow">Camera</span>
             <h2>{camera.title}</h2>
+            <small>{camera.latestLabel} · {formatTimestamp(camera.latestAt)}</small>
           </div>
           <span class:inactive={camera.is_active !== 1}>
             {camera.is_active === 1 ? 'Live' : 'Idle'}
@@ -306,203 +416,298 @@
         </section>
       </article>
     {/each}
-  </section>
+    </section>
+  </div>
 </Layout>
 
 <style>
-  .page-actions {
-    margin: 0.5rem 0 1rem;
-    display: flex;
-    justify-content: flex-end;
+  .feedback-banner {
+    margin: 0 0 0.9rem;
+    padding: 0.72rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--color-success) 32%, var(--color-border) 68%);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface) 90%);
+    color: var(--color-text);
   }
 
-  .feed-grid {
+  .signal-strip {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.9rem;
-  }
-
-  .device-registry {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-    gap: 0.9rem;
-    margin-bottom: 0.95rem;
-  }
-
-  .registry-panel {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: var(--surface-outline);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    padding: 0.95rem;
+    background: var(--color-border);
+    box-shadow: var(--shadow-xs);
   }
 
-  .registry-head {
+  .signal-strip > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.86rem 0.95rem;
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  }
+
+  .signal-strip span,
+  .settings-title span,
+  .node-row span,
+  .node-list p,
+  .feed-head small,
+  .clip-main span,
+  .clip-main small,
+  .clip-card.empty {
+    color: var(--color-text-muted);
+  }
+
+  .signal-strip strong {
+    font-size: clamp(1.1rem, 1.7vw, 1.45rem);
+    line-height: 1.05;
+  }
+
+  .monitor-workspace {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
+    gap: 0.95rem;
+    margin-top: 0.95rem;
+    align-items: start;
+  }
+
+  .setup-rail {
+    display: grid;
+    gap: 0.75rem;
+    position: sticky;
+    top: 1rem;
+  }
+
+  .setup-panel,
+  .feed-card {
+    border: var(--surface-outline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .setup-panel {
+    overflow: hidden;
+  }
+
+  .setup-panel summary {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 0.75rem;
-    align-items: end;
-    margin-bottom: 0.75rem;
+    cursor: pointer;
+    list-style: none;
+    padding: 0.9rem 1rem;
   }
 
-  .registry-head h2 {
-    margin: 0.12rem 0 0;
-    font-size: 1.05rem;
+  .setup-panel summary::-webkit-details-marker {
+    display: none;
   }
 
-  .registry-head > span {
+  .setup-panel summary span {
+    font-weight: var(--weight-bold);
+  }
+
+  .setup-panel summary small {
     color: var(--color-text-muted);
-    font-size: 0.8rem;
   }
 
   .camera-settings,
-  .node-list {
+  .node-list,
+  .device-list {
     display: grid;
-    gap: 0.62rem;
+    gap: 0.7rem;
+    padding: 0 1rem 1rem;
   }
 
-  .settings-row {
+  .settings-block {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.55rem;
-    align-items: end;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding-top: 0.62rem;
-    min-width: 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-divider);
   }
 
-  .settings-row:first-child {
+  .settings-block:first-child {
     border-top: 0;
     padding-top: 0;
   }
 
-  .settings-row label {
+  .settings-title,
+  .node-row,
+  .device-row,
+  .feed-head,
+  .form-actions,
+  .feed-controls,
+  .clip-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .settings-title span,
+  .feed-head > span {
+    border: 1px solid color-mix(in srgb, var(--color-success) 42%, var(--color-border) 58%);
+    border-radius: 999px;
+    color: color-mix(in srgb, var(--color-success) 72%, var(--color-text) 28%);
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: var(--weight-semibold);
+  }
+
+  .settings-title span.offline,
+  .feed-head > span.inactive {
+    border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border) 58%);
+    color: color-mix(in srgb, var(--color-warning) 74%, var(--color-text) 26%);
+  }
+
+  label {
     display: grid;
     gap: 0.25rem;
     min-width: 0;
   }
 
-  .settings-row label span {
+  label span {
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: 0.76rem;
   }
 
-  .settings-row input,
-  .settings-row select {
+  input,
+  select {
     width: 100%;
     min-width: 0;
-    min-height: 2.45rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 2.35rem;
+    border: var(--surface-outline);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.045);
+    background: color-mix(in srgb, var(--color-surface-alt) 62%, transparent);
     color: var(--color-text);
-    padding: 0.52rem 0.62rem;
+    padding: 0.5rem 0.62rem;
   }
 
-  .settings-row button {
-    width: 100%;
-    min-width: 0;
+  .form-actions,
+  .feed-controls {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
-  .switch-row {
-    max-width: 11rem;
+  .node-form,
+  .device-form {
+    display: grid;
+    grid-template-columns: minmax(70px, 0.42fr) minmax(0, 1fr);
+    gap: 0.55rem;
+    padding: 0 1rem 0.8rem;
   }
 
-  .node-add-row {
-    grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
-    border-top: 0;
-    padding-top: 0;
-    margin-bottom: 0.72rem;
+  .device-form {
+    grid-template-columns: minmax(0, 0.5fr) minmax(0, 1fr);
   }
 
-  .node-add-row button {
+  .device-form label:nth-child(3),
+  .node-form button,
+  .device-form button {
     grid-column: 1 / -1;
   }
 
-  .node-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.6rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    padding: 0.55rem 0.65rem;
-    background: rgba(255, 255, 255, 0.02);
+  .node-row,
+  .device-row {
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.62rem;
   }
 
-  .node-row span,
-  .node-list p {
-    color: var(--color-text-muted);
+  .node-row:first-child,
+  .device-row:first-child {
+    border-top: 0;
+    padding-top: 0;
   }
 
   .node-row strong {
-    font-size: 0.9rem;
+    min-width: 0;
+    flex: 1;
+    font-size: 0.92rem;
   }
 
-  .feed-card {
-    position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008) 42%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    padding: 1rem;
+  .clear-form button {
+    width: 100%;
   }
 
-  .feedback-banner {
-    margin: 0 0 0.9rem;
-    padding: 0.72rem 0.9rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
+  .key-output {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0 1rem 0.8rem;
+    padding: 0.72rem;
+    border: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border) 66%);
     border-radius: 12px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
-    color: #bbf7d0;
+    background: color-mix(in srgb, var(--color-success) 9%, var(--color-surface) 91%);
   }
 
-  .feed-card::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
-  }
-
-  .feed-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: end;
-  }
-
-  .feed-head h2 {
-    margin: 0.18rem 0 0;
-  }
-
-  .eyebrow,
-  .clip-main span {
+  .key-output span,
+  .device-row span,
+  .device-row small,
+  .device-list p {
     color: var(--color-text-muted);
+    font-size: 0.76rem;
   }
 
-  .feed-head > span {
-    border: 1px solid rgba(22, 163, 74, 0.4);
-    color: #86efac;
+  .key-output code {
+    overflow-wrap: anywhere;
+    color: var(--color-text);
+    font-size: 0.78rem;
+  }
+
+  .device-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+  }
+
+  .device-row > div {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
+  }
+
+  .device-row.revoked {
+    opacity: 0.68;
+  }
+
+  .revoked-pill {
+    border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
     border-radius: 999px;
-    padding: 0.18rem 0.55rem;
+    padding: 0.22rem 0.52rem;
+    color: var(--color-text-muted);
     font-size: 0.72rem;
   }
 
-  .feed-head > span.inactive {
-    border-color: rgba(245, 158, 11, 0.35);
-    color: #fcd34d;
+  .feed-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.95rem;
+  }
+
+  .feed-card {
+    padding: 1rem;
+    min-width: 0;
+  }
+
+  .feed-head {
+    align-items: flex-start;
+  }
+
+  .feed-head h2 {
+    margin: 0 0 0.18rem;
+    font-size: clamp(1.16rem, 2vw, 1.45rem);
   }
 
   .feed-stage {
-    margin-top: 0.85rem;
+    margin-top: 0.9rem;
     aspect-ratio: 16 / 9;
-    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+    border-radius: 14px;
     overflow: hidden;
-    background: rgba(0, 0, 0, 0.28);
+    background: #050607;
   }
 
   .feed-stage iframe,
@@ -512,7 +717,7 @@
     height: 100%;
     border: 0;
     object-fit: cover;
-    background: #000;
+    background: #050607;
   }
 
   .feed-placeholder {
@@ -524,45 +729,10 @@
     font-size: 0.88rem;
   }
 
-  .feed-controls {
-    display: flex;
-    gap: 0.55rem;
-    margin-top: 0.8rem;
-    flex-wrap: wrap;
-  }
-
-  .control-link,
-  .muted-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    min-height: 2.5rem;
-  }
-
-  .control-link {
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    padding: 0.55rem 0.78rem;
-    font-size: 0.78rem;
-    color: var(--color-text-soft);
-  }
-
-  .control-link.disabled {
-    opacity: 0.45;
-    pointer-events: none;
-  }
-
-  .muted-btn {
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.06);
-  }
-
   .camera-activity {
     margin-top: 0.95rem;
-    padding-top: 0.9rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--color-divider);
   }
 
   .activity-head {
@@ -574,7 +744,7 @@
 
   .activity-head h3 {
     margin: 0;
-    font-size: 0.98rem;
+    font-size: 1rem;
   }
 
   .activity-head span {
@@ -584,42 +754,40 @@
 
   .clip-list {
     display: grid;
-    gap: 0.55rem;
-    margin-top: 0.8rem;
+    gap: 0.62rem;
+    margin-top: 0.72rem;
   }
 
   .clip-card {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 160px) auto;
+    gap: 0.75rem;
     align-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    padding: 0.7rem 0.85rem;
-    background: rgba(255, 255, 255, 0.02);
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.62rem;
   }
 
-  .clip-card.empty {
-    color: var(--color-text-muted);
+  .clip-card:first-child {
+    border-top: 0;
+    padding-top: 0;
   }
 
   .clip-main {
     display: grid;
-    gap: 0.18rem;
+    gap: 0.16rem;
+    min-width: 0;
   }
 
   .clip-main small {
-    color: var(--color-text-muted);
     font-size: 0.75rem;
   }
 
   .clip-preview {
-    width: min(100%, 380px);
+    width: 100%;
     aspect-ratio: 16 / 9;
     border-radius: 10px;
     overflow: hidden;
-    background: rgba(0, 0, 0, 0.28);
-    flex: 0 0 auto;
+    background: #050607;
   }
 
   .clip-preview video,
@@ -632,38 +800,49 @@
   }
 
   .still-preview img {
-    object-fit: contain;
+    object-fit: cover;
     background: rgba(0, 0, 0, 0.38);
   }
 
   .clip-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
+    justify-content: flex-end;
     flex-wrap: wrap;
   }
 
-  .clip-actions a {
+  .clip-actions a,
+  .control-link {
     color: var(--color-text-soft);
     text-decoration: none;
   }
 
+  .control-link,
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.35rem;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border) 74%);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-text-soft);
-    min-height: 2.5rem;
-    padding: 0.55rem 0.78rem;
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface) 88%);
+    color: var(--color-text);
+    padding: 0.5rem 0.72rem;
     cursor: pointer;
     font-size: 0.78rem;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-semibold);
   }
 
   .danger {
-    border-color: rgba(239, 68, 68, 0.3);
-    color: #ffb6b6;
-    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
+    border-color: color-mix(in srgb, var(--color-error) 42%, var(--color-border) 58%);
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text) 24%);
+  }
+
+  .ghost {
+    background: color-mix(in srgb, var(--color-surface-alt) 76%, transparent);
+  }
+
+  .control-link.disabled {
+    opacity: 0.45;
+    pointer-events: none;
   }
 
   .compact {
@@ -671,28 +850,60 @@
     padding: 0.35rem 0.58rem;
   }
 
-  @media (max-width: 900px) {
-    .device-registry,
+  @media (max-width: 1180px) {
+    .monitor-workspace,
     .feed-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .settings-row,
-    .node-add-row {
+    .setup-rail {
+      position: static;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .clear-form {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .signal-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .setup-rail {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .switch-row {
-      max-width: none;
-    }
-
     .clip-card {
-      flex-direction: column;
-      align-items: start;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
     }
 
     .clip-preview {
       width: 100%;
+    }
+
+    .clip-actions {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 460px) {
+    .signal-strip {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .node-form {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .feed-head,
+    .settings-title,
+    .node-row,
+    .device-row {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 </style>

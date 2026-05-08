@@ -1,6 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import {
   addListItem,
+  createChecklistCategory,
   createCreatorCategory,
   createDocument,
   createListSection,
@@ -11,6 +12,7 @@ import {
   deleteListSection,
   deleteRecipe,
   loadAdminCreatorCatalog,
+  loadAdminChecklists,
   loadAdminDocuments,
   loadAdminRecipes,
   loadAdminSections,
@@ -21,6 +23,7 @@ import {
   updateListSection,
   updateRecipe
 } from '$lib/server/admin';
+import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   requireAdmin(locals.userRole);
@@ -29,16 +32,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const editorParam = url.searchParams.get('editor')?.trim().toLowerCase() ?? '';
   const domainParam = url.searchParams.get('domain')?.trim().toLowerCase() ?? '';
 
-  const initialEditorType: 'category' | 'list' | 'recipe' | 'document' =
+  const initialEditorType: 'category' | 'list' | 'recipe' | 'document' | 'menu' =
     editorParam === 'category' ||
     editorParam === 'recipe' ||
     editorParam === 'document' ||
-    editorParam === 'list'
+    editorParam === 'list' ||
+    editorParam === 'menu'
       ? editorParam
       : 'list';
 
-  const initialListDomain: 'preplists' | 'inventory' | 'orders' =
-    domainParam === 'inventory' || domainParam === 'orders' || domainParam === 'preplists'
+  const initialListDomain: 'preplists' | 'checklists' | 'inventory' | 'orders' =
+    domainParam === 'inventory' || domainParam === 'orders' || domainParam === 'preplists' || domainParam === 'checklists'
       ? domainParam
       : 'preplists';
 
@@ -49,6 +53,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         inventory: [],
         orders: []
       },
+      checklists: [],
       recipes: [],
       documents: [],
       creatorCatalog: {
@@ -62,16 +67,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       initialListDomain
     };
   }
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
-  const [sections, recipes, documents, creatorCatalog] = await Promise.all([
+  const [sections, checklists, recipes, documents, creatorCatalog] = await Promise.all([
     loadAdminSections(db, businessId),
+    loadAdminChecklists(db, businessId),
     loadAdminRecipes(db, businessId),
     loadAdminDocuments(db, businessId),
     loadAdminCreatorCatalog(db, businessId)
   ]);
 
-  return { sections, recipes, documents, creatorCatalog, initialEditorType, initialListDomain };
+  return { sections, checklists, recipes, documents, creatorCatalog, initialEditorType, initialListDomain };
 };
 
 export const actions: Actions = {
@@ -83,6 +89,7 @@ export const actions: Actions = {
   create_creator_category: ({ request, locals }) => createCreatorCategory(request, locals),
   update_creator_category: ({ request, locals }) => updateCreatorCategory(request, locals),
   delete_creator_category: ({ request, locals }) => deleteCreatorCategory(request, locals),
+  create_checklist_category: ({ request, locals }) => createChecklistCategory(request, locals),
   create_list_section: ({ request, locals }) => createListSection(request, locals),
   create_recipe: ({ request, locals }) => createRecipe(request, locals),
   update_recipe: ({ request, locals }) => updateRecipe(request, locals),

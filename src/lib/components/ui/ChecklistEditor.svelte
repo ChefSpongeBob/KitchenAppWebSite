@@ -13,7 +13,6 @@
   };
 
   export let title = 'Checklist';
-  export let subtitle = 'Work through the checklist and reset when needed.';
   export let resetLabel = 'Reset Checklist';
   export let items: ChecklistItem[] = [];
   export let infoCardTitle = '';
@@ -38,7 +37,7 @@
 </script>
 
 <Layout>
-  <PageHeader {title} {subtitle} />
+  <PageHeader {title} />
 
   {#if items.length === 0}
     <p class="empty">No checklist items found yet.</p>
@@ -121,8 +120,8 @@
   .sheet {
     display: flex;
     flex-direction: column;
-    gap: 0.8rem;
-    padding-top: 0.25rem;
+    gap: 0.55rem;
+    padding-top: 0;
   }
 
   .sheet-header,
@@ -134,7 +133,7 @@
   }
 
   .sheet-header {
-    padding: 0.2rem 0.8rem;
+    padding: 0.1rem 0.65rem;
     font-size: 0.74rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -144,46 +143,37 @@
   .sheet-list {
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.5rem;
   }
 
   .sheet-row {
     position: relative;
-    padding: 0.82rem 0.8rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(255,255,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.14);
+    padding: 0.68rem 0.72rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    box-shadow: none;
   }
 
   .sheet-row::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
+    content: none;
   }
 
   .sheet-row.done {
-    border-color: rgba(22, 163, 74, 0.2);
-    background:
-      linear-gradient(180deg, rgba(22, 163, 74, 0.12), rgba(22, 163, 74, 0.03)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    border-color: color-mix(in srgb, #16a34a 34%, var(--color-border));
+    background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
   }
 
   .sheet-row.done::before {
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.92), rgba(22, 163, 74, 0.2));
+    content: none;
   }
 
   .check-btn {
     width: 2.2rem;
     height: 2.2rem;
     border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 1rem;
@@ -215,11 +205,11 @@
   }
 
   .submit-btn {
-    min-height: 2.75rem;
-    padding: 0.72rem 1rem;
+    min-height: 2.45rem;
+    padding: 0.6rem 0.9rem;
     border-radius: 10px;
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.84rem;
@@ -236,14 +226,12 @@
   }
 
   .info-card {
-    margin-top: 1.35rem;
+    margin-top: 1rem;
     padding: 1rem;
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(255,255,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.14);
+    border: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    box-shadow: none;
   }
 
   .info-head {
@@ -272,8 +260,8 @@
   .info-day {
     padding: 0.8rem 0.85rem;
     border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--color-divider);
+    background: transparent;
     display: grid;
     gap: 0.45rem;
   }

@@ -11,6 +11,8 @@ type DB = App.Platform['env']['DB'];
 
 let featureSchemaEnsured = false;
 let ensureFeatureSchemaPromise: Promise<void> | null = null;
+const seededBusinessFeatureModes = new Set<string>();
+const seedBusinessFeaturePromises = new Map<string, Promise<void>>();
 
 async function ensureAppFeatureSchema(db: DB) {
   if (featureSchemaEnsured) return;
@@ -72,18 +74,35 @@ async function ensureAppFeatureSchema(db: DB) {
 }
 
 async function seedBusinessFeatureModes(db: DB, businessId: string) {
+  if (seededBusinessFeatureModes.has(businessId)) return;
+  const pending = seedBusinessFeaturePromises.get(businessId);
+  if (pending) {
+    await pending;
+    return;
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  for (const feature of appFeatureDefinitions) {
-    await db
-      .prepare(
-        `
-        INSERT INTO app_feature_flags_business (business_id, feature_key, mode, updated_at, updated_by)
-        VALUES (?, ?, ?, ?, NULL)
-        ON CONFLICT(business_id, feature_key) DO NOTHING
-        `
-      )
-      .bind(businessId, feature.key, defaultAppFeatureModes[feature.key], now)
-      .run();
+  const promise = (async () => {
+    for (const feature of appFeatureDefinitions) {
+      await db
+        .prepare(
+          `
+          INSERT INTO app_feature_flags_business (business_id, feature_key, mode, updated_at, updated_by)
+          VALUES (?, ?, ?, ?, NULL)
+          ON CONFLICT(business_id, feature_key) DO NOTHING
+          `
+        )
+        .bind(businessId, feature.key, defaultAppFeatureModes[feature.key], now)
+        .run();
+    }
+    seededBusinessFeatureModes.add(businessId);
+  })();
+
+  seedBusinessFeaturePromises.set(businessId, promise);
+  try {
+    await promise;
+  } finally {
+    seedBusinessFeaturePromises.delete(businessId);
   }
 }
 

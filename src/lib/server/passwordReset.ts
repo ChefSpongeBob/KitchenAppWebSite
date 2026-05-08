@@ -212,8 +212,12 @@ export function validateNewPassword(password: string, confirmPassword: string) {
     return fail(400, { error: 'Enter and confirm the new password.' });
   }
 
-  if (password.length < 8) {
-    return fail(400, { error: 'Password must be at least 8 characters.' });
+  if (password.length < 10) {
+    return fail(400, { error: 'Password must be at least 10 characters.' });
+  }
+
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return fail(400, { error: 'Password must include letters and numbers.' });
   }
 
   if (password !== confirmPassword) {

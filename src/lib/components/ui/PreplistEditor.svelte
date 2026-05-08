@@ -17,7 +17,6 @@
   };
 
   export let title = 'Prep List';
-  export let subtitle = 'Submit prep counts together. Admins can adjust par levels in admin tools.';
   export let items: PreplistItem[] = [];
   export let isAdmin = false;
   export let valueLabel = 'Prep';
@@ -74,7 +73,7 @@
 </script>
 
 <Layout>
-  <PageHeader {title} {subtitle} />
+  <PageHeader {title} />
 
   {#if items.length === 0}
     <p class="empty">No prep items found yet.</p>
@@ -131,7 +130,7 @@
 
             <div class="ref-readonly">
               <span class="field-tag">REF:</span>
-              <span>{item.details?.trim() || '—'}</span>
+              <span>{item.details?.trim() || '-'}</span>
             </div>
 
             <div class="par-readonly">
@@ -157,7 +156,7 @@
 
       {#if isAdmin}
         <details class="admin-par">
-          <summary>{adminSummaryLabel}</summary>
+          <summary>{adminSummaryLabel.replace(/^\+\s*/, '')}</summary>
           <form
             method="POST"
             action="?/save_par_levels"
@@ -194,8 +193,8 @@
   .sheet {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.25rem 0 0.15rem;
+    gap: 0.55rem;
+    padding: 0;
   }
 
   .sheet-header,
@@ -212,7 +211,7 @@
   }
 
   .sheet-header {
-    padding: 0.2rem 0.8rem;
+    padding: 0.1rem 0.65rem;
     font-size: 0.74rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -222,40 +221,30 @@
   .batch-form {
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.5rem;
   }
 
   .sheet-row {
     position: relative;
-    padding: 0.78rem 0.8rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(255,255,255,0.08);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.14);
-    transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+    padding: 0.68rem 0.72rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    box-shadow: none;
+    transition: background 140ms ease, border-color 140ms ease;
   }
 
   .sheet-row::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.88), rgba(132, 146, 166, 0.2));
+    content: none;
   }
 
   .sheet-row.done {
-    border-color: rgba(22, 163, 74, 0.2);
-    background:
-      linear-gradient(180deg, rgba(22, 163, 74, 0.12), rgba(22, 163, 74, 0.03)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.16);
+    border-color: color-mix(in srgb, #16a34a 34%, var(--color-border));
+    background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
   }
 
   .sheet-row.done::before {
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.92), rgba(22, 163, 74, 0.2));
+    content: none;
   }
 
   .number-form {
@@ -268,8 +257,8 @@
     width: 2.2rem;
     height: 2.2rem;
     border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 1rem;
@@ -288,8 +277,8 @@
     min-width: 0;
     padding: 0.5rem 0.58rem;
     border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
     color: var(--color-text);
   }
 
@@ -297,7 +286,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
-    margin-top: 0.35rem;
+    margin-top: 0.2rem;
     flex-wrap: wrap;
   }
 
@@ -306,11 +295,11 @@
   }
 
   .submit-btn {
-    min-height: 2.75rem;
-    padding: 0.72rem 1rem;
+    min-height: 2.45rem;
+    padding: 0.6rem 0.9rem;
     border-radius: 10px;
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.84rem;
@@ -328,12 +317,12 @@
   .admin-par summary {
     cursor: pointer;
     width: fit-content;
-    padding: 0.28rem 0.55rem;
-    border: 1px dashed rgba(132, 146, 166, 0.24);
+    padding: 0.34rem 0.65rem;
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     color: var(--color-text-muted);
     font-size: 0.8rem;
-    background: rgba(255,255,255,0.018);
+    background: transparent;
   }
 
   .admin-par-form {
@@ -355,8 +344,8 @@
     min-height: 2.35rem;
     padding: 0.55rem 0.72rem;
     border-radius: 10px;
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.18), rgba(132, 146, 166, 0.06));
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface-alt) 64%, transparent);
     color: var(--color-primary-contrast);
     cursor: pointer;
     font-size: 0.8rem;
@@ -374,7 +363,8 @@
     color: var(--color-text);
     padding: 0.3rem 0.4rem;
     border-radius: 10px;
-    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--color-divider);
+    background: transparent;
   }
 
   .ref-readonly {
@@ -386,7 +376,8 @@
     color: var(--color-text);
     padding: 0.3rem 0.45rem;
     border-radius: 10px;
-    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--color-divider);
+    background: transparent;
     overflow: hidden;
   }
 
@@ -435,4 +426,5 @@
     }
   }
 </style>
+
 

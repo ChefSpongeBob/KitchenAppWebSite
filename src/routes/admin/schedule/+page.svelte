@@ -34,6 +34,7 @@
     detail: string;
     startTime: string;
     endLabel: string;
+    breakMinutes: number;
     notes: string;
   };
 
@@ -55,6 +56,7 @@
     detail: string;
     startTime: string;
     endLabel: string;
+    breakMinutes: number;
     notes: string;
     offeredByUserId: string;
     offeredByUserName: string | null;
@@ -87,6 +89,46 @@
     managerNote: string;
   };
 
+  type OpenShift = {
+    id: string;
+    shiftDate: string;
+    department: string;
+    role: string;
+    detail: string;
+    startTime: string;
+    endLabel: string;
+    breakMinutes: number;
+    notes: string;
+  };
+
+  type OpenShiftRequest = OpenShift & {
+    requestId: string;
+    requestedByUserId: string;
+    requestedByUserName: string | null;
+    requestedByUserEmail: string;
+    status: 'pending' | 'approved' | 'declined';
+  };
+
+  type ScheduleTemplate = {
+    id: string;
+    name: string;
+    department: string;
+    shiftCount: number;
+    laborTargetPercent: number;
+    projectedSales: number;
+    averageHourlyRate: number;
+    updatedAt: number;
+  };
+
+  type LaborTarget = {
+    dayDate: string;
+    projectedSales: number;
+    targetLaborPercent: number;
+    averageHourlyRate: number;
+  };
+
+  type ScheduleTool = 'builder' | 'approvals' | 'open-shifts' | 'labor' | 'templates';
+
   type DraftShift = {
     clientId: string;
     shiftDate: string;
@@ -96,6 +138,7 @@
     detail: string;
     startTime: string;
     endLabel: string;
+    breakMinutes: number;
     notes: string;
     isEditing: boolean;
     duplicateDates: string[];
@@ -120,7 +163,11 @@
     days: Day[];
     rosterUserIds: string[];
     offers: ShiftOffer[];
+    openShifts: OpenShift[];
+    openShiftRequests: OpenShiftRequest[];
     timeOffRequests: TimeOffRequest[];
+    templates: ScheduleTemplate[];
+    laborTargets: LaborTarget[];
     settings: {
       departments: ScheduleDepartment[];
       autofillNewWeeks: boolean;
@@ -146,6 +193,16 @@
   let gridRenderVersion = 0;
   let weekPayload = '';
   let teamPayload = '';
+  let laborTargetsPayload = '';
+  let laborTargets = data.laborTargets.map((target) => ({ ...target }));
+  let openShiftDate = data.weekStart;
+  let openShiftDepartment = '';
+  let openShiftRole = '';
+  let openShiftStartTime = '';
+  let openShiftEndLabel = '';
+  let openShiftTimeEditor: '' | 'start' | 'end' = '';
+  let selectedTemplateId = data.templates[0]?.id ?? '';
+  let selectedScheduleTool: ScheduleTool = 'builder';
   let userOptionsById = new Map<string, UserOption>();
   let timeOffRequestsByUser = new Map<string, TimeOffRequest[]>();
   let employeeHourTotals = new Map<string, number>();
@@ -187,6 +244,17 @@
     return options.length > 0 ? options : ['Shift'];
   }
 
+  $: if (!openShiftDepartment || !availableDepartments.includes(openShiftDepartment as ScheduleDepartment)) {
+    openShiftDepartment = defaultDepartment;
+  }
+  $: openShiftRoles = rolesFor(normalizeDepartment(openShiftDepartment));
+  $: if (!openShiftRole || !openShiftRoles.includes(openShiftRole)) {
+    openShiftRole = openShiftRoles[0] ?? 'Shift';
+  }
+  $: if (!selectedTemplateId && data.templates.length > 0) {
+    selectedTemplateId = data.templates[0].id;
+  }
+
   function createShift(userId: string, shiftDate: string): DraftShift {
     const approvedDepartments = approvedDepartmentsForUser(userId);
     const startingDepartment =
@@ -202,6 +270,7 @@
       detail: '',
       startTime: '',
       endLabel: '',
+      breakMinutes: 0,
       notes: '',
       isEditing: true,
       duplicateDates: [],
@@ -232,6 +301,7 @@
       detail: shift.detail,
       startTime: shift.startTime,
       endLabel: shift.endLabel,
+      breakMinutes: shift.breakMinutes ?? 0,
       notes: shift.notes,
       isEditing: false,
       duplicateDates: [],
@@ -272,6 +342,7 @@
           detail: shift.detail,
           startTime: shift.startTime,
           endLabel: shift.endLabel,
+          breakMinutes: shift.breakMinutes,
           notes: shift.notes
         }))
       )
@@ -292,7 +363,12 @@
     new Map<string, TimeOffRequest[]>()
   );
   $: pendingOffers = data.offers.filter((offer) => offer.requestedByUserId);
+  $: pendingOpenShiftRequests = data.openShiftRequests.filter((request) => request.status === 'pending');
   $: pendingTimeOffRequests = data.timeOffRequests.filter((request) => request.status === 'pending');
+  $: pendingApprovalCount = pendingOffers.length + pendingOpenShiftRequests.length + pendingTimeOffRequests.length;
+  $: visibleOpenShiftCount = data.openShifts.filter(
+    (shift) => selectedSection === 'All' || shift.department === selectedSection
+  ).length;
   $: timeOffConflictCount = employeeRows.reduce(
     (total, row) =>
       total +
@@ -327,6 +403,15 @@
     const hours = shiftHours(shift);
     return hours === null ? sum : sum + hours;
   }, 0);
+  $: visibleStaffedEmployeeCount = new Set(
+    allShifts
+      .filter((shift) => selectedSection === 'All' || shift.department === selectedSection)
+      .map((shift) => shift.userId)
+  ).size;
+  $: availabilityWarningCount = allShifts.filter((shift) => {
+    if (selectedSection !== 'All' && shift.department !== selectedSection) return false;
+    return Boolean(shiftAvailabilityWarning(shift.userId, shift));
+  }).length;
   $: employeeHourTotals = allShifts.reduce((map, shift) => {
     const hours = shiftHours(shift);
     if (hours === null) return map;
@@ -361,6 +446,20 @@
       )
     };
   });
+  $: coveredDayCount = totalsByDay.filter((day) => day.total > 0).length;
+  $: scheduleIssueCount =
+    availabilityWarningCount +
+    timeOffConflictCount +
+    pendingOffers.length +
+    pendingOpenShiftRequests.length +
+    pendingTimeOffRequests.length +
+    visibleOpenShiftCount;
+  $: readinessState =
+    scheduleIssueCount > 0
+      ? `${scheduleIssueCount} needs review`
+      : visibleShiftCount > 0
+        ? 'Ready to publish'
+        : 'Build needed';
   $: weekRangeLabel = formatScheduleWeekRange(
     data.days.map((day) => day.date),
     data.weekStart
@@ -391,6 +490,7 @@
             detail: shift.detail,
             startTime: shift.startTime,
             endLabel: shift.endLabel,
+            breakMinutes: shift.breakMinutes,
             notes: shift.notes
           }))
         )
@@ -409,6 +509,32 @@
   function prepareWeekPayload() {
     weekPayload = serializeWeekPayload();
     teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
+  }
+
+  function prepareLaborTargets() {
+    laborTargetsPayload = JSON.stringify(laborTargets);
+  }
+
+  function targetForDate(date: string) {
+    return laborTargets.find((target) => target.dayDate === date) ?? {
+      dayDate: date,
+      projectedSales: 0,
+      targetLaborPercent: 0,
+      averageHourlyRate: 0
+    };
+  }
+
+  function updateLaborTarget(
+    date: string,
+    field: 'projectedSales' | 'targetLaborPercent' | 'averageHourlyRate',
+    value: string
+  ) {
+    const numericValue = Math.max(0, Number(value) || 0);
+    const existing = targetForDate(date);
+    laborTargets = [
+      ...laborTargets.filter((target) => target.dayDate !== date),
+      { ...existing, [field]: numericValue }
+    ].sort((left, right) => left.dayDate.localeCompare(right.dayDate));
   }
 
   function employeeName(userId: string) {
@@ -722,7 +848,7 @@
     if (start === null || end === null) return null;
     let diff = end - start;
     if (diff < 0) diff += 24 * 60;
-    return diff / 60;
+    return Math.max(0, diff - (shift.breakMinutes ?? 0)) / 60;
   }
 
   function formatHours(value: number) {
@@ -875,6 +1001,7 @@
       detail,
       startTime,
       endLabel,
+      breakMinutes,
       notes
     } = editorDraft;
     const baseShift: DraftShift = {
@@ -886,6 +1013,7 @@
       detail,
       startTime,
       endLabel,
+      breakMinutes,
       notes,
       isEditing: false,
       duplicateDates: [],
@@ -930,29 +1058,16 @@
 <Layout padded={false}>
   <div class="schedule-shell">
     <PageHeader
-      title="Admin Schedule"
+      title="Schedule Builder"
     />
 
     <section class="control-shell" aria-label="Schedule planning controls">
-      <header class="workspace-head">
-        <div>
-          <span class="eyebrow">Schedule Workspace</span>
-        </div>
-        <div class="workspace-status">
-          <span class="status-pill">{visibleShiftCount} visible shifts</span>
-          <span class:published={scheduleStateLabel === 'Published Schedule'} class="status-pill">
-            {scheduleStateLabel}
-          </span>
-          <span class="status-pill">{pendingOffers.length + pendingTimeOffRequests.length} pending approvals</span>
-        </div>
-      </header>
-
       <div class="control-grid">
         <section class="week-shell">
             <header class="week-head">
-              <div>
-                <span class="eyebrow">Week Of</span>
-                <h2>{weekRangeLabel}</h2>
+              <div class="week-title">
+                <span>Week</span>
+                <strong>{weekRangeLabel}</strong>
               </div>
               <div class="week-actions">
               <div class="week-nav">
@@ -966,6 +1081,16 @@
                   {#each availableDepartments as department}
                     <option value={department}>{department}</option>
                   {/each}
+                </select>
+              </label>
+              <label class="tool-select">
+                <span>Tool</span>
+                <select bind:value={selectedScheduleTool}>
+                  <option value="builder">Schedule Builder</option>
+                  <option value="open-shifts">Open Shifts ({data.openShifts.length})</option>
+                  <option value="approvals">Approvals ({pendingApprovalCount})</option>
+                  <option value="labor">Labor Targets</option>
+                  <option value="templates">Templates ({data.templates.length})</option>
                 </select>
               </label>
               <details class="action-menu">
@@ -1008,89 +1133,304 @@
             <button type="submit">Go</button>
           </form>
         </section>
-
-        <section class="approval-shell">
-          <header class="requests-head">
-            <div>
-              <span class="eyebrow">Approvals</span>
-              <h2>Pending Approvals</h2>
-            </div>
-            <span class="status-pill">{pendingOffers.length + pendingTimeOffRequests.length} pending</span>
-          </header>
-
-          {#if pendingOffers.length === 0 && pendingTimeOffRequests.length === 0}
-            <p class="requests-empty">No approvals are waiting right now.</p>
-          {:else}
-            <p class="approval-note">
-              Review shift pickups and time off requests before publishing schedule changes.
-            </p>
-          {/if}
-        </section>
       </div>
 
-      {#if pendingOffers.length > 0 || pendingTimeOffRequests.length > 0}
-        <div class="request-list">
-          {#each pendingOffers as offer}
-            <article class="request-card">
-              <div class="request-main">
-                <span class="request-type">Shift Pickup</span>
-                <strong>{offer.department} | {offer.role}</strong>
-                <p class="request-time">
-                  {scheduleDateLabel(offer.shiftDate)} | {formatScheduleTimeLabel(offer.startTime)}{#if offer.endLabel} - {offer.endLabel}{/if}
-                </p>
-                {#if offer.detail}
-                  <p class="request-detail">{offer.detail}</p>
-                {/if}
-                <p class="request-meta">
-                  Offered by {offer.offeredByUserName ?? offer.offeredByUserEmail}
-                </p>
-                <p class="request-meta">
-                  Requested by {offer.requestedByUserName ?? offer.requestedByUserEmail}
-                </p>
-                {#if offer.targetUserId}
-                  <p class="request-meta">
-                    Directed to {offer.targetUserName ?? offer.targetUserEmail}
-                  </p>
-                {/if}
-              </div>
+      {#if selectedScheduleTool !== 'builder'}
+      <section class="toolbox-shell" aria-label="Schedule tools">
+        {#if selectedScheduleTool === 'approvals'}
+          <div class="tool-section">
+            {#if pendingApprovalCount === 0}
+              <p class="tool-empty">No approvals are waiting right now.</p>
+            {:else}
+              <div class="request-list">
+                {#each pendingOffers as offer}
+                  <article class="request-card">
+                    <div class="request-main">
+                      <span class="request-type">Shift Pickup</span>
+                      <strong>{offer.department} | {offer.role}</strong>
+                      <p class="request-time">
+                        {scheduleDateLabel(offer.shiftDate)} | {formatScheduleTimeLabel(offer.startTime)}{#if offer.endLabel} - {offer.endLabel}{/if}
+                      </p>
+                      {#if offer.detail}
+                        <p class="request-detail">{offer.detail}</p>
+                      {/if}
+                      <p class="request-meta">
+                        Offered by {offer.offeredByUserName ?? offer.offeredByUserEmail}
+                      </p>
+                      <p class="request-meta">
+                        Requested by {offer.requestedByUserName ?? offer.requestedByUserEmail}
+                      </p>
+                      {#if offer.targetUserId}
+                        <p class="request-meta">
+                          Directed to {offer.targetUserName ?? offer.targetUserEmail}
+                        </p>
+                      {/if}
+                    </div>
 
-              <div class="request-actions">
-                <form method="POST" action="?/approve_offer" use:enhance={withFeedback}>
-                  <input type="hidden" name="shift_id" value={offer.shiftId} />
-                  <button type="submit" class="create-shift-btn">Approve</button>
-                </form>
-                <form method="POST" action="?/decline_offer" use:enhance={withFeedback}>
-                  <input type="hidden" name="shift_id" value={offer.shiftId} />
-                  <button type="submit" class="remove-btn request-decline-btn">Decline</button>
-                </form>
-              </div>
-            </article>
-          {/each}
+                    <div class="request-actions">
+                      <form method="POST" action="?/approve_offer" use:enhance={withFeedback}>
+                        <input type="hidden" name="shift_id" value={offer.shiftId} />
+                        <button type="submit" class="create-shift-btn">Approve</button>
+                      </form>
+                      <form method="POST" action="?/decline_offer" use:enhance={withFeedback}>
+                        <input type="hidden" name="shift_id" value={offer.shiftId} />
+                        <button type="submit" class="remove-btn request-decline-btn">Decline</button>
+                      </form>
+                    </div>
+                  </article>
+                {/each}
 
-          {#each pendingTimeOffRequests as request}
-            <article class="request-card">
-              <div class="request-main">
-                <span class="request-type">Time Off</span>
-                <strong>{request.userName ?? request.userEmail}</strong>
-                <p class="request-time">{formatRequestRange(request.startDate, request.endDate)}</p>
-                {#if request.note}
-                  <p class="request-detail">{request.note}</p>
+                {#each pendingOpenShiftRequests as request}
+                  <article class="request-card">
+                    <div class="request-main">
+                      <span class="request-type">Open Shift</span>
+                      <strong>{request.department} | {request.role}</strong>
+                      <p class="request-time">
+                        {scheduleDateLabel(request.shiftDate)} | {formatScheduleTimeLabel(request.startTime)}{#if request.endLabel} - {request.endLabel}{/if}
+                      </p>
+                      {#if request.detail}
+                        <p class="request-detail">{request.detail}</p>
+                      {/if}
+                      <p class="request-meta">
+                        Requested by {request.requestedByUserName ?? request.requestedByUserEmail}
+                      </p>
+                    </div>
+
+                    <div class="request-actions">
+                      <form method="POST" action="?/approve_open_shift" use:enhance={withFeedback}>
+                        <input type="hidden" name="request_id" value={request.requestId} />
+                        <button type="submit" class="create-shift-btn">Approve</button>
+                      </form>
+                      <form method="POST" action="?/decline_open_shift" use:enhance={withFeedback}>
+                        <input type="hidden" name="request_id" value={request.requestId} />
+                        <button type="submit" class="remove-btn request-decline-btn">Decline</button>
+                      </form>
+                    </div>
+                  </article>
+                {/each}
+
+                {#each pendingTimeOffRequests as request}
+                  <article class="request-card">
+                    <div class="request-main">
+                      <span class="request-type">Time Off</span>
+                      <strong>{request.userName ?? request.userEmail}</strong>
+                      <p class="request-time">{formatRequestRange(request.startDate, request.endDate)}</p>
+                      {#if request.note}
+                        <p class="request-detail">{request.note}</p>
+                      {/if}
+                    </div>
+
+                    <div class="request-actions">
+                      <form method="POST" action="?/approve_time_off" use:enhance={withFeedback}>
+                        <input type="hidden" name="request_id" value={request.id} />
+                        <button type="submit" class="create-shift-btn">Approve</button>
+                      </form>
+                      <form method="POST" action="?/decline_time_off" use:enhance={withFeedback}>
+                        <input type="hidden" name="request_id" value={request.id} />
+                        <button type="submit" class="remove-btn request-decline-btn">Decline</button>
+                      </form>
+                    </div>
+                  </article>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {:else if selectedScheduleTool === 'open-shifts'}
+          <div class="tool-section">
+            <div class="tool-section-head">
+            <div>
+              <h2>Open Shift</h2>
+            </div>
+            <span class="status-pill">{data.openShifts.length} open</span>
+          </div>
+          <form method="POST" action="?/create_open_shift" use:enhance={withFeedback} class="planning-create-form">
+            <input type="hidden" name="week_start" value={data.weekStart} />
+            <input type="hidden" name="start_time" value={openShiftStartTime} />
+            <input type="hidden" name="end_label" value={openShiftEndLabel} />
+            <div class="planning-fields">
+              <label>
+                <span>Date</span>
+                <input type="date" name="shift_date" bind:value={openShiftDate} />
+              </label>
+              <label>
+                <span>Department</span>
+                <select name="department" bind:value={openShiftDepartment}>
+                  {#each availableDepartments as department}
+                    <option value={department}>{department}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>Role</span>
+                <select name="role" bind:value={openShiftRole}>
+                  {#each openShiftRoles as role}
+                    <option value={role}>{role}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>Start</span>
+                <button
+                  type="button"
+                  class="time-launch-btn"
+                  on:click={() => (openShiftTimeEditor = openShiftTimeEditor === 'start' ? '' : 'start')}
+                >
+                  {openShiftStartTime ? formatScheduleTimeLabel(openShiftStartTime) : 'Set Start Time'}
+                </button>
+                {#if openShiftTimeEditor === 'start'}
+                  <ScheduleTimeSelect
+                    bind:value={openShiftStartTime}
+                    on:commit={() => (openShiftTimeEditor = '')}
+                  />
                 {/if}
-              </div>
+              </label>
+              <label>
+                <span>End</span>
+                <button
+                  type="button"
+                  class="time-launch-btn"
+                  on:click={() => (openShiftTimeEditor = openShiftTimeEditor === 'end' ? '' : 'end')}
+                >
+                  {openShiftEndLabel
+                    ? /^\d{2}:\d{2}$/.test(openShiftEndLabel)
+                      ? formatScheduleTimeLabel(openShiftEndLabel)
+                      : openShiftEndLabel
+                    : 'Set End Time'}
+                </button>
+                {#if openShiftTimeEditor === 'end'}
+                  <ScheduleTimeSelect
+                    bind:value={openShiftEndLabel}
+                    includeSpecialOptions={[...scheduleEndLabels]}
+                    specialPlaceholder="Timed End"
+                    on:commit={() => (openShiftTimeEditor = '')}
+                  />
+                {/if}
+              </label>
+              <label>
+                <span>Break</span>
+                <input type="number" name="break_minutes" min="0" step="5" value="0" />
+              </label>
+              <label class="wide-field">
+                <span>Detail</span>
+                <input type="text" name="detail" placeholder="Line, expo, prep, close..." />
+              </label>
+              <label class="wide-field">
+                <span>Notes</span>
+                <input type="text" name="notes" placeholder="Anything the pickup needs to know" />
+              </label>
+            </div>
+            <button type="submit" class="create-shift-btn">Create Open Shift</button>
+          </form>
 
-              <div class="request-actions">
-                <form method="POST" action="?/approve_time_off" use:enhance={withFeedback}>
-                  <input type="hidden" name="request_id" value={request.id} />
-                  <button type="submit" class="create-shift-btn">Approve</button>
-                </form>
-                <form method="POST" action="?/decline_time_off" use:enhance={withFeedback}>
-                  <input type="hidden" name="request_id" value={request.id} />
-                  <button type="submit" class="remove-btn request-decline-btn">Decline</button>
-                </form>
-              </div>
-            </article>
-          {/each}
-        </div>
+          {#if data.openShifts.length > 0}
+            <div class="compact-list">
+              {#each data.openShifts as shift}
+                <article>
+                  <div>
+                    <strong>{shift.department} | {shift.role}</strong>
+                    <span>{scheduleDateLabel(shift.shiftDate)} | {formatScheduleTimeLabel(shift.startTime)}{#if shift.endLabel} - {shift.endLabel}{/if}</span>
+                  </div>
+                  <form method="POST" action="?/delete_open_shift" use:enhance={withFeedback}>
+                    <input type="hidden" name="open_shift_id" value={shift.id} />
+                    <button type="submit" class="remove-btn">Delete</button>
+                  </form>
+                </article>
+              {/each}
+            </div>
+          {/if}
+          </div>
+        {:else if selectedScheduleTool === 'labor'}
+          <form
+            method="POST"
+            action="?/save_labor_targets"
+            use:enhance={withFeedback}
+            class="tool-section"
+            on:submit={prepareLaborTargets}
+          >
+          <input type="hidden" name="week_start" value={data.weekStart} />
+          <input type="hidden" name="labor_targets" value={laborTargetsPayload} />
+          <div class="tool-section-head">
+            <div>
+              <h2>Targets</h2>
+            </div>
+          </div>
+          <div class="target-list">
+            {#each data.days as day}
+              {@const target = targetForDate(day.date)}
+              <article>
+                <strong>{day.label}</strong>
+                <input
+                  aria-label={`${day.label} projected sales`}
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={target.projectedSales}
+                  placeholder="Sales"
+                  on:input={(event) => updateLaborTarget(day.date, 'projectedSales', event.currentTarget.value)}
+                />
+                <input
+                  aria-label={`${day.label} labor percent`}
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={target.targetLaborPercent}
+                  placeholder="%"
+                  on:input={(event) => updateLaborTarget(day.date, 'targetLaborPercent', event.currentTarget.value)}
+                />
+                <input
+                  aria-label={`${day.label} average hourly rate`}
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={target.averageHourlyRate}
+                  placeholder="Avg $/hr"
+                  on:input={(event) => updateLaborTarget(day.date, 'averageHourlyRate', event.currentTarget.value)}
+                />
+              </article>
+            {/each}
+          </div>
+          <button type="submit" class="create-shift-btn">Save Targets</button>
+        </form>
+        {:else}
+          <section class="tool-section">
+          <div class="tool-section-head">
+            <div>
+              <h2>Reusable Weeks</h2>
+            </div>
+            <span class="status-pill">{data.templates.length} saved</span>
+          </div>
+          <form method="POST" action="?/save_template" use:enhance={withFeedback} class="template-row">
+            <input type="hidden" name="week_start" value={data.weekStart} />
+            <label>
+              <span>Name</span>
+              <input type="text" name="template_name" placeholder="Dinner rush baseline" />
+            </label>
+            <button type="submit" class="create-shift-btn">Save Week</button>
+          </form>
+          <form method="POST" action="?/apply_template" use:enhance={withFeedback} class="template-row">
+            <input type="hidden" name="week_start" value={data.weekStart} />
+            <label>
+              <span>Apply</span>
+              <select name="template_id" bind:value={selectedTemplateId}>
+                {#if data.templates.length === 0}
+                  <option value="">No templates saved</option>
+                {:else}
+                  {#each data.templates as template}
+                    <option value={template.id}>{template.name} ({template.shiftCount})</option>
+                  {/each}
+                {/if}
+              </select>
+            </label>
+            <button type="submit" name="template_mode" value="merge" class="create-shift-btn" disabled={!selectedTemplateId}>
+              Add
+            </button>
+            <button type="submit" name="template_mode" value="replace" class="remove-btn" disabled={!selectedTemplateId}>
+              Replace
+            </button>
+          </form>
+        </section>
+        {/if}
+      </section>
       {/if}
     </section>
 
@@ -1101,7 +1441,6 @@
 
         <div class="planner-head">
           <div>
-            <span class="eyebrow">Week Builder</span>
             <h2>Team Schedule</h2>
           </div>
           <div class="planner-hours-shell">
@@ -1367,6 +1706,17 @@
               </select>
             </label>
 
+            <label>
+              <span>Break Minutes</span>
+              <input
+                type="number"
+                min="0"
+                step="5"
+                bind:value={editorDraft.breakMinutes}
+                on:input={touchDraft}
+              />
+            </label>
+
             {#if shiftAvailabilityWarning(editorDraft.userId, editorDraft)}
               <p class="shift-warning availability-warning">
                 {shiftAvailabilityWarning(editorDraft.userId, editorDraft)}
@@ -1441,7 +1791,7 @@
 <style>
   .schedule-shell {
     display: grid;
-    gap: 1rem;
+    gap: 1.1rem;
   }
 
   .week-actions,
@@ -1455,41 +1805,66 @@
   .control-shell,
   .planner-shell {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    box-shadow: none;
   }
 
   .control-shell {
-    padding: 1rem;
+    padding: clamp(0.55rem, 1.2vw, 0.75rem);
     display: grid;
-    gap: 0.9rem;
+    gap: 0.5rem;
   }
 
-  .week-shell,
-  .approval-shell {
+  .week-shell {
     display: grid;
+    gap: 0.42rem;
+  }
+
+  .toolbox-shell {
+    display: grid;
+    gap: 0.6rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .tool-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
     gap: 0.8rem;
   }
 
-  .workspace-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.9rem;
-    align-items: start;
-    padding-bottom: 0.2rem;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    margin-bottom: 0.1rem;
+  .tool-section-head h2 {
+    margin: 0;
+    font-size: 0.92rem;
   }
 
-  .workspace-status {
-    display: flex;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .tool-select {
+    display: grid;
+    gap: 0.18rem;
+    min-width: min(12rem, 100%);
+  }
+
+  .tool-select span {
+    color: var(--color-text-muted);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .tool-section {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+    padding-top: 0.2rem;
+  }
+
+  .tool-empty {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.45;
   }
 
   .planner-shell {
@@ -1499,35 +1874,37 @@
 
   .control-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+    grid-template-columns: 1fr;
     gap: 1rem;
     align-items: start;
   }
 
   .week-head,
-  .requests-head,
   .planner-head {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
-    align-items: start;
+    gap: 0.65rem;
+    align-items: center;
   }
 
   .eyebrow,
-  .week-picker label {
+  .week-picker label,
+  .week-title span {
     color: var(--color-text-muted);
-    font-size: 0.76rem;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
   }
 
   .section-filter {
     display: grid;
-    gap: 0.25rem;
+    gap: 0.18rem;
     min-width: 0;
   }
 
   .week-nav {
     display: flex;
-    gap: 0.4rem;
+    gap: 0.28rem;
     flex-wrap: wrap;
     align-items: center;
     min-width: 0;
@@ -1536,53 +1913,69 @@
   .week-nav-btn {
     text-decoration: none;
     color: var(--color-text-muted);
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-border);
     border-radius: 999px;
-    padding: 0.36rem 0.72rem;
-    background: rgba(255,255,255,0.03);
-    font-size: 0.76rem;
+    padding: 0.28rem 0.52rem;
+    background: transparent;
+    font-size: 0.68rem;
     line-height: 1;
     transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out);
   }
 
   .week-nav-btn:hover,
   .week-nav-btn:focus-visible {
-    border-color: rgba(132, 146, 166, 0.22);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
     color: var(--color-text);
     outline: none;
   }
 
   .section-filter span {
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
 
-  .week-head h2,
-  .requests-head h2,
   .planner-head h2 {
-    margin: 0.18rem 0 0;
+    margin: 0;
+  }
+
+  .week-title {
+    display: grid;
+    gap: 0.12rem;
+    min-width: min(18rem, 100%);
+  }
+
+  .week-title strong {
+    display: block;
+    font-size: 0.82rem;
+    line-height: 1.2;
   }
 
   .week-picker {
     display: grid;
-    grid-template-columns: auto minmax(160px, 220px) auto;
-    gap: 0.6rem;
+    grid-template-columns: auto minmax(140px, 180px) auto;
+    gap: 0.35rem;
     align-items: center;
     min-width: 0;
+  }
+
+  .week-picker input,
+  .week-picker button,
+  .section-filter select,
+  .tool-select select {
+    min-height: 1.9rem;
+    padding: 0.3rem 0.48rem;
+    border-radius: 8px;
+    font-size: 0.7rem;
   }
 
   .status-pill {
     color: var(--color-text-muted);
     padding: 0.2rem 0;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     background: transparent;
     border: 0;
-  }
-
-  .status-pill.published {
-    color: #bbf7d0;
   }
 
   .action-menu {
@@ -1590,30 +1983,26 @@
   }
 
   .action-menu[open] .menu-trigger {
-    border-color: rgba(132, 146, 166, 0.24);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
   }
 
   .menu-trigger {
     list-style: none;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    border: 1px solid var(--color-border);
+    border-radius: 9px;
+    background: transparent;
     color: var(--color-text);
-    min-height: 2.35rem;
-    padding: 0.56rem 0.88rem;
+    min-height: 1.9rem;
+    padding: 0.38rem 0.62rem;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     font-weight: 600;
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.7rem;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    box-shadow: none;
   }
 
   .menu-trigger::-webkit-details-marker {
@@ -1638,12 +2027,10 @@
     display: grid;
     gap: 0.1rem;
     padding: 0.3rem;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 16px 34px rgba(4, 5, 7, 0.28);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-md);
     z-index: 12;
   }
 
@@ -1661,13 +2048,13 @@
     min-height: 0;
     border: 0;
     border-radius: 8px;
-    padding: 0.64rem 0.78rem;
+    padding: 0.5rem 0.65rem;
     appearance: none;
     background: transparent;
     color: var(--color-text);
     text-decoration: none;
     box-shadow: none;
-    font-size: 0.82rem;
+    font-size: 0.74rem;
     font-weight: 500;
     line-height: 1.25;
     text-align: left;
@@ -1680,7 +2067,7 @@
 
   .menu-item:hover,
   .menu-item:focus-visible {
-    background: rgba(255,255,255,0.065);
+    background: color-mix(in srgb, var(--color-surface-alt) 54%, transparent);
     outline: none;
     transform: none;
   }
@@ -1696,14 +2083,15 @@
   }
 
   .menu-separate {
-    border-top: 1px solid rgba(255,255,255,0.08);
+    border-top: 1px solid var(--color-divider);
     margin-top: 0.12rem;
     padding-top: 0.2rem;
   }
 
   .planner-head {
-    padding: 1rem 1rem 0.85rem;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0.75rem 1rem 0.7rem;
+    border-bottom: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
   }
 
   .planner-hours {
@@ -1730,15 +2118,15 @@
     min-height: 1.95rem;
     padding: 0.36rem 0.72rem;
     font-size: 0.75rem;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--color-border);
+    background: transparent;
     color: var(--color-text);
     border-radius: 9px;
   }
 
   .planner-publish-btn {
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+    background: color-mix(in srgb, var(--color-surface-alt) 88%, var(--color-primary) 12%);
     color: var(--color-text);
   }
 
@@ -1749,8 +2137,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--color-border);
+    background: transparent;
     color: var(--color-text);
     border-radius: 9px;
     font-size: 1rem;
@@ -1765,12 +2153,12 @@
   }
 
   .hours-chip {
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-divider);
     border-radius: 999px;
     padding: 0.18rem 0.55rem;
     font-size: 0.74rem;
     color: var(--color-text-muted);
-    background: rgba(255,255,255,0.03);
+    background: transparent;
   }
 
   .request-list {
@@ -1782,10 +2170,9 @@
     display: flex;
     justify-content: space-between;
     gap: 0.85rem;
-    padding: 0.85rem;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
-    background: rgba(255,255,255,0.025);
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--color-divider);
+    background: transparent;
   }
 
   .request-main {
@@ -1802,9 +2189,7 @@
 
   .request-time,
   .request-detail,
-  .request-meta,
-  .requests-empty,
-  .approval-note {
+  .request-meta {
     margin: 0;
     color: var(--color-text-muted);
     line-height: 1.45;
@@ -1829,6 +2214,95 @@
     min-height: 2.3rem;
   }
 
+  .compact-list article,
+  .template-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.65rem;
+    align-items: start;
+  }
+
+  .planning-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .planning-fields label,
+  .template-row label {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .planning-fields span,
+  .template-row span {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .planning-fields input,
+  .planning-fields select,
+  .template-row input,
+  .template-row select,
+  .target-list input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    background: var(--surface-wash), var(--color-surface-alt);
+    color: var(--color-text);
+    border-radius: 10px;
+    padding: 0.48rem 0.55rem;
+  }
+
+  .wide-field {
+    grid-column: 1 / -1;
+  }
+
+  .compact-list,
+  .planning-create-form,
+  .target-list {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .compact-list article {
+    padding: 0.55rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .compact-list article > div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+  }
+
+  .compact-list span {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
+
+  .target-list article {
+    display: grid;
+    grid-template-columns: minmax(6rem, 1fr) repeat(3, minmax(0, 0.9fr));
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .target-list strong {
+    font-size: 0.78rem;
+  }
+
+  .template-row {
+    align-items: end;
+  }
+
+  .template-row label {
+    flex: 1 1 auto;
+  }
+
   .mobile-team-overlay,
   .mobile-team-panel {
     display: none;
@@ -1847,8 +2321,8 @@
   .corner-cell,
   .day-header,
   .employee-cell {
-    border-right: 1px solid rgba(255,255,255,0.06);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-right: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .corner-cell,
@@ -1856,7 +2330,7 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    background: color-mix(in srgb, var(--color-surface) 96%, black 4%);
   }
 
   .corner-cell {
@@ -1917,7 +2391,7 @@
     position: sticky;
     left: 0;
     z-index: 3;
-    background: color-mix(in srgb, var(--color-surface) 95%, black 5%);
+    background: color-mix(in srgb, var(--color-surface) 96%, black 4%);
     padding: 0.9rem;
     display: flex;
     align-items: start;
@@ -1971,18 +2445,18 @@
   input,
   select {
     width: 100%;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.42rem 0.56rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.8rem;
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-surface-alt) 84%, var(--color-primary) 16%);
     color: var(--color-primary-contrast);
     min-height: 2.3rem;
     padding: 0.5rem 0.76rem;
@@ -1997,8 +2471,8 @@
 
   .remove-btn,
   .remove-row-btn {
-    border-color: rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border-color: var(--color-border);
+    background: transparent;
     color: var(--color-text);
   }
 
@@ -2014,7 +2488,7 @@
     bottom: 0;
     z-index: 9999;
     padding: 0.8rem clamp(0.7rem, 2.2vw, 1rem) calc(0.8rem + var(--safe-bottom));
-    background: linear-gradient(180deg, rgba(4, 5, 7, 0), rgba(4, 5, 7, 0.68) 35%, rgba(4, 5, 7, 0.85));
+    background: linear-gradient(180deg, rgba(4, 5, 7, 0), rgba(4, 5, 7, 0.56) 35%, rgba(4, 5, 7, 0.74));
     pointer-events: none;
   }
 
@@ -2022,12 +2496,10 @@
     width: min(54rem, calc(100vw - 1.2rem - var(--safe-left) - var(--safe-right)));
     max-height: min(78vh, 54rem);
     overflow: auto;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-border);
     border-radius: 14px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 22px 56px rgba(4, 5, 7, 0.38);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-md);
     display: grid;
     gap: 0;
     margin-inline: auto;
@@ -2040,7 +2512,7 @@
     align-items: start;
     gap: 0.8rem;
     padding: 0.9rem 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .shift-editor-head h3 {
@@ -2075,8 +2547,8 @@
   .time-launch-btn {
     width: 100%;
     justify-content: flex-start;
-    border-color: rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border-color: var(--color-border);
+    background: transparent;
     color: var(--color-text);
   }
 
@@ -2099,8 +2571,8 @@
   }
 
   .duplicate-day-btn {
-    border-color: rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.04);
+    border-color: var(--color-border);
+    background: transparent;
     color: var(--color-text);
     min-height: 1.95rem;
     padding: 0.35rem 0.58rem;
@@ -2136,7 +2608,7 @@
 
   .shift-editor-actions {
     padding: 0.85rem 1rem 0.95rem;
-    border-top: 1px solid rgba(255,255,255,0.08);
+    border-top: 1px solid var(--color-divider);
     display: flex;
     gap: 0.6rem;
     justify-content: flex-end;
@@ -2152,7 +2624,7 @@
 
   .create-shift-btn {
     border-color: rgba(22, 163, 74, 0.25);
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.22), rgba(22, 163, 74, 0.08));
+    background: rgba(22, 163, 74, 0.12);
     color: #dcfce7;
     flex: 1 1 8rem;
   }
@@ -2163,15 +2635,6 @@
   }
 
   @media (max-width: 960px) {
-    .workspace-head {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .workspace-status {
-      justify-content: flex-start;
-    }
-
     .control-grid {
       grid-template-columns: 1fr;
     }
@@ -2231,6 +2694,23 @@
 
     .schedule-grid {
       grid-template-columns: 94px repeat(7, minmax(185px, 1fr));
+    }
+
+    .tool-section-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .planning-fields,
+    .target-list article,
+    .template-row {
+      grid-template-columns: 1fr;
+    }
+
+    .template-row,
+    .compact-list article {
+      flex-direction: column;
+      align-items: stretch;
     }
 
     .corner-cell,

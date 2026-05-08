@@ -107,18 +107,53 @@
 </Layout>
 
 <style>
-  .tabs { display: flex; gap: 0.5rem; padding: 0 0 0.9rem; }
-  .tabs button { flex: 1; padding: 0.6rem; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted); }
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 0 0.9rem;
+  }
+
+  .tabs button {
+    flex: 1;
+    padding: 0.68rem;
+    border-radius: var(--radius-md);
+    border: var(--surface-outline);
+    background: var(--surface-wash), var(--color-surface);
+    color: var(--color-text-muted);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+    transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  }
+
   .tabs button.active {
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
     color: var(--color-text);
     border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border) 45%);
-    box-shadow: 0 0 0 1px rgba(132, 146, 166, 0.12);
   }
+
   .card-list { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 6rem; }
   .card-wrapper { display: flex; flex-direction: column; gap: 4px; }
-  .card-hit { text-align: left; border: none; background: transparent; padding: 0; }
-  .complete-button { background: rgba(13, 168, 39, 0.33); border: 1px solid rgba(7, 201, 33, 0.95); color: var(--color-text); font-size: 0.72rem; padding: 0.28rem 0.56rem; border-radius: 999px; cursor: pointer; width: auto; }
+
+  .card-hit {
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .complete-button {
+    align-self: flex-start;
+    background: color-mix(in srgb, var(--color-success) 14%, var(--color-surface));
+    border: 1px solid color-mix(in srgb, var(--color-success) 42%, var(--color-border) 58%);
+    color: var(--color-text);
+    font-size: 0.74rem;
+    font-weight: var(--weight-semibold);
+    padding: 0.34rem 0.7rem;
+    border-radius: 999px;
+    cursor: pointer;
+    width: auto;
+  }
 
   @media (max-width: 760px) {
     .tabs {

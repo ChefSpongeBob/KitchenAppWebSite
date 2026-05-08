@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const db = locals.DB;
@@ -6,7 +7,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   if (!db) {
     return { categories: [], recipeIndex: [], query };
   }
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const { results: categories } = await db
     .prepare(`SELECT DISTINCT category FROM recipes WHERE business_id = ? ORDER BY category ASC`)

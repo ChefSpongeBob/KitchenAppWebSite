@@ -6,6 +6,7 @@ import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 import { loadTodayShifts } from '$lib/server/schedules';
+import { requireBusinessId } from '$lib/server/tenant';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
 
 type HomeTask = {
@@ -32,6 +33,12 @@ type TempRow = {
 type NodeNameRow = {
   sensor_id: number;
   name: string;
+};
+
+type MenuDoc = {
+  id: string;
+  title: string;
+  file_url: string | null;
 };
 
 type TodayShift = {
@@ -67,6 +74,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       todayTasks: [],
       todaySchedule: [],
       todayMeta: { assignedCount: 0, unassignedCount: 0 },
+      menuDocs: [],
       topIdeas: [],
       nodeTemps: [],
       tempSeries: { avg: [] },
@@ -74,17 +82,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     };
   }
 
+  const businessId = requireBusinessId(locals);
   const reviewEnabledPromise = featureAccess.whiteboard
     ? hasTable(db, 'whiteboard_review')
     : Promise.resolve(false);
   const nodeTablePromise = featureAccess.temps ? hasTable(db, 'sensor_nodes') : Promise.resolve(false);
   const announcementPromise = featureAccess.announcements
-    ? loadHomepageAnnouncement(db, locals.businessId)
+    ? loadHomepageAnnouncement(db, businessId)
     : Promise.resolve({ content: '', updatedAt: 0 });
   const employeeSpotlightPromise = featureAccess.employee_spotlight
-    ? loadEmployeeSpotlight(db, locals.businessId)
+    ? loadEmployeeSpotlight(db, businessId)
     : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 });
-  const dailySpecialsPromise = featureAccess.daily_specials ? loadDailySpecials(db, locals.businessId) : Promise.resolve([]);
+  const dailySpecialsPromise = featureAccess.daily_specials ? loadDailySpecials(db, businessId) : Promise.resolve([]);
   const userPromise = locals.userId
     ? db
         .prepare(`SELECT display_name, email FROM users WHERE id = ? LIMIT 1`)
@@ -112,12 +121,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           LIMIT 6
           `
         )
-        .bind(locals.userId, locals.businessId ?? '', locals.userId)
+        .bind(locals.userId, businessId, locals.userId)
         .all<HomeTask>()
     : Promise.resolve({ results: [] as HomeTask[] });
   const todaySchedulePromise =
     featureAccess.scheduling && locals.userId && db
-      ? loadTodayShifts(db, locals.userId, undefined, locals.businessId)
+      ? loadTodayShifts(db, locals.userId, undefined, businessId)
       : Promise.resolve([] as TodayShift[]);
   const tempsPromise = featureAccess.temps
     ? db
@@ -130,9 +139,29 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           LIMIT ?
           `
         )
-        .bind(locals.businessId ?? '', HOMEPAGE_TEMP_LIMIT)
+        .bind(businessId, HOMEPAGE_TEMP_LIMIT)
         .all<TempRow>()
     : Promise.resolve({ results: [] as TempRow[] });
+  const menuDocsPromise = featureAccess.menus
+    ? db
+        .prepare(
+          `
+          SELECT id, title, file_url
+          FROM documents
+          WHERE is_active = 1
+            AND business_id = ?
+            AND (
+              LOWER(slug) LIKE 'menu%'
+              OR LOWER(section) = 'menu'
+              OR LOWER(category) = 'menu'
+            )
+          ORDER BY title ASC
+          LIMIT 5
+          `
+        )
+        .bind(businessId)
+        .all<MenuDoc>()
+    : Promise.resolve({ results: [] as MenuDoc[] });
   const [
     reviewEnabled,
     nodeTable,
@@ -142,7 +171,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     user,
     taskResult,
     todaySchedule,
-    tempsResult
+    tempsResult,
+    menuDocsResult
   ] = await Promise.all([
     reviewEnabledPromise,
     nodeTablePromise,
@@ -152,7 +182,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     userPromise,
     todayTasksPromise,
     todaySchedulePromise,
-    tempsPromise
+    tempsPromise,
+    menuDocsPromise
   ]);
 
   const userName = user?.display_name || user?.email || 'Team';
@@ -175,7 +206,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             LIMIT 3
             `
           )
-          .bind(locals.businessId ?? '')
+          .bind(businessId)
           .all<IdeaRow>()
       : await db
           .prepare(
@@ -187,7 +218,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             LIMIT 3
             `
           )
-          .bind(locals.businessId ?? '')
+          .bind(businessId)
           .all<IdeaRow>()
     : { results: [] as IdeaRow[] };
 
@@ -205,7 +236,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   if (featureAccess.temps && nodeTable) {
     const nameRows = await db
       .prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`)
-      .bind(locals.businessId ?? '')
+      .bind(businessId)
       .all<NodeNameRow>();
     for (const row of nameRows.results ?? []) {
       namesBySensor.set(row.sensor_id, row.name);
@@ -236,6 +267,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     todayTasks,
     todaySchedule,
     todayMeta: { assignedCount, unassignedCount },
+    menuDocs: menuDocsResult.results ?? [],
     topIdeas: (topIdeasResult.results ?? []).map((r) => ({ text: r.content, votes: r.votes })),
     nodeTemps: nodeTemps.map((r) => ({
       sensorId: r.sensor_id,

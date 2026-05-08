@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { loadAdminCreatorCatalog } from '$lib/server/admin';
+import { requireBusinessId } from '$lib/server/tenant';
 
 type DocRow = {
   id: string;
@@ -18,7 +19,7 @@ function normalizeCategoryKey(value: string) {
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { docs: [], categories: [] };
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const docsResult = await db
     .prepare(

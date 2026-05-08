@@ -450,47 +450,37 @@
   </section>
 
   <section class="control-center" aria-label="Admin control center">
-    <article class="panel control-overview">
-      <div class="control-head">
-        <p class="control-kicker">Operations Snapshot</p>
-        <h2>Control Center</h2>
-      </div>
+    <article class="control-overview">
       <div class="metric-grid">
         <article class="metric-item">
           <p class="metric-label">Staffed Employees</p>
           <p class="metric-value">{data.summary.staffedEmployees}</p>
-          <p class="metric-note">Employees currently scheduled today.</p>
         </article>
         <article class="metric-item">
           <p class="metric-label">Whiteboard Pending</p>
           <p class="metric-value">{data.summary.pendingIdeas}</p>
-          <p class="metric-note">Ideas currently waiting for moderation.</p>
         </article>
         <article class="metric-item">
           <p class="metric-label">ToDo Active</p>
           <p class="metric-value">{data.summary.todoActive}</p>
-          <p class="metric-note">Tasks still open and in-progress.</p>
         </article>
         <article class="metric-item">
           <p class="metric-label">ToDo Completed</p>
           <p class="metric-value">{data.summary.todoCompleted}</p>
-          <p class="metric-note">Completed items still in the log.</p>
         </article>
         <article class="metric-item">
           <p class="metric-label">Nodes Operational</p>
           <p class="metric-value">{data.summary.nodesOperational}/{data.summary.nodesTracked}</p>
-          <p class="metric-note">Live telemetry seen in the last 15 minutes.</p>
         </article>
       </div>
     </article>
 
-    <aside class="panel reminders-panel" data-guide="admin-reminders">
+    <aside class="reminders-panel" data-guide="admin-reminders">
       <div class="control-head">
-        <p class="control-kicker">Action Queue</p>
         <h2>Reminders</h2>
       </div>
       {#if reminders.length === 0}
-        <p class="reminders-empty">No outstanding reminders. Control center is clear.</p>
+        <p class="reminders-empty">Clear.</p>
       {:else}
         <ul class="reminders-list">
           {#each reminders as reminder}
@@ -506,7 +496,6 @@
       <a href="/" class="quick-link">
         <span class="panel-kicker">Navigation</span>
         <h2>Site Homepage</h2>
-        <p>Open the public launch homepage without signing out.</p>
       </a>
     </article>
 
@@ -514,7 +503,6 @@
       <a href="/admin/app-editor" data-guide="admin-feature-controls" class="quick-link">
         <span class="panel-kicker">App Editor</span>
         <h2>Feature Controls</h2>
-        <p>Turn modules on, set admin-only, or hide modules without deleting data.</p>
       </a>
     </article>
 
@@ -522,7 +510,6 @@
       <a href="/admin/app-editor#business-registry" data-guide="admin-registry" class="quick-link">
         <span class="panel-kicker">Ownership</span>
         <h2>Business Registry</h2>
-        <p>Update legal entity, contact, website, and address records.</p>
       </a>
     </article>
 
@@ -530,7 +517,6 @@
       <a href="/admin/creator" class="quick-link">
         <span class="panel-kicker">Builder</span>
         <h2>Creator Studio</h2>
-        <p>Open the dedicated editor page for lists, recipes, and document uploads.</p>
       </a>
     </article>
 
@@ -692,10 +678,10 @@
 
 <style>
   .command-center {
-    padding: 1rem 1.05rem 1.05rem 1.1rem;
-    margin-bottom: 0.72rem;
+    padding: clamp(1rem, 2vw, 1.25rem);
+    margin-bottom: 1rem;
     display: grid;
-    gap: 0.86rem;
+    gap: 1rem;
   }
 
   .command-head {
@@ -721,31 +707,37 @@
     text-decoration: none;
     font-size: 0.75rem;
     color: var(--color-text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 999px;
     padding: 0.32rem 0.62rem;
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent;
   }
 
   .window-switch a.active {
     color: var(--color-text);
-    border-color: rgba(132, 146, 166, 0.38);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.2), rgba(132, 146, 166, 0.05));
+    border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+    background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
   }
 
   .kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.55rem;
+    gap: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .kpi-card {
-    padding: 0.72rem 0.74rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
+    padding: 0.85rem 0.9rem;
+    border-right: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     display: grid;
     gap: 0.2rem;
+  }
+
+  .kpi-card:last-child {
+    border-right: 0;
   }
 
   .kpi-card p {
@@ -782,14 +774,14 @@
   .chart-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.55rem;
+    gap: 0.65rem;
   }
 
   .chart-card {
-    padding: 0.7rem 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.015);
+    padding: 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
     display: grid;
     gap: 0.45rem;
   }
@@ -924,15 +916,15 @@
   .command-bottom {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-    gap: 0.55rem;
+    gap: 0.65rem;
   }
 
   .matrix-card,
   .feed-card {
-    padding: 0.72rem 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.015);
+    padding: 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
     display: grid;
     gap: 0.45rem;
   }
@@ -952,7 +944,7 @@
 
   .matrix-head {
     padding: 0 0.18rem 0.24rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--color-divider);
     color: var(--color-text-muted);
     font-size: 0.66rem;
     letter-spacing: 0.08em;
@@ -965,7 +957,7 @@
   }
 
   .matrix-row:nth-child(even) {
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
   }
 
   .module-cell {
@@ -1099,7 +1091,7 @@
     display: grid;
     gap: 0.12rem;
     padding-bottom: 0.4rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .feed-card li:last-child {
@@ -1193,25 +1185,31 @@
   .control-center,
   .admin-quick-tiles {
     display: grid;
-    gap: 0.8rem;
+    gap: 0.65rem;
   }
 
   .control-center {
-    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-    margin: 0.15rem 0 0.7rem;
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.34fr);
+    margin: 0.1rem 0 0.65rem;
+    align-items: start;
   }
 
   .control-overview,
   .reminders-panel {
-    padding: 1rem 1rem 1rem 1.1rem;
+    border: var(--surface-outline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-xs);
     overflow: hidden;
+  }
+
+  .reminders-panel {
+    padding: 0.85rem 0.9rem;
   }
 
   .control-head {
     display: grid;
-    gap: 0.2rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.55rem;
   }
 
   .control-kicker {
@@ -1224,28 +1222,23 @@
 
   .control-head h2 {
     margin: 0;
-    font-size: 1.2rem;
+    font-size: 1rem;
     letter-spacing: -0.02em;
   }
 
   .metric-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
-    overflow: hidden;
+    gap: 1px;
+    background: var(--color-divider);
   }
 
   .metric-item {
-    padding: 0.68rem 0.72rem;
-    min-height: 120px;
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .metric-item:last-child {
-    border-right: 0;
+    display: grid;
+    gap: 0.24rem;
+    min-height: 92px;
+    padding: 0.72rem 0.78rem;
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
   }
 
   .metric-label {
@@ -1258,7 +1251,7 @@
 
   .metric-value {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 1.42rem;
     font-weight: var(--weight-semibold);
     line-height: 1.05;
   }
@@ -1281,8 +1274,8 @@
   .reminders-list li,
   .reminders-empty {
     margin: 0;
-    padding: 0.42rem 0 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.38rem 0 0.44rem;
+    border-bottom: 1px solid var(--color-divider);
     color: var(--color-text-soft);
     font-size: 0.79rem;
     line-height: 1.4;
@@ -1294,41 +1287,34 @@
   }
 
   .admin-quick-tiles {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.65rem;
-    margin: 0 0 0.55rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 0 0 0.65rem;
   }
 
   .quick-tile {
-    box-shadow: 0 10px 20px rgba(4, 5, 7, 0.14);
+    box-shadow: none;
   }
 
   .quick-link-tile {
-    box-shadow: 0 10px 20px rgba(4, 5, 7, 0.14);
+    box-shadow: none;
   }
 
   .quick-link {
     display: block;
-    padding: 0.75rem 0.85rem 0.72rem 0.95rem;
+    padding: 0.68rem 0.78rem 0.7rem;
     text-decoration: none;
     color: inherit;
     min-height: 100%;
   }
 
   .quick-link h2 {
-    margin: 0.15rem 0 0.36rem;
-    font-size: 0.95rem;
-  }
-
-  .quick-link p {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    line-height: 1.35;
+    margin: 0.12rem 0 0;
+    font-size: 0.92rem;
   }
 
   .quick-link:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--color-surface-alt) 46%, transparent);
   }
 
   .quick-link:focus-visible {
@@ -1338,12 +1324,12 @@
   }
 
   .quick-tile summary {
-    padding: 0.75rem 0.85rem 0.72rem 0.95rem;
+    padding: 0.68rem 0.78rem 0.7rem;
   }
 
   .quick-tile h2 {
-    margin-top: 0.15rem;
-    font-size: 0.95rem;
+    margin-top: 0.12rem;
+    font-size: 0.92rem;
   }
 
   .quick-tile[open] {
@@ -1353,20 +1339,14 @@
 
   .panel {
     position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-sm);
   }
 
   .panel::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
+    content: none;
   }
 
   .panel-kicker {
@@ -1443,14 +1423,14 @@
     padding: 0.55rem 0.42rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-surface-alt) 40%, transparent);
   }
 
   .sheet td {
     padding: 0.48rem 0.42rem;
     vertical-align: middle;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .sheet tbody tr:last-child td {
@@ -1481,19 +1461,19 @@
   input,
   textarea,
   select {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.42rem 0.55rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.82rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-surface-alt) 84%, var(--color-primary) 16%);
     color: var(--color-primary-contrast);
     padding: 0.4rem 0.62rem;
     cursor: pointer;
@@ -1572,9 +1552,9 @@
 
   .whiteboard-card {
     padding: 0.85rem 0.9rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.025);
+    background: color-mix(in srgb, var(--color-surface-alt) 48%, transparent);
   }
 
   .whiteboard-head {
@@ -1630,10 +1610,6 @@
 
     .metric-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .metric-item:nth-child(3n) {
-      border-right: 0;
     }
 
     .admin-quick-tiles,
@@ -1703,19 +1679,6 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .metric-item {
-      border-right: 1px solid rgba(255, 255, 255, 0.08);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .metric-item:nth-child(2n) {
-      border-right: 0;
-    }
-
-    .metric-item:nth-last-child(-n + 2) {
-      border-bottom: 0;
-    }
-
     .admin-quick-tiles,
     .panel-grid {
       grid-template-columns: 1fr;
@@ -1738,16 +1701,6 @@
   @media (max-width: 520px) {
     .metric-grid {
       grid-template-columns: 1fr;
-    }
-
-    .metric-item {
-      border-right: 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      min-height: 0;
-    }
-
-    .metric-item:last-child {
-      border-bottom: 0;
     }
   }
 

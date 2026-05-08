@@ -21,6 +21,7 @@
   };
   type Idea = { text: string; votes: number };
   type NodeTemp = { sensorId: number; nodeName: string | null; temperature: number; ts: number };
+  type MenuDoc = { id: string; title: string; file_url: string | null };
   type DailySpecial = {
     category: string;
     label: string;
@@ -52,6 +53,7 @@
     todayTasks?: HomeTask[];
     todaySchedule?: TodayShift[];
     todayMeta?: { assignedCount: number; unassignedCount: number };
+    menuDocs?: MenuDoc[];
     topIdeas?: Idea[];
     nodeTemps?: NodeTemp[];
     tempSeries?: Record<string, number[]>;
@@ -79,6 +81,7 @@
   let dailySpecials: DailySpecial[] = data.dailySpecials ?? [];
   let todayTasks: HomeTask[] = data.todayTasks ?? [];
   let todaySchedule: TodayShift[] = data.todaySchedule ?? [];
+  let menuDocs: MenuDoc[] = data.menuDocs ?? [];
   let topIdeas: Idea[] = data.topIdeas ?? [];
   let nodeTemps: NodeTemp[] = data.nodeTemps ?? [];
   let todayMeta = data.todayMeta ?? { assignedCount: 0, unassignedCount: 0 };
@@ -88,7 +91,7 @@
   let px = 0;
   let py = 0;
   const TEMP_WARNING_THRESHOLD = 42;
-  const HOMEPAGE_TEMP_LIMIT = 480;
+  const HOMEPAGE_TEMP_LIMIT = 240;
 
   const namesBySensor = new Map<number, string | null>(
     nodeTemps.map((node) => [node.sensorId, node.nodeName])
@@ -292,7 +295,7 @@
 
   onMount(() => {
     updateTime();
-    const clock = setInterval(updateTime, 1000);
+    const clock = setInterval(updateTime, 30000);
     const stopPolling = startVisiblePolling(
       async () => {
         const jobs: Promise<unknown>[] = [];
@@ -301,7 +304,13 @@
         if (jobs.length === 0) return;
         await Promise.all(jobs);
       },
-      { intervalMs: 60000, runImmediately: false, refreshOnVisible: true }
+      {
+        intervalMs: 90000,
+        maxIntervalMs: 5 * 60 * 1000,
+        runImmediately: false,
+        refreshOnVisible: true,
+        jitterMs: 10000
+      }
     );
     return () => {
       clearInterval(clock);
@@ -423,8 +432,17 @@
     >
       <div class="tile-head">
         <span class="tile-label menu-label">Menus</span>
-        <small>docs</small>
+        <small>{menuDocs.length} uploaded</small>
       </div>
+      {#if menuDocs.length === 0}
+        <small class="menu-empty">No menus posted yet.</small>
+      {:else}
+        <div class="menu-list">
+          {#each menuDocs.slice(0, 3) as menu}
+            <span>{menu.title}</span>
+          {/each}
+        </div>
+      {/if}
     </a>
     {/if}
 
@@ -542,7 +560,7 @@
   <section class="dashboard" data-guide="quick-links" aria-label="Quick Access">
     <div class="section-row">
       <p class="section-label">Quick Access</p>
-      <small class="section-muted">Tap a card to continue</small>
+      <small class="section-muted">Core tools</small>
     </div>
     {#if featureAccess.lists}
       <a href="/lists" class="card-link" data-guide="quick-lists">
@@ -586,13 +604,13 @@
     transform-origin: left center;
     filter:
       brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%)
-      drop-shadow(0 2px 8px rgba(132, 146, 166, 0.18));
+      drop-shadow(0 2px 8px color-mix(in srgb, var(--color-text-muted) 16%, transparent));
     opacity: 0.98;
   }
 
   .mosaic { display: grid; grid-template-columns: 1.2fr 1fr; grid-auto-rows: 118px; gap: 12px; padding: 1rem; }
-  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--color-surface) 88%, var(--color-primary) 12%), var(--color-surface)); border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; justify-content: center; transition: transform .25s ease, box-shadow .25s ease, border-color .2s ease; }
-  .tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+  .tile { background: var(--surface-wash), var(--color-surface); border: var(--surface-outline); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; justify-content: center; box-shadow: var(--shadow-xs); transition: border-color .2s ease, background .2s ease; }
+  .tile:hover { border-color: color-mix(in srgb, var(--color-text-muted) 34%, transparent); }
   .greeting { grid-row: span 2; }
   .greeting-main {
     display: grid;
@@ -686,7 +704,7 @@
   .menu-card {
     text-decoration: none;
     color: inherit;
-    gap: 0.55rem;
+    gap: 0.65rem;
     min-height: 0;
   }
   .employee-card {
@@ -793,10 +811,25 @@
     text-transform: none;
     color: var(--color-text);
   }
+  .menu-list {
+    display: grid;
+    gap: 0.28rem;
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+  .menu-list span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .menu-empty {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
   .idea { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-muted); }
-  .today-area { margin: 1rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 35%),
-      var(--color-surface); }
+  .today-area { margin: 1rem; padding: 0.75rem; border: var(--surface-outline); border-radius: var(--radius-md); background: var(--surface-wash), var(--color-surface); box-shadow: var(--shadow-xs); }
   .today-head { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; margin-bottom: 0.5rem; }
   .today-head h3 { margin: 0; font-size: var(--text-md); }
   .today-head small { color: var(--color-text-muted); font-size: 0.78rem; }
@@ -808,10 +841,9 @@
 
   .dashboard { display: flex; flex-direction: column; gap: 1.1rem; padding-inline: 1rem; margin-top: 1.2rem; padding-bottom: 8rem; }
   .dashboard :global(.card) {
-    border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 45%),
-      var(--color-surface);
+    border: var(--surface-outline);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-xs);
   }
   .section-row { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; }
   .section-label { font-size: var(--text-sm); color: var(--color-text-muted); letter-spacing: .08em; text-transform: uppercase; margin: 0; }
@@ -894,10 +926,10 @@
       gap: 0.45rem;
     }
     .today-list li {
-      border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+      border: 1px solid var(--color-border);
       border-radius: 10px;
       padding: 0.45rem 0.55rem;
-      background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary) 8%);
+      background: color-mix(in srgb, var(--color-surface-alt) 36%, transparent);
       display: grid;
       gap: 0.16rem;
     }

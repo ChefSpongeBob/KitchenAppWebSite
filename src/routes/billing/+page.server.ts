@@ -15,6 +15,7 @@ import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName
 } from '$lib/server/authCookies';
+import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
 import type { PageServerLoad } from './$types';
 
 const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
@@ -104,6 +105,15 @@ export const actions: Actions = {
 				throw redirect(303, '/login');
 			}
 			if (!canManageBilling(locals.businessRole)) {
+				logOperationalEvent({
+					level: 'warn',
+					event: 'billing_access_denied',
+					request,
+					businessId: locals.businessId,
+					userId: locals.userId,
+					status: 403,
+					metadata: { action: 'convert', reason: 'role' }
+				});
 				return fail(403, { error: 'Only owner/admin can manage billing.' });
 			}
 
@@ -117,6 +127,15 @@ export const actions: Actions = {
 			const planTier = PLAN_TIER_MAP[planRaw] ?? 'starter';
 
 			if (!dev) {
+				logOperationalEvent({
+					level: 'info',
+					event: 'billing_conversion_queued',
+					request,
+					businessId: locals.businessId,
+					userId: locals.userId,
+					status: 202,
+					metadata: { action: 'convert', source: 'store_billing' }
+				});
 				await upsertStoreBillingPlaceholder(locals.DB, {
 					businessId: locals.businessId,
 					ownerUserId: locals.userId,
@@ -136,11 +155,28 @@ export const actions: Actions = {
 				addOnTempMonitoring,
 				addOnCameraMonitoring
 			});
+			logOperationalEvent({
+				level: 'info',
+				event: 'billing_conversion_completed',
+				request,
+				businessId: locals.businessId,
+				userId: locals.userId,
+				status: 200,
+				metadata: { action: 'convert', source: 'local_dev' }
+			});
 			throw redirect(303, '/app?billing=active&mode=local');
 		} catch (error) {
 			if (isRedirect(error)) throw error;
 			const message = error instanceof Error ? error.message : String(error ?? '');
-			console.error('Billing convert failed:', message);
+			logOperationalError({
+				event: 'billing_conversion_failed',
+				request,
+				businessId: locals.businessId,
+				userId: locals.userId,
+				status: 500,
+				error,
+				message
+			});
 			return fail(500, { error: 'Could not activate paid workspace right now.' });
 		}
 	},
@@ -150,6 +186,15 @@ export const actions: Actions = {
 				throw redirect(303, '/login');
 			}
 			if (!canManageBilling(locals.businessRole)) {
+				logOperationalEvent({
+					level: 'warn',
+					event: 'billing_access_denied',
+					request,
+					businessId: locals.businessId,
+					userId: locals.userId,
+					status: 403,
+					metadata: { action: 'cancel', reason: 'role' }
+				});
 				return fail(403, { error: 'Only owner/admin can cancel this workspace.' });
 			}
 
@@ -181,6 +226,7 @@ export const actions: Actions = {
 				businessId: locals.businessId,
 				source: 'canceled',
 				reason: 'manual_workspace_cancel',
+				requestedByUserId: locals.userId,
 				now,
 				identity: {
 					emailNormalized: user?.email ?? '',
@@ -190,13 +236,30 @@ export const actions: Actions = {
 					userAgent: request.headers.get('user-agent') ?? ''
 				}
 			});
+			logOperationalEvent({
+				level: 'warn',
+				event: 'billing_workspace_canceled',
+				request,
+				businessId: locals.businessId,
+				userId: locals.userId,
+				status: 200,
+				metadata: { action: 'cancel' }
+			});
 
 			clearSessionCookies(cookies, request);
 			throw redirect(303, '/login?trial=canceled');
 		} catch (error) {
 			if (isRedirect(error)) throw error;
 			const message = error instanceof Error ? error.message : String(error ?? '');
-			console.error('Billing cancel failed:', message);
+			logOperationalError({
+				event: 'billing_cancel_failed',
+				request,
+				businessId: locals.businessId,
+				userId: locals.userId,
+				status: 500,
+				error,
+				message
+			});
 			return fail(500, { error: 'Could not cancel and close workspace right now.' });
 		}
 	}

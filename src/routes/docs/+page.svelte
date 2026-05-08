@@ -1,7 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
   type DocItem = {
     id: string;
@@ -35,79 +35,104 @@
 <Layout>
   <PageHeader title="Documents" />
 
-  {#if categories.length === 0}
-    <p class="empty">No document categories available yet.</p>
-  {:else}
-    <section class="group-stack">
+  <section class="library-shell">
+    {#if categories.length === 0}
+      <EmptyState title="No document categories yet." compact />
+    {:else}
       {#each docsByCategory as [category, items]}
-        <div class="group">
-          <h2>{category}</h2>
+        <section class="category-row">
+          <header class="category-head">
+            <h2>{category}</h2>
+            <span>{items.length} document{items.length === 1 ? '' : 's'}</span>
+          </header>
+
           {#if items.length === 0}
-            <div class="grid">
-              <div class="doc-card empty-category-card">
-                <DashboardCard title={category}>
-                  <p class="empty">No documents in this category yet.</p>
-                </DashboardCard>
-              </div>
-            </div>
+            <EmptyState title="No documents yet." compact />
           {:else}
-            <div class="grid">
-              {#each items as d}
-                <div class="doc-card">
-                  <a href={getDocHref(d)} class="card-link">
-                    <DashboardCard title={d.title}>
-                      {#if d.content}
-                        <p>{d.content}</p>
-                      {/if}
-                    </DashboardCard>
-                  </a>
-                </div>
+            <div class="doc-list">
+              {#each items as doc}
+                <a href={getDocHref(doc)} class="doc-link">
+                  <span class="doc-title">{doc.title}</span>
+                  <span class="doc-meta">{doc.file_url ? 'File attached' : 'Text only'}</span>
+                </a>
               {/each}
             </div>
           {/if}
-        </div>
+        </section>
       {/each}
-    </section>
-  {/if}
+    {/if}
+  </section>
 </Layout>
 
 <style>
-  .group-stack {
+  .library-shell {
     display: grid;
-    gap: 1.1rem;
+    gap: 1.15rem;
   }
 
-  .group h2 {
-    margin: 0 0 0.65rem;
-    font-size: 0.95rem;
-    color: var(--color-text-muted);
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+  .category-row {
+    display: grid;
+    gap: 0.55rem;
+    padding-block: 0.85rem;
+    border-top: 1px solid var(--color-divider);
   }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  .category-row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .category-head,
+  .doc-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 1rem;
   }
 
-  .card-link {
-    display: block;
-    text-decoration: none;
+  .category-head h2 {
+    margin: 0;
+    font-size: clamp(1rem, 2vw, 1.25rem);
+  }
+
+  .category-head span,
+  .doc-meta {
+    color: var(--color-text-muted);
+  }
+
+  .category-head span,
+  .doc-meta {
+    font-size: 0.78rem;
+  }
+
+  .doc-list {
+    display: grid;
+    border-top: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
+  }
+
+  .doc-link {
+    min-height: 3.05rem;
+    padding: 0.72rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
     color: inherit;
+    text-decoration: none;
   }
 
-  .doc-card {
-    display: flex;
-    flex-direction: column;
+  .doc-link:hover .doc-title,
+  .doc-link:focus-visible .doc-title {
+    color: var(--color-primary);
   }
 
-  p {
-    margin: 0.5rem 0 0;
-    color: var(--color-text-muted);
+  .doc-title {
+    font-weight: var(--weight-semibold);
   }
 
-  .empty {
-    color: var(--color-text-muted);
+  @media (max-width: 700px) {
+    .category-head,
+    .doc-link {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
   }
 </style>

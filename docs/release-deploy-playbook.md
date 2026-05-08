@@ -8,16 +8,27 @@ Use this as the default runbook for pushing web + DB safely.
   - `npm run check`
   - `npm run build`
   - `npm run mobile:check`
+  - `npm run test:production-schema`
+  - `npm run test:scale-performance`
+  - `npm run test:auth-abuse`
+  - `npm run test:billing-lifecycle`
+  - `npm run test:observability`
 - Confirm feature flags for this release:
   - `PUBLIC_CAMERA_BETA_ENABLED` (default should stay `false` until camera is approved).
 
 ## 2) Database Safety
 - Validate production DB access:
   - `npx wrangler d1 execute kitchen --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`
+- Create/confirm backup before migrations:
+  - Export D1 from Cloudflare dashboard or Wrangler.
+  - Confirm R2 bucket names and business-scoped prefixes.
 - Normalize migration tracking if needed:
   - `npm run db:migrations:normalize:remote`
 - Apply required migrations before deploy:
   - `npm run db:migrations:apply:remote`
+- Verify production schema readiness after migrations and before traffic:
+  - Set `APP_BASE_URL` and `SMOKE_INTERNAL_TOKEN`
+  - `npm run schema:readiness:prod`
 
 ## 3) Deploy
 - Push code to `main`.
@@ -59,4 +70,19 @@ Use this as the default runbook for pushing web + DB safely.
   - exact timestamp/timezone
   - commit hash currently live
   - DB commands applied
+- Query Cloudflare logs for structured event names:
+  - `request_guard_error`
+  - `schema_readiness_failed`
+  - `tenant_access_denied`
+  - `billing_conversion_failed`
+  - `billing_cancel_failed`
+  - `document_media_*`
+  - `camera_media_*`
+- Alert watchlist:
+  - D1 timeout/overload messages
+  - failed schema readiness after migration
+  - login/reset/signup rate-limit spikes
+  - repeated media object misses
+  - billing lifecycle failures
 - Add findings to `docs/PROJECT_HANDOFF.md` if they affect future releases.
+- Use `docs/observability-incident-readiness.md` as the incident checklist.

@@ -15,8 +15,8 @@
     documents: string[];
   };
 
-  type ListDomain = 'preplists' | 'inventory' | 'orders';
-  type EditorType = 'category' | 'list' | 'recipe' | 'document';
+  type ListDomain = 'preplists' | 'checklists' | 'inventory' | 'orders';
+  type EditorType = 'category' | 'list' | 'recipe' | 'document' | 'menu';
 
   type ListItem = {
     id: string;
@@ -30,10 +30,31 @@
 
   type ListSection = {
     id: string;
-    domain: ListDomain;
+    domain: Exclude<ListDomain, 'checklists'>;
     slug: string;
     title: string;
+    description: string;
     items: ListItem[];
+  };
+
+  type ChecklistItem = {
+    id: string;
+    content: string;
+    is_checked: number;
+    sort_order: number;
+  };
+
+  type ChecklistSection = {
+    id: string;
+    slug: string;
+    title: string;
+    items: ChecklistItem[];
+  };
+
+  type ChecklistCategory = {
+    id: string;
+    title: string;
+    sections: ChecklistSection[];
   };
 
   type RecipeRow = {
@@ -61,6 +82,7 @@
       inventory: ListSection[];
       orders: ListSection[];
     };
+    checklists: ChecklistSection[];
     recipes: RecipeRow[];
     documents: DocumentRow[];
     creatorCatalog: CreatorCatalog;
@@ -79,8 +101,22 @@
 
   function listDomainLabel(domain: ListDomain) {
     if (domain === 'preplists') return 'Prep Lists';
+    if (domain === 'checklists') return 'Checklists';
     if (domain === 'inventory') return 'Inventory';
     return 'Orders';
+  }
+
+  const checklistGroupSlug = (slug: string) => slug.replace(/-(opening|midday|closing)$/i, '');
+  const toTitle = (value: string) =>
+    value
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+
+  function checklistSectionLabel(slug: string) {
+    const match = slug.match(/-(opening|midday|closing)$/i);
+    return match ? toTitle(match[1]) : 'Checklist';
   }
 
   function recipesByCategory(category: string) {
@@ -90,7 +126,15 @@
 
   function documentsByCategory(category: string) {
     const key = normalizeKey(category);
-    return data.documents.filter((document) => normalizeKey(document.category) === key);
+    return data.documents.filter((document) => normalizeKey(document.category) === key && !isMenuDocument(document));
+  }
+
+  function isMenuDocument(document: DocumentRow) {
+    return (
+      normalizeKey(document.category) === 'menu' ||
+      normalizeKey(document.section) === 'menu' ||
+      normalizeKey(document.slug).startsWith('menu')
+    );
   }
 
   $: listSections = [
@@ -98,7 +142,22 @@
     ...data.sections.inventory,
     ...data.sections.orders
   ] satisfies ListSection[];
-  $: filteredListSections = listSections.filter((section) => section.domain === listDomain);
+  $: filteredListSections =
+    listDomain === 'checklists' ? [] : listSections.filter((section) => section.domain === listDomain);
+  $: checklistGroupMap = data.checklists.reduce((map, section) => {
+    const key = checklistGroupSlug(section.slug);
+    const current = map.get(key) ?? [];
+    current.push(section);
+    map.set(key, current);
+    return map;
+  }, new Map<string, ChecklistSection[]>());
+  $: checklistCategories = Array.from(checklistGroupMap.entries())
+    .map(([id, sections]) => ({
+      id,
+      title: toTitle(id),
+      sections: sections.sort((a, b) => a.title.localeCompare(b.title))
+    })) satisfies ChecklistCategory[];
+  $: documentCategories = data.creatorCatalog.documents.filter((category) => normalizeKey(category) !== 'menu');
   $: routeSelectionToken = `${data.initialEditorType}:${data.initialListDomain}`;
   $: if (routeSelectionToken !== lastAppliedRouteSelection) {
     editorType = data.initialEditorType;
@@ -107,6 +166,9 @@
   }
   $: if (browser && editorType === 'category') {
     goto('/admin/category-creator');
+  }
+  $: if (browser && editorType === 'menu') {
+    goto('/admin/menus');
   }
 
   const withFeedback: SubmitFunction = () => {
@@ -146,6 +208,7 @@
             <option value="list">List</option>
             <option value="recipe">Recipe</option>
             <option value="document">Document</option>
+            <option value="menu">Menus</option>
           </select>
         </label>
         {#if editorType === 'list'}
@@ -153,6 +216,7 @@
             <span>List Type</span>
             <select bind:value={listDomain}>
               <option value="preplists">Prep Lists</option>
+              <option value="checklists">Checklists</option>
               <option value="inventory">Inventory</option>
               <option value="orders">Orders</option>
             </select>
@@ -169,61 +233,105 @@
       <h3>Category List</h3>
 
       {#if editorType === 'list'}
-        {#if filteredListSections.length === 0}
-          <p class="empty">No {listDomainLabel(listDomain)} categories yet.</p>
-        {:else}
-          <div class="stack">
-            {#each filteredListSections as section}
-              <details class="entity">
-                <summary>
-                  <strong>{section.title}</strong>
-                  <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
-                </summary>
-                <div class="entity-body">
-                  <form method="POST" action="?/update_list_section" use:enhance={withFeedback} class="inline-form">
-                    <input type="hidden" name="section_id" value={section.id} />
-                    <input name="title" value={section.title} required />
-                    <input name="description" placeholder="Description" />
-                    <button type="submit">Save Category</button>
-                  </form>
-                  <form method="POST" action="?/delete_list_section" use:enhance={withFeedback}>
-                    <input type="hidden" name="section_id" value={section.id} />
-                    <button type="submit" class="danger">Delete Category</button>
-                  </form>
+        {#if listDomain === 'checklists'}
+          <form method="POST" action="?/create_checklist_category" use:enhance={withFeedback} class="create-form">
+            <input name="title" placeholder="New checklist category" required />
+            <input name="description" placeholder="Description" />
+            <input type="hidden" name="create_shift_sections" value="1" />
+            <button type="submit">Create Checklist</button>
+          </form>
 
-                  <div class="entity-items">
-                    {#if section.items.length === 0}
-                      <p class="empty">No items yet.</p>
-                    {:else}
-                      {#each section.items as item}
+          {#if checklistCategories.length === 0}
+            <p class="empty">No checklist categories yet.</p>
+          {:else}
+            <div class="stack">
+              {#each checklistCategories as category}
+                <details class="entity">
+                  <summary>
+                    <strong>{category.title}</strong>
+                    <small>{category.sections.length} section{category.sections.length === 1 ? '' : 's'}</small>
+                  </summary>
+                  <div class="entity-body">
+                    <div class="entity-items">
+                      {#each category.sections as section}
                         <div class="entity-item">
-                          <form method="POST" action="?/update_list_item" use:enhance={withFeedback} class="inline-form">
-                            <input type="hidden" name="id" value={item.id} />
-                            <input name="content" value={item.content} required />
-                            <input name="details" value={item.details} />
-                            <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} />
-                            <button type="submit">Save Item</button>
-                          </form>
-                          <form method="POST" action="?/delete_list_item" use:enhance={withFeedback}>
-                            <input type="hidden" name="id" value={item.id} />
-                            <button type="submit" class="danger">Delete</button>
-                          </form>
+                          <strong>{checklistSectionLabel(section.slug)}</strong>
+                          <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
                         </div>
                       {/each}
-                    {/if}
+                    </div>
                   </div>
+                </details>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <form method="POST" action="?/create_list_section" use:enhance={withFeedback} class="create-form">
+            <input type="hidden" name="domain" value={listDomain} />
+            <input name="title" placeholder={`New ${listDomainLabel(listDomain)} category`} required />
+            <input name="description" placeholder="Description" />
+            <input name="first_item" placeholder="First item" />
+            <input name="first_details" placeholder="Item details" />
+            <input name="first_par_count" type="number" min="0" step="0.1" value="0" />
+            <button type="submit">Create {listDomainLabel(listDomain)}</button>
+          </form>
 
-                  <form method="POST" action="?/add_list_item" use:enhance={withFeedback} class="inline-form">
-                    <input type="hidden" name="section_id" value={section.id} />
-                    <input name="content" placeholder="New item" required />
-                    <input name="details" placeholder="Optional details" />
-                    <input name="par_count" type="number" min="0" step="0.1" value="0" />
-                    <button type="submit">Add Item</button>
-                  </form>
-                </div>
-              </details>
-            {/each}
-          </div>
+          {#if filteredListSections.length === 0}
+            <p class="empty">No {listDomainLabel(listDomain)} categories yet.</p>
+          {:else}
+            <div class="stack">
+              {#each filteredListSections as section}
+                <details class="entity">
+                  <summary>
+                    <strong>{section.title}</strong>
+                    <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
+                  </summary>
+                  <div class="entity-body">
+                    <form method="POST" action="?/update_list_section" use:enhance={withFeedback} class="inline-form">
+                      <input type="hidden" name="section_id" value={section.id} />
+                      <input name="title" value={section.title} required />
+                      <input name="description" value={section.description} placeholder="Description" />
+                      <button type="submit">Save Category</button>
+                    </form>
+                    <form method="POST" action="?/delete_list_section" use:enhance={withFeedback}>
+                      <input type="hidden" name="section_id" value={section.id} />
+                      <button type="submit" class="danger">Delete Category</button>
+                    </form>
+
+                    <div class="entity-items">
+                      {#if section.items.length === 0}
+                        <p class="empty">No items yet.</p>
+                      {:else}
+                        {#each section.items as item}
+                          <div class="entity-item">
+                            <form method="POST" action="?/update_list_item" use:enhance={withFeedback} class="inline-form">
+                              <input type="hidden" name="id" value={item.id} />
+                              <input name="content" value={item.content} required />
+                              <input name="details" value={item.details} />
+                              <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} />
+                              <button type="submit">Save Item</button>
+                            </form>
+                            <form method="POST" action="?/delete_list_item" use:enhance={withFeedback}>
+                              <input type="hidden" name="id" value={item.id} />
+                              <button type="submit" class="danger">Delete</button>
+                            </form>
+                          </div>
+                        {/each}
+                      {/if}
+                    </div>
+
+                    <form method="POST" action="?/add_list_item" use:enhance={withFeedback} class="inline-form">
+                      <input type="hidden" name="section_id" value={section.id} />
+                      <input name="content" placeholder="New item" required />
+                      <input name="details" placeholder="Optional details" />
+                      <input name="par_count" type="number" min="0" step="0.1" value="0" />
+                      <button type="submit">Add Item</button>
+                    </form>
+                  </div>
+                </details>
+              {/each}
+            </div>
+          {/if}
         {/if}
       {:else if editorType === 'recipe'}
           {#if data.creatorCatalog.recipes.length === 0}
@@ -297,11 +405,11 @@
             </div>
           {/if}
         {:else}
-          {#if data.creatorCatalog.documents.length === 0}
+          {#if documentCategories.length === 0}
             <p class="empty">No document categories yet.</p>
           {:else}
             <div class="stack">
-              {#each data.creatorCatalog.documents as category}
+              {#each documentCategories as category}
                 {@const items = documentsByCategory(category)}
                 <details class="entity">
                   <summary>
@@ -346,12 +454,12 @@
                               >
                                 <input type="hidden" name="id" value={document.id} />
                                 <input type="hidden" name="existing_file_url" value={document.file_url ?? ''} />
+                                <input type="hidden" name="section" value={document.section} />
+                                <input type="hidden" name="category" value={document.category} />
+                                <input type="hidden" name="file_url" value={document.file_url ?? ''} />
+                                <input type="hidden" name="content" value="" />
                                 <input name="title" value={document.title} required />
-                                <input name="section" value={document.section} />
-                                <input name="category" value={document.category} required />
-                                <input name="file_url" value={document.file_url ?? ''} placeholder="https://..." />
                                 <input name="file" type="file" accept="application/pdf,image/*" />
-                                <textarea name="content" rows="5">{document.content ?? ''}</textarea>
                                 <select name="is_active">
                                   <option value="1" selected={document.is_active === 1}>Active</option>
                                   <option value="0" selected={document.is_active === 0}>Inactive</option>
@@ -376,11 +484,11 @@
                       class="inline-form"
                     >
                       <input name="title" placeholder="Document title" required />
-                      <input name="section" value="Docs" />
-                      <input name="category" value={category} required />
-                      <input name="file_url" placeholder="https://..." />
+                      <input type="hidden" name="section" value="Docs" />
+                      <input type="hidden" name="category" value={category} />
+                      <input type="hidden" name="file_url" value="" />
+                      <input type="hidden" name="content" value="" />
                       <input name="file" type="file" accept="application/pdf,image/*" />
-                      <textarea name="content" rows="5" placeholder="Optional content"></textarea>
                       <select name="is_active">
                         <option value="1" selected>Active</option>
                         <option value="0">Inactive</option>
@@ -403,12 +511,10 @@
     gap: 0.75rem;
     margin-top: 0.95rem;
     padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: var(--surface-outline);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01) 40%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 16px 34px rgba(4, 5, 7, 0.16);
+    background: var(--surface-wash), var(--color-surface);
+    box-shadow: var(--shadow-sm);
   }
 
   .creator-header {
@@ -451,10 +557,10 @@
   .panel-block {
     display: grid;
     gap: 0.45rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-divider);
     border-radius: 12px;
     padding: 0.68rem;
-    background: rgba(255, 255, 255, 0.015);
+    background: transparent;
   }
 
   .stack {
@@ -463,9 +569,9 @@
   }
 
   .entity {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    background: rgba(132, 146, 166, 0.08);
+    background: color-mix(in srgb, var(--color-surface-alt) 38%, transparent);
     padding: 0.4rem;
   }
 
@@ -500,10 +606,10 @@
   }
 
   .entity-item {
-    border: 1px solid rgba(132, 146, 166, 0.2);
+    border: 1px solid var(--color-divider);
     border-radius: 9px;
     padding: 0.4rem;
-    background: rgba(132, 146, 166, 0.06);
+    background: transparent;
     display: grid;
     gap: 0.35rem;
   }
@@ -520,12 +626,26 @@
     gap: 0.3rem;
   }
 
+  .create-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.36rem;
+    padding: 0.48rem;
+    border: 1px solid var(--color-divider);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-surface-alt) 30%, transparent);
+  }
+
+  .create-form button {
+    grid-column: 1 / -1;
+  }
+
   .feedback-banner {
     margin: 0;
     padding: 0.65rem 0.82rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
+    border: 1px solid color-mix(in srgb, #16a34a 34%, var(--color-border));
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    background: color-mix(in srgb, #16a34a 14%, transparent);
     color: #bbf7d0;
     font-size: 0.8rem;
   }
@@ -533,19 +653,19 @@
   input,
   textarea,
   select {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 9px;
     padding: 0.4rem 0.52rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.8rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid var(--color-border);
     border-radius: 9px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
+    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
     color: var(--color-primary-contrast);
     padding: 0.36rem 0.58rem;
     cursor: pointer;
@@ -555,8 +675,8 @@
   }
 
   button.danger {
-    border-color: rgba(239, 68, 68, 0.38);
-    background: linear-gradient(180deg, rgba(239, 68, 68, 0.24), rgba(239, 68, 68, 0.1));
+    border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
+    background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
     color: #fecaca;
   }
 
@@ -569,6 +689,10 @@
     .header-controls {
       grid-template-columns: 1fr;
       width: 100%;
+    }
+
+    .create-form {
+      grid-template-columns: 1fr;
     }
   }
 </style>

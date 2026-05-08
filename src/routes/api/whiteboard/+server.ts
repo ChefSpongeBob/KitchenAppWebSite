@@ -8,6 +8,10 @@ type WhiteboardRow = {
 };
 let whiteboardVotesSchemaEnsured = false;
 
+function scopedBusinessId(locals: App.Locals) {
+  return String(locals.businessId ?? '').trim();
+}
+
 async function hasReviewTable(db: App.Platform['env']['DB']) {
   const table = await db
     .prepare(
@@ -45,7 +49,8 @@ export const GET: RequestHandler = async ({ platform, url, locals }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   await ensureTenantSchema(db);
-  const businessId = locals.businessId ?? '';
+  const businessId = scopedBusinessId(locals);
+  if (!businessId) return json({ error: 'Workspace required.' }, { status: 401 });
   const requestedLimit = Number(url.searchParams.get('limit') ?? 100);
   const limit = Number.isFinite(requestedLimit)
     ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
@@ -89,7 +94,8 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   await ensureTenantSchema(db);
-  const businessId = locals.businessId ?? '';
+  const businessId = scopedBusinessId(locals);
+  if (!businessId) return json({ error: 'Workspace required.' }, { status: 401 });
 
   let body: unknown;
   try {

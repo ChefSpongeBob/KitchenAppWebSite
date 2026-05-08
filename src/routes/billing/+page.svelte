@@ -11,7 +11,15 @@
 			addOnCameraMonitoring: boolean;
 		};
 		trial: {
-			mode: 'grandfathered' | 'trialing' | 'paid' | 'expired' | 'canceled' | 'pending_payment';
+			mode:
+				| 'grandfathered'
+				| 'trialing'
+				| 'active'
+				| 'expired'
+				| 'canceled'
+				| 'pending_payment'
+				| 'past_due'
+				| 'suspended';
 			allowApp: boolean;
 			shouldPurge: boolean;
 			trialEndsAt: number | null;

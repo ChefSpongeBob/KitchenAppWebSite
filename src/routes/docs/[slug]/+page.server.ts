@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { requireBusinessId } from '$lib/server/tenant';
 
 type DocRow = {
   title: string;
@@ -14,7 +15,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   if (!db) {
     throw error(503, 'Database is not configured.');
   }
-  const businessId = locals.businessId ?? '';
+  const businessId = requireBusinessId(locals);
 
   const doc = await db
     .prepare(

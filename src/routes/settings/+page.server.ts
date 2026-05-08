@@ -4,8 +4,10 @@ import { getTableColumns, hasTable } from '$lib/server/dbSchema';
 import {
   ensureEmployeeProfileEditRequestsTable,
   ensureEmployeeProfilesTable,
+  loadEmployeeOnboarding,
   loadAdminEmployeeProfile,
-  loadPendingEmployeeProfileEditRequest
+  loadPendingEmployeeProfileEditRequest,
+  submitEmployeeOnboardingItem
 } from '$lib/server/admin';
 import {
   loadScheduleDepartmentApprovalsByUser,
@@ -13,6 +15,14 @@ import {
   saveUserScheduleAvailability
 } from '$lib/server/schedules';
 import type { ScheduleDepartment } from '$lib/assets/schedule';
+import { getSessionCookieName } from '$lib/server/authCookies';
+import { hashSessionToken } from '$lib/server/auth';
+import {
+  listUserSessions,
+  revokeOtherUserSessions,
+  revokeSessionById,
+  writeAuditLog
+} from '$lib/server/security';
 
 let userPreferencesSchemaEnsured = false;
 
@@ -58,10 +68,17 @@ async function ensureUserPreferenceColumns(db: App.Platform['env']['DB']) {
   }
 }
 
-export const load: PageServerLoad = async ({ locals }) => {
+function resolveSessionToken(cookies: Parameters<PageServerLoad>[0]['cookies']) {
+  const primaryCookie = getSessionCookieName();
+  return cookies.get(primaryCookie) ?? cookies.get('session_id') ?? cookies.get('session_id_pwa') ?? null;
+}
+
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;
   if (!db) throw redirect(303, '/login');
+  const businessId = locals.businessId;
+  if (!businessId) throw redirect(303, '/login');
 
   await ensureUserPreferencesTable(db);
   await ensureUserPreferenceColumns(db);
@@ -90,11 +107,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   if (!user) throw redirect(303, '/login');
 
-  const [profile, pendingBirthdayRequest, approvalsByUser, availability, preferences] = await Promise.all([
-    loadAdminEmployeeProfile(db, locals.userId),
-    loadPendingEmployeeProfileEditRequest(db, locals.userId),
-    loadScheduleDepartmentApprovalsByUser(db, [locals.userId]),
-    loadUserScheduleAvailability(db, locals.userId),
+  const sessionToken = resolveSessionToken(cookies);
+  const currentSessionTokenHash = sessionToken ? await hashSessionToken(sessionToken) : null;
+
+  const [profile, pendingBirthdayRequest, onboarding, approvalsByUser, availability, preferences, sessions] = await Promise.all([
+    loadAdminEmployeeProfile(db, locals.userId, businessId),
+    loadPendingEmployeeProfileEditRequest(db, locals.userId, businessId),
+    loadEmployeeOnboarding(db, locals.userId, businessId),
+    loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
+    loadUserScheduleAvailability(db, locals.userId, businessId),
     db
       .prepare(
         `
@@ -110,16 +131,24 @@ export const load: PageServerLoad = async ({ locals }) => {
         sms_updates: number;
         dark_mode: number;
         language: string;
-      }>()
+      }>(),
+    listUserSessions(db, locals.userId, currentSessionTokenHash)
   ]);
 
   return {
+    activeTab:
+      ['availability', 'personal', 'contact', 'onboarding', 'app'].includes(String(url.searchParams.get('tab')))
+        ? String(url.searchParams.get('tab'))
+        : onboarding.package && onboarding.package.status !== 'approved'
+          ? 'onboarding'
+          : 'personal',
     user: {
       id: user.id,
       username: user.display_name ?? '',
       email: user.email ?? ''
     },
     profile,
+    onboarding,
     approvedDepartments: approvalsByUser.get(locals.userId) ?? ([] as ScheduleDepartment[]),
     availability,
     preferences: {
@@ -128,17 +157,21 @@ export const load: PageServerLoad = async ({ locals }) => {
       darkMode: (preferences?.dark_mode ?? 0) === 1,
       language: preferences?.language ?? 'en'
     },
+    sessions,
     pendingBirthdayRequest
   };
 };
 
 export const actions: Actions = {
+  submit_onboarding_item: ({ request, locals }) => submitEmployeeOnboardingItem(request, locals),
   save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
 
   save_personal_info: async ({ request, locals }) => {
     if (!locals.userId) throw redirect(303, '/login');
     const db = locals.DB;
     if (!db) throw redirect(303, '/login');
+    const businessId = locals.businessId;
+    if (!businessId) throw redirect(303, '/login');
 
     await ensureEmployeeProfilesTable(db);
 
@@ -170,11 +203,12 @@ export const actions: Actions = {
         .run();
     }
 
-    const existing = await loadAdminEmployeeProfile(db, locals.userId);
+    const existing = await loadAdminEmployeeProfile(db, locals.userId, businessId);
     await db
       .prepare(
         `
         INSERT INTO employee_profiles (
+          business_id,
           user_id,
           real_name,
           phone,
@@ -190,14 +224,15 @@ export const actions: Actions = {
           updated_at,
           updated_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(business_id, user_id) DO UPDATE SET
           real_name = excluded.real_name,
           updated_at = excluded.updated_at,
           updated_by = excluded.updated_by
         `
       )
       .bind(
+        businessId,
         locals.userId,
         realName,
         existing.phone,
@@ -222,6 +257,8 @@ export const actions: Actions = {
     if (!locals.userId) throw redirect(303, '/login');
     const db = locals.DB;
     if (!db) throw redirect(303, '/login');
+    const businessId = locals.businessId;
+    if (!businessId) throw redirect(303, '/login');
 
     await ensureEmployeeProfileEditRequestsTable(db);
 
@@ -231,9 +268,9 @@ export const actions: Actions = {
       return fail(400, { error: 'Birthday must use a valid date.' });
     }
 
-    const currentProfile = await loadAdminEmployeeProfile(db, locals.userId);
+    const currentProfile = await loadAdminEmployeeProfile(db, locals.userId, businessId);
     const now = Math.floor(Date.now() / 1000);
-    const existing = await loadPendingEmployeeProfileEditRequest(db, locals.userId);
+    const existing = await loadPendingEmployeeProfileEditRequest(db, locals.userId, businessId);
 
     if (existing) {
       await db
@@ -241,10 +278,10 @@ export const actions: Actions = {
           `
           UPDATE employee_profile_edit_requests
           SET requested_birthday = ?, requested_real_name = ?, requested_at = ?
-          WHERE id = ?
+          WHERE id = ? AND business_id = ?
           `
         )
-        .bind(requestedBirthday, currentProfile.real_name, now, existing.id)
+        .bind(requestedBirthday, currentProfile.real_name, now, existing.id, businessId)
         .run();
     } else {
       await db
@@ -252,6 +289,7 @@ export const actions: Actions = {
           `
           INSERT INTO employee_profile_edit_requests (
             id,
+            business_id,
             user_id,
             requested_real_name,
             requested_birthday,
@@ -259,10 +297,10 @@ export const actions: Actions = {
             manager_note,
             requested_at
           )
-          VALUES (?, ?, ?, ?, 'pending', '', ?)
+          VALUES (?, ?, ?, ?, ?, 'pending', '', ?)
           `
         )
-        .bind(crypto.randomUUID(), locals.userId, currentProfile.real_name, requestedBirthday, now)
+        .bind(crypto.randomUUID(), businessId, locals.userId, currentProfile.real_name, requestedBirthday, now)
         .run();
     }
 
@@ -273,9 +311,11 @@ export const actions: Actions = {
     if (!locals.userId) throw redirect(303, '/login');
     const db = locals.DB;
     if (!db) throw redirect(303, '/login');
+    const businessId = locals.businessId;
+    if (!businessId) throw redirect(303, '/login');
 
     await ensureEmployeeProfilesTable(db);
-    const currentProfile = await loadAdminEmployeeProfile(db, locals.userId);
+    const currentProfile = await loadAdminEmployeeProfile(db, locals.userId, businessId);
     const formData = await request.formData();
     const now = Math.floor(Date.now() / 1000);
     const email = String(formData.get('email') ?? '').trim().toLowerCase();
@@ -332,6 +372,7 @@ export const actions: Actions = {
       .prepare(
         `
         INSERT INTO employee_profiles (
+          business_id,
           user_id,
           real_name,
           phone,
@@ -347,8 +388,8 @@ export const actions: Actions = {
           updated_at,
           updated_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(business_id, user_id) DO UPDATE SET
           phone = excluded.phone,
           address_line_1 = excluded.address_line_1,
           address_line_2 = excluded.address_line_2,
@@ -363,6 +404,7 @@ export const actions: Actions = {
         `
       )
       .bind(
+        businessId,
         locals.userId,
         currentProfile.real_name,
         String(formData.get('phone') ?? '').trim(),
@@ -427,5 +469,47 @@ export const actions: Actions = {
       darkMode,
       language
     };
+  },
+
+  revoke_session: async ({ request, locals, getClientAddress }) => {
+    if (!locals.userId) throw redirect(303, '/login');
+    const db = locals.DB;
+    if (!db) throw redirect(303, '/login');
+    const formData = await request.formData();
+    const sessionId = String(formData.get('session_id') ?? '').trim();
+    if (!sessionId) return fail(400, { error: 'Missing session id.' });
+
+    await revokeSessionById(db, locals.userId, sessionId);
+    await writeAuditLog(db, {
+      action: 'user_revoked_session',
+      request,
+      getClientAddress,
+      businessId: locals.businessId ?? null,
+      actorUserId: locals.userId,
+      targetUserId: locals.userId,
+      metadata: { sessionId }
+    });
+
+    return { success: true, message: 'Session revoked.' };
+  },
+
+  revoke_other_sessions: async ({ request, locals, cookies, getClientAddress }) => {
+    if (!locals.userId) throw redirect(303, '/login');
+    const db = locals.DB;
+    if (!db) throw redirect(303, '/login');
+
+    const sessionToken = resolveSessionToken(cookies);
+    const currentSessionTokenHash = sessionToken ? await hashSessionToken(sessionToken) : null;
+    await revokeOtherUserSessions(db, locals.userId, currentSessionTokenHash);
+    await writeAuditLog(db, {
+      action: 'user_revoked_all_sessions',
+      request,
+      getClientAddress,
+      businessId: locals.businessId ?? null,
+      actorUserId: locals.userId,
+      targetUserId: locals.userId
+    });
+
+    return { success: true, message: 'Sessions revoked.' };
   }
 };

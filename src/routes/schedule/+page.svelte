@@ -29,6 +29,7 @@
         detail: string;
         startTime: string;
         endLabel: string;
+        breakMinutes: number;
         notes: string;
       }>;
     }>;
@@ -56,7 +57,7 @@
       : selectedDepartments.join(', ');
   $: visibleShifts = filteredDays.flatMap((day) => day.shifts);
   $: trackedHours = visibleShifts.reduce((sum, shift) => {
-    const hours = shiftHours(shift.startTime, shift.endLabel);
+    const hours = shiftHours(shift.startTime, shift.endLabel, shift.breakMinutes);
     return hours === null ? sum : sum + hours;
   }, 0);
   $: departmentHourTotals = Object.fromEntries(
@@ -67,7 +68,7 @@
           sum +
           day.shifts.reduce((daySum, shift) => {
             if (shift.department !== department) return daySum;
-            const hours = shiftHours(shift.startTime, shift.endLabel);
+            const hours = shiftHours(shift.startTime, shift.endLabel, shift.breakMinutes);
             return hours === null ? daySum : daySum + hours;
           }, 0)
         );
@@ -96,13 +97,13 @@
     return Number(match[1]) * 60 + Number(match[2]);
   }
 
-  function shiftHours(startTime: string, endLabel: string) {
+  function shiftHours(startTime: string, endLabel: string, breakMinutes = 0) {
     const start = parseTimeValue(startTime);
     const end = parseTimeValue(endLabel);
     if (start === null || end === null) return null;
     let diff = end - start;
     if (diff < 0) diff += 24 * 60;
-    return diff / 60;
+    return Math.max(0, diff - breakMinutes) / 60;
   }
 
   function formatHours(value: number) {

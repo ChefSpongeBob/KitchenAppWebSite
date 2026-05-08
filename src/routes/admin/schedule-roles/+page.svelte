@@ -42,19 +42,13 @@
     title="Department Roles"
   />
 
-  <section class="stack">
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <span class="panel-kicker">Roles</span>
-          <h2>Department Roles</h2>
-        </div>
-      </header>
+  <section class="roles-shell">
+    <header class="roles-head">
+      <h2>Departments</h2>
+      <a href="/admin/schedule-settings">Settings</a>
+    </header>
 
-      <p class="panel-note">
-        Keep department roles current here so managers are choosing from accurate scheduling options.
-      </p>
-
+    <div class="create-row">
       <form
         method="POST"
         action="?/create_department"
@@ -83,88 +77,79 @@
         </label>
         <button type="submit">Add Role</button>
       </form>
+    </div>
 
-      <div class="roles-grid">
-        {#each data.departments as department}
-          <article class="role-card">
-            <div class="role-card-head">
-              <strong>{department}</strong>
-              <span>{rolesForDepartment(department).length} roles</span>
-            </div>
+    <div class="roles-grid">
+      {#each data.departments as department}
+        <article class="role-card">
+          <div class="role-card-head">
+            <strong>{department}</strong>
+            <span>{rolesForDepartment(department).length} roles</span>
+          </div>
 
-            <div class="role-list">
-              {#each rolesForDepartment(department) as role}
-                <div class="role-row">
-                  <span>{role.roleName}</span>
-                  <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
-                    <input type="hidden" name="role_id" value={role.id} />
-                    <button type="submit" class="danger-btn">Delete</button>
-                  </form>
-                </div>
-              {/each}
-            </div>
-          </article>
-        {/each}
-      </div>
-    </section>
+          <div class="role-list">
+            {#each rolesForDepartment(department) as role}
+              <div class="role-row">
+                <span>{role.roleName}</span>
+                <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
+                  <input type="hidden" name="role_id" value={role.id} />
+                  <button type="submit" class="danger-btn">Delete</button>
+                </form>
+              </div>
+            {/each}
+          </div>
+        </article>
+      {/each}
+    </div>
   </section>
 </Layout>
 
 <style>
-  .stack {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .panel,
+  .roles-shell,
   .role-card {
-    position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01) 48%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: 0 18px 36px rgba(4, 5, 7, 0.18);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     overflow: hidden;
   }
 
-  .panel::before,
-  .role-card::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.9), rgba(132, 146, 166, 0.2));
-  }
-
-  .panel {
+  .roles-shell {
+    display: grid;
+    gap: 1rem;
     padding: 1rem;
   }
 
-  .panel-head {
+  .roles-head {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    align-items: end;
-    margin-bottom: 0.9rem;
+    align-items: center;
   }
 
-  .panel-kicker {
+  .roles-head h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .roles-head a {
+    min-height: 2.2rem;
     display: inline-flex;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.78rem;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: var(--weight-medium);
   }
 
-  .panel-head h2 {
-    margin: 0.2rem 0 0;
-  }
-
-  .panel-note {
-    margin: 0 0 0.9rem;
-    color: var(--color-text-muted);
-    max-width: 54rem;
+  .create-row {
+    display: grid;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-divider);
   }
 
   .create-role-form {
@@ -179,7 +164,6 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.7rem;
     align-items: end;
-    margin-bottom: 0.9rem;
   }
 
   .create-role-form label,
@@ -198,11 +182,10 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.8rem;
-    margin-top: 1rem;
   }
 
   .role-card {
-    padding: 1rem;
+    padding: 0.85rem;
   }
 
   .role-card-head {
@@ -229,16 +212,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.65rem 0.75rem;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.03);
+    padding: 0.55rem 0;
+    border-top: 1px solid var(--color-divider);
   }
 
   input,
   select {
     width: 100%;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 0.42rem 0.56rem;
     background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
@@ -247,8 +228,8 @@
   }
 
   button {
-    min-height: 2.5rem;
-    padding: 0.6rem 0.9rem;
+    min-height: 2.35rem;
+    padding: 0.55rem 0.85rem;
     border: 1px solid rgba(132, 146, 166, 0.22);
     border-radius: 10px;
     background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
@@ -263,7 +244,7 @@
     padding-inline: 0.8rem;
   }
 
-  @media (max-width: 920px) {
+    @media (max-width: 920px) {
     .roles-grid {
       grid-template-columns: 1fr;
     }

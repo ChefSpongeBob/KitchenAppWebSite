@@ -1,10 +1,12 @@
 CREATE TABLE IF NOT EXISTS schedule_weeks (
   id TEXT PRIMARY KEY,
-  week_start TEXT NOT NULL UNIQUE,
+  week_start TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'draft',
   published_at INTEGER,
   updated_at INTEGER NOT NULL,
   updated_by TEXT,
+  business_id TEXT NOT NULL DEFAULT '',
+  UNIQUE (business_id, week_start),
   FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
@@ -27,7 +29,7 @@ CREATE TABLE IF NOT EXISTS schedule_shifts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedule_weeks_week_start
-ON schedule_weeks(week_start, status);
+ON schedule_weeks(business_id, week_start, status);
 
 CREATE INDEX IF NOT EXISTS idx_schedule_shifts_week_date
 ON schedule_shifts(week_id, shift_date, start_time, sort_order);

@@ -19,6 +19,20 @@ function unauthorized() {
   return json({ error: 'Not found.' }, { status: 404 });
 }
 
+function readEnvValue(platform: App.Platform | undefined, key: string) {
+  const platformValue = platform?.env?.[key as keyof App.Platform['env']];
+  if (typeof platformValue === 'string' && platformValue.trim()) {
+    return platformValue.trim();
+  }
+
+  const nodeProcess = (
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process;
+  return nodeProcess?.env?.[key]?.trim() ?? '';
+}
+
 async function findUserByEmail(db: App.Platform['env']['DB'], emailRaw: string) {
   const email = emailRaw.trim().toLowerCase();
   const hasNormalized = await hasColumn(db, 'users', 'email_normalized');
@@ -32,7 +46,7 @@ async function findUserByEmail(db: App.Platform['env']['DB'], emailRaw: string) 
 }
 
 export const POST = async ({ request, cookies, locals, platform }) => {
-  const configuredToken = platform?.env?.SMOKE_INTERNAL_TOKEN?.trim() ?? '';
+  const configuredToken = readEnvValue(platform, 'SMOKE_INTERNAL_TOKEN');
   const suppliedToken = getSmokeToken(request);
   if (!configuredToken || !suppliedToken || suppliedToken !== configuredToken) {
     return unauthorized();
@@ -51,7 +65,7 @@ export const POST = async ({ request, cookies, locals, platform }) => {
   }
 
   const requestedEmail =
-    payload.email?.trim() || platform?.env?.SMOKE_DEFAULT_EMAIL?.trim() || '';
+    payload.email?.trim() || readEnvValue(platform, 'SMOKE_DEFAULT_EMAIL');
   if (!requestedEmail) {
     return json({ error: 'Missing email.' }, { status: 400 });
   }
@@ -122,7 +136,7 @@ export const POST = async ({ request, cookies, locals, platform }) => {
 };
 
 export const DELETE = async ({ request, cookies, locals, platform }) => {
-  const configuredToken = platform?.env?.SMOKE_INTERNAL_TOKEN?.trim() ?? '';
+  const configuredToken = readEnvValue(platform, 'SMOKE_INTERNAL_TOKEN');
   const suppliedToken = getSmokeToken(request);
   if (!configuredToken || !suppliedToken || suppliedToken !== configuredToken) {
     return unauthorized();

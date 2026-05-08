@@ -35,8 +35,8 @@
 			items: [
 				'Up to 250 employees',
 				'Full platform + multi-team scale',
-				'Temperature monitoring add-on available (+$30/mo)',
-				'Camera monitoring add-on available (+$30/mo)'
+				'Temperature monitoring included',
+				'Camera monitoring included'
 			]
 		}
 	];
@@ -64,13 +64,13 @@
 			label: 'Temperature Sensors',
 			starter: 'Optional +$30/mo',
 			growth: 'Optional +$30/mo',
-			enterprise: 'Optional +$30/mo'
+			enterprise: 'Included'
 		},
 		{
 			label: 'Camera Monitoring',
 			starter: 'Optional +$30/mo',
 			growth: 'Optional +$30/mo',
-			enterprise: 'Optional +$30/mo'
+			enterprise: 'Included'
 		}
 	];
 
@@ -328,16 +328,16 @@
 	.plans {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 0.75rem;
+		gap: 1px;
+		border: 1px solid var(--color-divider);
+		border-radius: 16px;
+		overflow: hidden;
+		background: var(--color-divider);
 	}
 
 	.plan {
-		padding: 0.78rem;
-		border-radius: 14px;
-		border: 1px solid var(--color-border);
-		background:
-			linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 42%),
-			var(--color-surface);
+		padding: 0.9rem;
+		background: var(--surface-wash), var(--color-surface);
 		display: grid;
 		gap: 0.1rem;
 	}
@@ -408,10 +408,8 @@
 
 	.table-shell {
 		margin-top: 0.62rem;
-		border: 1px solid var(--color-border);
-		border-radius: 14px;
 		overflow-x: auto;
-		background: var(--color-surface);
+		border-top: 1px solid var(--color-divider);
 	}
 
 	table {

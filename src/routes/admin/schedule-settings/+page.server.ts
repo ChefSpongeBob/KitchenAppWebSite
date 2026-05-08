@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   return {
-    settings: await loadScheduleSettings(db)
+    settings: await loadScheduleSettings(db, locals.businessId)
   };
 };
 

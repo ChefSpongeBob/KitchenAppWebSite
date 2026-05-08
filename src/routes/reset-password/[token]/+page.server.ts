@@ -5,6 +5,7 @@ import {
   findValidPasswordResetByTokenHash,
   validateNewPassword
 } from '$lib/server/passwordReset';
+import { revokeUserSessions, writeAuditLog } from '$lib/server/security';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -24,7 +25,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ request, params, locals }) => {
+  default: async ({ request, params, locals, getClientAddress }) => {
     const db = locals.DB;
     if (!db) {
       return fail(503, { error: 'Database is not configured yet.' });
@@ -66,14 +67,17 @@ export const actions: Actions = {
         .bind(now, reset.id),
       db
         .prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL`)
-        .bind(now, reset.user_id),
-      db
-        .prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
-        .bind(now, reset.user_id),
-      db
-        .prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
-        .bind(now, now, reset.user_id)
+        .bind(now, reset.user_id)
     ]);
+
+    await revokeUserSessions(db, reset.user_id, { revokeDevices: true });
+    await writeAuditLog(db, {
+      action: 'password_reset_completed',
+      request,
+      getClientAddress,
+      targetUserId: reset.user_id,
+      email: reset.user_email
+    });
 
     throw redirect(303, '/login?reset=success');
   }

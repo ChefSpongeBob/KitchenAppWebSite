@@ -62,18 +62,30 @@
 	}
 
 	.field {
-		padding: 0.6rem;
-		border-radius: 10px;
-		border: 1px solid var(--border-subtle);
-		background: transparent;
-		color: var(--text-primary);
+		width: 100%;
+		padding: 0.72rem 0.82rem;
+		border-radius: var(--radius-md);
+		border: var(--surface-outline);
+		background: var(--color-surface);
+		color: var(--color-text);
+		box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
 	}
 
 	.create-button {
-		background: rgba(235, 24, 24, 0.15);
-		border: 1px solid rgba(0,0,0,0.4);
-		padding: 0.5rem 1rem;
+		align-self: flex-start;
+		background: color-mix(in srgb, var(--color-primary) 16%, var(--color-surface));
+		border: 1px solid color-mix(in srgb, var(--color-primary) 42%, var(--color-border) 58%);
+		color: var(--color-text);
+		font-weight: var(--weight-semibold);
+		padding: 0.62rem 1rem;
 		border-radius: 999px;
 		cursor: pointer;
+	}
+
+	@media (max-width: 760px) {
+		.card-list {
+			gap: 0.8rem;
+			padding-bottom: 5rem;
+		}
 	}
 </style>

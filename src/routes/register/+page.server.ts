@@ -2,19 +2,22 @@ import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
 import { hashPassword } from '$lib/server/auth';
 import { hasColumn } from '$lib/server/dbSchema';
 import { ensureBusinessSchema, reserveBusinessSlug } from '$lib/server/business';
-import { ensureEmployeeProfilesTable } from '$lib/server/admin';
+import { ensureEmployeeOnboardingRequirement, ensureEmployeeProfilesTable } from '$lib/server/admin';
 import {
 	LIABILITY_AGREEMENT_KEY,
 	LIABILITY_AGREEMENT_VERSION,
 	recordLegalAgreementAcceptance
 } from '$lib/server/legal';
 import {
+	createTrialDenialRecord,
 	evaluateTrialEligibility,
 	getRequestIpAddress,
 	initializeBusinessTrial,
 	type TrialEligibility
 } from '$lib/server/trial';
 import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
+import { validateNewPassword } from '$lib/server/passwordReset';
+import { checkRateLimit, rateLimitFailure, writeAuditLog } from '$lib/server/security';
 import type { PageServerLoad } from './$types';
 
 const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
@@ -152,12 +155,8 @@ export const actions: Actions = {
 			if (email !== confirmEmail) {
 				return fail(400, { error: 'Emails do not match.' });
 			}
-			if (password.length < 8) {
-				return fail(400, { error: 'Password must be at least 8 characters.' });
-			}
-			if (password !== confirmPassword) {
-				return fail(400, { error: 'Passwords do not match.' });
-			}
+			const passwordError = validateNewPassword(password, confirmPassword);
+			if (passwordError) return passwordError;
 			if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
 				return fail(400, { error: 'Birthday must use a valid date.' });
 			}
@@ -187,6 +186,32 @@ export const actions: Actions = {
 			await ensureUserInvitesTable(db);
 			await ensureBusinessSchema(db);
 
+			const signupIp = getRequestIpAddress(request);
+			const [signupIpLimit, signupEmailLimit] = await Promise.all([
+				checkRateLimit(db, {
+					action: 'signup_ip',
+					identifier: signupIp,
+					limit: 8,
+					windowSeconds: 60 * 60,
+					blockSeconds: 60 * 60
+				}),
+				checkRateLimit(db, {
+					action: 'signup_email',
+					identifier: email,
+					limit: 3,
+					windowSeconds: 24 * 60 * 60,
+					blockSeconds: 24 * 60 * 60
+				})
+			]);
+			if (!signupIpLimit.allowed || !signupEmailLimit.allowed) {
+				await writeAuditLog(db, {
+					action: 'signup_rate_limited',
+					request,
+					email
+				});
+				return rateLimitFailure();
+			}
+
 			const hasNormalized = await hasEmailNormalizedColumn(db);
 			const hasIsActive = await hasIsActiveColumn(db);
 			const hasRole = await hasRoleColumn(db);
@@ -211,6 +236,11 @@ export const actions: Actions = {
 						.first();
 
 			if (existing) {
+				await writeAuditLog(db, {
+					action: 'signup_blocked_existing_account',
+					request,
+					email
+				});
 				return fail(400, { error: 'Account already exists.' });
 			}
 
@@ -224,6 +254,21 @@ export const actions: Actions = {
 					ipAddress: getRequestIpAddress(request),
 					userAgent: request.headers.get('user-agent') ?? ''
 				});
+				if (!trialEligibility.eligible) {
+					await createTrialDenialRecord(
+						db,
+						{
+							emailNormalized: email,
+							businessName,
+							clientFingerprint,
+							ipAddress: getRequestIpAddress(request),
+							userAgent: request.headers.get('user-agent') ?? ''
+						},
+						'abuse',
+						trialEligibility.reason ?? 'trial_reuse'
+					);
+					return fail(400, { error: 'Free trial unavailable. Choose purchase to continue.' });
+				}
 			}
 
 			let businessInvite:
@@ -413,59 +458,6 @@ export const actions: Actions = {
 				)
 				.bind(userId, wantsEmailUpdates ? 1 : 0, now)
 				.run();
-			await db
-				.prepare(
-					`
-			INSERT INTO employee_profiles (
-				user_id,
-				real_name,
-				phone,
-				birthday,
-				address_line_1,
-				address_line_2,
-				city,
-				state,
-				postal_code,
-				emergency_contact_name,
-				emergency_contact_phone,
-				emergency_contact_relationship,
-				updated_at,
-				updated_by
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(user_id) DO UPDATE SET
-				real_name = excluded.real_name,
-				phone = excluded.phone,
-				birthday = excluded.birthday,
-				address_line_1 = excluded.address_line_1,
-				address_line_2 = excluded.address_line_2,
-				city = excluded.city,
-				state = excluded.state,
-				postal_code = excluded.postal_code,
-				emergency_contact_name = excluded.emergency_contact_name,
-				emergency_contact_phone = excluded.emergency_contact_phone,
-				emergency_contact_relationship = excluded.emergency_contact_relationship,
-				updated_at = excluded.updated_at,
-				updated_by = excluded.updated_by
-		`
-				)
-				.bind(
-					userId,
-					realName || '',
-					userPhone || '',
-					birthday || '',
-					userAddressLine1 || '',
-					userAddressLine2 || '',
-					userCity || '',
-					userState || '',
-					userPostalCode || '',
-					emergencyContactName || '',
-					emergencyContactPhone || '',
-					emergencyContactRelationship || '',
-					now,
-					userId
-				)
-				.run();
 
 			if (businessInvite) {
 				await db
@@ -516,7 +508,7 @@ export const actions: Actions = {
 					FROM business_users bu
 					JOIN businesses b ON b.id = bu.business_id
 					WHERE bu.user_id = ?
-					  AND COALESCE(b.status, 'active') = 'active'
+					  AND COALESCE(b.status, 'active') IN ('active', 'trialing')
 					ORDER BY
 					  CASE bu.role
 					    WHEN 'owner' THEN 0
@@ -612,6 +604,13 @@ export const actions: Actions = {
 					eligible: purchaseMode === 'buy_now' ? true : trialEligibility.eligible,
 					denialReason: purchaseMode === 'buy_now' ? null : trialEligibility.reason,
 					statusOverride: purchaseMode === 'buy_now' ? 'pending_payment' : null,
+					identity: {
+						emailNormalized: email,
+						businessName,
+						clientFingerprint,
+						ipAddress: getRequestIpAddress(request),
+						userAgent: request.headers.get('user-agent') ?? ''
+					},
 					now
 				});
 			}
@@ -620,6 +619,66 @@ export const actions: Actions = {
 				return fail(400, {
 					error: 'Could not attach this account to a workspace. Ask your admin for a fresh invite.'
 				});
+			}
+
+			await db
+				.prepare(
+					`
+			INSERT INTO employee_profiles (
+				business_id,
+				user_id,
+				real_name,
+				phone,
+				birthday,
+				address_line_1,
+				address_line_2,
+				city,
+				state,
+				postal_code,
+				emergency_contact_name,
+				emergency_contact_phone,
+				emergency_contact_relationship,
+				updated_at,
+				updated_by
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(business_id, user_id) DO UPDATE SET
+				real_name = excluded.real_name,
+				phone = excluded.phone,
+				birthday = excluded.birthday,
+				address_line_1 = excluded.address_line_1,
+				address_line_2 = excluded.address_line_2,
+				city = excluded.city,
+				state = excluded.state,
+				postal_code = excluded.postal_code,
+				emergency_contact_name = excluded.emergency_contact_name,
+				emergency_contact_phone = excluded.emergency_contact_phone,
+				emergency_contact_relationship = excluded.emergency_contact_relationship,
+				updated_at = excluded.updated_at,
+				updated_by = excluded.updated_by
+		`
+				)
+				.bind(
+					resolvedBusinessId,
+					userId,
+					realName || '',
+					userPhone || '',
+					birthday || '',
+					userAddressLine1 || '',
+					userAddressLine2 || '',
+					userCity || '',
+					userState || '',
+					userPostalCode || '',
+					emergencyContactName || '',
+					emergencyContactPhone || '',
+					emergencyContactRelationship || '',
+					now,
+					userId
+				)
+				.run();
+
+			if (inviteCode && roleValue !== 'admin') {
+				await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null);
 			}
 
 			await recordLegalAgreementAcceptance(db, {
@@ -631,6 +690,15 @@ export const actions: Actions = {
 				acceptanceSource: 'register',
 				ipAddress: getRequestIpAddress(request),
 				userAgent: request.headers.get('user-agent') ?? ''
+			});
+
+			await writeAuditLog(db, {
+				action: inviteCode ? 'signup_completed_from_invite' : 'signup_completed_new_business',
+				request,
+				businessId: resolvedBusinessId,
+				actorUserId: userId,
+				targetUserId: userId,
+				email
 			});
 
 			if (buyNowRequested) {

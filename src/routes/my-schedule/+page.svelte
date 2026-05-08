@@ -38,6 +38,7 @@
         detail: string;
         startTime: string;
         endLabel: string;
+        breakMinutes: number;
         notes: string;
       }>;
     }>;
@@ -64,6 +65,22 @@
       requestedByUserName: string | null;
       requestedByUserEmail: string | null;
     }>;
+    openShifts: Array<{
+      id: string;
+      shiftDate: string;
+      department: string;
+      role: string;
+      detail: string;
+      startTime: string;
+      endLabel: string;
+      breakMinutes: number;
+      notes: string;
+    }>;
+    openShiftRequests: Array<{
+      requestId: string;
+      id: string;
+      status: 'pending' | 'approved' | 'declined';
+    }>;
   };
 
   type ShiftSummary = {
@@ -73,6 +90,7 @@
     detail: string;
     startTime: string;
     endLabel: string;
+    breakMinutes: number;
   };
 
   let activeOfferShift: ShiftSummary | null = null;
@@ -105,6 +123,9 @@
     data.weekStart
   );
   $: offersByShiftId = new Map(data.offers.map((offer) => [offer.shiftId, offer]));
+  $: requestedOpenShiftIds = new Set(
+    data.openShiftRequests.filter((request) => request.status === 'pending').map((request) => request.id)
+  );
   $: openShiftOffers = data.offers.filter((offer) => offer.offeredByUserId !== data.userId);
   $: myOfferCount = data.offers.filter((offer) => offer.offeredByUserId === data.userId).length;
   $: totalShiftCount = data.days.reduce((total, day) => total + day.shifts.length, 0);
@@ -112,7 +133,7 @@
     (total, day) =>
       total +
       day.shifts.reduce((sum, shift) => {
-        const hours = shiftHours(shift.startTime, shift.endLabel);
+        const hours = shiftHours(shift.startTime, shift.endLabel, shift.breakMinutes);
         return hours === null ? sum : sum + hours;
       }, 0),
     0
@@ -167,13 +188,13 @@
     return Number(match[1]) * 60 + Number(match[2]);
   }
 
-  function shiftHours(startTime: string, endLabel: string) {
+  function shiftHours(startTime: string, endLabel: string, breakMinutes = 0) {
     const start = parseTimeValue(startTime);
     const end = parseTimeValue(endLabel);
     if (start === null || end === null) return null;
     let diff = end - start;
     if (diff < 0) diff += 24 * 60;
-    return diff / 60;
+    return Math.max(0, diff - breakMinutes) / 60;
   }
 
   function formatHours(value: number) {
@@ -199,21 +220,19 @@
   <div class="schedule-shell">
     <PageHeader title="My Schedule" />
 
-    <nav class="subnav">
-      <a href="/schedule">Full Schedule</a>
-      <a href={`?week=${data.prevWeekStart}`}>Previous Week</a>
-      <a href={`?week=${data.nextWeekStart}`}>Next Week</a>
-    </nav>
-
-    <section class="week-banner">
+    <section class="schedule-toolbar">
       <div>
-        <span class="eyebrow">Week Of</span>
         <h2>{weekRangeLabel}</h2>
+        <span>
+          {totalShiftCount} shifts | {formatHours(weeklyTrackedHours)} hours
+          {#if myOfferCount > 0} | {myOfferCount} offered{/if}
+        </span>
       </div>
-      <span>
-        {totalShiftCount} shifts | {formatHours(weeklyTrackedHours)} hours
-        {#if myOfferCount > 0} | {myOfferCount} offered{/if}
-      </span>
+      <nav class="toolbar-actions">
+        <a href="/schedule">Full Schedule</a>
+        <a href={`?week=${data.prevWeekStart}`}>Previous</a>
+        <a href={`?week=${data.nextWeekStart}`}>Next</a>
+      </nav>
     </section>
 
     <section class="days-stack" aria-label="My scheduled week">
@@ -258,7 +277,8 @@
                             role: shift.role,
                             detail: shift.detail,
                             startTime: shift.startTime,
-                            endLabel: shift.endLabel
+                            endLabel: shift.endLabel,
+                            breakMinutes: shift.breakMinutes
                           })}
                       >
                         Offer Shift
@@ -289,14 +309,64 @@
       {/each}
     </section>
 
-    <section class="offers-shell" aria-label="Open Shifts">
-      <header class="offers-head">
-        <div>
-          <span class="eyebrow">Open Shifts</span>
-          <h3>Available Pickups</h3>
+    <div class="coverage-grid">
+      <section class="offers-shell" aria-label="Manager open shifts">
+        <header class="offers-head">
+          <div>
+            <span class="eyebrow">Open Shifts</span>
+            <h3>Available Coverage</h3>
+          </div>
+          <small>{data.openShifts.length} posted this week</small>
+        </header>
+
+      {#if data.openShifts.length === 0}
+        <p class="offers-empty">No open coverage has been posted right now.</p>
+      {:else}
+        <div class="offer-list">
+          {#each data.openShifts as shift}
+            <article class="offer-card">
+              <div class="offer-copy">
+                <strong>{shift.department} | {shift.role}</strong>
+                <p class="offer-time">
+                  {new Date(`${shift.shiftDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  | {formatScheduleTimeLabel(shift.startTime)}{#if shift.endLabel} - {shift.endLabel}{/if}
+                  {#if shift.breakMinutes > 0} | {shift.breakMinutes} min break{/if}
+                </p>
+                {#if shift.detail}
+                  <p class="offer-detail">{shift.detail}</p>
+                {/if}
+                {#if shift.notes}
+                  <p class="offer-owner">{shift.notes}</p>
+                {/if}
+              </div>
+              <div class="offer-actions">
+                {#if requestedOpenShiftIds.has(shift.id)}
+                  <span class="offer-badge requested">Requested</span>
+                  <form method="POST" action="?/withdraw_open_shift" use:enhance={withFeedback}>
+                    <input type="hidden" name="open_shift_id" value={shift.id} />
+                    <button type="submit" class="offer-btn">Withdraw</button>
+                  </form>
+                {:else}
+                  <form method="POST" action="?/request_open_shift" use:enhance={withFeedback}>
+                    <input type="hidden" name="open_shift_id" value={shift.id} />
+                    <button type="submit" class="offer-btn">Request</button>
+                  </form>
+                {/if}
+              </div>
+            </article>
+          {/each}
         </div>
-        <small>{openShiftOffers.length} available this week</small>
-      </header>
+      {/if}
+      </section>
+
+      <section class="offers-shell" aria-label="Open Shifts">
+        <header class="offers-head">
+          <div>
+            <span class="eyebrow">Shift Offers</span>
+            <h3>Team Pickups</h3>
+          </div>
+          <small>{openShiftOffers.length} available this week</small>
+        </header>
 
       {#if openShiftOffers.length === 0}
         <p class="offers-empty">No shifts are up for grabs right now.</p>
@@ -338,7 +408,8 @@
           {/each}
         </div>
       {/if}
-    </section>
+      </section>
+    </div>
   </div>
 </Layout>
 
@@ -374,7 +445,6 @@
         {#if activeOfferShift.detail}
           <p class="offer-popup-note">{activeOfferShift.detail}</p>
         {/if}
-        <p class="offer-popup-note">Offer this shift to everyone, or send it to one employee directly.</p>
       </div>
 
       <form method="POST" action="?/offer_shift" use:enhance={withOfferFeedback} class="offer-popup-form">
@@ -403,42 +473,49 @@
     gap: 1rem;
   }
 
-  .subnav {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin: -0.35rem 0 0.2rem;
-    padding-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-  }
-
-  .subnav a {
-    text-decoration: none;
-    color: var(--color-text-muted);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
-    padding: 0.32rem 0.7rem;
-    background: rgba(255,255,255,0.03);
-  }
-
-  .week-banner {
+  .schedule-toolbar {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-    padding: 0.95rem 1rem;
-    border: 1px solid rgba(255,255,255,0.08);
+    padding: 0.8rem 0.9rem;
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    align-items: start;
+    align-items: center;
+  }
+
+  .schedule-toolbar h2 {
+    margin: 0;
+    font-size: clamp(1rem, 2vw, 1.2rem);
+  }
+
+  .schedule-toolbar span {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: end;
+  }
+
+  .toolbar-actions a {
+    text-decoration: none;
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem;
+    background: transparent;
+    font-size: 0.78rem;
   }
 
   .eyebrow,
   .day-head small,
   .shift-detail,
-  .shift-notes,
-  .week-banner > span {
+  .shift-notes {
     color: var(--color-text-muted);
   }
 
@@ -461,11 +538,9 @@
   }
 
   .day-card {
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     padding: 0.95rem;
     display: grid;
     gap: 0.8rem;
@@ -485,10 +560,10 @@
   .shift-card {
     display: grid;
     gap: 0.3rem;
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid var(--color-divider);
     border-radius: 12px;
     padding: 0.75rem 0.8rem;
-    background: rgba(255,255,255,0.025);
+    background: color-mix(in srgb, var(--color-surface-alt) 74%, transparent);
   }
 
   .shift-headline {
@@ -586,15 +661,19 @@
     line-height: 1.45;
   }
 
-  .offers-shell {
+  .coverage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
     margin-bottom: 1rem;
+  }
+
+  .offers-shell {
     padding: 0.95rem 1rem;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     display: grid;
     gap: 0.85rem;
   }
@@ -627,10 +706,10 @@
     display: flex;
     justify-content: space-between;
     gap: 0.9rem;
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid var(--color-divider);
     border-radius: 12px;
     padding: 0.85rem;
-    background: rgba(255,255,255,0.025);
+    background: transparent;
   }
 
   .offer-copy {
@@ -658,7 +737,7 @@
 
   .offer-popup {
     width: min(100%, 28rem);
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
     background:
       linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
@@ -709,9 +788,19 @@
   }
 
   @media (max-width: 760px) {
+    .schedule-toolbar,
     .offer-card,
     .offers-head {
       flex-direction: column;
+      align-items: stretch;
+    }
+
+    .toolbar-actions {
+      justify-content: start;
+    }
+
+    .coverage-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>

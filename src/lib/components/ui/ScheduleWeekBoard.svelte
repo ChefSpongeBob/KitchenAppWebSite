@@ -11,6 +11,7 @@
     detail: string;
     startTime: string;
     endLabel: string;
+    breakMinutes: number;
     notes: string;
   };
 
@@ -52,6 +53,7 @@
               </div>
               <p class="shift-time">
                 {formatScheduleTimeLabel(shift.startTime)}{#if shift.endLabel} - {shift.endLabel}{/if}
+                {#if shift.breakMinutes > 0} | {shift.breakMinutes} min break{/if}
               </p>
               {#if shift.notes}
                 <p class="shift-notes">{shift.notes}</p>

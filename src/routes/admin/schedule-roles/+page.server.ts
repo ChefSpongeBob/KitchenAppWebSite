@@ -20,8 +20,8 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   return {
-    departments: await loadScheduleDepartments(db),
-    roles: await loadScheduleRoleDefinitions(db)
+    departments: await loadScheduleDepartments(db, locals.businessId),
+    roles: await loadScheduleRoleDefinitions(db, locals.businessId)
   };
 };
 

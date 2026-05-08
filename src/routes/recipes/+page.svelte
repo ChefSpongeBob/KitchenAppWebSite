@@ -1,9 +1,8 @@
-﻿<script lang="ts">
+<script lang="ts">
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
-  import { fade } from 'svelte/transition';
   import { goto } from '$app/navigation';
   import { recipeCategories } from '$lib/assets/recipeCategories';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
   type RecipeIndexItem = {
     id: number;
@@ -17,13 +16,16 @@
   );
   const recipeIndex = data.recipeIndex ?? [];
   let search = data.query ?? '';
+
   $: normalizedSearch = search.trim().toLowerCase();
   $: searchResults =
     normalizedSearch.length < 2
       ? []
-      : recipeIndex
-          .filter((r) => r.title.toLowerCase().includes(normalizedSearch))
-          .slice(0, 12);
+      : recipeIndex.filter((r) => r.title.toLowerCase().includes(normalizedSearch)).slice(0, 12);
+
+  function countByCategory(category: string) {
+    return recipeIndex.filter((recipe) => recipe.category === category).length;
+  }
 
   function recipeCategoryHref(category: string) {
     const query = normalizedSearch.length >= 2 ? `?q=${encodeURIComponent(search.trim())}` : '';
@@ -42,125 +44,108 @@
 
 <PageHeader title="Recipes" />
 
-<section class="search">
-  <input
-    type="search"
-    placeholder="Search recipe by title..."
-    bind:value={search}
-    on:input={(event) => syncSearch((event.currentTarget as HTMLInputElement).value)}
-    aria-label="Search recipe by title"
-  />
+<section class="recipe-index">
+  <div class="search-row">
+    <input
+      type="search"
+      placeholder="Search recipes"
+      bind:value={search}
+      on:input={(event) => syncSearch((event.currentTarget as HTMLInputElement).value)}
+      aria-label="Search recipes"
+    />
+  </div>
+
   {#if normalizedSearch.length >= 2}
-    {#if searchResults.length > 0}
-      <div class="search-results">
+    <div class="search-results">
+      {#if searchResults.length > 0}
         {#each searchResults as recipe}
-          <a href={`/recipes/${recipe.category}?q=${encodeURIComponent(search.trim())}`} class="result-link">
-            <strong>{recipe.title}</strong>
+          <a href={`/recipes/${recipe.category}?q=${encodeURIComponent(search.trim())}`}>
+            <span>{recipe.title}</span>
             <small>{recipe.category}</small>
           </a>
         {/each}
-      </div>
-    {:else}
-      <p class="search-empty">No recipes found.</p>
-    {/if}
+      {:else}
+        <EmptyState title="No recipes found." compact />
+      {/if}
+    </div>
   {/if}
-</section>
 
-<section class="grid">
-  <!-- Static category cards -->
-  {#each categories as c, index}
-    <button
-      type="button"
-      class="category-wrapper"
-      on:click={() => goto(recipeCategoryHref(c))}
-      in:fade={{ delay: index * 80, duration: 180 }}
-    >
-      <DashboardCard title={c} description={`View recipes in ${c}`} />
-    </button>
-  {/each}
+  <div class="category-list">
+    {#each categories as category}
+      <button type="button" on:click={() => goto(recipeCategoryHref(category))}>
+        <span>{category}</span>
+        <small>{countByCategory(category)} recipe{countByCategory(category) === 1 ? '' : 's'}</small>
+      </button>
+    {/each}
+  </div>
 </section>
 
 <style>
-  .grid {
+  .recipe-index {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 1rem;
-    margin-top: 1rem;
   }
 
-  .search {
-    margin: 0.35rem 0 0.8rem;
-  }
-
-  .search input {
-    width: 100%;
-    max-width: 560px;
+  .search-row input {
+    width: min(100%, 620px);
     border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.5rem 0.65rem;
-    background: var(--color-surface-alt);
+    border-radius: 999px;
+    padding: 0.68rem 0.95rem;
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
   }
 
-  .search-results {
-    margin-top: 0.45rem;
+  .search-results,
+  .category-list {
     display: grid;
-    gap: 0.35rem;
-    max-width: 560px;
+    border-top: 1px solid var(--color-divider);
   }
 
-  .result-link {
+  .search-results a,
+  .category-list button {
     display: flex;
     justify-content: space-between;
-    gap: 0.65rem;
-    text-decoration: none;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.45rem 0.6rem;
-    color: var(--color-text);
-    background: var(--color-surface);
-  }
-
-  .result-link small {
-    color: var(--color-text-muted);
-  }
-
-  .search-empty {
-    margin: 0.45rem 0 0;
-    color: var(--color-text-muted);
-    font-size: 0.86rem;
-  }
-
-  .category-wrapper {
-    cursor: pointer;
-    transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
-    border: none;
-    padding: 0;
+    align-items: center;
+    gap: 1rem;
+    min-height: 3.1rem;
+    padding: 0.72rem 0;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-divider) 72%, transparent);
     background: transparent;
-    text-align: inherit;
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
   }
 
-  .category-wrapper:hover,
-  .category-wrapper:focus {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
-    outline: none;
+  .search-results span,
+  .category-list span {
+    font-weight: var(--weight-semibold);
+    text-transform: capitalize;
   }
 
-  .category-wrapper:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 4px;
+  .search-results small,
+  .category-list small {
+    color: var(--color-text-muted);
   }
 
-  @media (max-width: 760px) {
-    .grid {
-      grid-template-columns: 1fr;
-      gap: 0.75rem;
-    }
+  .search-results a:hover span,
+  .category-list button:hover span,
+  .category-list button:focus-visible span {
+    color: var(--color-primary);
+  }
 
-    .search {
-      margin-top: 0.2rem;
+  .category-list button:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 72%, transparent);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 700px) {
+    .search-results a,
+    .category-list button {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.2rem;
     }
   }
 </style>
-
