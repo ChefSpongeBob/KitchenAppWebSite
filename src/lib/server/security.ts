@@ -24,52 +24,61 @@ export type SessionSummary = {
 };
 
 let securitySchemaEnsured = false;
+let securitySchemaPromise: Promise<void> | null = null;
 
 export async function ensureSecuritySchema(db: D1) {
   if (securitySchemaEnsured) return;
+  if (securitySchemaPromise) {
+    await securitySchemaPromise;
+    return;
+  }
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS security_rate_limits (
-        key_hash TEXT PRIMARY KEY,
-        action TEXT NOT NULL,
-        window_start INTEGER NOT NULL,
-        count INTEGER NOT NULL,
-        blocked_until INTEGER,
-        last_seen_at INTEGER NOT NULL
+  securitySchemaPromise = (async () => {
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS security_rate_limits (
+          key_hash TEXT PRIMARY KEY,
+          action TEXT NOT NULL,
+          window_start INTEGER NOT NULL,
+          count INTEGER NOT NULL,
+          blocked_until INTEGER,
+          last_seen_at INTEGER NOT NULL
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS account_audit_logs (
-        id TEXT PRIMARY KEY,
-        business_id TEXT,
-        actor_user_id TEXT,
-        target_user_id TEXT,
-        action TEXT NOT NULL,
-        email_hash TEXT,
-        ip_hash TEXT,
-        user_agent_hash TEXT,
-        metadata_json TEXT NOT NULL DEFAULT '{}',
-        created_at INTEGER NOT NULL
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS account_audit_logs (
+          id TEXT PRIMARY KEY,
+          business_id TEXT,
+          actor_user_id TEXT,
+          target_user_id TEXT,
+          action TEXT NOT NULL,
+          email_hash TEXT,
+          ip_hash TEXT,
+          user_agent_hash TEXT,
+          metadata_json TEXT NOT NULL DEFAULT '{}',
+          created_at INTEGER NOT NULL
+        )
+        `
       )
-      `
-    )
-    .run();
+      .run();
 
-  await db
-    .prepare(`CREATE INDEX IF NOT EXISTS idx_security_rate_limits_action_seen ON security_rate_limits(action, last_seen_at)`)
-    .run();
-  await db
-    .prepare(`CREATE INDEX IF NOT EXISTS idx_account_audit_logs_business_created ON account_audit_logs(business_id, created_at DESC)`)
-    .run();
+    await db
+      .prepare(`CREATE INDEX IF NOT EXISTS idx_security_rate_limits_action_seen ON security_rate_limits(action, last_seen_at)`)
+      .run();
+    await db
+      .prepare(`CREATE INDEX IF NOT EXISTS idx_account_audit_logs_business_created ON account_audit_logs(business_id, created_at DESC)`)
+      .run();
 
-  securitySchemaEnsured = true;
+    securitySchemaEnsured = true;
+  })();
+
+  await securitySchemaPromise;
 }
 
 export function getRequestIpAddress(request: Request, getClientAddress?: (() => string) | null) {

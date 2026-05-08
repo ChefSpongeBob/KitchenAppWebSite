@@ -1,4 +1,5 @@
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { hashSessionToken, verifyPassword } from '$lib/server/auth';
 import {
 	getSessionCookieDeleteOptions,
@@ -13,7 +14,7 @@ import {
 	clearRateLimit,
 	getRequestIpAddress,
 	rateLimitFailure,
-	writeAuditLog
+	writeAuditLogSafe
 } from '$lib/server/security';
 import type { PageServerLoad } from './$types';
 
@@ -124,7 +125,7 @@ export const actions: Actions = {
 		await revokeActiveSession(locals.DB, cookies, request);
 		throw redirect(303, '/login?switch=1');
 	},
-	default: async ({ request, cookies, locals, getClientAddress }) => {
+	login: async ({ request, cookies, locals, getClientAddress }) => {
 		let email = '';
 		try {
 			const formData = await request.formData();
@@ -142,25 +143,30 @@ export const actions: Actions = {
 			}
 
 			const ipAddress = getRequestIpAddress(request, getClientAddress);
-			const [ipLimit, emailLimit] = await Promise.all([
-				checkRateLimit(db, {
+			let ipLimit = { allowed: true, retryAfterSeconds: 0 };
+			let emailLimit = { allowed: true, retryAfterSeconds: 0 };
+			try {
+				ipLimit = await checkRateLimit(db, {
 					action: 'login_ip',
 					identifier: ipAddress,
 					limit: 20,
 					windowSeconds: 15 * 60,
 					blockSeconds: 15 * 60
-				}),
-				checkRateLimit(db, {
+				});
+				emailLimit = await checkRateLimit(db, {
 					action: 'login_email',
 					identifier: email,
 					limit: 8,
 					windowSeconds: 15 * 60,
 					blockSeconds: 15 * 60
-				})
-			]);
+				});
+			} catch (error) {
+				if (!dev) throw error;
+				console.warn('Local login rate limit skipped:', error instanceof Error ? error.message : String(error));
+			}
 
 			if (!ipLimit.allowed || !emailLimit.allowed) {
-				await writeAuditLog(db, {
+				await writeAuditLogSafe(db, {
 					action: 'login_rate_limited',
 					request,
 					getClientAddress,
@@ -211,7 +217,7 @@ export const actions: Actions = {
 						}>();
 
 			if (!user || !user.password_hash) {
-				await writeAuditLog(db, {
+				await writeAuditLogSafe(db, {
 					action: 'login_failed_unknown_user',
 					request,
 					getClientAddress,
@@ -220,7 +226,7 @@ export const actions: Actions = {
 				return fail(400, { error: GENERIC_LOGIN_ERROR, email });
 			}
 			if (hasIsActive && user.is_active !== 1) {
-				await writeAuditLog(db, {
+				await writeAuditLogSafe(db, {
 					action: 'login_blocked_inactive_user',
 					request,
 					getClientAddress,
@@ -232,7 +238,7 @@ export const actions: Actions = {
 
 			const passwordCheck = await verifyPassword(password, user.password_hash);
 			if (!passwordCheck.valid) {
-				await writeAuditLog(db, {
+				await writeAuditLogSafe(db, {
 					action: 'login_failed_bad_password',
 					request,
 					getClientAddress,
@@ -329,7 +335,7 @@ export const actions: Actions = {
 
 			await Promise.all([
 				clearRateLimit(db, 'login_email', email),
-				writeAuditLog(db, {
+				writeAuditLogSafe(db, {
 					action: 'login_success',
 					request,
 					getClientAddress,
@@ -350,7 +356,7 @@ export const actions: Actions = {
 			if (message.includes('D1_ERROR: no such table')) {
 				return fail(503, { error: 'Sign in is temporarily unavailable while the workspace finishes setup.', email: '' });
 			}
-			return fail(500, { error: 'Sign in failed. Please try again.', email });
+			return fail(500, { error: dev ? `Local sign in failed: ${message}` : 'Sign in failed. Please try again.', email });
 		}
 	}
 };

@@ -49,7 +49,7 @@
 	supportText=""
 >
 	<div class="auth-stack">
-		<form method="POST" class="auth-form">
+		<form method="POST" action="?/login" class="auth-form">
 			<div class="auth-form-head">
 				<h2>Sign in</h2>
 			</div>
