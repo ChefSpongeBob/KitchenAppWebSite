@@ -2,6 +2,37 @@
 -- These mirror the runtime guards in src/lib/server/tenant.ts so a fresh deploy
 -- starts with business-owned data indexed by business_id.
 
+ALTER TABLE todos ADD COLUMN business_id TEXT;
+ALTER TABLE todo_assignments ADD COLUMN business_id TEXT;
+ALTER TABLE todo_completion_log ADD COLUMN business_id TEXT;
+ALTER TABLE recipes ADD COLUMN business_id TEXT;
+ALTER TABLE documents ADD COLUMN business_id TEXT;
+ALTER TABLE whiteboard_posts ADD COLUMN business_id TEXT;
+ALTER TABLE whiteboard_review ADD COLUMN business_id TEXT;
+ALTER TABLE whiteboard_votes ADD COLUMN business_id TEXT;
+ALTER TABLE list_sections ADD COLUMN business_id TEXT;
+ALTER TABLE list_items ADD COLUMN business_id TEXT;
+ALTER TABLE checklist_sections ADD COLUMN business_id TEXT;
+ALTER TABLE checklist_items ADD COLUMN business_id TEXT;
+ALTER TABLE announcements ADD COLUMN business_id TEXT;
+ALTER TABLE employee_spotlight ADD COLUMN business_id TEXT;
+ALTER TABLE daily_specials ADD COLUMN business_id TEXT;
+ALTER TABLE daily_specials_editors ADD COLUMN business_id TEXT;
+ALTER TABLE meeting_notes ADD COLUMN business_id TEXT;
+ALTER TABLE sensor_nodes ADD COLUMN business_id TEXT;
+ALTER TABLE temps ADD COLUMN business_id TEXT;
+ALTER TABLE camera_events ADD COLUMN business_id TEXT;
+ALTER TABLE camera_sources ADD COLUMN business_id TEXT;
+ALTER TABLE schedule_shifts ADD COLUMN business_id TEXT;
+ALTER TABLE schedule_week_team ADD COLUMN business_id TEXT;
+ALTER TABLE schedule_shift_offers ADD COLUMN business_id TEXT;
+ALTER TABLE schedule_preferences ADD COLUMN business_id TEXT;
+ALTER TABLE schedule_role_definitions ADD COLUMN business_id TEXT;
+ALTER TABLE schedule_departments ADD COLUMN business_id TEXT;
+ALTER TABLE user_schedule_departments ADD COLUMN business_id TEXT;
+ALTER TABLE user_schedule_availability ADD COLUMN business_id TEXT;
+ALTER TABLE user_schedule_time_off_requests ADD COLUMN business_id TEXT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_profiles_business_user
 ON employee_profiles(business_id, user_id);
 

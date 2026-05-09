@@ -1,5 +1,25 @@
 {
 	"name": "criminikitchenapp",
 	"compatibility_date": "2026-02-07",
-	"pages_build_output_dir": ".svelte-kit/cloudflare"
+	"pages_build_output_dir": ".svelte-kit/cloudflare",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "crimini-production",
+			"database_id": "ae576972-bfc0-49fa-8fa2-80ddcffa2f5c"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "DOC_MEDIA",
+			"bucket_name": "crimini-doc-media"
+		},
+		{
+			"binding": "CAMERA_MEDIA",
+			"bucket_name": "crimini-camera-media"
+		}
+	],
+	"vars": {
+		"APP_BASE_URL": "https://criminiops.com"
+	}
 }

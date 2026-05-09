@@ -36,7 +36,7 @@ SELECT
   email,
   lower(email),
   password_hash,
-  username,
+  display_name,
   1,
   NULL,
   created_at,
