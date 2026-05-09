@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 
 	type WorkflowStep = {
@@ -256,7 +256,7 @@
 		<p class="eyebrow">How It Works</p>
 		<h1>One clear operations flow for your whole team.</h1>
 		<p>
-			SoftwareKitchenNNS keeps setup, scheduling, daily execution, and service visibility connected.
+			Crimini keeps setup, scheduling, daily execution, and service visibility connected.
 		</p>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Free Trial</a>
@@ -529,20 +529,25 @@
 	.tour-preview-shell {
 		display: grid;
 		gap: 0.45rem;
+		justify-items: center;
 	}
 
 	.tour-stage {
 		position: relative;
+		width: min(100%, 32rem);
+		aspect-ratio: 16 / 10;
 		border-radius: 14px;
 		overflow: hidden;
 		border: 1px solid var(--color-border);
-		background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+		background: #ffffff;
 	}
 
 	.tour-stage img {
 		display: block;
 		width: 100%;
-		height: auto;
+		height: 100%;
+		object-fit: contain;
+		background: #ffffff;
 	}
 
 	.focus-ring {
@@ -559,6 +564,7 @@
 		grid-template-columns: auto 1fr auto;
 		align-items: center;
 		gap: 0.45rem;
+		width: min(100%, 32rem);
 	}
 
 	.scene-nav p {
@@ -585,6 +591,7 @@
 		display: grid;
 		gap: 0.35rem;
 		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+		width: min(100%, 32rem);
 	}
 
 	.target-tabs button {
@@ -606,6 +613,7 @@
 	}
 
 	.target-copy {
+		width: min(100%, 32rem);
 		padding-block: 0.62rem;
 		border-block: 1px solid var(--color-divider);
 	}
@@ -626,6 +634,7 @@
 		display: grid;
 		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 0.3rem;
+		width: min(100%, 32rem);
 	}
 
 	.scene-progress button {

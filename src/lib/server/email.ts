@@ -1,4 +1,4 @@
-type EmailEnv = Partial<App.Platform['env']> & {
+﻿type EmailEnv = Partial<App.Platform['env']> & {
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   RESEND_REPLY_TO_EMAIL?: string;
@@ -81,7 +81,7 @@ export async function sendTransactionalEmail({
       headers: {
         Authorization: `Bearer ${env?.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'KitchenApp/1.0',
+        'User-Agent': 'Crimini/1.0',
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
       },
       body: JSON.stringify({
@@ -149,10 +149,10 @@ export async function sendInviteEmail({
   return sendTransactionalEmail({
     env,
     to: inviteeEmail,
-    subject: 'You have been invited to KitchenApp',
+    subject: 'You have been invited to Crimini',
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
-        <h2 style="margin-bottom: 0.5rem;">You have been invited to KitchenApp</h2>
+        <h2 style="margin-bottom: 0.5rem;">You have been invited to Crimini</h2>
         <p>An admin created an invite for this email address.</p>
         <p>Use this invite code when you register:</p>
         <p style="font-size: 1.1rem; font-weight: 700; letter-spacing: 0.06em;">${safeCode}</p>
@@ -165,7 +165,7 @@ export async function sendInviteEmail({
       </div>
     `,
     text: [
-      'You have been invited to KitchenApp.',
+      'You have been invited to Crimini.',
       '',
       `Invite code: ${inviteCode}`,
       `Register here: ${registerUrl}`,
@@ -196,12 +196,12 @@ export async function sendApprovalEmail({
   return sendTransactionalEmail({
     env,
     to: userEmail,
-    subject: 'Your KitchenApp access has been approved',
+    subject: 'Your Crimini access has been approved',
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
         <h2 style="margin-bottom: 0.5rem;">Your access has been approved</h2>
         <p>Hi ${safeName},</p>
-        <p>Your KitchenApp account is now approved and ready to use.</p>
+        <p>Your Crimini account is now approved and ready to use.</p>
         <p>
           Sign in here:
           <a href="${safeLoginUrl}">${safeLoginUrl}</a>
@@ -211,7 +211,7 @@ export async function sendApprovalEmail({
     text: [
       `Hi ${displayName?.trim() || 'there'},`,
       '',
-      'Your KitchenApp account is now approved and ready to use.',
+      'Your Crimini account is now approved and ready to use.',
       `Sign in here: ${loginUrl}`
     ].join('\n'),
     idempotencyKey: `approval/${userEmail.toLowerCase()}`
@@ -239,12 +239,12 @@ export async function sendPasswordResetEmail({
   return sendTransactionalEmail({
     env,
     to: userEmail,
-    subject: 'Reset your KitchenApp password',
+    subject: 'Reset your Crimini password',
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
         <h2 style="margin-bottom: 0.5rem;">Reset your password</h2>
         <p>Hi ${safeName},</p>
-        <p>Use the link below to set a new password for your KitchenApp account.</p>
+        <p>Use the link below to set a new password for your Crimini account.</p>
         <p>
           <a href="${safeResetUrl}">${safeResetUrl}</a>
         </p>
@@ -254,7 +254,7 @@ export async function sendPasswordResetEmail({
     text: [
       `Hi ${displayName?.trim() || 'there'},`,
       '',
-      'Use this link to reset your KitchenApp password:',
+      'Use this link to reset your Crimini password:',
       resetUrl,
       '',
       'This link expires in 2 hours.'

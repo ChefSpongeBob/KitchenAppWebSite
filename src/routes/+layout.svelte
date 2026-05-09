@@ -242,11 +242,11 @@
       currentPath.startsWith(`${prefix}/`) ||
       currentPath.startsWith("/app")
   );
-  $: showRouteSplash =
-    Boolean(data.user) &&
-    Boolean($navigating) &&
-    Boolean(navTargetPath) &&
-    !navTargetPath.startsWith("/register");
+  $: routeSplashTargetPath = navTargetPath || currentPath;
+  $: isRouteSplashMarketing =
+    marketingExactRoutes.has(routeSplashTargetPath) ||
+    marketingPrefixRoutes.some((prefix) => routeSplashTargetPath.startsWith(prefix));
+  $: showRouteSplash = Boolean($navigating) && Boolean(navTargetPath) && !navTargetPath.startsWith("/register");
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
   $: filteredPrimaryNav = primaryNav.filter((item) => canSeeFeature(item.featureKey));
   $: visibleAdminControlGroups = adminControlGroups
@@ -340,7 +340,7 @@
   <meta name="theme-color" content="#10141b" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Kitchen Hub" />
+  <meta name="apple-mobile-web-app-title" content="Crimini" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-touch-fullscreen" content="yes" />
 </svelte:head>
@@ -350,11 +350,7 @@
   <header class="marketing-header">
     <div class="marketing-shell">
       <a href="/" class="marketing-brand">
-        <img src="/kitchen-icons/whisk.svg" alt="" aria-hidden="true" class="marketing-brand-icon" />
-        <div class="marketing-brand-copy">
-          <strong>SoftwareKitchenNNS</strong>
-          <small>Kitchen Operations Platform</small>
-        </div>
+        <img src="/crimini-mushrooms.svg" alt="Crimini" class="marketing-brand-logo" />
       </a>
 
       <nav class="marketing-nav" aria-label="Primary navigation">
@@ -364,14 +360,6 @@
       </nav>
 
       <div class="marketing-actions">
-        <button
-          class="theme-toggle marketing-theme tap"
-          on:click={toggleTheme}
-          aria-label={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          title={themeMode === "dark" ? "Light mode" : "Dark mode"}
-        >
-          <span class="material-icons">{themeMode === "dark" ? "light_mode" : "dark_mode"}</span>
-        </button>
         <a href="/login" class="marketing-btn marketing-btn-ghost">Sign In</a>
         <a href="/register#onboarding-slideshow" class="marketing-btn marketing-btn-primary">Start Free</a>
         <button
@@ -404,7 +392,7 @@
     on:click={toggleSidebar}
     aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
   >
-    <img class="menu-icon" src="/kitchen-icons/burger.svg" alt="" aria-hidden="true" />
+    <img class="menu-icon" src="/crimini-mark.svg" alt="" aria-hidden="true" />
   </button>
 
   <button
@@ -435,10 +423,10 @@
         {#if data.user?.businessLogoUrl}
           <img src={data.user.businessLogoUrl} alt="" aria-hidden="true" class="brand-mark brand-mark-image" />
         {:else}
-          <span class="brand-mark">K</span>
+          <span class="brand-mark">C</span>
         {/if}
         <div class="brand-copy">
-          <strong>{data.user?.businessName?.trim() || 'Kitchen Hub'}</strong>
+          <strong>{data.user?.businessName?.trim() || 'Crimini'}</strong>
           <small>Service Workspace</small>
         </div>
         {#if userBusinesses.length > 1}
@@ -507,9 +495,12 @@
   {#if showRouteSplash}
     <div class="route-splash" role="status" aria-live="polite">
       <div class="route-splash-inner">
-        <img src="/favicon-splash.svg" alt="" aria-hidden="true" class="route-splash-logo" />
-        <p class="route-splash-copy">Prepping...</p>
-        <div class="route-splash-loader" aria-hidden="true"></div>
+        {#if isRouteSplashMarketing}
+          <img src="/crimini-full-logo.jpg" alt="Crimini" class="route-splash-logo route-splash-logo-marketing" />
+        {:else}
+          <img src={data.user?.businessLogoUrl || "/favicon-splash.svg"} alt="" aria-hidden="true" class="route-splash-logo" />
+          <p class="route-splash-copy">Prepping...</p>
+        {/if}
       </div>
     </div>
   {/if}
@@ -522,10 +513,10 @@
     <div class="footer-shell">
       <div class="footer-top">
         <div class="footer-brand">
-          <img src="/kitchen-icons/whisk.svg" alt="" aria-hidden="true" class="footer-logo" />
+          <img src="/crimini-mushrooms.svg" alt="" aria-hidden="true" class="footer-logo" />
           <div class="footer-brand-copy">
-            <strong>{isMarketingRoute ? "SoftwareKitchenNNS" : "Kitchen Hub"}</strong>
-            <span class="footer-version">{isMarketingRoute ? "Platform Preview" : "Boilerplate v1.0"}</span>
+            <strong>Crimini</strong>
+            <span class="footer-version">by NNS, LLC</span>
           </div>
         </div>
       </div>
@@ -555,7 +546,7 @@
         {/if}
       </nav>
       <div class="footer-bottom">
-        <span>&copy; 2026 {isMarketingRoute ? "SoftwareKitchenNNS" : "Kitchen Hub"}</span>
+        <span>&copy; 2026 Crimini by NNS, LLC</span>
         <span>{isMarketingRoute ? "Built for modern kitchen teams" : "Built for connected kitchen operations"}</span>
       </div>
     </div>
@@ -598,28 +589,55 @@
   }
 
   .app-shell.marketing-app::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 28%),
-      radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 32%),
-      radial-gradient(circle at 52% 100%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 36%);
-    z-index: 0;
+    content: none;
+    display: none;
   }
 
   .app-shell.marketing-app::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 32px 32px;
-    opacity: 0.09;
-    z-index: 0;
+    content: none;
+    display: none;
+  }
+
+  :global(html:has(.app-shell.marketing-app)),
+  :global(body:has(.app-shell.marketing-app)) {
+    --color-primary: #111214;
+    --color-primary-contrast: #ffffff;
+    --color-primary-soft: rgba(17, 18, 20, 0.08);
+    --color-accent: #8f826e;
+    --color-bg: #ffffff;
+    --color-bg-elevated: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f8f4ec;
+    --color-surface-soft: #f3eee5;
+    --color-text: #111214;
+    --color-text-muted: rgba(17, 18, 20, 0.62);
+    --color-text-soft: rgba(17, 18, 20, 0.76);
+    --color-border: rgba(17, 18, 20, 0.14);
+    --color-divider: rgba(17, 18, 20, 0.1);
+    --surface-outline: 1px solid rgba(17, 18, 20, 0.14);
+    --surface-wash: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
+    --shadow-xs: 0 1px 2px rgba(17, 18, 20, 0.04);
+    --shadow-sm: 0 8px 22px rgba(17, 18, 20, 0.06);
+    --shadow-md: 0 18px 42px rgba(17, 18, 20, 0.08);
+    --shadow-glow: 0 1px 2px rgba(17, 18, 20, 0.04), 0 18px 42px rgba(17, 18, 20, 0.08);
+    background: #ffffff !important;
+    background-image: none !important;
+    color-scheme: light;
+  }
+
+  :global(body:has(.app-shell.marketing-app)::before),
+  :global(body:has(.app-shell.marketing-app)::after) {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    opacity: 0 !important;
+  }
+
+  .app-shell.marketing-app,
+  .marketing-header,
+  .marketing-footer {
+    background: #ffffff;
+    color: #111214;
   }
 
   .route-splash {
@@ -628,12 +646,8 @@
     z-index: 1500;
     display: grid;
     place-items: center;
-    background:
-      radial-gradient(circle at 16% 12%, rgba(132, 146, 166, 0.12), transparent 30%),
-      radial-gradient(circle at top, rgba(132, 146, 166, 0.16), transparent 38%),
-      radial-gradient(circle at bottom, rgba(148, 163, 184, 0.09), transparent 34%),
-      linear-gradient(180deg, #141821, #0f131a);
-    backdrop-filter: blur(6px);
+    background: #ffffff;
+    backdrop-filter: none;
   }
 
   .route-splash-inner {
@@ -648,46 +662,20 @@
     width: min(220px, 58vw);
     height: auto;
     display: block;
-    filter:
-      brightness(0) saturate(100%) invert(92%) sepia(23%) saturate(189%) hue-rotate(327deg) brightness(109%) contrast(93%)
-      drop-shadow(0 10px 24px rgba(0, 0, 0, 0.24));
+    filter: drop-shadow(0 10px 24px rgba(17, 18, 20, 0.1));
+  }
+
+  .route-splash-logo-marketing {
+    width: min(360px, 76vw);
   }
 
   .route-splash-copy {
     margin: 0;
-    color: #f3f7fd;
+    color: #111214;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     font-size: 0.74rem;
     font-weight: 700;
-  }
-
-  .route-splash-loader {
-    width: 140px;
-    height: 3px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
-    overflow: hidden;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
-  }
-
-  .route-splash-loader::after {
-    content: "";
-    display: block;
-    width: 44%;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, rgba(148, 163, 184, 0.72), rgba(132, 146, 166, 0.95));
-    animation: route-splash-load 1.1s ease-in-out infinite;
-  }
-
-  @keyframes route-splash-load {
-    0% {
-      transform: translateX(-120%);
-    }
-    100% {
-      transform: translateX(320%);
-    }
   }
 
   .app-content {
@@ -707,6 +695,8 @@
     max-width: 1200px;
     display: grid;
     gap: clamp(0.85rem, 2.2vw, 1.45rem);
+    background: #ffffff;
+    color: #111214;
   }
 
   .app-content.onboarding-content {
@@ -752,10 +742,10 @@
     left: 0;
     right: 0;
     z-index: 1100;
-    padding: calc(0.42rem + var(--safe-top)) 0.75rem 0.34rem;
-    background: color-mix(in srgb, var(--color-bg) 92%, black 8%);
-    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
-    backdrop-filter: blur(10px);
+    padding: calc(0.5rem + var(--safe-top)) 0.75rem 0.42rem;
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom: 1px solid rgba(17, 18, 20, 0.12);
+    backdrop-filter: blur(12px);
   }
 
   .marketing-shell {
@@ -780,29 +770,11 @@
     color: inherit;
   }
 
-  .marketing-brand-icon {
-    width: 1.75rem;
-    height: 1.75rem;
-    opacity: 0.92;
-  }
-
-  .marketing-brand-copy {
-    display: grid;
-    gap: 0.08rem;
-  }
-
-  .marketing-brand-copy strong {
-    color: var(--color-text);
-    font-size: 0.9rem;
-    letter-spacing: -0.01em;
-    line-height: 1.1;
-  }
-
-  .marketing-brand-copy small {
-    color: var(--color-text-muted);
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  .marketing-brand-logo {
+    width: 3.15rem;
+    height: auto;
+    display: block;
+    opacity: 0.98;
   }
 
   .marketing-nav {
@@ -815,19 +787,21 @@
 
   .marketing-nav a {
     text-decoration: none;
-    color: var(--color-text-muted);
+    color: rgba(17, 18, 20, 0.62);
     border: 1px solid transparent;
-    border-radius: 999px;
-    padding: 0.32rem 0.62rem;
-    font-size: 0.8rem;
+    border-radius: 0;
+    padding: 0.34rem 0.62rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
   }
 
   .marketing-nav a:hover,
   .marketing-nav a.active {
-    color: var(--color-text);
-    border-color: color-mix(in srgb, var(--color-border) 84%, transparent);
-    background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+    color: #111214;
+    border-bottom-color: #111214;
+    background: transparent;
   }
 
   .marketing-actions {
@@ -838,37 +812,29 @@
 
   .marketing-btn {
     text-decoration: none;
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-    padding: 0.42rem 0.7rem;
-    font-size: 0.8rem;
+    border-radius: 0;
+    border: 1px solid rgba(17, 18, 20, 0.18);
+    padding: 0.44rem 0.72rem;
+    font-size: 0.78rem;
     font-weight: var(--weight-semibold);
-    color: var(--color-text);
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    color: #111214;
+    background: transparent;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .marketing-btn-primary {
-    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
-    background:
-      linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.1)),
-      color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
-  }
-
-  .marketing-theme {
-    position: static;
-    inset: auto;
-    width: 2.2rem;
-    height: 2.2rem;
-    box-shadow: none;
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    border-color: #111214;
+    background: #111214;
+    color: #ffffff;
   }
 
   .marketing-menu-btn {
     display: none;
-    border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
-    color: var(--color-text);
-    border-radius: 10px;
+    border: 1px solid rgba(17, 18, 20, 0.18);
+    background: transparent;
+    color: #111214;
+    border-radius: 0;
     width: 2.2rem;
     height: 2.2rem;
     align-items: center;
@@ -878,9 +844,9 @@
   .marketing-mobile-menu {
     width: min(1200px, 100%);
     margin: 0.45rem auto 0;
-    border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    border: 1px solid rgba(17, 18, 20, 0.12);
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.96);
     padding: 0.42rem;
     display: grid;
     gap: 0.3rem;
@@ -888,16 +854,18 @@
 
   .marketing-mobile-menu a {
     text-decoration: none;
-    color: var(--color-text);
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    color: #111214;
+    border-radius: 0;
+    border: 1px solid rgba(17, 18, 20, 0.12);
+    background: #ffffff;
     padding: 0.5rem 0.62rem;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .marketing-mobile-menu a.active {
-    border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
+    border-color: #111214;
   }
 
   .marketing-mobile-cta {
@@ -908,10 +876,9 @@
   }
 
   .marketing-mobile-cta a.primary {
-    border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
-    background:
-      linear-gradient(180deg, rgba(122, 132, 148, 0.24), rgba(122, 132, 148, 0.1)),
-      color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+    border-color: #111214;
+    background: #111214;
+    color: #ffffff;
   }
 
   /* ===== Hamburger ===== */
@@ -941,14 +908,9 @@
   }
 
   .menu-icon {
-    width: 1.42rem;
-    height: 1.42rem;
+    width: 1.72rem;
+    height: 1.22rem;
     object-fit: contain;
-    filter: brightness(0) saturate(100%) invert(95%) sepia(12%) saturate(308%) hue-rotate(296deg) brightness(111%) contrast(94%);
-  }
-
-  :global(html[data-theme='light']) .menu-icon {
-    filter: brightness(0) saturate(100%) invert(14%) sepia(11%) saturate(1188%) hue-rotate(175deg) brightness(95%) contrast(89%);
   }
 
   .theme-toggle {
@@ -1394,8 +1356,8 @@
       padding: 0.42rem 0.5rem;
     }
 
-    .marketing-brand-copy small {
-      display: none;
+    .marketing-brand-logo {
+      width: 2.45rem;
     }
 
     .marketing-nav,

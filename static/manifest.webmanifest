@@ -1,8 +1,8 @@
-{
-  "name": "Kitchen Hub",
-  "short_name": "KitchenHub",
+﻿{
+  "name": "Crimini",
+  "short_name": "Crimini",
   "id": "/",
-  "description": "Kitchen operations workspace",
+  "description": "Restaurant operations workspace by NNS, LLC",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -25,5 +25,3 @@
     }
   ]
 }
-
-

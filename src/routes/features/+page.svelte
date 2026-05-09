@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 
 	type CapabilityRow = {
@@ -20,7 +20,7 @@
 	const serviceModes = ['Front of House', 'Sushi', 'Kitchen', 'Cross-department managers', 'Multi-role staff'];
 	const missionPoints = [
 		'Built around real shift workflows instead of disconnected tools.',
-		'Combines scheduling, execution, and communication in one workspace.',
+		'Combines scheduling, labor visibility, execution, and communication in one workspace.',
 		'Designed for fast scanning and low-friction daily usage.'
 	];
 
@@ -42,15 +42,32 @@
 		{
 			title: 'Scheduling and Management Control',
 			summary:
-				'Build weekly coverage, publish updates quickly, and manage users and permissions from admin without jumping across tools.',
+				'Build weekly coverage across departments, track labor, route shift changes through approval, and manage users from admin without jumping across tools.',
 			items: [
-				'Department-based schedule builder',
+				'Multi-department schedule builder',
 				'My schedule employee day view',
-				'Role-aware admin controls and approvals',
-				'Temperature and monitoring visibility'
+				'Employee shift offers and swap requests',
+				'Manager approval for schedule changes',
+				'Labor tracking and coverage visibility',
+				'Role-aware admin controls'
 			],
 			image: '/marketing/app/admin-dashboard.png',
 			alt: 'Admin dashboard with operations controls',
+			position: 'top center'
+		},
+		{
+			title: 'Employee Shift Flow',
+			summary:
+				'Give staff a clear place to see their schedule, offer shifts, request swaps, and keep managers in control of final approvals.',
+			items: [
+				'Published shifts visible from My Schedule',
+				'Offer available shifts to eligible employees',
+				'Request shift swaps without side conversations getting lost',
+				'Manager review before changes affect the live schedule',
+				'Department and role context stays attached to each shift'
+			],
+			image: '/marketing/app/scheduling-builder.png',
+			alt: 'Schedule builder interface with shift controls',
 			position: 'top center'
 		}
 	];
@@ -63,7 +80,31 @@
 			enterprise: 'Included'
 		},
 		{
+			module: 'Multi-department scheduling',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Labor tracking + coverage visibility',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
 			module: 'My Schedule (employee day view)',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Shift offers + shift swaps',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Manager approval for schedule changes',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
@@ -107,7 +148,7 @@
 		<p class="eyebrow">Features</p>
 		<h1>Core workflows for cleaner daily kitchen operations.</h1>
 		<p class="head-copy">
-			SoftwareKitchenNNS keeps scheduling, execution, communication, and monitoring in one operating flow.
+			Crimini keeps scheduling, labor tracking, shift changes, execution, communication, and monitoring in one operating flow.
 		</p>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Trial</a>

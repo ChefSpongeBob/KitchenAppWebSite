@@ -1,9 +1,9 @@
-{
+﻿{
   "appId": "com.nexusnorthsystems.kitchen",
-  "appName": "Kitchen",
+  "appName": "Crimini",
   "webDir": "build",
   "loggingBehavior": "none",
-  "appendUserAgent": " KitchenNative/2.1 Capacitor",
+  "appendUserAgent": " CriminiNative/1.0 Capacitor",
   "zoomEnabled": false,
   "initialFocus": true,
   "backgroundColor": "#121315",

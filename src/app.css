@@ -1,4 +1,4 @@
-/* =========================================================
+﻿/* =========================================================
    ROOT TOKENS
    ========================================================= */
 :root {
@@ -247,15 +247,15 @@ body::before {
   z-index: 0;
   opacity: 0.075;
   background-image:
-    url("/kitchen-icons/burger.svg"),
+    url("/crimini-mark.svg"),
     url("/kitchen-icons/chicken-leg.svg"),
     url("/kitchen-icons/fries.svg"),
     url("/kitchen-icons/whisk.svg"),
     url("/kitchen-icons/knife.svg"),
-    url("/kitchen-icons/burger.svg"),
+    url("/crimini-mark.svg"),
     url("/kitchen-icons/fries.svg");
   background-repeat: no-repeat;
-  background-size: 84px auto, 82px auto, 62px auto, 72px auto, 98px auto, 78px auto, 56px auto;
+  background-size: 92px auto, 82px auto, 62px auto, 72px auto, 98px auto, 86px auto, 56px auto;
   background-position:
     left 2.5rem top 8rem,
     right 2.5rem top 13rem,

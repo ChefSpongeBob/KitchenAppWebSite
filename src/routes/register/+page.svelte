@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { onMount } from 'svelte';
 
@@ -288,6 +288,11 @@
 />
 
 <section class="tour-shell" id="onboarding-slideshow" aria-label="Signup onboarding slideshow">
+	<a class="tour-home-link" href="/" aria-label="Return to homepage">
+		<span aria-hidden="true">&lt;</span>
+		Home
+	</a>
+
 	<div class="tour-bg" aria-hidden="true">
 		{#if activeSlide.background.kind === 'video'}
 			<video autoplay muted loop playsinline>
@@ -379,7 +384,7 @@
 									aria-pressed={planTier === 'large'}
 								>
 									<strong>Large</strong>
-									<p class="tier-price">$275/mo</p>
+									<p class="tier-price">$160/mo</p>
 									<ul class="tier-features">
 										<li>Up to 250 employees</li>
 										<li>Full platform + multi-team scale</li>
@@ -690,7 +695,7 @@
 								value="1"
 								required
 							/>
-							<span>I agree to the NexusNorthSystems LLC liability release agreement.</span>
+							<span>I agree to the Crimini by NNS, LLC liability release agreement.</span>
 						</label>
 
 						<button type="submit" class="primary submit-btn">Create account</button>
@@ -769,6 +774,32 @@
 	.tour-main {
 		position: relative;
 		z-index: 2;
+	}
+
+	.tour-home-link {
+		position: fixed;
+		top: max(0.9rem, calc(var(--safe-top) + 0.72rem));
+		left: max(0.9rem, calc(var(--safe-left) + 0.9rem));
+		z-index: 5;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.42rem;
+		text-decoration: none;
+		border: 1px solid rgba(17, 18, 20, 0.16);
+		background: rgba(255, 255, 255, 0.86);
+		color: #111214;
+		padding: 0.48rem 0.68rem;
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		backdrop-filter: blur(8px);
+		box-shadow: 0 10px 28px rgba(17, 18, 20, 0.08);
+	}
+
+	.tour-home-link:hover {
+		border-color: rgba(17, 18, 20, 0.42);
+		background: #ffffff;
 	}
 
 	.tour-main {
@@ -1298,6 +1329,153 @@
 		border: 1px solid rgba(213, 230, 249, 0.65);
 		color: #f1f7ff;
 		font-weight: 700;
+	}
+
+	.tour-shell {
+		background: #ffffff;
+		color: #111214;
+	}
+
+	.tour-bg {
+		background: #ffffff;
+	}
+
+	.tour-bg img,
+	.tour-bg video {
+		filter: grayscale(0.06) saturate(0.72) contrast(1.06) brightness(1.08);
+		opacity: 1;
+	}
+
+	.tour-shade {
+		background:
+			linear-gradient(105deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.46) 34%, rgba(255, 255, 255, 0.2) 64%, rgba(255, 255, 255, 0.58) 100%),
+			radial-gradient(circle at 78% 44%, rgba(143, 130, 110, 0.13), transparent 44%);
+	}
+
+	.tour-copy h1,
+	.tier-showcase h2,
+	.payment-placeholder h2 {
+		font-family: Georgia, 'Times New Roman', serif;
+		font-weight: 400;
+		letter-spacing: -0.045em;
+		color: #111214;
+	}
+
+	.tour-description,
+	.tour-bullets li,
+	.agreement-toggle,
+	.invite-note,
+	.auth-note,
+	.purchase-mode-card span,
+	.addon-card span,
+	.tier-features li {
+		color: rgba(17, 18, 20, 0.68);
+	}
+
+	.tour-feedback.error {
+		color: #9f1f2b;
+	}
+
+	.tour-shot,
+	.tier-card,
+	.addon-card,
+	.purchase-mode-card,
+	.store-pref-card,
+	.payment-placeholder {
+		border-radius: 0;
+		border: 1px solid rgba(17, 18, 20, 0.16);
+		background: rgba(255, 255, 255, 0.88);
+		color: #111214;
+		box-shadow: 0 18px 44px rgba(17, 18, 20, 0.08);
+		backdrop-filter: blur(8px);
+	}
+
+	.tour-shot::before {
+		background: radial-gradient(circle at 18% 14%, rgba(143, 130, 110, 0.14), transparent 54%);
+	}
+
+	.tour-shot:hover,
+	.tier-card:hover,
+	.addon-card:hover,
+	.purchase-mode-card:hover,
+	.store-pref-card:hover {
+		box-shadow: 0 22px 46px rgba(17, 18, 20, 0.1);
+	}
+
+	.tour-shot img,
+	.tour-shot img.contain {
+		background: #ffffff;
+	}
+
+	.form-zone label {
+		color: rgba(17, 18, 20, 0.58);
+	}
+
+	.form-zone input {
+		border-radius: 0;
+		border: 1px solid rgba(17, 18, 20, 0.16);
+		background: rgba(255, 255, 255, 0.9);
+		color: #111214;
+	}
+
+	.form-zone input:focus {
+		border-color: rgba(17, 18, 20, 0.52);
+		box-shadow: 0 0 0 3px rgba(17, 18, 20, 0.08);
+	}
+
+	.plain-toggle,
+	.side-arrow {
+		border-radius: 0;
+		border: 1px solid rgba(17, 18, 20, 0.18);
+		background: rgba(255, 255, 255, 0.9);
+		color: #111214;
+	}
+
+	.side-arrow:hover {
+		background: #f8f4ec;
+		border-color: rgba(17, 18, 20, 0.42);
+	}
+
+	button.primary {
+		border-radius: 0;
+		border-color: #111214;
+		background: #111214;
+		color: #ffffff;
+	}
+
+	.tier-card strong,
+	.addon-card strong,
+	.purchase-mode-card strong,
+	.store-pref-card strong,
+	.tier-price,
+	.addon-card em {
+		color: #111214;
+	}
+
+	.tier-card.active,
+	.addon-card.active,
+	.purchase-mode-card.active,
+	.store-pref-card.active {
+		border-color: #111214;
+		background: #f8f4ec;
+		box-shadow:
+			0 0 0 1px #111214 inset,
+			0 20px 42px rgba(17, 18, 20, 0.1);
+	}
+
+	.tier-status,
+	.tier-card.active .tier-status,
+	.addon-card.active .tier-status {
+		color: rgba(17, 18, 20, 0.66);
+	}
+
+	.store-pref-badge {
+		border-color: rgba(17, 18, 20, 0.14);
+		background: #ffffff;
+	}
+
+	.auth-note a {
+		color: #111214;
 	}
 
 	.sr-only {

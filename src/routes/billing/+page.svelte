@@ -96,7 +96,7 @@
 					<select id="billing-plan" name="plan_tier" bind:value={selectedPlan}>
 						<option value="small">Small - $50/mo</option>
 						<option value="medium">Medium - $120/mo</option>
-						<option value="large">Large - $275/mo</option>
+						<option value="large">Large - $160/mo</option>
 					</select>
 
 					<label class="check">

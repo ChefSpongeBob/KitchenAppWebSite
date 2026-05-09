@@ -1,7 +1,7 @@
-<?xml version='1.0' encoding='utf-8'?>
+﻿<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Kitchen</string>
-    <string name="title_activity_main">Kitchen</string>
+    <string name="app_name">Crimini</string>
+    <string name="title_activity_main">Crimini</string>
     <string name="package_name">com.nexusnorthsystems.kitchen</string>
     <string name="custom_url_scheme">com.nexusnorthsystems.kitchen</string>
 </resources>

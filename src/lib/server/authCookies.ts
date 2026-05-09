@@ -1,6 +1,6 @@
-import { dev } from '$app/environment';
+﻿import { dev } from '$app/environment';
 
-const NATIVE_APP_MARKERS = ['KitchenNative/', 'Capacitor'];
+const NATIVE_APP_MARKERS = ['CriminiNative/', 'Capacitor'];
 
 export function isNativeAppRequest(request: Request) {
   const userAgent = request.headers.get('user-agent') ?? '';

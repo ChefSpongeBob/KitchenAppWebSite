@@ -1,4 +1,4 @@
-import { fail, redirect } from '@sveltejs/kit';
+﻿import { fail, redirect } from '@sveltejs/kit';
 import {
   ensureAnnouncementsSchema,
   getHomepageAnnouncementId,
@@ -3353,7 +3353,7 @@ export async function approveUser(
 
   const emailResult = await sendApprovalEmail({
     env,
-    origin: origin ?? 'https://nexusnorthsystems.com',
+    origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
     userEmail: approvedUser.email,
     displayName: approvedUser.display_name
   });
@@ -4065,7 +4065,7 @@ export async function createUserInvite(
 
   const emailResult = await sendInviteEmail({
     env,
-    origin: origin ?? 'https://nexusnorthsystems.com',
+    origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
     inviteeEmail: email,
     inviteCode,
     expiresAt

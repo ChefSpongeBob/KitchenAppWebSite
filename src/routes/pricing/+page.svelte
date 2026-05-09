@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 
 	const plans = [
@@ -29,7 +29,7 @@
 		},
 		{
 			name: 'Large',
-			price: '$275/mo',
+			price: '$160/mo',
 			target: 'Scaled service teams',
 			description: 'For high-capacity teams running full platform coverage.',
 			items: [
@@ -194,28 +194,48 @@
 </Layout>
 
 <style>
+	:global(body) {
+		background: #ffffff;
+		background-image: none;
+	}
+
+	:global(body::before) {
+		display: none;
+	}
+
+	:global(.app-content.marketing-content) {
+		color: #111214;
+		background: #ffffff;
+	}
+
 	.head {
 		display: grid;
 		gap: 0.45rem;
+		padding-bottom: 0.95rem;
+		border-bottom: 1px solid rgba(17, 18, 20, 0.14);
 	}
 
 	.eyebrow {
 		margin: 0;
 		font-size: 0.76rem;
-		letter-spacing: 0.1em;
+		letter-spacing: 0.18em;
 		text-transform: uppercase;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.58);
 	}
 
 	h1 {
 		margin: 0;
-		font-size: clamp(1.45rem, 3.6vw, 2.05rem);
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: clamp(1.65rem, 4vw, 2.65rem);
+		font-weight: 400;
 		line-height: 1.1;
+		letter-spacing: -0.045em;
+		color: #111214;
 	}
 
 	.head p {
 		margin: 0;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.64);
 		max-width: 66ch;
 		line-height: 1.5;
 	}
@@ -238,9 +258,9 @@
 		width: 100%;
 		height: auto;
 		display: block;
-		border-radius: 0.5rem;
-		border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
-		background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+		border-radius: 0;
+		border: 1px solid rgba(17, 18, 20, 0.12);
+		background: #ffffff;
 	}
 
 	.btn {
@@ -248,39 +268,45 @@
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
-		color: var(--color-text);
-		border-radius: 10px;
+		border: 1px solid rgba(17, 18, 20, 0.18);
+		background: transparent;
+		color: #111214;
+		border-radius: 0;
 		padding: 0.58rem 0.84rem;
 		font-weight: var(--weight-semibold);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		font-size: 0.78rem;
 	}
 
 	.btn-primary {
-		background: linear-gradient(180deg, rgba(122, 132, 148, 0.26), rgba(122, 132, 148, 0.14));
-		border-color: rgba(122, 132, 148, 0.36);
+		background: #111214;
+		border-color: #111214;
+		color: #ffffff;
 	}
 
 	.btn-ghost {
-		background: var(--color-surface);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
+		background: transparent;
+		color: #111214;
+		border: 1px solid rgba(17, 18, 20, 0.18);
 	}
 
 	.pricing-band {
 		margin-top: 0.95rem;
 		display: grid;
 		grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-		gap: 0.76rem;
+		gap: clamp(1rem, 3vw, 2rem);
 		align-items: stretch;
+		padding-block: 0.95rem;
+		border-bottom: 1px solid rgba(17, 18, 20, 0.14);
 	}
 
 	.pricing-media {
 		margin: 0;
-		border-radius: 16px;
+		border-radius: 0;
 		overflow: hidden;
-		border: 1px solid var(--color-border);
-		background: color-mix(in srgb, var(--color-surface-alt) 92%, transparent);
+		border: 1px solid rgba(17, 18, 20, 0.12);
+		background: #ffffff;
 		max-height: 270px;
 	}
 
@@ -290,7 +316,7 @@
 		height: 100%;
 		object-fit: cover;
 		object-position: center;
-		filter: saturate(0.94) contrast(1.08) brightness(1.04);
+		filter: grayscale(0.12) saturate(0.72) contrast(1.1) brightness(1.03);
 	}
 
 	.pricing-copy {
@@ -301,12 +327,16 @@
 
 	h2 {
 		margin: 0;
-		font-size: clamp(1.08rem, 2.8vw, 1.6rem);
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: clamp(1.2rem, 3vw, 1.85rem);
+		font-weight: 400;
+		letter-spacing: -0.04em;
+		color: #111214;
 	}
 
 	.pricing-copy p {
 		margin: 0;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.64);
 		line-height: 1.5;
 	}
 
@@ -315,7 +345,7 @@
 		padding-left: 1rem;
 		display: grid;
 		gap: 0.28rem;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.64);
 	}
 
 	.plans,
@@ -328,51 +358,58 @@
 	.plans {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 1px;
-		border: 1px solid var(--color-divider);
-		border-radius: 16px;
-		overflow: hidden;
-		background: var(--color-divider);
+		gap: 0;
+		border: 1px solid rgba(17, 18, 20, 0.14);
+		border-radius: 0;
+		overflow: visible;
+		background: #ffffff;
 	}
 
 	.plan {
-		padding: 0.9rem;
-		background: var(--surface-wash), var(--color-surface);
+		padding: clamp(0.95rem, 2.4vw, 1.25rem);
+		background: #ffffff;
 		display: grid;
 		gap: 0.1rem;
+		border-right: 1px solid rgba(17, 18, 20, 0.12);
+	}
+
+	.plan:last-child {
+		border-right: 0;
 	}
 
 	.plan.recommended {
-		border-color: color-mix(in srgb, var(--color-primary) 46%, var(--color-border));
-		box-shadow: 0 14px 34px rgba(6, 10, 16, 0.28);
+		background: #f8f4ec;
+		box-shadow: none;
 	}
 
 	.recommended-tag {
 		margin: 0;
 		font-size: 0.7rem;
 		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: color-mix(in srgb, var(--color-primary) 72%, var(--color-text));
+		letter-spacing: 0.16em;
+		color: #111214;
 		font-weight: var(--weight-semibold);
 	}
 
 	.price {
 		margin: 0.24rem 0 0;
-		font-size: 1.06rem;
-		font-weight: var(--weight-semibold);
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: 1.45rem;
+		font-weight: 400;
+		color: #111214;
 	}
 
 	.target {
 		margin: 0.2rem 0 0;
 		font-size: 0.84rem;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.64);
 	}
 
 	.description {
 		margin: 0.26rem 0 0;
 		font-size: 0.79rem;
 		line-height: 1.45;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.64);
 	}
 
 	.plan-btn {
@@ -381,13 +418,15 @@
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-		border-radius: 10px;
+		border: 1px solid rgba(17, 18, 20, 0.18);
+		border-radius: 0;
 		padding: 0.5rem 0.76rem;
-		background: color-mix(in srgb, var(--color-surface-alt) 90%, transparent);
-		color: var(--color-text);
+		background: #111214;
+		color: #ffffff;
 		font-weight: var(--weight-semibold);
-		font-size: 0.86rem;
+		font-size: 0.78rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 	}
 
 	.section-head {
@@ -409,7 +448,7 @@
 	.table-shell {
 		margin-top: 0.62rem;
 		overflow-x: auto;
-		border-top: 1px solid var(--color-divider);
+		border-top: 1px solid rgba(17, 18, 20, 0.14);
 	}
 
 	table {
@@ -422,15 +461,16 @@
 	td {
 		text-align: left;
 		padding: 0.62rem 0.7rem;
-		border-bottom: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+		border-bottom: 1px solid rgba(17, 18, 20, 0.12);
 		font-size: 0.82rem;
+		color: rgba(17, 18, 20, 0.72);
 	}
 
 	th {
 		font-size: 0.75rem;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: var(--color-text-muted);
+		color: rgba(17, 18, 20, 0.58);
 	}
 
 	tr:last-child td {
@@ -461,6 +501,15 @@
 
 		.plans {
 			grid-template-columns: 1fr;
+		}
+
+		.plan {
+			border-right: 0;
+			border-bottom: 1px solid rgba(17, 18, 20, 0.12);
+		}
+
+		.plan:last-child {
+			border-bottom: 0;
 		}
 
 		.store-badge-row {
