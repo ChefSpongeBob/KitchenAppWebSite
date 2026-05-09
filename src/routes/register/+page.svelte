@@ -885,28 +885,23 @@
 		margin: 0;
 		width: min(46vw, 40rem);
 		aspect-ratio: 16 / 10;
-		border-radius: 1rem;
+		border-radius: 0;
 		overflow: hidden;
-		box-shadow: 0 28px 56px rgba(0, 0, 0, 0.38);
-		border: 1px solid rgba(226, 239, 255, 0.25);
-		background: linear-gradient(170deg, rgba(198, 226, 250, 0.14), rgba(7, 10, 15, 0.64));
-		padding: 0.36rem;
+		box-shadow: none;
+		border: 0;
+		background: transparent;
+		padding: 0;
 		position: relative;
 		transform: translateY(0);
-		transition: transform 220ms ease, box-shadow 220ms ease;
+		transition: transform 220ms ease;
 	}
 
 	.tour-shot::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: radial-gradient(circle at 18% 14%, rgba(186, 218, 248, 0.24), transparent 52%);
-		pointer-events: none;
+		content: none;
 	}
 
 	.tour-shot:hover {
 		transform: translateY(-2px);
-		box-shadow: 0 32px 58px rgba(0, 0, 0, 0.4);
 	}
 
 	.tour-shot.portrait {
@@ -928,12 +923,12 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		border-radius: 0.72rem;
+		border-radius: 0;
 	}
 
 	.tour-shot img.contain {
 		object-fit: contain;
-		background: rgba(6, 10, 15, 0.9);
+		background: transparent;
 	}
 
 	.form-zone {
@@ -1376,7 +1371,6 @@
 		color: #9f1f2b;
 	}
 
-	.tour-shot,
 	.tier-card,
 	.addon-card,
 	.purchase-mode-card,
@@ -1390,11 +1384,6 @@
 		backdrop-filter: blur(8px);
 	}
 
-	.tour-shot::before {
-		background: radial-gradient(circle at 18% 14%, rgba(143, 130, 110, 0.14), transparent 54%);
-	}
-
-	.tour-shot:hover,
 	.tier-card:hover,
 	.addon-card:hover,
 	.purchase-mode-card:hover,
@@ -1404,7 +1393,7 @@
 
 	.tour-shot img,
 	.tour-shot img.contain {
-		background: #ffffff;
+		background: transparent;
 	}
 
 	.form-zone label {

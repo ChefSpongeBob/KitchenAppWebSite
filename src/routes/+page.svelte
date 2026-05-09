@@ -151,10 +151,13 @@
 		focus: 'Operations and communication'
 	};
 
+	const visitorHold = true;
 	let activeSlide = 0;
 	let slideTimer: ReturnType<typeof setInterval> | undefined;
 
 	onMount(() => {
+		if (visitorHold) return;
+
 		slideTimer = setInterval(() => {
 			activeSlide = (activeSlide + 1) % carouselSlides.length;
 		}, 5200);
@@ -165,6 +168,14 @@
 	});
 </script>
 
+{#if visitorHold}
+	<main class="coming-soon-page" aria-label="Crimini coming soon">
+		<div class="coming-soon-lockup">
+			<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystems, LLC" />
+			<p>Coming soon.</p>
+		</div>
+	</main>
+{:else}
 <Layout>
 	<section class="hero" aria-label="Top Banner">
 		<div class="hero-carousel">
@@ -337,6 +348,7 @@
 		</span>
 	</p>
 </Layout>
+{/if}
 
 <style>
 	:global(body) {
@@ -351,6 +363,38 @@
 	:global(.app-content.marketing-content) {
 		color: #111214;
 		background: #ffffff;
+	}
+
+	.coming-soon-page {
+		min-height: calc(100dvh - 8rem);
+		display: grid;
+		place-items: center;
+		padding: clamp(3rem, 8vw, 7rem) 1.25rem;
+		background: #ffffff;
+		color: #111214;
+	}
+
+	.coming-soon-lockup {
+		width: min(100%, 42rem);
+		display: grid;
+		justify-items: center;
+		gap: clamp(1rem, 2.5vw, 1.6rem);
+		text-align: center;
+	}
+
+	.coming-soon-lockup img {
+		width: min(100%, 34rem);
+		height: auto;
+		display: block;
+	}
+
+	.coming-soon-lockup p {
+		margin: 0;
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: clamp(1.4rem, 3.4vw, 2.6rem);
+		font-weight: 400;
+		letter-spacing: -0.045em;
+		color: #111214;
 	}
 
 	.hero {
