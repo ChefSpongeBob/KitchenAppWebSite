@@ -6,7 +6,7 @@ const argv = new Set(process.argv.slice(2));
 const isRemote = argv.has('--remote');
 const isDryRun = argv.has('--dry-run');
 const dbNameArg = process.argv.find((arg) => arg.startsWith('--db='));
-const dbName = dbNameArg ? dbNameArg.slice('--db='.length) : 'kitchen';
+const dbName = dbNameArg ? dbNameArg.slice('--db='.length) : 'crimini-production';
 
 const root = process.cwd();
 const migrationsDir = path.join(root, 'migrations');
