@@ -1,18 +1,5 @@
 {
-	"name": "kitchensoftware",
+	"name": "criminikitchenapp",
 	"compatibility_date": "2026-02-07",
-	"pages_build_output_dir": ".svelte-kit/cloudflare",
-	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "kitchen",
-			"database_id": "b15f561e-782d-4695-97cf-91787ae8d4b4"
-		}
-	],
-	"r2_buckets": [
-		{
-			"binding": "CAMERA_MEDIA",
-			"bucket_name": "kitchen-camera-media"
-		}
-	]
+	"pages_build_output_dir": ".svelte-kit/cloudflare"
 }
