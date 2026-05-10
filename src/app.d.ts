@@ -8,7 +8,6 @@ declare global {
 		interface Platform {
 			env: {
 				DB: D1Database;
-				IOT_API_KEY?: string;
 				CAMERA_MEDIA?: R2Bucket;
 				DOC_MEDIA?: R2Bucket;
 				RESEND_API_KEY?: string;

@@ -129,7 +129,7 @@ async function assertReachable(path, label, options = {}) {
 
 async function createSmokeSession() {
   if (internalToken) {
-    const response = await request('/api/smoke-session', {
+    const response = await request('/api/internal/smoke/session', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -165,7 +165,7 @@ async function createSmokeSession() {
 
 async function revokeSmokeSession() {
   if (internalToken) {
-    const response = await request('/api/smoke-session', {
+    const response = await request('/api/internal/smoke/session', {
       method: 'DELETE',
       headers: { 'x-smoke-token': internalToken }
     });

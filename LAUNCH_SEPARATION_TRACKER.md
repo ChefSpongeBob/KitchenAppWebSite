@@ -4,23 +4,25 @@ Use this file as the single source of truth for getting this project launched as
 
 ## Rules (Lock These In)
 - Do not run remote DB commands unless explicitly approved in chat.
-- Keep footer information unchanged.
-- Prefer local-only testing until separation is complete.
+- Keep Crimini by NNS, LLC footer/legal identity intact.
+- Treat the live homepage hold screen as intentional until legal/store launch work is complete.
 
 ## Current Goal
-Ship this app as its own product (marketing + downloads + desktop admin) with no dependency on the original project resources.
+Ship Crimini as its own production product with separate Cloudflare resources, tenant-safe data, and controlled public launch timing.
 
 ## How Next Step Is Chosen
 The next step is always the first unchecked item in **Today Critical Path**.
 
 ## Today Critical Path
-- [ ] 1. Create new Cloudflare resource map (new Pages/Worker project name, new D1 name, new R2 name).
-- [ ] 2. Update `wrangler.jsonc` bindings to the new resource names/IDs.
-- [ ] 3. Create project-local env template (`.env.example` or `.dev.vars.example`) with only new keys.
-- [ ] 4. Replace old domain/app origin references with new project domain placeholders.
-- [ ] 5. Verify login + admin routes work on local only (`npm run dev` flow).
-- [ ] 6. Validate download/marketing routes and desktop admin navigation.
-- [ ] 7. Run launch smoke checklist (`docs/test-readiness-checklist.md`) and record pass/fail notes.
+- [x] 1. Create new Cloudflare resource map.
+- [x] 2. Update `wrangler.jsonc` bindings to Crimini D1/R2 resources.
+- [x] 3. Attach project to GitHub and Cloudflare Pages.
+- [x] 4. Attach live domain `criminiops.com`.
+- [x] 5. Replace old public homepage with temporary visitor hold screen.
+- [x] 6. Remove old copied public guide/static artifacts.
+- [ ] 7. Add final store/copyright/legal launch assets.
+- [ ] 8. Set production secrets needed for smoke/email flows.
+- [ ] 9. Run live production smoke with `SMOKE_INTERNAL_TOKEN`.
 
 ## National-Scale Production Hardening Addendum
 

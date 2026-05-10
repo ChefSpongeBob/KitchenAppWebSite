@@ -72,7 +72,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isPublicApiRoute =
 		pathname.startsWith('/api/internal/smoke') ||
 		pathname.startsWith('/api/internal/schema-readiness') ||
-		pathname.startsWith('/api/smoke-session') ||
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/camera/upload') ||
 		pathname.startsWith('/api/camera/activity');

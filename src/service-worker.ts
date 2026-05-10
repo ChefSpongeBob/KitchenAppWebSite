@@ -2,8 +2,8 @@
 import { build, files, version } from '$service-worker';
 
 const CACHE = `cache-${version}`;
-const RUNTIME_CACHEABLE_PATHS = ['/menus/', '/files/'];
-const PRECACHE_EXCLUSIONS = [/^\/menus\//, /^\/files\//];
+const RUNTIME_CACHEABLE_PATHS = ['/menus/'];
+const PRECACHE_EXCLUSIONS = [/^\/menus\//];
 const ASSETS = [...build, ...files].filter(
 	(path) => !PRECACHE_EXCLUSIONS.some((pattern) => pattern.test(path))
 );

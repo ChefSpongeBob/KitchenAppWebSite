@@ -123,7 +123,7 @@ async function main() {
   await assertSchemaReady();
 
   if (internalToken) {
-    const smokeSessionResponse = await request('/api/smoke-session', {
+    const smokeSessionResponse = await request('/api/internal/smoke/session', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -147,7 +147,7 @@ async function main() {
       }
     }
 
-    const internalLogout = await request('/api/smoke-session', {
+    const internalLogout = await request('/api/internal/smoke/session', {
       method: 'DELETE',
       headers: {
         'x-smoke-token': internalToken
