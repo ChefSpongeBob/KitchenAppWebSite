@@ -63,7 +63,7 @@
 
 <section class:compact class="install-card">
 	<div class="left">
-		<img src="/favicon-splash.svg" alt="Crimini app" width="38" height="24" />
+		<img src="/crimini-full-logo.jpg" alt="Crimini app" width="54" height="40" />
 		<div>
 			<h3>Download App</h3>
 			<p>Install on your phone for quick access.</p>

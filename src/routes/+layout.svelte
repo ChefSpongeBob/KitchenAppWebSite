@@ -323,7 +323,9 @@
 </script>
 
 <svelte:head>
-  <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon-splash.svg?v=3" />
+  <link rel="icon" type="image/svg+xml" sizes="any" href="/crimini-mushrooms.svg?v=4" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=4" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=4" />
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
   <link
@@ -337,7 +339,7 @@
     rel="stylesheet"
   />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#10141b" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Crimini" />
