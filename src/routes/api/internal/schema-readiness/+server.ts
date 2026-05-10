@@ -18,10 +18,10 @@ const REQUIRED_CORE_TABLES = [
 ];
 
 function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
-	const token = env?.SMOKE_INTERNAL_TOKEN;
+	const token = env?.SMOKE_INTERNAL_TOKEN?.trim();
 	if (!token) return false;
-	const headerToken = request.headers.get('x-smoke-token');
-	const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+	const headerToken = request.headers.get('x-smoke-token')?.trim();
+	const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
 	return headerToken === token || bearer === token;
 }
 
