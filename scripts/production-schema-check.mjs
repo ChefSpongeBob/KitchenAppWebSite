@@ -36,7 +36,9 @@ expect('src/lib/server/tenant.ts', 'tenant schema repair is skipped on productio
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness endpoint exists', (source) =>
   source.includes('verifyTenantSchema') &&
   source.includes('SMOKE_INTERNAL_TOKEN') &&
-  source.includes('missingCoreTables')
+  source.includes('missingCoreTables') &&
+  source.includes('missingCoreIndexes') &&
+  source.includes('idx_schedule_departments_business_active_order')
 );
 
 expect('docs/release-deploy-playbook.md', 'deploy playbook includes schema verification', (source) =>

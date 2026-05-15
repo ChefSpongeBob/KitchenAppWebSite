@@ -27,6 +27,18 @@ expect('migrations/0053_scale_performance_indexes.sql', 'scale migration covers 
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0060_schedule_resource_indexes.sql', 'schedule resource migration covers business-first indexes', (source) =>
+  [
+    'idx_schedule_departments_business_active_order',
+    'idx_schedule_role_definitions_business_active_department',
+    'idx_schedule_preferences_business',
+    'idx_user_schedule_departments_business_user',
+    'idx_schedule_open_shift_requests_business_open_user',
+    'idx_schedule_templates_business_updated',
+    'idx_store_purchase_events_business_status_created'
+  ].every((indexName) => source.includes(indexName))
+);
+
 expect('src/lib/server/retention.ts', 'temp retention cleanup is batched', (source) =>
   source.includes('TEMP_CLEANUP_BATCH_SIZE') &&
   source.includes('LIMIT ?') &&

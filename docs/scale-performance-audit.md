@@ -9,6 +9,7 @@ Phase 7 focuses on keeping normal tenant traffic fast as restaurant count and se
 - Batched camera retention cleanup to avoid loading/deleting unlimited event rows in one pass.
 - Batched old ToDo cleanup and throttled rejected-whiteboard cleanup during normal page requests.
 - Consolidated admin dashboard ToDo analytics into aggregate queries instead of several separate count reads.
+- Added business-first schedule/resource indexes for schedule departments, role definitions, preferences, user department approvals, open-shift requests, templates, and store purchase event lookups.
 - Removed production request-time schema repair/verification from hot paths; production now relies on migrations plus schema-readiness checks.
 - Removed production `PRAGMA` introspection from list/admin paths that already have migration-backed columns.
 - Streamed document and camera media responses from R2 instead of loading whole files into Worker memory.
@@ -31,6 +32,7 @@ Phase 7 focuses on keeping normal tenant traffic fast as restaurant count and se
   - open shift requests
   - team ordering
   - availability and time-off reads
+  - department/role setup reads
 - Media/security:
   - document file lookup
   - camera media lookup by image/clip URL

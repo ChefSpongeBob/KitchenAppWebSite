@@ -20,6 +20,21 @@ const REQUIRED_CORE_TABLES = [
 	'store_webhook_events'
 ];
 
+const REQUIRED_CORE_INDEXES = [
+	'idx_business_users_business_active_role',
+	'idx_schedule_shifts_business_week_date',
+	'idx_schedule_open_shifts_business_week',
+	'idx_schedule_departments_business_active_order',
+	'idx_schedule_role_definitions_business_active_department',
+	'idx_user_schedule_departments_business_user',
+	'idx_schedule_open_shift_requests_business_open_user',
+	'idx_documents_business_slug_active',
+	'idx_recipes_business_category_title',
+	'idx_temps_business_sensor_ts',
+	'idx_camera_events_business_created',
+	'idx_store_purchase_events_business_status_created'
+];
+
 function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
 	const token = env?.SMOKE_INTERNAL_TOKEN?.trim();
 	if (!token) return false;
@@ -47,6 +62,25 @@ async function missingCoreTables(db: App.Platform['env']['DB']) {
 	return missing;
 }
 
+async function missingCoreIndexes(db: App.Platform['env']['DB']) {
+	const missing: string[] = [];
+	for (const indexName of REQUIRED_CORE_INDEXES) {
+		const row = await db
+			.prepare(
+				`
+				SELECT name
+				FROM sqlite_master
+				WHERE type = 'index' AND name = ?
+				LIMIT 1
+				`
+			)
+			.bind(indexName)
+			.first<{ name: string }>();
+		if (!row?.name) missing.push(indexName);
+	}
+	return missing;
+}
+
 export const GET: RequestHandler = async ({ request, platform, locals }) => {
 	if (!isAuthorized(request, platform?.env)) {
 		return json({ ok: false, error: 'Unauthorized.' }, { status: 401 });
@@ -63,8 +97,12 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 		return json({ ok: false, error: 'Database not configured.' }, { status: 503 });
 	}
 
-	const [coreTables, tenantIssues] = await Promise.all([missingCoreTables(db), verifyTenantSchema(db)]);
-	const ok = coreTables.length === 0 && tenantIssues.length === 0;
+	const [coreTables, coreIndexes, tenantIssues] = await Promise.all([
+		missingCoreTables(db),
+		missingCoreIndexes(db),
+		verifyTenantSchema(db)
+	]);
+	const ok = coreTables.length === 0 && coreIndexes.length === 0 && tenantIssues.length === 0;
 	if (!ok) {
 		logOperationalEvent({
 			level: 'error',
@@ -73,6 +111,7 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 			status: 500,
 			metadata: {
 				table_count: coreTables.length,
+				index_count: coreIndexes.length,
 				issue_count: tenantIssues.length,
 				phase: 'pre_traffic'
 			}
@@ -83,6 +122,7 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 		{
 			ok,
 			missingCoreTables: coreTables,
+			missingCoreIndexes: coreIndexes,
 			tenantIssues
 		},
 		{
