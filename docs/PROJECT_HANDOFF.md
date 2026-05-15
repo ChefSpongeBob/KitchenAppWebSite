@@ -9,9 +9,10 @@ Use this file when a new chat needs to continue Crimini work without guessing.
 - Stack: SvelteKit, Cloudflare Pages, Cloudflare D1, Cloudflare R2, Capacitor shell prep
 
 ## Current Public State
-- The public homepage is intentionally in a temporary visitor hold state.
-- `/` shows the full Crimini worded logo and `Coming soon.` while legal, copyright, store, and launch items are finished.
-- App/admin/auth routes remain intact for direct testing.
+- `/` is the active Crimini marketing homepage.
+- Marketing pages use the top navigation only.
+- App/admin/auth routes are available for direct testing.
+- If a launch hold is needed again, add it deliberately and update this file in the same pass.
 
 ## Brand
 - Product name: Crimini
@@ -73,3 +74,5 @@ node .\scripts\observability-check.mjs
 - Old copied static guide files have been removed.
 - Duplicate `/api/smoke-session` alias has been removed; scripts use the internal route.
 - The service worker no longer caches `/files/`.
+- Employee invite acceptance now creates employment records and links onboarding packet items to compliance document tracking.
+- Sensitive employee tax, bank, and identity storage has schema placeholders only. Do not collect real SSN, bank, or identity data until field-level encryption and HR-only access review are completed.

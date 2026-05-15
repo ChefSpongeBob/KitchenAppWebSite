@@ -1,6 +1,6 @@
 # Cloudflare Production Checklist
 
-Last updated: May 11, 2026
+Last updated: May 15, 2026
 
 ## Project
 
@@ -75,11 +75,24 @@ If Wrangler returns authorization error `7403`, fix the Cloudflare token/account
 ```powershell
 npm run test:cloudflare-readiness
 npm run test:security-headers
+npm run test:production-schema
+npm run test:tenant-isolation
+npm run test:iot-device-auth
+npm run test:media-access
+npm run test:billing-lifecycle
 npm run schema:readiness:prod
 npm run smoke:prod
 ```
 
 Do not open production traffic until schema readiness passes.
+
+## External Systems Before Live Testing
+
+- Email can be tested manually without Resend, but automated invite and reset emails require `RESEND_API_KEY` and `RESEND_FROM_EMAIL`.
+- Temperature ingestion requires a sensor device created in admin Camera & Sensors; use the generated per-device key, not a shared environment secret.
+- Camera ingestion requires a camera device created in admin Camera & Sensors and the `CAMERA_MEDIA` R2 binding.
+- Store billing requires the App Store and Google Play product IDs from `docs/store-billing-setup.md` plus the billing secrets above.
+- Employee tax, bank, and identity data should not be collected with real personal data until field-level encryption is finished.
 
 ## Global Response Headers
 
