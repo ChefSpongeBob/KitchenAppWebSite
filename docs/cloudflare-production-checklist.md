@@ -42,6 +42,8 @@ npx wrangler pages secret put SECRET_NAME --project-name criminikitchenappwebsit
 
 ```txt
 SMOKE_INTERNAL_TOKEN=
+SENSITIVE_DATA_KEY=
+SENSITIVE_DATA_KEY_VERSION=
 BILLING_WEBHOOK_TOKEN=
 APP_STORE_BUNDLE_ID=com.nexusnorthsystems.crimini
 APP_STORE_ISSUER_ID=
@@ -93,6 +95,7 @@ Do not open production traffic until schema readiness passes.
 - Camera ingestion requires a camera device created in admin Camera & Sensors and the `CAMERA_MEDIA` R2 binding.
 - Store billing requires the App Store and Google Play product IDs from `docs/store-billing-setup.md` plus the billing secrets above.
 - Employee tax, bank, and identity data should not be collected with real personal data until field-level encryption is finished.
+- `SENSITIVE_DATA_KEY` must be a high-entropy secret with at least 32 characters. Rotate by setting a new key and `SENSITIVE_DATA_KEY_VERSION` during a planned migration window.
 
 ## Global Response Headers
 

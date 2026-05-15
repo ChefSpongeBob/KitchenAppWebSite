@@ -56,6 +56,9 @@ Use this as the default runbook for pushing web + DB safely.
   - `BILLING_WEBHOOK_TOKEN`
 - Required for production smoke/schema checks:
   - `SMOKE_INTERNAL_TOKEN`
+- Required before employee onboarding can collect sensitive personal, tax, bank, or identity records:
+  - `SENSITIVE_DATA_KEY`
+  - `SENSITIVE_DATA_KEY_VERSION`
 - Optional email automation:
   - `RESEND_API_KEY`
   - `RESEND_FROM_EMAIL`

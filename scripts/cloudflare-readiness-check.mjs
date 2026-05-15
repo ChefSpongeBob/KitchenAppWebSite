@@ -67,6 +67,11 @@ expect('Schema readiness checks account deletion requests', readinessEndpoint.in
 expect('Schema readiness checks employee HR compliance foundation', readinessEndpoint.includes('employee_compliance_documents'));
 expect('Schema readiness checks employee sensitive vault foundation', readinessEndpoint.includes('employee_sensitive_record_vault'));
 expect('Schema readiness checks onboarding compliance link index', readinessEndpoint.includes('idx_employee_compliance_documents_onboarding_item'));
+expect('Schema readiness requires sensitive encryption secret', readinessEndpoint.includes('SENSITIVE_DATA_KEY'));
+
+const sensitiveServer = read('src/lib/server/sensitive.ts');
+expect('Sensitive vault uses AES-GCM encryption', sensitiveServer.includes('AES-GCM-256') && sensitiveServer.includes('encryptSensitiveJsonPayload'));
+expect('Sensitive vault enforces HR access permission', sensitiveServer.includes('hr_sensitive_access') && sensitiveServer.includes('canAccessEmployeeSensitiveData'));
 
 const storeDoc = read('docs/store-billing-setup.md');
 expect('Store billing doc lists Cloudflare billing secrets', storeDoc.includes('APP_STORE_PRIVATE_KEY') && storeDoc.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'));
@@ -74,6 +79,7 @@ expect('Store billing doc lists Cloudflare billing secrets', storeDoc.includes('
 const playbook = read('docs/release-deploy-playbook.md');
 expect('Deploy playbook references DB binding, not old kitchen binding', playbook.includes('d1 execute DB --remote') && !playbook.includes('d1 execute kitchen --remote'));
 expect('Deploy playbook includes Cloudflare readiness check', playbook.includes('npm run test:cloudflare-readiness'));
+expect('Deploy playbook lists sensitive encryption secret', playbook.includes('SENSITIVE_DATA_KEY'));
 
 const failed = checks.filter((check) => !check.ok);
 for (const check of checks) {

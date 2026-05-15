@@ -19,8 +19,9 @@ import {
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
 import { listUserSessions } from '$lib/server/security';
+import { canAccessEmployeeSensitiveData } from '$lib/server/sensitive';
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, platform }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
 
@@ -39,10 +40,37 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     throw error(404, 'Employee not found.');
   }
 
+  const canReadSensitiveProfile = await canAccessEmployeeSensitiveData(
+    db,
+    locals.businessId,
+    locals.userId,
+    locals.businessRole,
+    employee.id
+  );
+  const profile = await loadAdminEmployeeProfile(db, employee.id, locals.businessId);
+
   return {
     employee,
-    profile: await loadAdminEmployeeProfile(db, employee.id, locals.businessId),
-    onboarding: await loadEmployeeOnboarding(db, employee.id, locals.businessId),
+    profile: canReadSensitiveProfile
+      ? profile
+      : {
+          ...profile,
+          birthday: '',
+          address_line_1: '',
+          address_line_2: '',
+          city: '',
+          state: '',
+          postal_code: '',
+          emergency_contact_name: '',
+          emergency_contact_phone: '',
+          emergency_contact_relationship: ''
+        },
+    onboarding: await loadEmployeeOnboarding(db, employee.id, locals.businessId, {
+      env: platform?.env,
+      actorUserId: locals.userId,
+      actorBusinessRole: locals.businessRole,
+      auditSensitiveRead: true
+    }),
     sessions: await listUserSessions(db, employee.id),
     departments: await loadScheduleDepartments(db, locals.businessId)
   };

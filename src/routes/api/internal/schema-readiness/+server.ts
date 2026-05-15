@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { verifyTenantSchema } from '$lib/server/tenant';
 import { logOperationalEvent } from '$lib/server/observability';
+import { isSensitiveEncryptionConfigured } from '$lib/server/sensitive';
 
 const REQUIRED_CORE_TABLES = [
 	'users',
@@ -58,6 +59,12 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_employee_verification_checks_business_user',
 	'idx_employee_compliance_documents_onboarding_item'
 ];
+
+function missingRequiredSecrets(env: App.Platform['env'] | undefined) {
+	const missing: string[] = [];
+	if (!isSensitiveEncryptionConfigured(env)) missing.push('SENSITIVE_DATA_KEY');
+	return missing;
+}
 
 function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
 	const token = env?.SMOKE_INTERNAL_TOKEN?.trim();
@@ -126,7 +133,8 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 		missingCoreIndexes(db),
 		verifyTenantSchema(db)
 	]);
-	const ok = coreTables.length === 0 && coreIndexes.length === 0 && tenantIssues.length === 0;
+	const secrets = missingRequiredSecrets(platform?.env);
+	const ok = coreTables.length === 0 && coreIndexes.length === 0 && tenantIssues.length === 0 && secrets.length === 0;
 	if (!ok) {
 		logOperationalEvent({
 			level: 'error',
@@ -137,6 +145,7 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 				table_count: coreTables.length,
 				index_count: coreIndexes.length,
 				issue_count: tenantIssues.length,
+				secret_count: secrets.length,
 				phase: 'pre_traffic'
 			}
 		});
@@ -147,7 +156,8 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 			ok,
 			missingCoreTables: coreTables,
 			missingCoreIndexes: coreIndexes,
-			tenantIssues
+			tenantIssues,
+			missingRequiredSecrets: secrets
 		},
 		{
 			status: ok ? 200 : 500,

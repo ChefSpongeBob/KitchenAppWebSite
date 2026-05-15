@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { logOperationalEvent } from '$lib/server/observability';
+import { canAccessEmployeeSensitiveData, writeSensitiveRecordAudit } from '$lib/server/sensitive';
 
 export const GET: RequestHandler = async ({ params, platform, locals, request }) => {
   const bucket = platform?.env?.DOC_MEDIA;
@@ -56,7 +57,17 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
       .bind(fileUrl, fileUrl, locals.businessId)
       .first<{ user_id: string; business_id: string }>();
 
-    if (record && record.user_id !== locals.userId && locals.userRole !== 'admin') {
+    const canReadEmployeeOnboardingMedia =
+      record &&
+      (await canAccessEmployeeSensitiveData(
+        locals.DB,
+        locals.businessId,
+        locals.userId,
+        locals.businessRole,
+        record.user_id
+      ));
+
+    if (record && !canReadEmployeeOnboardingMedia) {
       logOperationalEvent({
         level: 'warn',
         event: 'document_media_access_denied',
@@ -67,6 +78,17 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
         metadata: { reason: 'employee_onboarding_owner_mismatch' }
       });
       return new Response('Forbidden.', { status: 403 });
+    }
+
+    if (record && record.user_id !== locals.userId) {
+      await writeSensitiveRecordAudit(locals.DB, {
+        businessId: locals.businessId,
+        userId: record.user_id,
+        actorUserId: locals.userId,
+        action: 'employee_onboarding_media_read',
+        request,
+        metadata: { keyType: 'employee_onboarding' }
+      });
     }
 
     if (!record) {

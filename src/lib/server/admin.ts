@@ -31,6 +31,15 @@ import {
   revokeUserSessions,
   writeAuditLog
 } from '$lib/server/security';
+import {
+  canAccessEmployeeSensitiveData,
+  decryptSensitiveJsonPayload,
+  encryptSensitiveJsonPayload,
+  isSensitiveEncryptionConfigured,
+  isSensitiveOnboardingFormKey,
+  sensitiveConfigurationFailure,
+  writeSensitiveRecordAudit
+} from '$lib/server/sensitive';
 
 type D1 = App.Platform['env']['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -232,6 +241,7 @@ export type EmployeeOnboardingItem = {
   submitted_at: number | null;
   reviewed_at: number | null;
   reviewed_by: string | null;
+  sensitive_redacted?: boolean;
 };
 
 export type EmployeeOnboardingState = {
@@ -1373,7 +1383,9 @@ function classifyOnboardingComplianceItem(item: {
       ...base,
       requirementKey: 'personal_information',
       category: 'profile',
-      documentType: 'personal_information'
+      documentType: 'personal_information',
+      sensitiveScope: 'personal',
+      sensitiveRecordType: 'profile'
     };
   }
   if (item.form_key === 'emergency_contact') {
@@ -1381,7 +1393,9 @@ function classifyOnboardingComplianceItem(item: {
       ...base,
       requirementKey: 'emergency_contact',
       category: 'profile',
-      documentType: 'emergency_contact'
+      documentType: 'emergency_contact',
+      sensitiveScope: 'personal',
+      sensitiveRecordType: 'emergency_contact'
     };
   }
   if (item.form_key === 'payroll_setup') {
@@ -1548,6 +1562,177 @@ async function ensureSensitiveVaultPlaceholder(
       updatedBy
     )
     .run();
+}
+
+function sanitizeSensitiveOnboardingPayload(formKey: string, payload: Record<string, string>) {
+  if (formKey === 'payroll_setup') {
+    return {
+      worker_classification: payload.worker_classification,
+      start_date: payload.start_date,
+      pay_type: payload.pay_type,
+      direct_deposit_authorized: payload.direct_deposit_authorized,
+      protected_record: 'Encrypted HR record'
+    };
+  }
+
+  return {
+    protected_record: 'Encrypted HR record'
+  };
+}
+
+async function storeSensitiveOnboardingFormPayload(
+  db: D1,
+  env: Partial<App.Platform['env']> | undefined,
+  item: Pick<EmployeeOnboardingItem, 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'>,
+  payload: Record<string, string>,
+  updatedBy: string | null,
+  now = Math.floor(Date.now() / 1000)
+) {
+  if (!isSensitiveOnboardingFormKey(item.form_key)) return null;
+  if (!isSensitiveEncryptionConfigured(env)) throw new Error('sensitive_encryption_missing');
+
+  const classification = classifyOnboardingComplianceItem(item);
+  if (!classification.sensitiveScope || !classification.sensitiveRecordType) return null;
+
+  await ensureSensitiveVaultPlaceholder(db, item.business_id, item.user_id, classification, updatedBy, now);
+  const encrypted = await encryptSensitiveJsonPayload(env, payload, {
+    businessId: item.business_id,
+    userId: item.user_id,
+    recordScope: classification.sensitiveScope,
+    recordType: classification.sensitiveRecordType
+  });
+  const displayLastFour =
+    payload.account_last_four || payload.routing_last_four || payload.postal_code?.slice(-4) || '';
+
+  const record = await db
+    .prepare(
+      `
+      SELECT id
+      FROM employee_sensitive_record_vault
+      WHERE business_id = ?
+        AND user_id = ?
+        AND record_scope = ?
+        AND record_type = ?
+      LIMIT 1
+      `
+    )
+    .bind(item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType)
+    .first<{ id: string }>();
+
+  await db
+    .prepare(
+      `
+      UPDATE employee_sensitive_record_vault
+      SET status = 'active',
+        encrypted_payload = ?,
+        payload_iv = ?,
+        payload_tag = ?,
+        key_version = ?,
+        encryption_algorithm = ?,
+        display_last_four = ?,
+        updated_at = ?,
+        updated_by = ?
+      WHERE business_id = ?
+        AND user_id = ?
+        AND record_scope = ?
+        AND record_type = ?
+      `
+    )
+    .bind(
+      encrypted.encryptedPayload,
+      encrypted.payloadIv,
+      encrypted.payloadTag,
+      encrypted.keyVersion,
+      encrypted.encryptionAlgorithm,
+      displayLastFour,
+      now,
+      updatedBy,
+      item.business_id,
+      item.user_id,
+      classification.sensitiveScope,
+      classification.sensitiveRecordType
+    )
+    .run();
+
+  if (record?.id) {
+    await writeSensitiveRecordAudit(db, {
+      businessId: item.business_id,
+      userId: item.user_id,
+      vaultRecordId: record.id,
+      actorUserId: updatedBy,
+      action: 'sensitive_record_encrypted_write',
+      metadata: {
+        recordScope: classification.sensitiveScope,
+        recordType: classification.sensitiveRecordType
+      }
+    });
+  }
+
+  return record?.id ?? null;
+}
+
+async function decryptSensitiveOnboardingFormPayload(
+  db: D1,
+  env: Partial<App.Platform['env']> | undefined,
+  item: Pick<EmployeeOnboardingItem, 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'>,
+  actorUserId: string | null | undefined,
+  shouldAudit = false
+) {
+  if (!isSensitiveOnboardingFormKey(item.form_key) || !isSensitiveEncryptionConfigured(env)) return null;
+  const classification = classifyOnboardingComplianceItem(item);
+  if (!classification.sensitiveScope || !classification.sensitiveRecordType) return null;
+
+  const record = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        encrypted_payload,
+        payload_iv,
+        key_version,
+        encryption_algorithm
+      FROM employee_sensitive_record_vault
+      WHERE business_id = ?
+        AND user_id = ?
+        AND record_scope = ?
+        AND record_type = ?
+        AND status = 'active'
+      LIMIT 1
+      `
+    )
+    .bind(item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType)
+    .first<{
+      id: string;
+      encrypted_payload: string;
+      payload_iv: string;
+      key_version: string;
+      encryption_algorithm: string;
+    }>();
+
+  if (!record?.encrypted_payload) return null;
+
+  const payload = await decryptSensitiveJsonPayload<Record<string, string>>(env, record, {
+    businessId: item.business_id,
+    userId: item.user_id,
+    recordScope: classification.sensitiveScope,
+    recordType: classification.sensitiveRecordType
+  });
+
+  if (payload && shouldAudit) {
+    await writeSensitiveRecordAudit(db, {
+      businessId: item.business_id,
+      userId: item.user_id,
+      vaultRecordId: record.id,
+      actorUserId: actorUserId ?? null,
+      action: 'sensitive_record_decrypted_read',
+      metadata: {
+        recordScope: classification.sensitiveScope,
+        recordType: classification.sensitiveRecordType
+      }
+    });
+  }
+
+  return payload;
 }
 
 async function upsertComplianceDocumentForOnboardingItem(
@@ -2143,7 +2328,13 @@ async function refreshEmployeeOnboardingPackageStatus(
 export async function loadEmployeeOnboarding(
   db: D1,
   userId: string,
-  businessId: string
+  businessId: string,
+  options: {
+    env?: Partial<App.Platform['env']>;
+    actorUserId?: string | null;
+    actorBusinessRole?: string | null;
+    auditSensitiveRead?: boolean;
+  } = {}
 ): Promise<EmployeeOnboardingState> {
   await ensureEmployeeOnboardingTables(db);
 
@@ -2212,9 +2403,46 @@ export async function loadEmployeeOnboarding(
     .bind(onboardingPackage.id, businessId)
     .all<EmployeeOnboardingItem>();
 
+  const rawItems = items.results ?? [];
+  const canReadSensitive = await canAccessEmployeeSensitiveData(
+    db,
+    businessId,
+    options.actorUserId ?? null,
+    options.actorBusinessRole ?? null,
+    userId
+  );
+
+  const hydratedItems = await Promise.all(
+    rawItems.map(async (item) => {
+      if (!isSensitiveOnboardingFormKey(item.form_key)) return item;
+
+      if (!canReadSensitive) {
+        return {
+          ...item,
+          form_payload: item.form_payload || JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})),
+          sensitive_redacted: true
+        };
+      }
+
+      const decrypted = await decryptSensitiveOnboardingFormPayload(
+        db,
+        options.env,
+        item,
+        options.actorUserId ?? null,
+        Boolean(options.auditSensitiveRead && options.actorUserId && options.actorUserId !== userId)
+      );
+      if (!decrypted) return item;
+      return {
+        ...item,
+        form_payload: JSON.stringify(decrypted),
+        sensitive_redacted: false
+      };
+    })
+  );
+
   return {
     package: onboardingPackage,
-    items: items.results ?? []
+    items: hydratedItems
   };
 }
 
@@ -4123,6 +4351,11 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
   if (!(await userBelongsToBusiness(db, userId, businessId))) {
     return fail(404, { error: 'Employee not found in this business.' });
   }
+  if (
+    !(await canAccessEmployeeSensitiveData(db, businessId, locals.userId, locals.businessRole, userId))
+  ) {
+    return fail(403, { error: 'HR access is required.' });
+  }
 
   const target = await getUserById(db, userId);
   if (!target) return fail(404, { error: 'Employee not found.' });
@@ -4257,7 +4490,11 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
   return { success: true, message: 'Onboarding package sent.' };
 }
 
-export async function submitEmployeeOnboardingItem(request: Request, locals: App.Locals) {
+export async function submitEmployeeOnboardingItem(
+  request: Request,
+  locals: App.Locals,
+  env?: Partial<App.Platform['env']>
+) {
   if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4316,6 +4553,7 @@ export async function submitEmployeeOnboardingItem(request: Request, locals: App
   let fileUrl = item.file_url;
   let fileName = item.file_name;
   let formPayload = item.form_payload;
+  const now = Math.floor(Date.now() / 1000);
 
   if (item.item_type === 'document') {
     if (upload instanceof File && upload.size > 0) {
@@ -4354,14 +4592,25 @@ export async function submitEmployeeOnboardingItem(request: Request, locals: App
       formResult.payload,
       locals.userId
     );
-    formPayload = JSON.stringify(formResult.payload);
+    if (isSensitiveOnboardingFormKey(item.form_key)) {
+      try {
+        await storeSensitiveOnboardingFormPayload(db, env, item, formResult.payload, locals.userId, now);
+      } catch (error) {
+        if (error instanceof Error && error.message === 'sensitive_encryption_missing') {
+          return sensitiveConfigurationFailure();
+        }
+        throw error;
+      }
+      formPayload = JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, formResult.payload));
+    } else {
+      formPayload = JSON.stringify(formResult.payload);
+    }
   } else if (String(formData.get('acknowledged') ?? '0') !== '1') {
     return fail(400, { error: 'Confirm the acknowledgement before submitting.' });
   } else if (!signedName) {
     return fail(400, { error: 'Typed name is required.' });
   }
 
-  const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
       `

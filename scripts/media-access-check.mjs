@@ -49,8 +49,14 @@ assertIncludes(
 
 assertIncludes(
   'src/routes/api/documents/media/[...key]/+server.ts',
-  'record.user_id !== locals.userId && locals.userRole !==',
-  'employee onboarding media allows only the employee or admin'
+  'canAccessEmployeeSensitiveData',
+  'employee onboarding media requires employee, owner, admin, or HR-sensitive access'
+);
+
+assertIncludes(
+  'src/routes/api/documents/media/[...key]/+server.ts',
+  'employee_onboarding_media_read',
+  'employee onboarding media admin reads are audited'
 );
 
 assertIncludes(

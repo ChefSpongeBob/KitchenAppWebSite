@@ -75,4 +75,6 @@ node .\scripts\observability-check.mjs
 - Duplicate `/api/smoke-session` alias has been removed; scripts use the internal route.
 - The service worker no longer caches `/files/`.
 - Employee invite acceptance now creates employment records and links onboarding packet items to compliance document tracking.
-- Sensitive employee tax, bank, and identity storage has schema placeholders only. Do not collect real SSN, bank, or identity data until field-level encryption and HR-only access review are completed.
+- Sensitive employee onboarding form payloads are written through the encrypted employee vault when `SENSITIVE_DATA_KEY` is configured.
+- Owner/admin/HR-permitted users can read sensitive employee records; manager/staff access is blocked unless explicitly granted through `employee_role_permissions`.
+- Do not collect real SSN, bank, or identity data until `SENSITIVE_DATA_KEY` is set in Cloudflare and a live onboarding test confirms encrypted vault writes and audit rows.

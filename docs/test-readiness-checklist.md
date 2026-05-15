@@ -27,6 +27,7 @@ Use this before big feature passes, GitHub pushes, and launch deploys.
 - [ ] R2 camera binding is `CAMERA_MEDIA = crimini-camera-media`
 - [ ] `APP_BASE_URL=https://criminiops.com`
 - [ ] `SMOKE_INTERNAL_TOKEN` is set for schema and smoke checks
+- [ ] `SENSITIVE_DATA_KEY` is set before employee onboarding tests
 - [ ] `npm run schema:readiness:prod` passes
 - [ ] Latest required migrations through `0063_employee_compliance_onboarding_link.sql` are applied
 
@@ -114,6 +115,10 @@ npm run smoke:local
 - [ ] Approved package changes employment status to active
 - [ ] Compliance document rows exist for onboarding items
 - [ ] Sensitive vault placeholders exist only for tax, bank, and identity buckets
+- [ ] Sensitive onboarding form payloads save encrypted in `employee_sensitive_record_vault`
+- [ ] Regular manager access cannot view sensitive onboarding payloads
+- [ ] Owner/admin or HR-permitted access can view sensitive onboarding payloads
+- [ ] Sensitive reads/writes create audit rows
 - [ ] Normal users cannot access admin onboarding review
 - [ ] Admin cannot see another business onboarding records
 

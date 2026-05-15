@@ -17,6 +17,8 @@ declare global {
 				SMOKE_INTERNAL_TOKEN?: string;
 				SMOKE_DEFAULT_EMAIL?: string;
 				ALLOW_RUNTIME_SCHEMA_MUTATION?: string;
+				SENSITIVE_DATA_KEY?: string;
+				SENSITIVE_DATA_KEY_VERSION?: string;
 				APP_STORE_BUNDLE_ID?: string;
 				APP_STORE_ISSUER_ID?: string;
 				APP_STORE_KEY_ID?: string;

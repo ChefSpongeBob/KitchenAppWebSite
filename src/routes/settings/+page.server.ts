@@ -81,7 +81,7 @@ function resolveSessionToken(cookies: Parameters<PageServerLoad>[0]['cookies']) 
   return cookies.get(primaryCookie) ?? cookies.get('session_id') ?? cookies.get('session_id_pwa') ?? null;
 }
 
-export const load: PageServerLoad = async ({ locals, url, cookies }) => {
+export const load: PageServerLoad = async ({ locals, url, cookies, platform }) => {
   if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;
   if (!db) throw redirect(303, '/login');
@@ -121,7 +121,11 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   const [profile, pendingBirthdayRequest, onboarding, approvalsByUser, availability, preferences, sessions] = await Promise.all([
     loadAdminEmployeeProfile(db, locals.userId, businessId),
     loadPendingEmployeeProfileEditRequest(db, locals.userId, businessId),
-    loadEmployeeOnboarding(db, locals.userId, businessId),
+    loadEmployeeOnboarding(db, locals.userId, businessId, {
+      env: platform?.env,
+      actorUserId: locals.userId,
+      actorBusinessRole: locals.businessRole
+    }),
     loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
     loadUserScheduleAvailability(db, locals.userId, businessId),
     db
@@ -171,7 +175,8 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 };
 
 export const actions: Actions = {
-  submit_onboarding_item: ({ request, locals }) => submitEmployeeOnboardingItem(request, locals),
+  submit_onboarding_item: ({ request, locals, platform }) =>
+    submitEmployeeOnboardingItem(request, locals, platform?.env),
   save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
 
   save_personal_info: async ({ request, locals }) => {
