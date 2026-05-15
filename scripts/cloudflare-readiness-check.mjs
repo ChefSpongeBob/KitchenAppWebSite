@@ -50,6 +50,10 @@ const migrations = fs
   .filter((file) => /^\d+_.+\.sql$/.test(file))
   .sort();
 expect('Latest billing entitlement migration exists', migrations.includes('0059_store_entitlements.sql'));
+expect('Schedule resource index migration exists', migrations.includes('0060_schedule_resource_indexes.sql'));
+expect('Employee HR compliance foundation migration exists', migrations.includes('0061_employee_hr_compliance_foundation.sql'));
+expect('Employee sensitive vault migration exists', migrations.includes('0062_employee_invite_sensitive_vault.sql'));
+expect('Employee compliance onboarding link migration exists', migrations.includes('0063_employee_compliance_onboarding_link.sql'));
 expect('Account deletion migration exists', migrations.includes('0058_account_deletion_requests.sql'));
 expect('Todo foreign key repair migration exists', migrations.includes('0057_repair_todo_user_foreign_keys.sql'));
 
@@ -60,6 +64,9 @@ expect('Public billing webhook routes are allowed', hooks.includes('/api/billing
 const readinessEndpoint = read('src/routes/api/internal/schema-readiness/+server.ts');
 expect('Schema readiness checks store products', readinessEndpoint.includes('store_products'));
 expect('Schema readiness checks account deletion requests', readinessEndpoint.includes('account_deletion_requests'));
+expect('Schema readiness checks employee HR compliance foundation', readinessEndpoint.includes('employee_compliance_documents'));
+expect('Schema readiness checks employee sensitive vault foundation', readinessEndpoint.includes('employee_sensitive_record_vault'));
+expect('Schema readiness checks onboarding compliance link index', readinessEndpoint.includes('idx_employee_compliance_documents_onboarding_item'));
 
 const storeDoc = read('docs/store-billing-setup.md');
 expect('Store billing doc lists Cloudflare billing secrets', storeDoc.includes('APP_STORE_PRIVATE_KEY') && storeDoc.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'));

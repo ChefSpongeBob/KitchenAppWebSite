@@ -12,6 +12,7 @@ import {
   toggleScheduleDepartmentApproval,
   toggleSpecialsAccess
 } from '$lib/server/admin';
+import { loadScheduleDepartments } from '$lib/server/schedules';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
@@ -20,17 +21,21 @@ export const load: PageServerLoad = async ({ locals }) => {
   if (!db) {
     return {
       users: [],
-      invites: []
+      invites: [],
+      departments: []
     };
   }
 
   if (!locals.businessId) {
-    return { users: [], invites: [] };
+    return { users: [], invites: [], departments: [] };
   }
 
-  const users = await loadAdminUsers(db, locals.businessId);
-  const invites = await loadAdminInvites(db, locals.businessId);
-  return { users, invites };
+  const [users, invites, departments] = await Promise.all([
+    loadAdminUsers(db, locals.businessId),
+    loadAdminInvites(db, locals.businessId),
+    loadScheduleDepartments(db, locals.businessId)
+  ]);
+  return { users, invites, departments };
 };
 
 export const actions: Actions = {

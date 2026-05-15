@@ -34,6 +34,10 @@ Use this as the default runbook for pushing web + DB safely.
   - `0057_repair_todo_user_foreign_keys.sql`
   - `0058_account_deletion_requests.sql`
   - `0059_store_entitlements.sql`
+  - `0060_schedule_resource_indexes.sql`
+  - `0061_employee_hr_compliance_foundation.sql`
+  - `0062_employee_invite_sensitive_vault.sql`
+  - `0063_employee_compliance_onboarding_link.sql`
 - Verify production schema readiness after migrations and before traffic:
   - Set `APP_BASE_URL` and `SMOKE_INTERNAL_TOKEN`
   - `npm run schema:readiness:prod`

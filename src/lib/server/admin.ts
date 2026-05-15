@@ -143,6 +143,13 @@ export type AdminInvite = {
   id: string;
   email: string;
   invite_code: string;
+  employment_type: string;
+  job_title: string;
+  department: string;
+  primary_schedule_department: string;
+  start_date: string;
+  pay_type: string;
+  onboarding_required: number;
   created_at: number;
   expires_at: number | null;
   used_at: number | null;
@@ -1109,7 +1116,21 @@ export async function loadAdminInvites(db: D1, businessId: string) {
   const invites = await db
     .prepare(
       `
-      SELECT id, email, invite_code, created_at, expires_at, used_at, revoked_at
+      SELECT
+        id,
+        email,
+        invite_code,
+        employment_type,
+        job_title,
+        department,
+        primary_schedule_department,
+        start_date,
+        pay_type,
+        onboarding_required,
+        created_at,
+        expires_at,
+        used_at,
+        revoked_at
       FROM business_invites
       WHERE business_id = ?
       ORDER BY
@@ -1306,6 +1327,306 @@ function defaultEmployeeOnboardingItems() {
     source_file_name: string;
     sort_order: number;
   }>;
+}
+
+type ComplianceClassification = {
+  requirementKey: string;
+  title: string;
+  category: string;
+  documentType: string;
+  requiresDocument: boolean;
+  requiresSignature: boolean;
+  retentionYears: number | null;
+  sensitiveScope: string | null;
+  sensitiveRecordType: string | null;
+};
+
+function normalizeComplianceKey(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || 'general'
+  );
+}
+
+function classifyOnboardingComplianceItem(item: {
+  item_type: EmployeeOnboardingItem['item_type'];
+  form_key: string;
+  title: string;
+}) {
+  const title = item.title.trim();
+  const lower = `${item.form_key} ${title}`.toLowerCase();
+  const base = {
+    title,
+    requiresDocument: item.item_type === 'document',
+    requiresSignature: item.item_type === 'form' || item.item_type === 'acknowledgement',
+    retentionYears: null,
+    sensitiveScope: null,
+    sensitiveRecordType: null
+  } satisfies Omit<ComplianceClassification, 'requirementKey' | 'category' | 'documentType'>;
+
+  if (item.form_key === 'personal_information') {
+    return {
+      ...base,
+      requirementKey: 'personal_information',
+      category: 'profile',
+      documentType: 'personal_information'
+    };
+  }
+  if (item.form_key === 'emergency_contact') {
+    return {
+      ...base,
+      requirementKey: 'emergency_contact',
+      category: 'profile',
+      documentType: 'emergency_contact'
+    };
+  }
+  if (item.form_key === 'payroll_setup') {
+    return {
+      ...base,
+      requirementKey: 'payroll_setup',
+      category: 'payroll',
+      documentType: 'payroll_setup',
+      retentionYears: 4,
+      sensitiveScope: 'bank',
+      sensitiveRecordType: 'direct_deposit'
+    };
+  }
+  if (lower.includes('i-9') || lower.includes('employment eligibility')) {
+    return {
+      ...base,
+      requirementKey: 'i9_employment_eligibility',
+      category: 'employment_eligibility',
+      documentType: 'i9',
+      sensitiveScope: 'identity',
+      sensitiveRecordType: 'employment_eligibility'
+    };
+  }
+  if (lower.includes('tax') || lower.includes('w-4') || lower.includes('withholding')) {
+    return {
+      ...base,
+      requirementKey: 'tax_withholding',
+      category: 'tax',
+      documentType: 'tax_withholding',
+      retentionYears: 4,
+      sensitiveScope: 'tax',
+      sensitiveRecordType: 'withholding'
+    };
+  }
+  if (lower.includes('handbook')) {
+    return {
+      ...base,
+      requirementKey: 'handbook_acknowledgement',
+      category: 'policy',
+      documentType: 'handbook_acknowledgement'
+    };
+  }
+  if (lower.includes('food') || lower.includes('safety')) {
+    return {
+      ...base,
+      requirementKey: 'food_safety_acknowledgement',
+      category: 'certification',
+      documentType: 'food_safety'
+    };
+  }
+
+  return {
+    ...base,
+    requirementKey: normalizeComplianceKey(`${item.item_type}_${item.form_key || title}`),
+    category: item.item_type === 'document' ? 'document' : item.item_type,
+    documentType: normalizeComplianceKey(item.form_key || title)
+  };
+}
+
+function complianceStatusFromOnboardingStatus(status: EmployeeOnboardingItem['status']) {
+  if (status === 'needs_changes') return 'needs_changes';
+  return status;
+}
+
+async function ensureEmployeeComplianceRequirement(
+  db: D1,
+  businessId: string,
+  classification: ComplianceClassification,
+  updatedBy: string | null,
+  now: number
+) {
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM employee_compliance_requirements
+      WHERE business_id = ? AND requirement_key = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, classification.requirementKey)
+    .first<{ id: string }>();
+  if (existing?.id) return existing.id;
+
+  const id = crypto.randomUUID();
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_compliance_requirements (
+        id,
+        business_id,
+        requirement_key,
+        title,
+        category,
+        applies_to_type,
+        is_required,
+        requires_document,
+        requires_signature,
+        default_due_days,
+        renewal_interval_days,
+        retention_years,
+        is_active,
+        created_at,
+        updated_at,
+        updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, 'employee', 1, ?, ?, NULL, NULL, ?, 1, ?, ?, ?)
+      `
+    )
+    .bind(
+      id,
+      businessId,
+      classification.requirementKey,
+      classification.title,
+      classification.category,
+      classification.requiresDocument ? 1 : 0,
+      classification.requiresSignature ? 1 : 0,
+      classification.retentionYears,
+      now,
+      now,
+      updatedBy
+    )
+    .run();
+  return id;
+}
+
+async function ensureSensitiveVaultPlaceholder(
+  db: D1,
+  businessId: string,
+  userId: string,
+  classification: ComplianceClassification,
+  updatedBy: string | null,
+  now: number
+) {
+  if (!classification.sensitiveScope || !classification.sensitiveRecordType) return;
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_sensitive_record_vault (
+        id,
+        business_id,
+        user_id,
+        record_scope,
+        record_type,
+        status,
+        created_at,
+        updated_at,
+        updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, 'empty', ?, ?, ?)
+      ON CONFLICT(business_id, user_id, record_scope, record_type) DO UPDATE SET
+        updated_at = employee_sensitive_record_vault.updated_at
+      `
+    )
+    .bind(
+      crypto.randomUUID(),
+      businessId,
+      userId,
+      classification.sensitiveScope,
+      classification.sensitiveRecordType,
+      now,
+      now,
+      updatedBy
+    )
+    .run();
+}
+
+async function upsertComplianceDocumentForOnboardingItem(
+  db: D1,
+  item: Pick<
+    EmployeeOnboardingItem,
+    | 'id'
+    | 'business_id'
+    | 'user_id'
+    | 'item_type'
+    | 'form_key'
+    | 'title'
+    | 'status'
+    | 'file_url'
+    | 'file_name'
+    | 'signed_name'
+    | 'submitted_at'
+    | 'reviewed_at'
+    | 'reviewed_by'
+  >,
+  updatedBy: string | null,
+  now = Math.floor(Date.now() / 1000)
+) {
+  const classification = classifyOnboardingComplianceItem(item);
+  const requirementId = await ensureEmployeeComplianceRequirement(db, item.business_id, classification, updatedBy, now);
+  await ensureSensitiveVaultPlaceholder(db, item.business_id, item.user_id, classification, updatedBy, now);
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_compliance_documents (
+        id,
+        business_id,
+        user_id,
+        requirement_id,
+        onboarding_item_id,
+        document_type,
+        status,
+        file_url,
+        file_name,
+        signed_name,
+        submitted_at,
+        reviewed_at,
+        reviewed_by,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, onboarding_item_id) DO UPDATE SET
+        requirement_id = excluded.requirement_id,
+        document_type = excluded.document_type,
+        status = excluded.status,
+        file_url = excluded.file_url,
+        file_name = excluded.file_name,
+        signed_name = excluded.signed_name,
+        submitted_at = excluded.submitted_at,
+        reviewed_at = excluded.reviewed_at,
+        reviewed_by = excluded.reviewed_by,
+        updated_at = excluded.updated_at
+      `
+    )
+    .bind(
+      crypto.randomUUID(),
+      item.business_id,
+      item.user_id,
+      requirementId,
+      item.id,
+      classification.documentType,
+      complianceStatusFromOnboardingStatus(item.status),
+      item.file_url,
+      item.file_name,
+      item.signed_name,
+      item.submitted_at,
+      item.reviewed_at,
+      item.reviewed_by,
+      now,
+      now
+    )
+    .run();
 }
 
 function isAdminBusinessRole(role: string | null | undefined) {
@@ -1798,6 +2119,25 @@ async function refreshEmployeeOnboardingPackageStatus(
     )
     .bind(status, completedAt, completedAt, approvedAt, approvedAt, reviewer, reviewer, now, packageId, businessId)
     .run();
+
+  if (status === 'approved') {
+    await db
+      .prepare(
+        `
+        UPDATE employee_employment_records
+        SET employment_status = CASE
+            WHEN employment_status = 'terminated' THEN employment_status
+            ELSE 'active'
+          END,
+          updated_at = ?,
+          updated_by = COALESCE(?, updated_by)
+        WHERE business_id = ?
+          AND onboarding_package_id = ?
+        `
+      )
+      .bind(now, reviewer, businessId, packageId)
+      .run();
+  }
 }
 
 export async function loadEmployeeOnboarding(
@@ -1939,6 +2279,7 @@ async function createEmployeeOnboardingPackageForUser(
   const onboardingItems = templateItems.length > 0 ? templateItems : defaultEmployeeOnboardingItems();
 
   for (const item of onboardingItems) {
+    const onboardingItemId = crypto.randomUUID();
     await db
       .prepare(
         `
@@ -1969,7 +2310,7 @@ async function createEmployeeOnboardingPackageForUser(
         `
       )
       .bind(
-        crypto.randomUUID(),
+        onboardingItemId,
         packageId,
         options.businessId,
         options.userId,
@@ -1983,7 +2324,64 @@ async function createEmployeeOnboardingPackageForUser(
         now
       )
       .run();
+
+    await upsertComplianceDocumentForOnboardingItem(
+      db,
+      {
+        id: onboardingItemId,
+        business_id: options.businessId,
+        user_id: options.userId,
+        item_type: item.item_type,
+        form_key: item.form_key,
+        title: item.title,
+        status: 'pending',
+        file_url: '',
+        file_name: '',
+        signed_name: '',
+        submitted_at: null,
+        reviewed_at: null,
+        reviewed_by: null
+      },
+      options.createdBy ?? null,
+      now
+    );
   }
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_employment_records (
+        business_id,
+        user_id,
+        employment_status,
+        employment_type,
+        onboarding_package_id,
+        created_at,
+        updated_at,
+        updated_by
+      )
+      VALUES (?, ?, 'onboarding', ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, user_id) DO UPDATE SET
+        employment_status = CASE
+          WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
+          ELSE 'onboarding'
+        END,
+        employment_type = excluded.employment_type,
+        onboarding_package_id = excluded.onboarding_package_id,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(
+      options.businessId,
+      options.userId,
+      payrollClassification,
+      packageId,
+      now,
+      now,
+      options.createdBy ?? null
+    )
+    .run();
 
   return { created: true, packageId, status: 'sent' as const };
 }
@@ -3983,6 +4381,22 @@ export async function submitEmployeeOnboardingItem(request: Request, locals: App
     .bind(fileUrl, fileName, formPayload, signedName, now, item.id, locals.userId, businessId)
     .run();
 
+  await upsertComplianceDocumentForOnboardingItem(
+    db,
+    {
+      ...item,
+      status: 'submitted',
+      file_url: fileUrl,
+      file_name: fileName,
+      signed_name: signedName,
+      submitted_at: now,
+      reviewed_at: null,
+      reviewed_by: null
+    },
+    locals.userId,
+    now
+  );
+
   await refreshEmployeeOnboardingPackageStatus(db, item.package_id, businessId);
 
   return { success: true, message: 'Onboarding item submitted.' };
@@ -4012,14 +4426,45 @@ async function reviewEmployeeOnboardingItem(
   const item = await db
     .prepare(
       `
-      SELECT id, package_id, user_id
+      SELECT
+        id,
+        package_id,
+        business_id,
+        user_id,
+        CASE WHEN item_type = 'profile' THEN 'form' ELSE item_type END AS item_type,
+        CASE
+          WHEN item_type = 'profile' AND COALESCE(form_key, '') = '' THEN 'personal_information'
+          ELSE form_key
+        END AS form_key,
+        title,
+        status,
+        file_url,
+        file_name,
+        signed_name,
+        submitted_at
       FROM employee_onboarding_items
       WHERE id = ? AND business_id = ?
       LIMIT 1
       `
     )
     .bind(itemId, businessId)
-    .first<{ id: string; package_id: string; user_id: string }>();
+    .first<
+      Pick<
+        EmployeeOnboardingItem,
+        | 'id'
+        | 'package_id'
+        | 'business_id'
+        | 'user_id'
+        | 'item_type'
+        | 'form_key'
+        | 'title'
+        | 'status'
+        | 'file_url'
+        | 'file_name'
+        | 'signed_name'
+        | 'submitted_at'
+      >
+    >();
 
   if (!item) return fail(404, { error: 'Onboarding item not found.' });
   if (!(await userBelongsToBusiness(db, item.user_id, businessId))) {
@@ -4040,6 +4485,18 @@ async function reviewEmployeeOnboardingItem(
     )
     .bind(status, managerNote, now, locals.userId ?? null, item.id, businessId)
     .run();
+
+  await upsertComplianceDocumentForOnboardingItem(
+    db,
+    {
+      ...item,
+      status,
+      reviewed_at: now,
+      reviewed_by: locals.userId ?? null
+    },
+    locals.userId ?? null,
+    now
+  );
 
   await refreshEmployeeOnboardingPackageStatus(
     db,
@@ -4076,8 +4533,17 @@ export async function createUserInvite(
   const formData = await request.formData();
   const email = String(formData.get('email') ?? '').trim();
   const emailNormalized = email.toLowerCase();
+  const employmentType = String(formData.get('employment_type') ?? 'employee') === 'contractor' ? 'contractor' : 'employee';
+  const jobTitle = String(formData.get('job_title') ?? '').trim().slice(0, 120);
+  const department = String(formData.get('department') ?? '').trim().slice(0, 120);
+  const startDate = String(formData.get('start_date') ?? '').trim().slice(0, 10);
+  const payTypeRaw = String(formData.get('pay_type') ?? '').trim().toLowerCase();
+  const payType = payTypeRaw === 'hourly' || payTypeRaw === 'salary' ? payTypeRaw : '';
   if (!email || !email.includes('@')) {
     return fail(400, { error: 'A valid email is required.' });
+  }
+  if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    return fail(400, { error: 'Start date must use a valid date.' });
   }
 
   const [businessLimit, adminLimit, emailLimit] = await Promise.all([
@@ -4118,17 +4584,49 @@ export async function createUserInvite(
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + 60 * 60 * 24 * 14;
   const inviteCode = generateInviteCode();
+  const inviteId = crypto.randomUUID();
 
   await db
     .prepare(
       `
       INSERT INTO business_invites (
-        id, business_id, email, email_normalized, invite_code, role, invited_by, created_at, expires_at, revoked_at
+        id,
+        business_id,
+        email,
+        email_normalized,
+        invite_code,
+        role,
+        invited_by,
+        employment_type,
+        job_title,
+        department,
+        primary_schedule_department,
+        start_date,
+        pay_type,
+        onboarding_required,
+        created_at,
+        expires_at,
+        revoked_at
       )
-      VALUES (?, ?, ?, ?, ?, 'staff', ?, ?, ?, NULL)
+      VALUES (?, ?, ?, ?, ?, 'staff', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
       `
     )
-    .bind(crypto.randomUUID(), businessId, email, emailNormalized, inviteCode, locals.userId ?? null, now, expiresAt)
+    .bind(
+      inviteId,
+      businessId,
+      email,
+      emailNormalized,
+      inviteCode,
+      locals.userId ?? null,
+      employmentType,
+      jobTitle,
+      department,
+      department,
+      startDate,
+      payType,
+      now,
+      expiresAt
+    )
     .run();
 
   await writeAuditLog(db, {
@@ -4136,7 +4634,8 @@ export async function createUserInvite(
     request,
     businessId,
     actorUserId: locals.userId ?? null,
-    email
+    email,
+    metadata: { inviteId, employmentType, jobTitle: Boolean(jobTitle), department: Boolean(department), startDate: Boolean(startDate) }
   });
 
   const emailResult = await sendInviteEmail({

@@ -20,6 +20,13 @@
     id: string;
     email: string;
     invite_code: string;
+    employment_type: string;
+    job_title: string;
+    department: string;
+    primary_schedule_department: string;
+    start_date: string;
+    pay_type: string;
+    onboarding_required: number;
     created_at: number;
     expires_at: number | null;
     used_at: number | null;
@@ -29,6 +36,7 @@
   export let data: {
     users: UserOption[];
     invites: InviteOption[];
+    departments: string[];
   };
 
   let staffSearch = '';
@@ -163,6 +171,43 @@
 
           <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
             <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
+            <details class="invite-context">
+              <summary>Employment</summary>
+              <div class="invite-context-grid">
+                <label>
+                  <span>Type</span>
+                  <select name="employment_type">
+                    <option value="employee">Employee</option>
+                    <option value="contractor">Contractor</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Job Title</span>
+                  <input name="job_title" />
+                </label>
+                <label>
+                  <span>Department</span>
+                  <select name="department">
+                    <option value="">Unassigned</option>
+                    {#each data.departments as department}
+                      <option value={department}>{department}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Start Date</span>
+                  <input name="start_date" type="date" />
+                </label>
+                <label>
+                  <span>Pay Type</span>
+                  <select name="pay_type">
+                    <option value="">Unset</option>
+                    <option value="hourly">Hourly</option>
+                    <option value="salary">Salary</option>
+                  </select>
+                </label>
+              </div>
+            </details>
             <button type="submit">Invite</button>
           </form>
 
@@ -174,6 +219,7 @@
                 <div class="invite-row">
                   <div>
                     <strong>{invite.email}</strong>
+                    <span>{[invite.job_title, invite.department, invite.start_date].filter(Boolean).join(' | ') || 'Pending setup'}</span>
                     <span>Expires {formatDate(invite.expires_at)}</span>
                   </div>
                   <code>{invite.invite_code}</code>
@@ -504,6 +550,36 @@
     gap: 0.5rem;
   }
 
+  .invite-context {
+    grid-column: 1 / -1;
+  }
+
+  .invite-context summary {
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .invite-context-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-top: 0.55rem;
+  }
+
+  .invite-context-grid label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .invite-context-grid span {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .invite-list,
   .restricted-list,
   .used-list {
@@ -623,6 +699,10 @@
   @media (max-width: 560px) {
     .people-metrics,
     .invite-form {
+      grid-template-columns: 1fr;
+    }
+
+    .invite-context-grid {
       grid-template-columns: 1fr;
     }
 

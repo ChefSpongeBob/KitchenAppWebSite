@@ -17,7 +17,18 @@ const REQUIRED_CORE_TABLES = [
 	'business_lifecycle_snapshots',
 	'account_deletion_requests',
 	'store_products',
-	'store_webhook_events'
+	'store_webhook_events',
+	'employee_employment_records',
+	'employee_compliance_requirements',
+	'employee_compliance_documents',
+	'employee_document_access_audit',
+	'employee_onboarding_invite_requirements',
+	'employee_role_permissions',
+	'employee_pos_permissions',
+	'employee_certifications',
+	'employee_sensitive_record_vault',
+	'employee_sensitive_record_audit',
+	'employee_verification_checks'
 ];
 
 const REQUIRED_CORE_INDEXES = [
@@ -32,7 +43,20 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_recipes_business_category_title',
 	'idx_temps_business_sensor_ts',
 	'idx_camera_events_business_created',
-	'idx_store_purchase_events_business_status_created'
+	'idx_store_purchase_events_business_status_created',
+	'idx_employee_employment_records_business_status',
+	'idx_employee_compliance_requirements_business_active',
+	'idx_employee_compliance_documents_business_user',
+	'idx_employee_document_access_audit_business_created',
+	'idx_employee_onboarding_invite_requirements_invite',
+	'idx_employee_role_permissions_business_permission',
+	'idx_employee_pos_permissions_business_pos',
+	'idx_employee_certifications_business_user',
+	'idx_business_invites_business_context',
+	'idx_employee_sensitive_record_vault_business_scope',
+	'idx_employee_sensitive_record_audit_business_created',
+	'idx_employee_verification_checks_business_user',
+	'idx_employee_compliance_documents_onboarding_item'
 ];
 
 function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {

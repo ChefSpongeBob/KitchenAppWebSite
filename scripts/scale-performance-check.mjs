@@ -39,6 +39,33 @@ expect('migrations/0060_schedule_resource_indexes.sql', 'schedule resource migra
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0061_employee_hr_compliance_foundation.sql', 'employee HR compliance migration covers business-first indexes', (source) =>
+  [
+    'idx_employee_employment_records_business_status',
+    'idx_employee_compliance_requirements_business_active',
+    'idx_employee_compliance_documents_business_user',
+    'idx_employee_document_access_audit_business_created',
+    'idx_employee_role_permissions_business_permission',
+    'idx_employee_pos_permissions_business_pos',
+    'idx_employee_certifications_business_user'
+  ].every((indexName) => source.includes(indexName))
+);
+
+expect('migrations/0062_employee_invite_sensitive_vault.sql', 'employee sensitive vault migration covers business-first indexes', (source) =>
+  [
+    'idx_business_invites_business_context',
+    'idx_employee_sensitive_record_vault_business_scope',
+    'idx_employee_sensitive_record_vault_retention',
+    'idx_employee_sensitive_record_audit_business_created',
+    'idx_employee_verification_checks_business_user',
+    'idx_employee_verification_checks_business_status'
+  ].every((indexName) => source.includes(indexName))
+);
+
+expect('migrations/0063_employee_compliance_onboarding_link.sql', 'employee compliance link migration enforces onboarding uniqueness', (source) =>
+  source.includes('idx_employee_compliance_documents_onboarding_item')
+);
+
 expect('src/lib/server/retention.ts', 'temp retention cleanup is batched', (source) =>
   source.includes('TEMP_CLEANUP_BATCH_SIZE') &&
   source.includes('LIMIT ?') &&

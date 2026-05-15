@@ -282,6 +282,14 @@ export const actions: Actions = {
 						business_id: string;
 						email_normalized: string;
 						role: string;
+						employment_type: string;
+						job_title: string;
+						department: string;
+						primary_schedule_department: string;
+						start_date: string;
+						pay_type: string;
+						manager_user_id: string | null;
+						onboarding_required: number;
 						expires_at: number | null;
 						revoked_at: number | null;
 						used_at: number | null;
@@ -301,7 +309,22 @@ export const actions: Actions = {
 				businessInvite = await db
 					.prepare(
 						`
-				SELECT id, business_id, email_normalized, role, expires_at, revoked_at, used_at
+				SELECT
+					id,
+					business_id,
+					email_normalized,
+					role,
+					employment_type,
+					job_title,
+					department,
+					primary_schedule_department,
+					start_date,
+					pay_type,
+					manager_user_id,
+					onboarding_required,
+					expires_at,
+					revoked_at,
+					used_at
 				FROM business_invites
 				WHERE invite_code = ?
 				LIMIT 1
@@ -313,6 +336,14 @@ export const actions: Actions = {
 						business_id: string;
 						email_normalized: string;
 						role: string;
+						employment_type: string;
+						job_title: string;
+						department: string;
+						primary_schedule_department: string;
+						start_date: string;
+						pay_type: string;
+						manager_user_id: string | null;
+						onboarding_required: number;
 						expires_at: number | null;
 						revoked_at: number | null;
 						used_at: number | null;
@@ -490,6 +521,59 @@ export const actions: Actions = {
 							: invitedBusinessRole || 'staff',
 						now,
 						now
+					)
+					.run();
+				await db
+					.prepare(
+						`
+				INSERT INTO employee_employment_records (
+					business_id,
+					user_id,
+					employment_status,
+					employment_type,
+					job_title,
+					department,
+					primary_schedule_department,
+					hire_date,
+					start_date,
+					pay_type,
+					manager_user_id,
+					created_at,
+					updated_at,
+					updated_by
+				)
+				VALUES (?, ?, 'onboarding', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(business_id, user_id) DO UPDATE SET
+					employment_status = CASE
+						WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
+						ELSE 'onboarding'
+					END,
+					employment_type = excluded.employment_type,
+					job_title = excluded.job_title,
+					department = excluded.department,
+					primary_schedule_department = excluded.primary_schedule_department,
+					hire_date = excluded.hire_date,
+					start_date = excluded.start_date,
+					pay_type = excluded.pay_type,
+					manager_user_id = excluded.manager_user_id,
+					updated_at = excluded.updated_at,
+					updated_by = excluded.updated_by
+			`
+					)
+					.bind(
+						businessInvite.business_id,
+						userId,
+						businessInvite.employment_type || 'employee',
+						businessInvite.job_title || '',
+						businessInvite.department || '',
+						businessInvite.primary_schedule_department || businessInvite.department || '',
+						businessInvite.start_date || '',
+						businessInvite.start_date || '',
+						businessInvite.pay_type || '',
+						businessInvite.manager_user_id ?? null,
+						now,
+						now,
+						businessInvite.manager_user_id ?? null
 					)
 					.run();
 				resolvedBusinessId = businessInvite.business_id;
