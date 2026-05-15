@@ -1,3 +1,5 @@
+import { dev } from '$app/environment';
+
 type D1 = App.Platform['env']['DB'];
 
 let businessSchemaEnsured = false;
@@ -62,6 +64,11 @@ export async function reserveBusinessSlug(db: D1, requestedName: string) {
 }
 
 export async function ensureBusinessSchema(db: D1) {
+  if (!dev) {
+    businessSchemaEnsured = true;
+    return;
+  }
+
   if (businessSchemaEnsured) return;
   if (businessSchemaPromise) {
     await businessSchemaPromise;

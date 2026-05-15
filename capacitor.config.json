@@ -1,5 +1,5 @@
-﻿{
-  "appId": "com.nexusnorthsystems.kitchen",
+{
+  "appId": "com.nexusnorthsystems.crimini",
   "appName": "Crimini",
   "webDir": "build",
   "loggingBehavior": "none",
@@ -8,11 +8,11 @@
   "initialFocus": true,
   "backgroundColor": "#121315",
   "server": {
-    "url": "https://nexusnorthsystems.com",
+    "url": "https://criminiops.com",
     "cleartext": false,
     "allowNavigation": [
-      "nexusnorthsystems.com",
-      "www.nexusnorthsystems.com"
+      "criminiops.com",
+      "www.criminiops.com"
     ]
   },
   "ios": {

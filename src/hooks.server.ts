@@ -45,6 +45,23 @@ function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
 	event.cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(event.request));
 }
 
+function applySecurityHeaders(response: Response) {
+	response.headers.set('x-content-type-options', 'nosniff');
+	response.headers.set('x-frame-options', 'DENY');
+	response.headers.set('referrer-policy', 'strict-origin-when-cross-origin');
+	response.headers.set(
+		'permissions-policy',
+		'camera=(self), geolocation=(), microphone=(), payment=(self)'
+	);
+	response.headers.set('cross-origin-opener-policy', 'same-origin');
+
+	if (!dev) {
+		response.headers.set('strict-transport-security', 'max-age=31536000; includeSubDomains; preload');
+	}
+
+	return response;
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const rawDb = event.platform?.env?.DB as App.Platform['env']['DB'];
 	event.locals.DB = rawDb
@@ -67,14 +84,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname === '/about' ||
 		pathname === '/features' ||
 		pathname === '/how-it-works' ||
-		pathname === '/pricing';
+		pathname === '/pricing' ||
+		pathname === '/privacy' ||
+		pathname === '/account-deletion';
 
 	const isPublicApiRoute =
 		pathname.startsWith('/api/internal/smoke') ||
 		pathname.startsWith('/api/internal/schema-readiness') ||
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/camera/upload') ||
-		pathname.startsWith('/api/camera/activity');
+		pathname.startsWith('/api/camera/activity') ||
+		pathname.startsWith('/api/billing/app-store-notifications') ||
+		pathname.startsWith('/api/billing/google-play-notifications');
 	const isBillingRoute = pathname.startsWith('/billing');
 
 	const isPrivateRoute = !isAuthRoute && !isPublicMarketingRoute && !isPublicApiRoute;
@@ -83,9 +104,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
 		response.headers.set('pragma', 'no-cache');
 		response.headers.set('expires', '0');
-		return response;
+		return applySecurityHeaders(response);
 	};
-	const resolvePublicOrAuthRoute = async () => (isAuthRoute ? resolveWithNoStore() : resolve(event));
+	const resolvePublicOrAuthRoute = async () =>
+		isAuthRoute ? resolveWithNoStore() : applySecurityHeaders(await resolve(event));
 
 	const db = event.locals.DB;
 	const primaryCookie = getSessionCookieName();

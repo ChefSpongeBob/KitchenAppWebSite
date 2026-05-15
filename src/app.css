@@ -482,9 +482,175 @@ a:focus-visible {
     align-items: stretch;
   }
 
-  :where(.app-toolbar > *) {
+:where(.app-toolbar > *) {
     min-width: 0;
   }
+}
+
+/* =========================================================
+   CRIMINI APP BRAND RESET
+   Light mode is now the app default. Dark mode stays available,
+   but both themes use the same cream / black / mushroom direction.
+   ========================================================= */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --color-primary: #111214;
+  --color-primary-contrast: #ffffff;
+  --color-primary-soft: rgba(17, 18, 20, 0.07);
+  --color-accent: #8f826e;
+
+  --color-bg: #ffffff;
+  --color-bg-elevated: #fffdf8;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8f4ec;
+  --color-surface-soft: #f1eadf;
+
+  --color-text: #111214;
+  --color-text-muted: rgba(17, 18, 20, 0.62);
+  --color-text-soft: rgba(17, 18, 20, 0.76);
+
+  --color-border: rgba(17, 18, 20, 0.13);
+  --color-divider: rgba(17, 18, 20, 0.1);
+
+  --color-success: #2f7d4f;
+  --color-warning: #9a6428;
+  --color-error: #a73535;
+
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  --shadow-xs: 0 1px 2px rgba(17, 18, 20, 0.035);
+  --shadow-sm: 0 5px 16px rgba(17, 18, 20, 0.055);
+  --shadow-md: 0 12px 30px rgba(17, 18, 20, 0.08);
+  --shadow-glow: var(--shadow-sm);
+  --surface-outline: 1px solid var(--color-border);
+  --surface-wash: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
+  --ring-red: rgba(167, 53, 53, 0.12);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-primary: #f8f4ec;
+  --color-primary-contrast: #111214;
+  --color-primary-soft: rgba(248, 244, 236, 0.08);
+  --color-accent: #c7b99f;
+
+  --color-bg: #171717;
+  --color-bg-elevated: #1f1f1f;
+  --color-surface: #232323;
+  --color-surface-alt: #2a2a2a;
+  --color-surface-soft: #303030;
+
+  --color-text: #f8f4ec;
+  --color-text-muted: rgba(248, 244, 236, 0.64);
+  --color-text-soft: rgba(248, 244, 236, 0.78);
+
+  --color-border: rgba(248, 244, 236, 0.13);
+  --color-divider: rgba(248, 244, 236, 0.1);
+
+  --color-success: #5bb17a;
+  --color-warning: #d0974f;
+  --color-error: #dd6b6b;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-sm: 0 5px 16px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.26);
+}
+
+body,
+[data-theme='light'] body {
+  background:
+    radial-gradient(circle at 16% 2%, rgba(143, 130, 110, 0.08), transparent 24%),
+    linear-gradient(180deg, #ffffff 0%, #fffdf8 42%, #ffffff 100%);
+  color: var(--color-text);
+}
+
+[data-theme='dark'] body {
+  background:
+    radial-gradient(circle at 16% 2%, rgba(199, 185, 159, 0.08), transparent 24%),
+    linear-gradient(180deg, #171717 0%, #1f1f1f 48%, #171717 100%);
+}
+
+body::before,
+[data-theme='light'] body::before {
+  opacity: 0.035;
+  background-image:
+    url("/crimini-mark.svg"),
+    url("/crimini-mushrooms.svg"),
+    url("/crimini-mark.svg");
+  background-size: 92px auto, 120px auto, 74px auto;
+  background-position:
+    left 2.4rem top 8rem,
+    right 3rem top 18rem,
+    left 4rem bottom 8rem;
+  filter: grayscale(1) contrast(1.05);
+}
+
+[data-theme='dark'] body::before {
+  opacity: 0.055;
+  filter: invert(1) grayscale(1) brightness(1.8) contrast(0.86);
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+button {
+  box-shadow: none;
+}
+
+button:hover,
+button:focus-visible {
+  box-shadow: none;
+}
+
+button.danger,
+.danger,
+.warn-action,
+.text-action.danger {
+  border-color: color-mix(in srgb, var(--color-error) 68%, var(--color-border)) !important;
+  color: var(--color-error) !important;
+  background: transparent !important;
+}
+
+button.success,
+.success,
+.approve-action,
+.text-action.success {
+  border-color: color-mix(in srgb, var(--color-success) 68%, var(--color-border)) !important;
+  color: var(--color-success) !important;
+  background: transparent !important;
+}
+
+.app-panel,
+.ui-section,
+:where(.panel, .card, [class$='card'], [class*='-card'], [class$='tile'], [class*='-tile']) {
+  box-shadow: var(--shadow-xs);
+}
+
+[data-theme='light'] .app-panel,
+[data-theme='light'] .panel,
+[data-theme='light'] [class$='card'],
+[data-theme='light'] [class*='-card'] {
+  border-color: var(--color-border) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+:where(.success, .ok, .online, .normal, .active, [data-tone='success']) {
+  --state-border: color-mix(in srgb, var(--color-success) 62%, var(--color-border));
+}
+
+:where(.danger, .error, .hot, .offline, [data-tone='danger']) {
+  --state-border: color-mix(in srgb, var(--color-error) 62%, var(--color-border));
 }
 
 @media (max-width: 480px) {

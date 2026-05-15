@@ -9,26 +9,17 @@
 <style>
   .card {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008) 42%, rgba(255,255,255,0)),
-      color-mix(in srgb, var(--color-surface) 95%, transparent);
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     padding: var(--space-5);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-xs);
     margin-bottom: var(--space-4);
     overflow-wrap: anywhere;
-    backdrop-filter: blur(14px);
   }
 
   .card::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.78), rgba(132, 146, 166, 0.18));
-    opacity: 0.9;
+    content: none;
   }
 
   .card:last-child {
@@ -41,8 +32,8 @@
   }
 
   .interactive:hover {
-    border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
-    box-shadow: var(--shadow-md);
+    border-color: var(--color-text);
+    box-shadow: var(--shadow-xs);
   }
 
   .interactive:active {

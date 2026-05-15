@@ -1,4 +1,8 @@
+import { dev } from '$app/environment';
+
 type D1 = App.Platform['env']['DB'];
+
+let userPreferencesSchemaEnsured = false;
 
 export type WelcomeTourVariant = 'admin' | 'user';
 export type FirstOpenTourVariant = 'user_home' | 'admin_dashboard';
@@ -20,6 +24,13 @@ async function ensureOptionalColumn(db: D1, tableName: string, columnName: strin
 }
 
 export async function ensureUserPreferencesSchema(db: D1) {
+  if (!dev) {
+    userPreferencesSchemaEnsured = true;
+    return;
+  }
+
+  if (userPreferencesSchemaEnsured) return;
+
   await db
     .prepare(
       `
@@ -37,6 +48,7 @@ export async function ensureUserPreferencesSchema(db: D1) {
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_variant', 'TEXT');
   await ensureOptionalColumn(db, 'user_preferences', 'user_home_tour_completed_at', 'INTEGER');
   await ensureOptionalColumn(db, 'user_preferences', 'admin_tour_completed_at', 'INTEGER');
+  userPreferencesSchemaEnsured = true;
 }
 
 export async function isWelcomeTourComplete(db: D1, userId: string) {

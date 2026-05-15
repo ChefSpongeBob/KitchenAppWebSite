@@ -26,10 +26,11 @@ expect('src/hooks.server.ts', 'request DB is wrapped by schema guard', (source) 
   source.includes('ALLOW_RUNTIME_SCHEMA_MUTATION')
 );
 
-expect('src/lib/server/tenant.ts', 'tenant schema verifies instead of mutating in production', (source) =>
+expect('src/lib/server/tenant.ts', 'tenant schema repair is skipped on production request paths', (source) =>
   source.includes('verifyTenantSchema') &&
   source.includes('if (!dev)') &&
-  source.includes('Production schema readiness failed')
+  source.includes('tenantSchemaEnsured = true') &&
+  source.includes('return;')
 );
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness endpoint exists', (source) =>

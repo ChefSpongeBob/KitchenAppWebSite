@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
 import { hashPassword } from '$lib/server/auth';
 import { hasColumn } from '$lib/server/dbSchema';
@@ -42,6 +43,8 @@ async function hasRoleColumn(db: App.Platform['env']['DB']) {
 }
 
 async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
+	if (!dev) return;
+
 	await db.prepare(`
 		CREATE TABLE IF NOT EXISTS user_preferences (
 			user_id TEXT PRIMARY KEY,
@@ -53,6 +56,8 @@ async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
 }
 
 async function ensureUserInvitesTable(db: App.Platform['env']['DB']) {
+	if (!dev) return;
+
 	await db.prepare(`
 		CREATE TABLE IF NOT EXISTS user_invites (
 			id TEXT PRIMARY KEY,

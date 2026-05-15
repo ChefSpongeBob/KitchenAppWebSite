@@ -27,6 +27,10 @@ if (!capacitorRaw) {
   ok = fail('Missing capacitor.config.json') && ok;
 } else {
   const config = JSON.parse(capacitorRaw);
+  ok = (config.appId === 'com.nexusnorthsystems.crimini'
+    ? pass('Capacitor appId is com.nexusnorthsystems.crimini')
+    : fail(`Capacitor appId should be com.nexusnorthsystems.crimini (found "${config.appId}")`)) && ok;
+
   ok = (config.loggingBehavior === 'none'
     ? pass('Capacitor loggingBehavior is none')
     : fail(`Capacitor loggingBehavior should be "none" (found "${config.loggingBehavior}")`)) && ok;

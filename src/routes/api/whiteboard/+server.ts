@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
@@ -13,6 +14,7 @@ function scopedBusinessId(locals: App.Locals) {
 }
 
 async function hasReviewTable(db: App.Platform['env']['DB']) {
+  if (!dev) return true;
   const table = await db
     .prepare(
       `
@@ -27,6 +29,11 @@ async function hasReviewTable(db: App.Platform['env']['DB']) {
 }
 
 async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    whiteboardVotesSchemaEnsured = true;
+    return;
+  }
+
   if (whiteboardVotesSchemaEnsured) return;
   await db
     .prepare(

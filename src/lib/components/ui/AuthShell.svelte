@@ -54,7 +54,7 @@
   }
 
   .auth-intro::before {
-    content: '';
+    content: none;
     position: absolute;
     width: min(360px, 58vw);
     aspect-ratio: 1;
@@ -73,7 +73,7 @@
   .auth-eyebrow {
     width: fit-content;
     border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-    border-radius: 999px;
+    border-radius: 0;
     padding: 0.34rem 0.66rem;
     color: var(--color-text-muted);
     font-size: 0.74rem;
@@ -127,18 +127,16 @@
 
   .auth-panel {
     position: relative;
-    border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-    border-radius: 28px;
-    background:
-      linear-gradient(145deg, rgba(255,255,255,0.055), transparent 34%),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
-    box-shadow: var(--shadow-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-xs);
     padding: clamp(1.05rem, 2.4vw, 1.65rem);
     overflow: hidden;
   }
 
   .auth-panel::before {
-    content: '';
+    content: none;
     position: absolute;
     inset: 0;
     pointer-events: none;
@@ -199,8 +197,8 @@
     width: 100%;
     min-height: 2.95rem;
     border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--color-surface-alt) 90%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
     color: var(--color-text);
     padding: 0.72rem 0.82rem;
     font: inherit;
@@ -229,10 +227,10 @@
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    border-radius: 14px;
+    border-radius: var(--radius-sm);
     border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
     color: var(--color-text);
-    background: color-mix(in srgb, var(--color-surface-alt) 90%, transparent);
+    background: transparent;
     font: inherit;
     font-weight: var(--weight-semibold);
     text-decoration: none;
@@ -241,10 +239,9 @@
   }
 
   .auth-panel :global(.auth-button) {
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 28%, transparent), transparent),
-      color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
-    border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-primary-contrast);
   }
 
   .auth-panel :global(.auth-button:hover),
@@ -269,9 +266,9 @@
 
   .auth-panel :global(.auth-alert) {
     margin: 0;
-    border-radius: 14px;
+    border-radius: var(--radius-sm);
     border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+    background: var(--color-surface-alt);
     color: var(--color-text);
     padding: 0.72rem 0.82rem;
     line-height: 1.45;
@@ -279,8 +276,8 @@
   }
 
   .auth-panel :global(.auth-alert.error) {
-    border-color: color-mix(in srgb, #ff8d92 42%, var(--color-border));
-    color: #ffb3b7;
+    border-color: color-mix(in srgb, var(--color-error) 58%, var(--color-border));
+    color: var(--color-error);
   }
 
   .auth-panel :global(.auth-actions-row),

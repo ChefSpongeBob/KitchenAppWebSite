@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
@@ -20,6 +21,11 @@ function requireAdmin(role: string | undefined | null) {
 }
 
 async function ensureMeetingNotesTable(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    meetingNotesSchemaEnsured = true;
+    return;
+  }
+
   if (meetingNotesSchemaEnsured) return;
   await db
     .prepare(

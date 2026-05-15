@@ -169,10 +169,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1px;
     overflow: hidden;
-    border: var(--surface-outline);
-    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
     background: var(--color-border);
-    box-shadow: var(--shadow-xs);
+    box-shadow: none;
     margin-bottom: 1rem;
   }
 
@@ -180,7 +180,7 @@
     display: grid;
     gap: 0.2rem;
     padding: 0.86rem 0.95rem;
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    background: var(--color-surface);
   }
 
   .status-strip span {
@@ -202,14 +202,12 @@
 
   .warning-card {
     border: 1px solid color-mix(in srgb, var(--color-error) 38%, var(--color-border) 62%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-error) 14%, transparent), transparent),
-      var(--color-surface);
-    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
     padding: 0.9rem 1rem;
     display: grid;
     gap: 0.22rem;
-    box-shadow: var(--shadow-xs);
+    box-shadow: none;
     color: var(--color-text);
   }
 
@@ -245,11 +243,11 @@
 
   .tile {
     position: relative;
-    background: var(--surface-wash), var(--color-surface);
+    background: var(--color-surface);
     padding: 1rem;
-    border: var(--surface-outline);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-xs);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: none;
     color: var(--color-text);
     transition: border-color 0.2s ease, background 0.2s ease;
     overflow: hidden;
@@ -269,7 +267,7 @@
 
   .node-head span {
     border: 1px solid color-mix(in srgb, var(--color-success) 42%, var(--color-border) 58%);
-    border-radius: 999px;
+    border-radius: 0;
     color: color-mix(in srgb, var(--color-success) 72%, var(--color-text) 28%);
     padding: 0.14rem 0.48rem;
     font-size: 0.7rem;
@@ -301,9 +299,9 @@
   .empty-state {
     display: grid;
     gap: 0.2rem;
-    border: var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
     padding: 1rem;
     color: var(--color-text);
   }
@@ -313,24 +311,18 @@
   }
 
   .hot {
-    border-color: color-mix(in srgb, var(--color-error) 72%, var(--color-border) 28%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-error) 9%, transparent), transparent 70%),
-      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-error) 78%, var(--color-border) 22%);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-error) 86%, transparent);
   }
 
   .cold {
-    border-color: color-mix(in srgb, var(--color-primary) 68%, var(--color-border) 32%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 70%),
-      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-warning) 64%, var(--color-border) 36%);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-warning) 76%, transparent);
   }
 
   .normal {
-    border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border) 42%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-success) 8%, transparent), transparent 70%),
-      var(--color-surface);
+    border-color: color-mix(in srgb, var(--color-success) 68%, var(--color-border) 32%);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-success) 78%, transparent);
   }
 
   @media (max-width: 760px) {

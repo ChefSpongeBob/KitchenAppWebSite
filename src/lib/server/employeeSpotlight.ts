@@ -1,3 +1,5 @@
+import { dev } from '$app/environment';
+
 export type EmployeeSpotlight = {
   employeeName: string;
   shoutout: string;
@@ -26,6 +28,11 @@ async function ensureOptionalColumn(
 }
 
 export async function ensureEmployeeSpotlightSchema(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    employeeSpotlightSchemaEnsured = true;
+    return;
+  }
+
   if (employeeSpotlightSchemaEnsured) return;
 
   await db

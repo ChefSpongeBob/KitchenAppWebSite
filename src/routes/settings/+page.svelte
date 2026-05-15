@@ -618,6 +618,7 @@
         <div class="utility-links">
           <a href="/forgot-password">Change Password</a>
           <a href="/app/about">Contact / Support</a>
+          <a href="/account-deletion">Account Deletion</a>
         </div>
 
 

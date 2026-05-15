@@ -14,7 +14,10 @@ const REQUIRED_CORE_TABLES = [
 	'security_rate_limits',
 	'account_audit_logs',
 	'trial_identity_claims',
-	'business_lifecycle_snapshots'
+	'business_lifecycle_snapshots',
+	'account_deletion_requests',
+	'store_products',
+	'store_webhook_events'
 ];
 
 function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {

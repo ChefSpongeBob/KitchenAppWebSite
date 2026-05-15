@@ -20,7 +20,9 @@ Use this file when a new chat needs to continue Crimini work without guessing.
 - Install/PWA icon: full worded Crimini logo
 
 ## Cloudflare Resources
-- Pages project: `criminikitchenapp`
+- Pages project: `criminikitchenappwebsite`
+- Wrangler app name: `criminikitchenapp`
+- Compatibility flag: `nodejs_compat`
 - D1 binding: `DB`
 - D1 database: `crimini-production`
 - R2 bindings: `DOC_MEDIA`, `CAMERA_MEDIA`
@@ -64,6 +66,7 @@ node .\scripts\observability-check.mjs
 - Preferred smoke auth route: `/api/internal/smoke/session`
 - Schema readiness route: `/api/internal/schema-readiness`
 - Both require `SMOKE_INTERNAL_TOKEN`.
+- Keep the local production smoke value in an ignored env file such as `.env.production.local`; do not commit it.
 - `SMOKE_DEFAULT_EMAIL` can choose the smoke account server-side.
 
 ## Current Cleanup Notes

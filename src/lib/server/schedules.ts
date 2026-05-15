@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { fail } from '@sveltejs/kit';
 import {
   scheduleDepartments,
@@ -553,6 +554,11 @@ export function buildWeekDays(weekStart: string, shifts: ScheduleShift[]) {
 }
 
 export async function ensureScheduleSchema(db: DB) {
+  if (!dev) {
+    scheduleSchemaEnsured = true;
+    return;
+  }
+
   if (scheduleSchemaEnsured) return;
   if (scheduleSchemaPromise) {
     await scheduleSchemaPromise;

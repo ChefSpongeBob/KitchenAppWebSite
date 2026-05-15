@@ -51,12 +51,12 @@
 
   let sidebarOpen = false;
   let marketingMenuOpen = false;
-  let themeMode: "dark" | "light" = "dark";
+  let themeMode: "dark" | "light" = "light";
   let mobileView: "default" | "compact" = "default";
   let narrowViewportQuery: MediaQueryList | null = null;
   let coarsePointerQuery: MediaQueryList | null = null;
   let revealObserver: IntersectionObserver | null = null;
-  const THEME_STORAGE_KEY = "kitchen_theme_mode";
+  const THEME_STORAGE_KEY = "crimini_theme_mode";
   const adminNavItem: NavItem = {
     label: "Admin",
     route: "/admin",
@@ -128,7 +128,7 @@
     document.documentElement.setAttribute("data-theme", mode);
     document.documentElement.style.colorScheme = mode;
     const themeMeta = document.querySelector('meta[name="theme-color"]');
-    themeMeta?.setAttribute("content", mode === "light" ? "#eef2f6" : "#10141b");
+    themeMeta?.setAttribute("content", mode === "light" ? "#ffffff" : "#171717");
   }
 
   function applyMobileView(mode: "default" | "compact") {
@@ -210,6 +210,8 @@
     "/how-it-works",
     "/about",
     "/pricing",
+    "/privacy",
+    "/account-deletion",
     "/register",
     "/login",
     "/forgot-password"
@@ -536,11 +538,15 @@
           <a href="/how-it-works">How It Works</a>
           <a href="/about">About</a>
           <a href="/pricing">Pricing</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/account-deletion">Account Deletion</a>
           <a href="/register#onboarding-slideshow">Start Free</a>
         {:else if data.user}
           <a href="/app/about">About App</a>
           <a href="/docs">Documentation</a>
           <a href="/settings">Support</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/account-deletion">Account Deletion</a>
         {:else}
           <a href="/features">Features</a>
           <a href="/how-it-works">How It Works</a>
@@ -1345,6 +1351,95 @@
     color: var(--color-text-muted);
     border-top: 1px solid rgba(255,255,255,0.05);
     margin-top: 0.2rem;
+  }
+
+  .hamburger,
+  .theme-toggle {
+    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+    border-color: color-mix(in srgb, var(--color-border) 88%, transparent);
+    box-shadow: var(--shadow-xs);
+    backdrop-filter: blur(10px);
+  }
+
+  .hamburger:hover,
+  .theme-toggle:hover {
+    background: var(--color-surface-alt);
+    border-color: var(--color-text);
+  }
+
+  .sidebar {
+    background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+    border-right: 1px solid var(--color-border);
+    box-shadow: 10px 0 26px rgba(17, 18, 20, 0.08);
+  }
+
+  :global(html[data-theme='dark']) .sidebar {
+    box-shadow: 10px 0 26px rgba(0, 0, 0, 0.26);
+  }
+
+  .sidebar-brand {
+    background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+    border-bottom-color: var(--color-divider);
+  }
+
+  .brand-mark {
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text);
+    border-color: var(--color-border);
+  }
+
+  .side-group-summary,
+  .side-item {
+    border-radius: 0;
+    border-color: transparent;
+  }
+
+  .side-group-summary:hover,
+  .side-group-summary.active,
+  .side-item:hover,
+  .side-item.active {
+    background: transparent;
+    border-bottom-color: var(--color-text);
+    color: var(--color-text);
+    transform: none;
+  }
+
+  .active-indicator {
+    width: 2px;
+    background: var(--color-text);
+  }
+
+  .app-shell:not(.marketing-app) .app-footer {
+    background: var(--color-bg);
+    border-top-color: var(--color-divider);
+    backdrop-filter: none;
+  }
+
+  .app-shell:not(.marketing-app) .app-footer::before,
+  .app-shell:not(.marketing-app) .footer-shell::after {
+    content: none;
+  }
+
+  .app-shell:not(.marketing-app) .footer-logo {
+    filter: none;
+  }
+
+  .app-shell:not(.marketing-app) .footer-bottom {
+    border-top-color: var(--color-divider);
+  }
+
+  .app-shell:not(.marketing-app) .app-footer a {
+    border-radius: 0;
+    border-color: transparent;
+    border-bottom-color: var(--color-border);
+    background: transparent;
+  }
+
+  .app-shell:not(.marketing-app) .app-footer a:hover {
+    border-bottom-color: var(--color-text);
+    background: transparent;
+    color: var(--color-text);
   }
 
   @media (max-width: 760px) {

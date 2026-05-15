@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { fail } from '@sveltejs/kit';
 import { sha256Hex } from '$lib/server/auth';
 import { logOperationalEvent, logOperationalError } from '$lib/server/observability';
@@ -27,6 +28,11 @@ let securitySchemaEnsured = false;
 let securitySchemaPromise: Promise<void> | null = null;
 
 export async function ensureSecuritySchema(db: D1) {
+  if (!dev) {
+    securitySchemaEnsured = true;
+    return;
+  }
+
   if (securitySchemaEnsured) return;
   if (securitySchemaPromise) {
     await securitySchemaPromise;

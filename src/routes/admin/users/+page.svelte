@@ -162,10 +162,6 @@
             <span>{activeInvites.length} active</span>
           </header>
 
-          {#if !data.emailConfigured}
-            <p class="config-banner">Invite emails are not configured. Add `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to send automatically.</p>
-          {/if}
-
           <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
             <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
             <button type="submit">Invite</button>
@@ -501,17 +497,6 @@
   .side-section {
     display: grid;
     gap: 0.75rem;
-  }
-
-  .config-banner {
-    margin: 0;
-    padding: 0.68rem 0.78rem;
-    border: 1px solid color-mix(in srgb, #f59e0b 34%, var(--color-border));
-    border-radius: 14px;
-    background: color-mix(in srgb, #f59e0b 12%, transparent);
-    color: #fde68a;
-    font-size: 0.84rem;
-    line-height: 1.45;
   }
 
   .invite-form {

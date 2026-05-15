@@ -2,6 +2,12 @@
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import { onMount } from 'svelte';
+	import {
+		CriminiBilling,
+		nativeStoreForPlatform,
+		type NativeBillingProduct,
+		type NativeStore
+	} from '$lib/billing/nativeBilling';
 
 	export let data: {
 		business: {
@@ -27,6 +33,30 @@
 		};
 		canManageBilling: boolean;
 		localMode: boolean;
+		storeProducts: Array<{
+			store: NativeStore;
+			productId: string;
+			displayName: string;
+			entitlementKey: string;
+			planTier: 'starter' | 'growth' | 'enterprise' | null;
+			priceCents: number;
+			currency: string;
+			addOnTempMonitoring: boolean;
+			addOnCameraMonitoring: boolean;
+		}>;
+		storeEntitlements: Array<{
+			store: NativeStore;
+			productId: string;
+			entitlementKey: string;
+			planTier: 'starter' | 'growth' | 'enterprise' | null;
+			status: string;
+			currentPeriodEnd: number | null;
+			autoRenewing: boolean;
+		}>;
+		manageLinks: {
+			appStore: string;
+			googlePlay: string;
+		};
 		storeBillingPlaceholder: {
 			preferredStore: 'google_play' | 'app_store' | 'both';
 			status: 'pending_setup' | 'queued' | 'active' | 'disabled';
@@ -49,10 +79,96 @@
 	let storeBillingPreference: 'both' | 'google_play' | 'app_store' =
 		data.storeBillingPlaceholder?.preferredStore ?? 'both';
 	let clientFingerprint = '';
+	let nativeStore: NativeStore | null = null;
+	let nativeProducts: NativeBillingProduct[] = [];
+	let selectedProductId = '';
+	let purchaseStatus = '';
+	let purchaseBusy = false;
 
 	const trialEndsText = data.trial.trialEndsAt
 		? new Date(data.trial.trialEndsAt * 1000).toLocaleDateString()
 		: 'N/A';
+
+	$: availableProducts = data.storeProducts.filter((product) =>
+		nativeStore ? product.store === nativeStore : product.store === 'google_play'
+	);
+	$: if (!selectedProductId && availableProducts.length) {
+		selectedProductId =
+			availableProducts.find((product) => product.planTier === 'starter')?.productId ??
+			availableProducts[0].productId;
+	}
+	$: selectedStoreProduct = availableProducts.find((product) => product.productId === selectedProductId);
+	$: nativeProduct = nativeProducts.find((product) => product.productId === selectedProductId);
+	$: activeEntitlement = data.storeEntitlements.find((entitlement) => entitlement.status === 'active');
+	$: manageUrl =
+		activeEntitlement?.store === 'app_store'
+			? data.manageLinks.appStore
+			: activeEntitlement?.store === 'google_play'
+				? data.manageLinks.googlePlay
+				: nativeStore === 'app_store'
+					? data.manageLinks.appStore
+					: data.manageLinks.googlePlay;
+
+	function priceLabel(product: (typeof availableProducts)[number]) {
+		return new Intl.NumberFormat('en-US', {
+			style: 'currency',
+			currency: product.currency
+		}).format(product.priceCents / 100);
+	}
+
+	async function postNativePurchase(payload: Record<string, unknown>) {
+		const response = await fetch('/api/billing/native-purchase', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload)
+		});
+		const result = await response.json().catch(() => ({}));
+		if (!response.ok && response.status !== 202) {
+			throw new Error(result?.error ?? 'Purchase could not be saved.');
+		}
+		return result;
+	}
+
+	async function purchaseSelectedProduct() {
+		if (!selectedProductId) return;
+		if (!nativeStore) {
+			purchaseStatus = 'Open the mobile app to purchase.';
+			return;
+		}
+
+		purchaseBusy = true;
+		purchaseStatus = '';
+		try {
+			const purchase = await CriminiBilling.purchase({ productId: selectedProductId });
+			await postNativePurchase(purchase);
+			purchaseStatus = 'Purchase received. Verification pending.';
+		} catch (error) {
+			purchaseStatus = error instanceof Error ? error.message : 'Purchase failed.';
+		} finally {
+			purchaseBusy = false;
+		}
+	}
+
+	async function restorePurchases() {
+		if (!nativeStore) {
+			purchaseStatus = 'Open the mobile app to restore.';
+			return;
+		}
+
+		purchaseBusy = true;
+		purchaseStatus = '';
+		try {
+			const restored = await CriminiBilling.restorePurchases();
+			for (const purchase of restored.purchases) {
+				await postNativePurchase(purchase);
+			}
+			purchaseStatus = restored.purchases.length ? 'Restore received.' : 'Nothing to restore.';
+		} catch (error) {
+			purchaseStatus = error instanceof Error ? error.message : 'Restore failed.';
+		} finally {
+			purchaseBusy = false;
+		}
+	}
 
 	onMount(() => {
 		try {
@@ -60,6 +176,19 @@
 			clientFingerprint = window.localStorage.getItem(storageKey) ?? '';
 		} catch {
 			clientFingerprint = '';
+		}
+		nativeStore = nativeStoreForPlatform();
+		if (nativeStore) {
+			const productIds = data.storeProducts
+				.filter((product) => product.store === nativeStore)
+				.map((product) => product.productId);
+			CriminiBilling.getProducts({ productIds })
+				.then((result) => {
+					nativeProducts = result.products;
+				})
+				.catch(() => {
+					nativeProducts = [];
+				});
 		}
 	});
 </script>
@@ -72,15 +201,21 @@
 			<h2>{data.business.name}</h2>
 			<p class="muted">Trial status: {data.trial.mode}</p>
 			<p class="muted">Trial end: {trialEndsText}</p>
-			<p class="notice">Billing provider path: app stores only.</p>
+			<p class="notice">Billing provider: app stores.</p>
 			{#if data.storeStatus === 'queued'}
 				<p class="notice">Store billing placeholder has been queued for activation.</p>
 			{/if}
 			{#if data.storeBillingPlaceholder}
 				<p class="muted">
-					Placeholder: {data.storeBillingPlaceholder.preferredStore.replace('_', ' ')} /
+					Billing: {data.storeBillingPlaceholder.preferredStore.replace('_', ' ')} /
 					{data.storeBillingPlaceholder.status}
 				</p>
+			{/if}
+			{#if data.storeEntitlements.length}
+				<p class="muted">Entitlement: {data.storeEntitlements[0].status}</p>
+			{/if}
+			{#if activeEntitlement}
+				<a class="manage-link" href={manageUrl} target="_blank" rel="noreferrer">Manage subscription</a>
 			{/if}
 		</article>
 
@@ -90,40 +225,44 @@
 			</article>
 		{:else}
 			<article class="panel">
-				<h3>Convert To Paid</h3>
-				<form method="POST" action="?/convert" class="stack">
-					<label for="billing-plan">Plan tier</label>
-					<select id="billing-plan" name="plan_tier" bind:value={selectedPlan}>
-						<option value="small">Small - $50/mo</option>
-						<option value="medium">Medium - $120/mo</option>
-						<option value="large">Large - $160/mo</option>
+				<h3>Plans</h3>
+				<div class="stack">
+					<label for="store-product">Plan or add-on</label>
+					<select id="store-product" bind:value={selectedProductId}>
+						{#each availableProducts as product}
+							<option value={product.productId}>
+								{product.displayName} - {nativeProducts.length && nativeProduct?.price
+									? nativeProduct.price
+									: `${priceLabel(product)}/mo`}
+							</option>
+						{/each}
 					</select>
 
-					<label class="check">
-						<input type="checkbox" bind:checked={addOnTempMonitoring} />
-						<span>Cooler/freezer monitoring (+$30/mo)</span>
-					</label>
-					<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
+					<div class="button-row">
+						<button type="button" class="primary" disabled={purchaseBusy} on:click={purchaseSelectedProduct}>
+							{purchaseBusy ? 'Working...' : 'Purchase'}
+						</button>
+						<button type="button" class="secondary" disabled={purchaseBusy} on:click={restorePurchases}>
+							Restore
+						</button>
+					</div>
 
-					<label class="check">
-						<input type="checkbox" bind:checked={addOnCameraMonitoring} />
-						<span>Camera monitoring (+$30/mo)</span>
-					</label>
-					<input type="hidden" name="addon_camera_monitoring" value={addOnCameraMonitoring ? '1' : '0'} />
-					<label for="store-preference">Store target</label>
-					<select id="store-preference" name="store_billing_preference" bind:value={storeBillingPreference}>
-						<option value="both">Both stores</option>
-						<option value="google_play">Google Play</option>
-						<option value="app_store">App Store</option>
-					</select>
-
-					<button type="submit" class="primary">Activate Paid Workspace</button>
-				</form>
-				<p class="muted">
-					{data.localMode
-						? 'Local testing mode: direct activation is enabled for development only.'
-						: 'Production mode: paid activation must be handled through Play Store / App Store billing.'}
-				</p>
+					{#if !nativeStore}
+						<p class="muted">Purchases are available in the mobile app.</p>
+					{/if}
+					{#if purchaseStatus}
+						<p class="notice">{purchaseStatus}</p>
+					{/if}
+				</div>
+				{#if data.localMode}
+					<form method="POST" action="?/convert" class="dev-convert">
+						<input type="hidden" name="plan_tier" value={selectedPlan} />
+						<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
+						<input type="hidden" name="addon_camera_monitoring" value={addOnCameraMonitoring ? '1' : '0'} />
+						<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
+						<button type="submit" class="secondary">Local activate</button>
+					</form>
+				{/if}
 			</article>
 
 			<article class="panel danger">
@@ -186,13 +325,14 @@
 		color: var(--color-text);
 	}
 
-	.check {
+	.button-row {
 		display: flex;
-		align-items: center;
-		gap: 0.45rem;
+		flex-wrap: wrap;
+		gap: 0.6rem;
 	}
 
 	.primary,
+	.secondary,
 	.danger-btn {
 		padding: 0.62rem 0.9rem;
 		border-radius: 10px;
@@ -203,6 +343,15 @@
 	.primary {
 		background: color-mix(in srgb, var(--color-primary) 24%, var(--color-surface));
 		color: var(--color-text);
+	}
+
+	.secondary {
+		background: var(--color-surface-alt);
+		color: var(--color-text);
+	}
+
+	.dev-convert {
+		margin-top: 0.8rem;
 	}
 
 	.danger {
@@ -222,5 +371,13 @@
 	.notice {
 		margin: 0.45rem 0 0;
 		color: var(--color-text);
+	}
+
+	.manage-link {
+		display: inline-flex;
+		margin-top: 0.65rem;
+		color: var(--color-text);
+		text-decoration: underline;
+		text-underline-offset: 0.18em;
 	}
 </style>

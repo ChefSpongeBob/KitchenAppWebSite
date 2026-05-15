@@ -8,6 +8,9 @@ import {
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
+const MAX_CAMERA_STILL_BYTES = 8 * 1024 * 1024;
+const MAX_CAMERA_CLIP_BYTES = 25 * 1024 * 1024;
+
 export async function POST({ request, platform, url }) {
   if (!cameraBetaEnabled) {
     return json({ error: 'Not found.' }, { status: 404 });
@@ -21,14 +24,23 @@ export async function POST({ request, platform, url }) {
   if (!device) return json({ error: 'Device credentials required.' }, { status: 401 });
 
   const contentType = request.headers.get('content-type') ?? 'application/octet-stream';
+  const kind = (url.searchParams.get('kind') ?? 'still').trim() || 'still';
+  const maxUploadBytes = kind === 'clip' ? MAX_CAMERA_CLIP_BYTES : MAX_CAMERA_STILL_BYTES;
+  const declaredLength = Number(request.headers.get('content-length') ?? NaN);
+  if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
+    return json({ error: 'Camera upload is too large.' }, { status: 413 });
+  }
+
   const fileBuffer = await request.arrayBuffer();
   if (!fileBuffer.byteLength) {
     return json({ error: 'Empty upload body.' }, { status: 400 });
   }
+  if (fileBuffer.byteLength > maxUploadBytes) {
+    return json({ error: 'Camera upload is too large.' }, { status: 413 });
+  }
 
   const cameraId = (url.searchParams.get('camera_id') ?? 'camera').trim() || 'camera';
   const cameraName = (url.searchParams.get('camera_name') ?? '').trim() || null;
-  const kind = (url.searchParams.get('kind') ?? 'still').trim() || 'still';
   const eventType = (url.searchParams.get('event_type') ?? kind).trim() || kind;
   const logEvent = url.searchParams.get('log_event') === '1';
   const filename = (url.searchParams.get('filename') ?? '').trim();

@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { cleanupExpiredTemps } from '$lib/server/retention';
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
@@ -12,6 +13,10 @@ type TempRow = {
 let tempsIndexesEnsured = false;
 
 async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    tempsIndexesEnsured = true;
+    return;
+  }
   if (tempsIndexesEnsured) return;
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_temps_ts_desc ON temps(ts DESC)`).run();
   await db

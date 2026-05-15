@@ -1,9 +1,18 @@
+import { dev } from '$app/environment';
+
 type D1 = App.Platform['env']['DB'];
 
 export const LIABILITY_AGREEMENT_KEY = 'liability_release';
 export const LIABILITY_AGREEMENT_VERSION = '2026-04-25';
+let legalAgreementSchemaEnsured = false;
 
 export async function ensureLegalAgreementSchema(db: D1) {
+	if (!dev) {
+		legalAgreementSchemaEnsured = true;
+		return;
+	}
+	if (legalAgreementSchemaEnsured) return;
+
 	await db
 		.prepare(
 			`
@@ -36,6 +45,7 @@ export async function ensureLegalAgreementSchema(db: D1) {
     `
 		)
 		.run();
+	legalAgreementSchemaEnsured = true;
 }
 
 export async function recordLegalAgreementAcceptance(

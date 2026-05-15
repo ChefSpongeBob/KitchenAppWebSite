@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
@@ -90,6 +91,7 @@ async function seedDefaultsIfMissing(
 }
 
 async function hasAmountTextColumn(db: DB) {
+  if (!dev) return true;
   const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{
     name: string;
   }>();
@@ -97,6 +99,7 @@ async function hasAmountTextColumn(db: DB) {
 }
 
 async function hasDetailsColumn(db: DB) {
+  if (!dev) return true;
   const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{
     name: string;
   }>();

@@ -1,3 +1,5 @@
+import { dev } from '$app/environment';
+
 type D1 = App.Platform['env']['DB'];
 type CameraBucket = App.Platform['env']['CAMERA_MEDIA'];
 
@@ -7,6 +9,7 @@ type ColumnInfo = {
 
 let lastCameraCleanupAt = 0;
 const CAMERA_CLEANUP_BATCH_SIZE = 100;
+let cameraSchemaEnsured = false;
 
 async function tableColumns(db: D1, table: string) {
   const columns = await db.prepare(`PRAGMA table_info(${table})`).all<ColumnInfo>();
@@ -14,6 +17,12 @@ async function tableColumns(db: D1, table: string) {
 }
 
 export async function ensureCameraSchema(db: D1) {
+  if (!dev) {
+    cameraSchemaEnsured = true;
+    return;
+  }
+  if (cameraSchemaEnsured) return;
+
   await db
     .prepare(
       `
@@ -71,6 +80,8 @@ export async function ensureCameraSchema(db: D1) {
       `
     )
     .run();
+
+  cameraSchemaEnsured = true;
 }
 
 export function cameraIngestAuthorized(request: Request, apiKey?: string) {

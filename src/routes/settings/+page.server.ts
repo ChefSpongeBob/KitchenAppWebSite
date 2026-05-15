@@ -1,4 +1,5 @@
 import type { Actions, PageServerLoad } from './$types';
+import { dev } from '$app/environment';
 import { fail, redirect } from '@sveltejs/kit';
 import { getTableColumns, hasTable } from '$lib/server/dbSchema';
 import {
@@ -27,6 +28,11 @@ import {
 let userPreferencesSchemaEnsured = false;
 
 async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    userPreferencesSchemaEnsured = true;
+    return;
+  }
+
   if (userPreferencesSchemaEnsured) return;
   try {
     await db
@@ -55,6 +61,8 @@ async function getUsersColumns(db: App.Platform['env']['DB']) {
 }
 
 async function ensureUserPreferenceColumns(db: App.Platform['env']['DB']) {
+  if (!dev) return;
+
   if (!(await hasTable(db, 'user_preferences'))) return;
   const columns = await getTableColumns(db, 'user_preferences');
   if (!columns.has('sms_updates')) {

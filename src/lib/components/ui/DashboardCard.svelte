@@ -32,13 +32,13 @@
 
   .card {
     position: relative;
-    background: var(--surface-wash), var(--color-surface);
-    border: 1px solid var(--surface-outline);
-    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
     padding: clamp(0.95rem, 1.8vw, 1.15rem);
     overflow-wrap: anywhere;
     color: var(--color-text);
-    box-shadow: var(--shadow-xs);
+    box-shadow: none;
   }
 
   .header h2 {

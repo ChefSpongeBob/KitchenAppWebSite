@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { sha256Hex } from '$lib/server/auth';
 
 type D1 = App.Platform['env']['DB'];
@@ -208,6 +209,11 @@ export function getRequestIpAddress(request: Request) {
 }
 
 export async function ensureTrialSchema(db: D1) {
+	if (!dev) {
+		trialSchemaEnsured = true;
+		return;
+	}
+
 	if (trialSchemaEnsured) return;
 	if (trialSchemaPromise) {
 		await trialSchemaPromise;

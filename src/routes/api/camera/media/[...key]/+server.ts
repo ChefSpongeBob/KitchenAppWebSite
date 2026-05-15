@@ -98,9 +98,8 @@ export async function GET({ params, platform, locals, url, request }) {
   }
 
   const contentType = object.httpMetadata?.contentType ?? 'application/octet-stream';
-  const body = await object.arrayBuffer();
 
-  return new Response(body, {
+  return new Response(object.body as unknown as BodyInit, {
     headers: responseHeaders(contentType, object.httpEtag)
   });
 }

@@ -8,17 +8,21 @@ Use this as the default runbook for pushing web + DB safely.
   - `npm run check`
   - `npm run build`
   - `npm run mobile:check`
+  - `npm run native:prereq`
   - `npm run test:production-schema`
   - `npm run test:scale-performance`
   - `npm run test:auth-abuse`
   - `npm run test:billing-lifecycle`
+  - `npm run test:store-release`
+  - `npm run test:cloudflare-readiness`
+  - `npm run test:security-headers`
   - `npm run test:observability`
 - Confirm feature flags for this release:
   - `PUBLIC_CAMERA_BETA_ENABLED` (default should stay `false` until camera is approved).
 
 ## 2) Database Safety
 - Validate production DB access:
-  - `npx wrangler d1 execute kitchen --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`
+  - `npx wrangler d1 execute DB --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`
 - Create/confirm backup before migrations:
   - Export D1 from Cloudflare dashboard or Wrangler.
   - Confirm R2 bucket names and business-scoped prefixes.
@@ -26,9 +30,32 @@ Use this as the default runbook for pushing web + DB safely.
   - `npm run db:migrations:normalize:remote`
 - Apply required migrations before deploy:
   - `npm run db:migrations:apply:remote`
+- Current required post-live migrations:
+  - `0057_repair_todo_user_foreign_keys.sql`
+  - `0058_account_deletion_requests.sql`
+  - `0059_store_entitlements.sql`
 - Verify production schema readiness after migrations and before traffic:
   - Set `APP_BASE_URL` and `SMOKE_INTERNAL_TOKEN`
   - `npm run schema:readiness:prod`
+
+## 2.5) Cloudflare Secrets
+- Pages project name for secrets:
+  - `criminikitchenappwebsite`
+- Required before app-store billing can fully verify:
+  - `APP_STORE_BUNDLE_ID`
+  - `APP_STORE_ISSUER_ID`
+  - `APP_STORE_KEY_ID`
+  - `APP_STORE_PRIVATE_KEY`
+  - `APP_STORE_ENVIRONMENT`
+  - `GOOGLE_PLAY_PACKAGE_NAME`
+  - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+  - `BILLING_WEBHOOK_TOKEN`
+- Required for production smoke/schema checks:
+  - `SMOKE_INTERNAL_TOKEN`
+- Optional email automation:
+  - `RESEND_API_KEY`
+  - `RESEND_FROM_EMAIL`
+  - `RESEND_REPLY_TO_EMAIL`
 
 ## 3) Deploy
 - Push code to `main`.

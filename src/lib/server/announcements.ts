@@ -1,3 +1,5 @@
+import { dev } from '$app/environment';
+
 export type HomepageAnnouncement = {
   content: string;
   updatedAt: number;
@@ -24,6 +26,11 @@ async function ensureOptionalColumn(
 }
 
 export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    announcementsSchemaEnsured = true;
+    return;
+  }
+
   if (announcementsSchemaEnsured) return;
   await db
     .prepare(

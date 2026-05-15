@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import {
   appFeatureDefinitions,
   defaultAppFeatureModes,
@@ -15,6 +16,11 @@ const seededBusinessFeatureModes = new Set<string>();
 const seedBusinessFeaturePromises = new Map<string, Promise<void>>();
 
 async function ensureAppFeatureSchema(db: DB) {
+  if (!dev) {
+    featureSchemaEnsured = true;
+    return;
+  }
+
   if (featureSchemaEnsured) return;
   if (ensureFeatureSchemaPromise) {
     await ensureFeatureSchemaPromise;

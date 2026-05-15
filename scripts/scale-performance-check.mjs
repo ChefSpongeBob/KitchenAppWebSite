@@ -39,6 +39,44 @@ expect('src/lib/server/camera.ts', 'camera retention cleanup is batched', (sourc
   source.includes('DELETE FROM camera_events WHERE id = ?')
 );
 
+expect('src/lib/server/tenant.ts', 'tenant schema repair is skipped on production request paths', (source) =>
+  source.includes("import { dev } from '$app/environment'") &&
+  source.includes('if (!dev)') &&
+  source.includes('verifyTenantSchema')
+);
+
+expect('src/lib/server/business.ts', 'business schema repair is skipped on production request paths', (source) =>
+  source.includes("import { dev } from '$app/environment'") && source.includes('businessSchemaEnsured = true')
+);
+
+expect('src/lib/server/schedules.ts', 'schedule schema repair is skipped on production request paths', (source) =>
+  source.includes("import { dev } from '$app/environment'") && source.includes('scheduleSchemaEnsured = true')
+);
+
+expect('src/lib/server/admin.ts', 'admin schema repair helpers are skipped on production request paths', (source) =>
+  source.includes("import { dev } from '$app/environment'") &&
+  source.includes('employeeOnboardingTablesEnsured = true') &&
+  !source.includes("'' AS details")
+);
+
+expect('src/routes/api/temps/+server.ts', 'temp index repair is skipped on production API paths', (source) =>
+  source.includes("import { dev } from '$app/environment'") && source.includes('tempsIndexesEnsured = true')
+);
+
+expect('src/routes/api/documents/media/[...key]/+server.ts', 'document media responses stream from R2', (source) =>
+  source.includes('new Response(object.body') && !source.includes('object.arrayBuffer()')
+);
+
+expect('src/routes/api/camera/media/[...key]/+server.ts', 'camera media responses stream from R2', (source) =>
+  source.includes('new Response(object.body') && !source.includes('object.arrayBuffer()')
+);
+
+expect('src/routes/api/camera/upload/+server.ts', 'camera uploads have hard size limits', (source) =>
+  source.includes('MAX_CAMERA_STILL_BYTES') &&
+  source.includes('MAX_CAMERA_CLIP_BYTES') &&
+  source.includes('status: 413')
+);
+
 expect('docs/scale-performance-audit.md', 'scale audit document exists', (source) =>
   source.includes('Query Areas Reviewed') && source.includes('Next Scale Notes')
 );

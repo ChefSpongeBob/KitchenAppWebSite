@@ -47,6 +47,8 @@ const TENANT_TABLES = [
   'employee_onboarding_template_items',
   'business_trials',
   'store_billing_placeholders',
+  'business_store_entitlements',
+  'store_purchase_events',
   'legal_agreements',
   'app_feature_flags_business',
   'iot_devices'
@@ -152,6 +154,11 @@ export async function verifyTenantSchema(db: D1) {
 }
 
 export async function ensureTenantSchema(db: D1, force = false) {
+  if (!dev) {
+    tenantSchemaEnsured = true;
+    return;
+  }
+
   if (!force && tenantSchemaEnsured) return;
   if (!force && tenantSchemaPromise) {
     await tenantSchemaPromise;
@@ -159,19 +166,6 @@ export async function ensureTenantSchema(db: D1, force = false) {
   }
 
   const run = async () => {
-    if (!dev) {
-      const issues = await verifyTenantSchema(db);
-      if (issues.length) {
-        console.error(
-          `Production schema readiness failed. Apply migrations before serving traffic: ${issues
-            .map((issue) => `${issue.table}:${issue.issue}`)
-            .join(', ')}`
-        );
-      }
-      tenantSchemaEnsured = true;
-      return;
-    }
-
     for (const tableName of TENANT_TABLES) {
       await ensureBusinessColumn(db, tableName);
     }

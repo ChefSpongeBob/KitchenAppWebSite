@@ -22,6 +22,8 @@
       <AdminEditorMenu />
     </div>
   {/if}
+
+  <span class="page-header-divider" aria-hidden="true"></span>
 </header>
 
 <style>
@@ -39,9 +41,9 @@
 
   .header-rule {
     width: clamp(2.5rem, 7vw, 4.5rem);
-    height: 3px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--color-primary) 58%, transparent);
+    height: 1px;
+    border-radius: 0;
+    background: var(--color-text);
   }
 
   h1 {
@@ -64,6 +66,13 @@
     width: 100%;
   }
 
+  .page-header-divider {
+    display: block;
+    width: 100%;
+    margin-top: 0.95rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+  }
+
   @media (max-width: 760px) {
     .page-header {
       margin-bottom: var(--space-4);
@@ -72,6 +81,10 @@
 
     .admin-editor-slot {
       margin-top: 0.62rem;
+    }
+
+    .page-header-divider {
+      margin-top: 0.72rem;
     }
 
     h1 {

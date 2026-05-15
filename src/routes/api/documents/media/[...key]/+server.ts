@@ -192,6 +192,5 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
   headers.set('cache-control', 'private, no-store');
   headers.set('etag', object.httpEtag);
 
-  const body = await object.arrayBuffer();
-  return new Response(body, { headers });
+  return new Response(object.body as unknown as BodyInit, { headers });
 };

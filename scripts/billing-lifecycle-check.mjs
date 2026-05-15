@@ -63,6 +63,44 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
   source.includes('trial_identity_claims') && source.includes('business_lifecycle_snapshots')
 );
 
+expect('migrations/0059_store_entitlements.sql', 'store entitlement migration creates native billing tables', (source) =>
+  source.includes('store_products') &&
+  source.includes('business_store_entitlements') &&
+  source.includes('store_purchase_events') &&
+  source.includes('store_webhook_events')
+);
+
+expect('src/routes/api/billing/native-purchase/+server.ts', 'native purchases stay pending until store verification', (source) =>
+  source.includes("pending_store_configuration") &&
+  source.includes("pending_verification") &&
+  !source.includes('convertBusinessToPaid(')
+);
+
+expect('src/lib/server/storeBilling.ts', 'verified entitlements are the paid activation path', (source) =>
+  source.includes('activateVerifiedStoreEntitlement') &&
+  source.includes('applyVerifiedEntitlementsToBusiness') &&
+  source.includes("status = 'active'")
+);
+
+expect('src/lib/server/storeVerification.ts', 'store verification calls Apple and Google APIs', (source) =>
+  source.includes('api.storekit.itunes.apple.com') &&
+  source.includes('androidpublisher.googleapis.com') &&
+  source.includes('purchases/subscriptionsv2/tokens')
+);
+
+expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store notification endpoint stores events', (source) =>
+  source.includes('store_webhook_events') && source.includes("'app_store'")
+);
+
+expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play notification endpoint stores events', (source) =>
+  source.includes('store_webhook_events') && source.includes("'google_play'")
+);
+
+expect('src/lib/billing/nativeBilling.ts', 'web app has native billing bridge', (source) =>
+  source.includes("registerPlugin<CriminiBillingPlugin>('CriminiBilling')") &&
+  source.includes('nativeStoreForPlatform')
+);
+
 expect('docs/billing-trial-tenant-lifecycle.md', 'lifecycle documentation exists', (source) =>
   source.includes('Trial identity claims') && source.includes('pre-purge snapshot')
 );

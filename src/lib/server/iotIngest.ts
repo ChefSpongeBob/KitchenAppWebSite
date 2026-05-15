@@ -1,6 +1,10 @@
+import { dev } from '$app/environment';
+
 type D1 = App.Platform['env']['DB'];
 
 let lastGuardCleanupAt = 0;
+let iotDeviceSchemaEnsured = false;
+let iotIngestGuardSchemaEnsured = false;
 
 export type IoTDeviceType = 'sensor' | 'camera';
 
@@ -77,6 +81,12 @@ function generateDeviceSecret() {
 }
 
 export async function ensureIoTDeviceSchema(db: D1) {
+  if (!dev) {
+    iotDeviceSchemaEnsured = true;
+    return;
+  }
+  if (iotDeviceSchemaEnsured) return;
+
   await db
     .prepare(
       `
@@ -119,6 +129,8 @@ export async function ensureIoTDeviceSchema(db: D1) {
       `
     )
     .run();
+
+  iotDeviceSchemaEnsured = true;
 }
 
 export async function loadIoTDevices(db: D1, businessId: string) {
@@ -301,6 +313,12 @@ export async function authenticateIoTDevice(
 }
 
 export async function ensureIoTIngestGuardSchema(db: D1) {
+  if (!dev) {
+    iotIngestGuardSchemaEnsured = true;
+    return;
+  }
+  if (iotIngestGuardSchemaEnsured) return;
+
   await db
     .prepare(
       `
@@ -321,6 +339,8 @@ export async function ensureIoTIngestGuardSchema(db: D1) {
       `
     )
     .run();
+
+  iotIngestGuardSchemaEnsured = true;
 }
 
 export async function cleanupExpiredIoTIngestGuards(

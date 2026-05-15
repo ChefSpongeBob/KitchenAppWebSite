@@ -1,4 +1,6 @@
-﻿import { fail, redirect } from '@sveltejs/kit';
+﻿import { dev } from '$app/environment';
+import { fail, redirect } from '@sveltejs/kit';
+import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import {
   ensureAnnouncementsSchema,
   getHomepageAnnouncementId,
@@ -31,6 +33,11 @@ import {
 } from '$lib/server/security';
 
 type D1 = App.Platform['env']['DB'];
+let creatorCategoryRegistryEnsured = false;
+let employeeProfilesTableEnsured = false;
+let employeeProfileEditRequestsTableEnsured = false;
+let employeeOnboardingTablesEnsured = false;
+let userInvitesTableEnsured = false;
 
 export type AdminSectionRow = {
   section_id: string;
@@ -360,9 +367,7 @@ async function uploadDocumentMedia(
   const extension = filenameExtension || typeExtension || 'bin';
   const normalizedSlug = normalizeSlug(slug) || 'document';
   const key = `businesses/${businessId}/documents/${normalizedSlug}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  const body = await file.arrayBuffer();
-
-  await bucket.put(key, body, {
+  await bucket.put(key, file.stream() as unknown as WorkerReadableStream, {
     httpMetadata: {
       contentType,
       cacheControl: 'private, max-age=0'
@@ -397,9 +402,7 @@ async function uploadEmployeeOnboardingMedia(
 
   const normalizedUserId = normalizeSlug(userId) || 'employee';
   const key = `businesses/${businessId}/employee-onboarding/${normalizedUserId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  const body = await file.arrayBuffer();
-
-  await bucket.put(key, body, {
+  await bucket.put(key, file.stream() as unknown as WorkerReadableStream, {
     httpMetadata: {
       contentType,
       cacheControl: 'private, max-age=0'
@@ -418,6 +421,8 @@ async function uploadEmployeeOnboardingMedia(
 }
 
 export async function tableExists(db: D1, tableName: string) {
+  if (!dev) return true;
+
   const table = await db
     .prepare(
       `
@@ -433,6 +438,8 @@ export async function tableExists(db: D1, tableName: string) {
 }
 
 export async function usersHasIsActiveColumn(db: D1) {
+  if (!dev) return true;
+
   const columns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
   return (columns.results ?? []).some((column) => column.name === 'is_active');
 }
@@ -446,6 +453,12 @@ async function ensureOptionalColumn(db: D1, tableName: string, columnName: strin
 }
 
 async function ensureCreatorCategoryRegistry(db: D1) {
+  if (!dev) {
+    creatorCategoryRegistryEnsured = true;
+    return;
+  }
+  if (creatorCategoryRegistryEnsured) return;
+
   await db
     .prepare(
       `
@@ -470,9 +483,16 @@ async function ensureCreatorCategoryRegistry(db: D1) {
       `
     )
     .run();
+  creatorCategoryRegistryEnsured = true;
 }
 
 export async function ensureEmployeeProfilesTable(db: D1) {
+  if (!dev) {
+    employeeProfilesTableEnsured = true;
+    return;
+  }
+  if (employeeProfilesTableEnsured) return;
+
   await db
     .prepare(
       `
@@ -510,9 +530,16 @@ export async function ensureEmployeeProfilesTable(db: D1) {
       `
     )
     .run();
+  employeeProfilesTableEnsured = true;
 }
 
 export async function ensureEmployeeProfileEditRequestsTable(db: D1) {
+  if (!dev) {
+    employeeProfileEditRequestsTableEnsured = true;
+    return;
+  }
+  if (employeeProfileEditRequestsTableEnsured) return;
+
   await db
     .prepare(
       `
@@ -543,9 +570,16 @@ export async function ensureEmployeeProfileEditRequestsTable(db: D1) {
       `
     )
     .run();
+  employeeProfileEditRequestsTableEnsured = true;
 }
 
 export async function ensureEmployeeOnboardingTables(db: D1) {
+  if (!dev) {
+    employeeOnboardingTablesEnsured = true;
+    return;
+  }
+  if (employeeOnboardingTablesEnsured) return;
+
   await db
     .prepare(
       `
@@ -657,6 +691,7 @@ export async function ensureEmployeeOnboardingTables(db: D1) {
     .run();
 
   await ensureOptionalColumn(db, 'employee_onboarding_template_items', 'form_key', "TEXT NOT NULL DEFAULT ''");
+  employeeOnboardingTablesEnsured = true;
 }
 
 function emptyEmployeeProfile(userId: string): AdminEmployeeProfile {
@@ -677,6 +712,12 @@ function emptyEmployeeProfile(userId: string): AdminEmployeeProfile {
 }
 
 export async function ensureUserInvitesTable(db: D1) {
+  if (!dev) {
+    userInvitesTableEnsured = true;
+    return;
+  }
+  if (userInvitesTableEnsured) return;
+
   await db
     .prepare(
       `
@@ -715,6 +756,7 @@ export async function ensureUserInvitesTable(db: D1) {
       `
     )
     .run();
+  userInvitesTableEnsured = true;
 }
 
 function generateInviteCode() {
@@ -723,8 +765,6 @@ function generateInviteCode() {
 
 export async function loadAdminSections(db: D1, businessId: string) {
   await ensureTenantSchema(db);
-  const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
-  const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
   const sectionRows = await db
     .prepare(
       `
@@ -736,7 +776,7 @@ export async function loadAdminSections(db: D1, businessId: string) {
         s.description,
         i.id AS item_id,
         i.content,
-        ${detailsEnabled ? 'i.details,' : "'' AS details,"}
+        i.details,
         i.amount,
         i.par_count,
         i.is_checked,
@@ -4134,3 +4174,4 @@ export async function revokeEmployeeSessions(request: Request, locals: App.Local
 
   return { success: true, message: 'Active sessions revoked.' };
 }
+

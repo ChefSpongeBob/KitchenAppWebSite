@@ -1,10 +1,18 @@
+import { dev } from '$app/environment';
 import { fail } from '@sveltejs/kit';
 import { hasColumn } from '$lib/server/dbSchema';
 
 const RESET_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const RESET_RECORD_RETENTION_SECONDS = 30 * 24 * 60 * 60;
+let passwordResetSchemaEnsured = false;
 
 export async function ensurePasswordResetSchema(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    passwordResetSchemaEnsured = true;
+    return;
+  }
+  if (passwordResetSchemaEnsured) return;
+
   await db
     .prepare(
       `
@@ -49,6 +57,8 @@ export async function ensurePasswordResetSchema(db: App.Platform['env']['DB']) {
     `
     )
     .run();
+
+  passwordResetSchemaEnsured = true;
 }
 
 export function generatePasswordResetToken() {

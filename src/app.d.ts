@@ -17,6 +17,14 @@ declare global {
 				SMOKE_INTERNAL_TOKEN?: string;
 				SMOKE_DEFAULT_EMAIL?: string;
 				ALLOW_RUNTIME_SCHEMA_MUTATION?: string;
+				APP_STORE_BUNDLE_ID?: string;
+				APP_STORE_ISSUER_ID?: string;
+				APP_STORE_KEY_ID?: string;
+				APP_STORE_PRIVATE_KEY?: string;
+				APP_STORE_ENVIRONMENT?: string;
+				GOOGLE_PLAY_PACKAGE_NAME?: string;
+				GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?: string;
+				BILLING_WEBHOOK_TOKEN?: string;
 			};
 		}
 

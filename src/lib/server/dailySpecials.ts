@@ -1,3 +1,4 @@
+import { dev } from '$app/environment';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
 export const dailySpecialCategories = ['item-1', 'item-2', 'item-3', 'item-4'] as const;
@@ -37,6 +38,11 @@ function displayDailySpecialCategory(category: string, businessId?: string | nul
 }
 
 export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
+  if (!dev) {
+    dailySpecialsSchemaEnsured = true;
+    return;
+  }
+
   if (dailySpecialsSchemaEnsured) return;
   await db
     .prepare(

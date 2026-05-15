@@ -34,6 +34,12 @@ if (!gradle) {
 
   if (/minifyEnabled\s+true/.test(gradle)) pass('Release minifyEnabled is true');
   else console.log('WARN: Release minifyEnabled is false (allowed, but less optimized).');
+
+  if (gradle.includes('applicationId "com.nexusnorthsystems.crimini"')) pass('Android applicationId is final');
+  else fail('Android applicationId should be com.nexusnorthsystems.crimini');
+
+  if (gradle.includes('com.android.billingclient:billing')) pass('Google Play Billing dependency is present');
+  else fail('Google Play Billing dependency is missing');
 }
 
 const capacitorRaw = read(capacitorPath);
