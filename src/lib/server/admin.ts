@@ -38,6 +38,9 @@ let employeeProfilesTableEnsured = false;
 let employeeProfileEditRequestsTableEnsured = false;
 let employeeOnboardingTablesEnsured = false;
 let userInvitesTableEnsured = false;
+const WHITEBOARD_CLEANUP_BATCH_SIZE = 50;
+const WHITEBOARD_CLEANUP_INTERVAL_SECONDS = 15 * 60;
+const lastWhiteboardCleanupAtByBusiness = new Map<string, number>();
 
 export type AdminSectionRow = {
   section_id: string;
@@ -2203,7 +2206,12 @@ export async function cleanupExpiredRejectedWhiteboardIdeas(db: D1, businessId: 
   if (!(await tableExists(db, 'whiteboard_review'))) return;
   await ensureTenantSchema(db);
 
-  const cutoff = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 7;
+  const now = Math.floor(Date.now() / 1000);
+  const lastCleanupAt = lastWhiteboardCleanupAtByBusiness.get(businessId) ?? 0;
+  if (now - lastCleanupAt < WHITEBOARD_CLEANUP_INTERVAL_SECONDS) return;
+  lastWhiteboardCleanupAtByBusiness.set(businessId, now);
+
+  const cutoff = now - 60 * 60 * 24 * 7;
   const rejected = await db
     .prepare(
       `
@@ -2212,9 +2220,11 @@ export async function cleanupExpiredRejectedWhiteboardIdeas(db: D1, businessId: 
       WHERE status = 'rejected'
         AND COALESCE(reviewed_at, 0) < ?
         AND business_id = ?
+      ORDER BY COALESCE(reviewed_at, 0) ASC
+      LIMIT ?
       `
     )
-    .bind(cutoff, businessId)
+    .bind(cutoff, businessId, WHITEBOARD_CLEANUP_BATCH_SIZE)
     .all<{ post_id: string }>();
 
   for (const row of rejected.results ?? []) {

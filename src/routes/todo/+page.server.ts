@@ -15,6 +15,7 @@ type TodoRow = {
 	assigned_email?: string | null;
 };
 
+const TODO_CLEANUP_BATCH_SIZE = 100;
 let lastTodoCleanupAt = 0;
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -33,11 +34,17 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (now - lastTodoCleanupAt >= 900) {
 		await db.prepare(`
 			DELETE FROM todos
-			WHERE completed_at IS NOT NULL
-			AND completed_at < ?
-			AND business_id = ?
+			WHERE id IN (
+				SELECT id
+				FROM todos
+				WHERE completed_at IS NOT NULL
+					AND completed_at < ?
+					AND business_id = ?
+				ORDER BY completed_at ASC
+				LIMIT ?
+			)
 		`)
-		.bind(threeDaysAgo, businessId)
+		.bind(threeDaysAgo, businessId, TODO_CLEANUP_BATCH_SIZE)
 		.run();
 		lastTodoCleanupAt = now;
 	}

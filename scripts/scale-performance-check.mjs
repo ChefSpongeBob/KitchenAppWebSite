@@ -39,6 +39,25 @@ expect('src/lib/server/camera.ts', 'camera retention cleanup is batched', (sourc
   source.includes('DELETE FROM camera_events WHERE id = ?')
 );
 
+expect('src/routes/todo/+page.server.ts', 'todo cleanup is batched', (source) =>
+  source.includes('TODO_CLEANUP_BATCH_SIZE') &&
+  source.includes('ORDER BY completed_at ASC') &&
+  source.includes('LIMIT ?')
+);
+
+expect('src/lib/server/admin.ts', 'whiteboard cleanup is throttled and batched', (source) =>
+  source.includes('WHITEBOARD_CLEANUP_BATCH_SIZE') &&
+  source.includes('WHITEBOARD_CLEANUP_INTERVAL_SECONDS') &&
+  source.includes('lastWhiteboardCleanupAtByBusiness') &&
+  source.includes('LIMIT ?')
+);
+
+expect('src/routes/admin/+page.server.ts', 'admin todo analytics are aggregated', (source) =>
+  source.includes("SELECT 'created' AS kind") &&
+  source.includes('UNION ALL') &&
+  source.includes('completed_previous_window')
+);
+
 expect('src/lib/server/tenant.ts', 'tenant schema repair is skipped on production request paths', (source) =>
   source.includes("import { dev } from '$app/environment'") &&
   source.includes('if (!dev)') &&

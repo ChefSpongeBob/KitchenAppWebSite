@@ -251,23 +251,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   let completedPreviousWindow = 0;
   if (featureAccess.todo) {
     try {
-      const [createdRows, completedRows, createdBefore, completedBefore, completedPrev] = await Promise.all([
+      const [activityRows, todoWindowCounts] = await Promise.all([
         db
           .prepare(
             `
-            SELECT date(created_at, 'unixepoch') AS day, COUNT(*) AS count
+            SELECT 'created' AS kind, date(created_at, 'unixepoch') AS day, COUNT(*) AS count
             FROM todos
             WHERE created_at >= ? AND created_at < ?
               AND business_id = ?
             GROUP BY date(created_at, 'unixepoch')
-            `
-          )
-          .bind(startTs, endExclusiveTs, businessId)
-          .all<{ day: string; count: number }>(),
-        db
-          .prepare(
-            `
-            SELECT date(completed_at, 'unixepoch') AS day, COUNT(*) AS count
+
+            UNION ALL
+
+            SELECT 'completed' AS kind, date(completed_at, 'unixepoch') AS day, COUNT(*) AS count
             FROM todos
             WHERE completed_at IS NOT NULL
               AND completed_at >= ? AND completed_at < ?
@@ -275,41 +271,40 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             GROUP BY date(completed_at, 'unixepoch')
             `
           )
-          .bind(startTs, endExclusiveTs, businessId)
-          .all<{ day: string; count: number }>(),
-        db
-          .prepare(`SELECT COUNT(*) AS count FROM todos WHERE created_at < ? AND business_id = ?`)
-          .bind(startTs, businessId)
-          .first<{ count: number }>(),
-        db
-          .prepare(`SELECT COUNT(*) AS count FROM todos WHERE completed_at IS NOT NULL AND completed_at < ? AND business_id = ?`)
-          .bind(startTs, businessId)
-          .first<{ count: number }>(),
+          .bind(startTs, endExclusiveTs, businessId, startTs, endExclusiveTs, businessId)
+          .all<{ kind: 'created' | 'completed'; day: string; count: number }>(),
         db
           .prepare(
             `
-            SELECT COUNT(*) AS count
+            SELECT
+              SUM(CASE WHEN created_at < ? THEN 1 ELSE 0 END) AS created_before,
+              SUM(CASE WHEN completed_at IS NOT NULL AND completed_at < ? THEN 1 ELSE 0 END) AS completed_before,
+              SUM(CASE WHEN completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ? THEN 1 ELSE 0 END) AS completed_previous_window
             FROM todos
-            WHERE completed_at IS NOT NULL
-              AND completed_at >= ? AND completed_at < ?
-              AND business_id = ?
+            WHERE business_id = ?
             `
           )
-          .bind(prevStartTs, prevEndExclusiveTs, businessId)
-          .first<{ count: number }>()
+          .bind(startTs, startTs, prevStartTs, prevEndExclusiveTs, businessId)
+          .first<{
+            created_before: number | null;
+            completed_before: number | null;
+            completed_previous_window: number | null;
+          }>()
       ]);
 
-      for (const row of createdRows.results ?? []) {
-        if (todoCreatedByDay.has(row.day)) todoCreatedByDay.set(row.day, row.count ?? 0);
-      }
-      for (const row of completedRows.results ?? []) {
-        if (todoCompletedByDay.has(row.day)) todoCompletedByDay.set(row.day, row.count ?? 0);
+      for (const row of activityRows.results ?? []) {
+        if (row.kind === 'created' && todoCreatedByDay.has(row.day)) {
+          todoCreatedByDay.set(row.day, row.count ?? 0);
+        }
+        if (row.kind === 'completed' && todoCompletedByDay.has(row.day)) {
+          todoCompletedByDay.set(row.day, row.count ?? 0);
+        }
       }
 
-      const createdBeforeCount = createdBefore?.count ?? 0;
-      const completedBeforeCount = completedBefore?.count ?? 0;
+      const createdBeforeCount = todoWindowCounts?.created_before ?? 0;
+      const completedBeforeCount = todoWindowCounts?.completed_before ?? 0;
       startingOpenTodos = Math.max(createdBeforeCount - completedBeforeCount, 0);
-      completedPreviousWindow = completedPrev?.count ?? 0;
+      completedPreviousWindow = todoWindowCounts?.completed_previous_window ?? 0;
     } catch {
       // Keep defaults when todo table is unavailable.
     }
