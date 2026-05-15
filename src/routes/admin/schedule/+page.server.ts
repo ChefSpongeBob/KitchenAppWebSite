@@ -85,15 +85,71 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     prevWeekStart: addDays(weekStart, -7),
     nextWeekStart: addDays(weekStart, 7),
     users,
-    week: schedule.week,
+    week: schedule.week
+      ? {
+          status: schedule.week.status
+        }
+      : null,
     days: schedule.days,
     rosterUserIds: schedule.rosterUserIds,
-    offers,
-    openShifts,
-    openShiftRequests,
-    timeOffRequests,
-    templates,
-    laborTargets,
+    offers: offers.map((offer) => ({
+      shiftId: offer.shiftId,
+      shiftDate: offer.shiftDate,
+      department: offer.department,
+      role: offer.role,
+      detail: offer.detail,
+      startTime: offer.startTime,
+      endLabel: offer.endLabel,
+      offeredByUserName: offer.offeredByUserName,
+      offeredByUserEmail: offer.offeredByUserEmail,
+      targetUserId: offer.targetUserId,
+      targetUserName: offer.targetUserName,
+      targetUserEmail: offer.targetUserEmail,
+      requestedByUserId: offer.requestedByUserId,
+      requestedByUserName: offer.requestedByUserName,
+      requestedByUserEmail: offer.requestedByUserEmail
+    })),
+    openShifts: openShifts.map((shift) => ({
+      id: shift.id,
+      shiftDate: shift.shiftDate,
+      department: shift.department,
+      role: shift.role,
+      startTime: shift.startTime,
+      endLabel: shift.endLabel
+    })),
+    openShiftRequests: openShiftRequests.map((request) => ({
+      requestId: request.requestId,
+      requestedByUserName: request.requestedByUserName,
+      requestedByUserEmail: request.requestedByUserEmail,
+      status: request.status,
+      shiftDate: request.shiftDate,
+      department: request.department,
+      role: request.role,
+      detail: request.detail,
+      startTime: request.startTime,
+      endLabel: request.endLabel
+    })),
+    timeOffRequests: timeOffRequests.map((request) => ({
+      id: request.id,
+      userId: request.userId,
+      userName: request.userName,
+      userEmail: request.userEmail,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      note: request.note,
+      status: request.status
+    })),
+    templates: templates.map((template) => ({
+      id: template.id,
+      name: template.name,
+      shiftCount: template.shiftCount
+    })),
+    laborTargets: laborTargets.map((target) => ({
+      dayDate: target.dayDate,
+      projectedSales: target.projectedSales,
+      targetLaborPercent: target.targetLaborPercent,
+      averageHourlyRate: target.averageHourlyRate
+    })),
     settings,
     availabilityByUser: Object.fromEntries(availabilityByUser)
   };

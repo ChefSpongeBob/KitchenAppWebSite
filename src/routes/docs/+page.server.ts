@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { loadAdminCreatorCatalog } from '$lib/server/admin';
+import { loadAdminDocumentCategories } from '$lib/server/admin';
 import { requireBusinessId } from '$lib/server/tenant';
 
 type DocRow = {
@@ -8,7 +8,6 @@ type DocRow = {
   title: string;
   section: string;
   category: string;
-  content: string | null;
   file_url: string | null;
 };
 
@@ -20,30 +19,33 @@ export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { docs: [], categories: [] };
   const businessId = requireBusinessId(locals);
+  const categories = await loadAdminDocumentCategories(db, businessId);
 
+  if (categories.length === 0) {
+    return {
+      docs: [],
+      categories
+    };
+  }
+
+  const categoryKeys = categories.map((category) => normalizeCategoryKey(category));
+  const placeholders = categoryKeys.map(() => '?').join(', ');
   const docsResult = await db
     .prepare(
       `
-        SELECT id, slug, title, section, category, content, file_url
+        SELECT id, slug, title, section, category, file_url
         FROM documents
         WHERE is_active = 1
           AND business_id = ?
+          AND LOWER(TRIM(COALESCE(category, ''))) IN (${placeholders})
         ORDER BY section ASC, category ASC, title ASC
       `
     )
-    .bind(businessId)
+    .bind(businessId, ...categoryKeys)
     .all<DocRow>();
 
-  const creatorCatalog = await loadAdminCreatorCatalog(db, businessId);
-  const categories = creatorCatalog.documents;
-
-  const allowedCategoryKeys = new Set(categories.map((category) => normalizeCategoryKey(category)));
-  const docs = (docsResult.results ?? []).filter((doc) =>
-    allowedCategoryKeys.has(normalizeCategoryKey(String(doc.category ?? '')))
-  );
-
   return {
-    docs,
+    docs: docsResult.results ?? [],
     categories
   };
 };

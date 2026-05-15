@@ -29,7 +29,6 @@
   export let data: {
     users: UserOption[];
     invites: InviteOption[];
-    emailConfigured: boolean;
   };
 
   let staffSearch = '';

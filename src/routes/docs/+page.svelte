@@ -9,7 +9,6 @@
     title: string;
     section: string;
     category: string;
-    content?: string | null;
     file_url?: string | null;
   };
 

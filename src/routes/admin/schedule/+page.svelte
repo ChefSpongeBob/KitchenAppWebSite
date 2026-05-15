@@ -45,20 +45,13 @@
   };
 
   type ShiftOffer = {
-    id: string;
     shiftId: string;
     shiftDate: string;
-    userId: string;
-    userName: string | null;
-    userEmail: string;
     department: string;
     role: string;
     detail: string;
     startTime: string;
     endLabel: string;
-    breakMinutes: number;
-    notes: string;
-    offeredByUserId: string;
     offeredByUserName: string | null;
     offeredByUserEmail: string;
     targetUserId: string | null;
@@ -67,7 +60,6 @@
     requestedByUserId: string | null;
     requestedByUserName: string | null;
     requestedByUserEmail: string | null;
-    managerNote: string;
   };
 
   type AvailabilityEntry = {
@@ -86,7 +78,6 @@
     endDate: string;
     note: string;
     status: 'pending' | 'approved' | 'declined';
-    managerNote: string;
   };
 
   type OpenShift = {
@@ -94,30 +85,27 @@
     shiftDate: string;
     department: string;
     role: string;
-    detail: string;
     startTime: string;
     endLabel: string;
-    breakMinutes: number;
-    notes: string;
   };
 
-  type OpenShiftRequest = OpenShift & {
+  type OpenShiftRequest = {
     requestId: string;
-    requestedByUserId: string;
     requestedByUserName: string | null;
     requestedByUserEmail: string;
     status: 'pending' | 'approved' | 'declined';
+    shiftDate: string;
+    department: string;
+    role: string;
+    detail: string;
+    startTime: string;
+    endLabel: string;
   };
 
   type ScheduleTemplate = {
     id: string;
     name: string;
-    department: string;
     shiftCount: number;
-    laborTargetPercent: number;
-    projectedSales: number;
-    averageHourlyRate: number;
-    updatedAt: number;
   };
 
   type LaborTarget = {
@@ -159,7 +147,7 @@
     prevWeekStart: string;
     nextWeekStart: string;
     users: UserOption[];
-    week: { status: 'draft' | 'published'; publishedAt: number | null } | null;
+    week: { status: 'draft' | 'published' } | null;
     days: Day[];
     rosterUserIds: string[];
     offers: ShiftOffer[];

@@ -991,6 +991,32 @@ export async function loadAdminCreatorCatalog(db: D1, businessId: string): Promi
   };
 }
 
+export async function loadAdminDocumentCategories(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
+  await ensureCreatorCategoryRegistry(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT category
+      FROM creator_category_registry
+      WHERE business_id = ?
+        AND editor_type = 'document'
+      ORDER BY category ASC
+      `
+    )
+    .bind(businessId)
+    .all<{ category: string }>();
+
+  return Array.from(
+    new Set(
+      (rows.results ?? [])
+        .map((row) => String(row.category ?? '').trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 export async function loadAdminTodos(db: D1, businessId: string) {
   await ensureTenantSchema(db);
   const todos = await db

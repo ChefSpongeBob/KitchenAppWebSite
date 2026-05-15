@@ -70,6 +70,12 @@ expect('src/routes/admin/+page.server.ts', 'admin todo analytics are aggregated'
   source.includes('completed_previous_window')
 );
 
+expect('src/routes/docs/+page.server.ts', 'document listing avoids full document content payloads', (source) =>
+  source.includes('loadAdminDocumentCategories') &&
+  source.includes('SELECT id, slug, title, section, category, file_url') &&
+  !source.includes('SELECT id, slug, title, section, category, content, file_url')
+);
+
 expect('src/lib/server/tenant.ts', 'tenant schema repair is skipped on production request paths', (source) =>
   source.includes("import { dev } from '$app/environment'") &&
   source.includes('if (!dev)') &&
