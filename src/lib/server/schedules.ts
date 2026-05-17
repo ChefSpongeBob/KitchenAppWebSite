@@ -234,7 +234,12 @@ async function loadScheduleDepartmentsFromTable(db: DB, businessId?: string | nu
     .map((row) => String(row.name ?? '').trim())
     .filter((department) => department.length > 0);
 
-  return departments.length > 0 ? departments : [...scheduleDepartments];
+  const merged: ScheduleDepartment[] = [...scheduleDepartments];
+  for (const department of departments) {
+    if (!merged.includes(department)) merged.push(department);
+  }
+
+  return merged;
 }
 
 export async function loadScheduleDepartments(db: DB, businessId?: string | null): Promise<ScheduleDepartment[]> {
