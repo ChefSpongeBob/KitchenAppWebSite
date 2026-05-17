@@ -20,10 +20,13 @@
     id: string;
     email: string;
     invite_code: string;
+    role: string;
+    permission_template: string;
     employment_type: string;
     job_title: string;
     department: string;
     primary_schedule_department: string;
+    schedule_departments: string[];
     start_date: string;
     pay_type: string;
     onboarding_required: number;
@@ -43,7 +46,7 @@
 
   $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
-  $: adminUsers = activeUsers.filter((user) => user.role === 'admin');
+  $: adminUsers = activeUsers.filter((user) => ['owner', 'admin', 'manager'].includes(user.role));
   $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
   $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
   $: filteredStaff = activeUsers.filter((user) => {
@@ -56,6 +59,35 @@
   });
 
   const formatDate = (value: number | null) => (value ? new Date(value * 1000).toLocaleDateString() : 'None');
+
+  const accessTypes = [
+    { value: 'staff', label: 'Employee' },
+    { value: 'manager', label: 'Manager' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'owner', label: 'Owner' }
+  ];
+
+  const permissionTemplates = [
+    { value: 'staff', label: 'Staff' },
+    { value: 'shift_lead', label: 'Shift Lead' },
+    { value: 'hourly_manager', label: 'Hourly Manager' },
+    { value: 'foh_manager', label: 'FOH Manager' },
+    { value: 'boh_manager', label: 'BOH Manager' },
+    { value: 'general_manager', label: 'General Manager' },
+    { value: 'owner', label: 'Owner' }
+  ];
+
+  const labelFor = (items: Array<{ value: string; label: string }>, value: string) =>
+    items.find((item) => item.value === value)?.label ?? value;
+
+  const roleLabel = (role: string) => labelFor(accessTypes, role) || 'Employee';
+
+  const inviteDepartmentSummary = (invite: InviteOption) => {
+    const departments = invite.schedule_departments.length
+      ? invite.schedule_departments
+      : [invite.primary_schedule_department || invite.department].filter(Boolean);
+    return departments.length ? departments.join(', ') : 'No departments';
+  };
 
   const departmentSummary = (user: UserOption) =>
     user.approved_departments.length > 0 ? user.approved_departments.join(', ') : 'No schedule departments';
@@ -144,7 +176,9 @@
                     <small>{user.email}</small>
                   </span>
                 </a>
-                <span class="role-pill" class:role-admin={user.role === 'admin'}>{user.role === 'admin' ? 'Admin' : 'Staff'}</span>
+                <span class="role-pill" class:role-admin={['owner', 'admin', 'manager'].includes(user.role)}>
+                  {roleLabel(user.role)}
+                </span>
                 <span class="department-copy">{departmentSummary(user)}</span>
                 <div class="row-actions">
                   <a href={`/admin/users/${user.id}`} class="inline-action">Open</a>
@@ -175,6 +209,22 @@
               <summary>Employment</summary>
               <div class="invite-context-grid">
                 <label>
+                  <span>Access</span>
+                  <select name="access_type">
+                    {#each accessTypes as accessType}
+                      <option value={accessType.value}>{accessType.label}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Template</span>
+                  <select name="permission_template">
+                    {#each permissionTemplates as template}
+                      <option value={template.value}>{template.label}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
                   <span>Type</span>
                   <select name="employment_type">
                     <option value="employee">Employee</option>
@@ -186,8 +236,8 @@
                   <input name="job_title" />
                 </label>
                 <label>
-                  <span>Department</span>
-                  <select name="department">
+                  <span>Primary Department</span>
+                  <select name="primary_schedule_department">
                     <option value="">Unassigned</option>
                     {#each data.departments as department}
                       <option value={department}>{department}</option>
@@ -206,6 +256,19 @@
                     <option value="salary">Salary</option>
                   </select>
                 </label>
+                <fieldset class="department-checks">
+                  <legend>Schedule Departments</legend>
+                  {#if data.departments.length === 0}
+                    <p>No departments yet.</p>
+                  {:else}
+                    {#each data.departments as department}
+                      <label>
+                        <input type="checkbox" name="schedule_departments" value={department} />
+                        <span>{department}</span>
+                      </label>
+                    {/each}
+                  {/if}
+                </fieldset>
               </div>
             </details>
             <button type="submit">Invite</button>
@@ -219,7 +282,8 @@
                 <div class="invite-row">
                   <div>
                     <strong>{invite.email}</strong>
-                    <span>{[invite.job_title, invite.department, invite.start_date].filter(Boolean).join(' | ') || 'Pending setup'}</span>
+                    <span>{[invite.job_title, labelFor(permissionTemplates, invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
+                    <span>{inviteDepartmentSummary(invite)}</span>
                     <span>Expires {formatDate(invite.expires_at)}</span>
                   </div>
                   <code>{invite.invite_code}</code>
@@ -578,6 +642,40 @@
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  .department-checks {
+    grid-column: 1 / -1;
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-sm);
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.6rem;
+  }
+
+  .department-checks legend {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 0 0.2rem;
+    text-transform: uppercase;
+  }
+
+  .department-checks label {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+  }
+
+  .department-checks input {
+    accent-color: var(--color-success, #2f6f4e);
+  }
+
+  .department-checks p {
+    color: var(--color-text-muted);
+    margin: 0;
   }
 
   .invite-list,

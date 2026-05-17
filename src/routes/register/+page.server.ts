@@ -21,6 +21,20 @@ import { validateNewPassword } from '$lib/server/passwordReset';
 import { checkRateLimit, rateLimitFailure, writeAuditLog } from '$lib/server/security';
 import type { PageServerLoad } from './$types';
 
+function parseInviteDepartments(value: string | null | undefined, fallback = '') {
+	try {
+		const parsed = JSON.parse(value || '[]');
+		if (Array.isArray(parsed)) {
+			const cleaned = parsed.map((item) => String(item ?? '').trim()).filter(Boolean);
+			if (cleaned.length > 0) return Array.from(new Set(cleaned));
+		}
+	} catch {
+		// Fall back to legacy invite department fields below.
+	}
+	const normalizedFallback = fallback.trim();
+	return normalizedFallback ? [normalizedFallback] : [];
+}
+
 const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	small: 'starter',
 	medium: 'growth',
@@ -282,10 +296,12 @@ export const actions: Actions = {
 						business_id: string;
 						email_normalized: string;
 						role: string;
+						permission_template: string;
 						employment_type: string;
 						job_title: string;
 						department: string;
 						primary_schedule_department: string;
+						schedule_departments_json: string;
 						start_date: string;
 						pay_type: string;
 						manager_user_id: string | null;
@@ -314,10 +330,12 @@ export const actions: Actions = {
 					business_id,
 					email_normalized,
 					role,
+					permission_template,
 					employment_type,
 					job_title,
 					department,
 					primary_schedule_department,
+					schedule_departments_json,
 					start_date,
 					pay_type,
 					manager_user_id,
@@ -336,10 +354,12 @@ export const actions: Actions = {
 						business_id: string;
 						email_normalized: string;
 						role: string;
+						permission_template: string;
 						employment_type: string;
 						job_title: string;
 						department: string;
 						primary_schedule_department: string;
+						schedule_departments_json: string;
 						start_date: string;
 						pay_type: string;
 						manager_user_id: string | null;
@@ -401,7 +421,9 @@ export const actions: Actions = {
 
 			const invitedBusinessRole = String(businessInvite?.role ?? '').toLowerCase();
 			const roleValue = inviteCode
-				? invitedBusinessRole === 'admin' || invitedBusinessRole === 'manager'
+				? invitedBusinessRole === 'owner' ||
+					invitedBusinessRole === 'admin' ||
+					invitedBusinessRole === 'manager'
 					? 'admin'
 					: 'user'
 				: 'admin';
@@ -516,7 +538,10 @@ export const actions: Actions = {
 					.bind(
 						businessInvite.business_id,
 						userId,
-						invitedBusinessRole && invitedBusinessRole !== 'admin' && invitedBusinessRole !== 'manager'
+						invitedBusinessRole &&
+							invitedBusinessRole !== 'owner' &&
+							invitedBusinessRole !== 'admin' &&
+							invitedBusinessRole !== 'manager'
 							? 'staff'
 							: invitedBusinessRole || 'staff',
 						now,
@@ -576,6 +601,30 @@ export const actions: Actions = {
 						businessInvite.manager_user_id ?? null
 					)
 					.run();
+
+				const invitedDepartments = parseInviteDepartments(
+					businessInvite.schedule_departments_json,
+					businessInvite.primary_schedule_department || businessInvite.department || ''
+				);
+				if (invitedDepartments.length > 0) {
+					await db.batch(
+						invitedDepartments.map((department) =>
+							db
+								.prepare(
+									`
+					INSERT OR IGNORE INTO user_schedule_departments (
+						user_id,
+						department,
+						updated_at,
+						business_id
+					)
+					VALUES (?, ?, ?, ?)
+				`
+								)
+								.bind(userId, department, now, businessInvite.business_id)
+						)
+					);
+				}
 				resolvedBusinessId = businessInvite.business_id;
 			} else if (invite) {
 				await db

@@ -152,10 +152,13 @@ export type AdminInvite = {
   id: string;
   email: string;
   invite_code: string;
+  role: string;
+  permission_template: string;
   employment_type: string;
   job_title: string;
   department: string;
   primary_schedule_department: string;
+  schedule_departments: string[];
   start_date: string;
   pay_type: string;
   onboarding_required: number;
@@ -1130,10 +1133,13 @@ export async function loadAdminInvites(db: D1, businessId: string) {
         id,
         email,
         invite_code,
+        role,
+        permission_template,
         employment_type,
         job_title,
         department,
         primary_schedule_department,
+        schedule_departments_json,
         start_date,
         pay_type,
         onboarding_required,
@@ -1155,7 +1161,53 @@ export async function loadAdminInvites(db: D1, businessId: string) {
     .bind(businessId)
     .all<AdminInvite>();
 
-  return invites.results ?? [];
+  return (invites.results ?? []).map((invite) => ({
+    ...invite,
+    schedule_departments: parseScheduleDepartmentsJson(
+      (invite as AdminInvite & { schedule_departments_json?: string }).schedule_departments_json,
+      invite.primary_schedule_department || invite.department
+    )
+  }));
+}
+
+function normalizeInviteAccessType(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'owner' || normalized === 'admin' || normalized === 'manager') return normalized;
+  return 'staff';
+}
+
+function normalizePermissionTemplate(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const allowed = new Set([
+    'owner',
+    'general_manager',
+    'boh_manager',
+    'foh_manager',
+    'hourly_manager',
+    'shift_lead',
+    'staff'
+  ]);
+  return allowed.has(normalized) ? normalized : 'staff';
+}
+
+function formatPermissionTemplate(value: string) {
+  return normalizePermissionTemplate(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function parseScheduleDepartmentsJson(value: string | null | undefined, fallback = '') {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (Array.isArray(parsed)) {
+      const cleaned = parsed.map((item) => String(item ?? '').trim()).filter(Boolean);
+      if (cleaned.length > 0) return Array.from(new Set(cleaned));
+    }
+  } catch {
+    // Fall back to the legacy single-department fields below.
+  }
+  const normalizedFallback = fallback.trim();
+  return normalizedFallback ? [normalizedFallback] : [];
 }
 
 export function getAdminEmailStatus(env?: EmailEnv | null): AdminEmailStatus {
@@ -4782,9 +4834,24 @@ export async function createUserInvite(
   const formData = await request.formData();
   const email = String(formData.get('email') ?? '').trim();
   const emailNormalized = email.toLowerCase();
+  const accessType = normalizeInviteAccessType(String(formData.get('access_type') ?? 'staff'));
+  const permissionTemplate = normalizePermissionTemplate(String(formData.get('permission_template') ?? 'staff'));
   const employmentType = String(formData.get('employment_type') ?? 'employee') === 'contractor' ? 'contractor' : 'employee';
   const jobTitle = String(formData.get('job_title') ?? '').trim().slice(0, 120);
-  const department = String(formData.get('department') ?? '').trim().slice(0, 120);
+  const primaryDepartment = String(formData.get('primary_schedule_department') ?? '').trim().slice(0, 120);
+  const allowedDepartments = await loadScheduleDepartments(db, businessId);
+  const scheduleDepartments = Array.from(
+    new Set(
+      formData
+        .getAll('schedule_departments')
+        .map((value) => String(value ?? '').trim())
+        .filter((value) => allowedDepartments.includes(value))
+    )
+  );
+  if (primaryDepartment && allowedDepartments.includes(primaryDepartment) && !scheduleDepartments.includes(primaryDepartment)) {
+    scheduleDepartments.unshift(primaryDepartment);
+  }
+  const department = primaryDepartment || scheduleDepartments[0] || '';
   const startDate = String(formData.get('start_date') ?? '').trim().slice(0, 10);
   const payTypeRaw = String(formData.get('pay_type') ?? '').trim().toLowerCase();
   const payType = payTypeRaw === 'hourly' || payTypeRaw === 'salary' ? payTypeRaw : '';
@@ -4846,10 +4913,12 @@ export async function createUserInvite(
         invite_code,
         role,
         invited_by,
+        permission_template,
         employment_type,
         job_title,
         department,
         primary_schedule_department,
+        schedule_departments_json,
         start_date,
         pay_type,
         onboarding_required,
@@ -4857,7 +4926,7 @@ export async function createUserInvite(
         expires_at,
         revoked_at
       )
-      VALUES (?, ?, ?, ?, ?, 'staff', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
       `
     )
     .bind(
@@ -4866,11 +4935,14 @@ export async function createUserInvite(
       email,
       emailNormalized,
       inviteCode,
+      accessType,
       locals.userId ?? null,
+      permissionTemplate,
       employmentType,
       jobTitle,
       department,
       department,
+      JSON.stringify(scheduleDepartments),
       startDate,
       payType,
       now,
@@ -4884,7 +4956,16 @@ export async function createUserInvite(
     businessId,
     actorUserId: locals.userId ?? null,
     email,
-    metadata: { inviteId, employmentType, jobTitle: Boolean(jobTitle), department: Boolean(department), startDate: Boolean(startDate) }
+    metadata: {
+      inviteId,
+      accessType,
+      permissionTemplate,
+      employmentType,
+      jobTitle: Boolean(jobTitle),
+      department: Boolean(department),
+      departmentCount: scheduleDepartments.length,
+      startDate: Boolean(startDate)
+    }
   });
 
   const emailResult = await sendInviteEmail({

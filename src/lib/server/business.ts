@@ -140,6 +140,16 @@ export async function ensureBusinessSchema(db: D1) {
         invite_code TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL DEFAULT 'staff',
         invited_by TEXT,
+        permission_template TEXT NOT NULL DEFAULT 'staff',
+        employment_type TEXT NOT NULL DEFAULT 'employee',
+        job_title TEXT NOT NULL DEFAULT '',
+        department TEXT NOT NULL DEFAULT '',
+        primary_schedule_department TEXT NOT NULL DEFAULT '',
+        schedule_departments_json TEXT NOT NULL DEFAULT '[]',
+        start_date TEXT NOT NULL DEFAULT '',
+        pay_type TEXT NOT NULL DEFAULT '',
+        manager_user_id TEXT,
+        onboarding_required INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         expires_at INTEGER,
         used_at INTEGER,
@@ -152,6 +162,17 @@ export async function ensureBusinessSchema(db: D1) {
       `
     )
     .run();
+
+  await ensureOptionalColumn(db, 'business_invites', 'permission_template', "TEXT NOT NULL DEFAULT 'staff'");
+  await ensureOptionalColumn(db, 'business_invites', 'employment_type', "TEXT NOT NULL DEFAULT 'employee'");
+  await ensureOptionalColumn(db, 'business_invites', 'job_title', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'business_invites', 'department', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'business_invites', 'primary_schedule_department', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'business_invites', 'schedule_departments_json', "TEXT NOT NULL DEFAULT '[]'");
+  await ensureOptionalColumn(db, 'business_invites', 'start_date', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'business_invites', 'pay_type', "TEXT NOT NULL DEFAULT ''");
+  await ensureOptionalColumn(db, 'business_invites', 'manager_user_id', 'TEXT');
+  await ensureOptionalColumn(db, 'business_invites', 'onboarding_required', 'INTEGER NOT NULL DEFAULT 1');
 
   await db
     .prepare(
@@ -167,6 +188,15 @@ export async function ensureBusinessSchema(db: D1) {
       `
       CREATE INDEX IF NOT EXISTS idx_business_invites_email
       ON business_invites(email_normalized)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_business_invites_access_template
+      ON business_invites(business_id, role, permission_template, created_at)
       `
     )
     .run();
