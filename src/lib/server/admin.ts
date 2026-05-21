@@ -1172,7 +1172,8 @@ export async function loadAdminInvites(db: D1, businessId: string) {
 
 function normalizeInviteAccessType(value: string) {
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'owner' || normalized === 'admin' || normalized === 'manager') return normalized;
+  if (normalized === 'owner') return 'owner';
+  if (normalized === 'admin' || normalized === 'manager') return 'admin';
   return 'staff';
 }
 

@@ -419,7 +419,8 @@ export const actions: Actions = {
 			const passwordHash = await hashPassword(password);
 			let resolvedBusinessId: string | null = null;
 
-			const invitedBusinessRole = String(businessInvite?.role ?? '').toLowerCase();
+			const invitedBusinessRoleRaw = String(businessInvite?.role ?? '').toLowerCase();
+			const invitedBusinessRole = invitedBusinessRoleRaw === 'manager' ? 'admin' : invitedBusinessRoleRaw;
 			const roleValue = inviteCode
 				? invitedBusinessRole === 'owner' ||
 					invitedBusinessRole === 'admin' ||

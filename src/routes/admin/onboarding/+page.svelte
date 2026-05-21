@@ -45,15 +45,39 @@
     is_active: number;
   };
 
+  type InviteOption = {
+    id: string;
+    email: string;
+    invite_code: string;
+    role: string;
+    permission_template: string;
+    employment_type: string;
+    job_title: string;
+    department: string;
+    primary_schedule_department: string;
+    schedule_departments: string[];
+    start_date: string;
+    pay_type: string;
+    onboarding_required: number;
+    created_at: number;
+    expires_at: number | null;
+    used_at: number | null;
+    revoked_at: number | null;
+  };
+
   export let data: {
     templateItems: OnboardingTemplateItem[];
     onboardingRows: OnboardingRow[];
     users: UserOption[];
+    invites: InviteOption[];
+    departments: string[];
   };
 
   let feedbackMessage = '';
 
   $: staffUsers = data.users.filter((user) => !['owner', 'admin', 'manager'].includes(user.role));
+  $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
+  $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
   $: needsReview = data.onboardingRows.filter((row) => row.package_status === 'submitted' || row.submitted_items > 0);
   $: activeRows = data.onboardingRows.filter((row) => row.package_status === 'sent' || row.package_status === 'in_progress');
   $: completedRows = data.onboardingRows.filter((row) => row.package_status === 'approved');
@@ -91,6 +115,39 @@
     return value ? new Date(value * 1000).toLocaleDateString() : 'Not started';
   }
 
+  const accessTypes = [
+    { value: 'staff', label: 'Employee' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'owner', label: 'Owner' }
+  ];
+
+  const permissionTemplates = [
+    { value: 'staff', label: 'Staff' },
+    { value: 'shift_lead', label: 'Shift Lead' },
+    { value: 'hourly_manager', label: 'Hourly Manager' },
+    { value: 'foh_manager', label: 'FOH Manager' },
+    { value: 'boh_manager', label: 'BOH Manager' },
+    { value: 'general_manager', label: 'General Manager' },
+    { value: 'owner', label: 'Owner' }
+  ];
+
+  const labelFor = (items: Array<{ value: string; label: string }>, value: string) =>
+    items.find((item) => item.value === value)?.label ?? value;
+
+  const roleLabel = (role: string) => {
+    const normalized = role.toLowerCase();
+    if (normalized === 'owner') return 'Owner';
+    if (normalized === 'admin' || normalized === 'manager') return 'Admin';
+    return 'Employee';
+  };
+
+  const inviteDepartmentSummary = (invite: InviteOption) => {
+    const departments = invite.schedule_departments.length
+      ? invite.schedule_departments
+      : [invite.primary_schedule_department || invite.department].filter(Boolean);
+    return departments.length ? departments.join(', ') : 'No departments';
+  };
+
   function progressText(row: OnboardingRow) {
     if (!row.package_id) return 'No packet';
     if (row.total_items === 0) return '0 requirements';
@@ -124,6 +181,123 @@
     {#if feedbackMessage}
       <p class="feedback-banner">{feedbackMessage}</p>
     {/if}
+
+    <section class="workspace-section invite-section" aria-label="Registration access">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">Invites</span>
+          <h2>Registration Access</h2>
+        </div>
+        <span>{activeInvites.length} active</span>
+      </header>
+
+      <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
+        <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
+        <details class="invite-context">
+          <summary>Employment</summary>
+          <div class="invite-context-grid">
+            <label>
+              <span>Access</span>
+              <select name="access_type">
+                {#each accessTypes as accessType}
+                  <option value={accessType.value}>{accessType.label}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              <span>Template</span>
+              <select name="permission_template">
+                {#each permissionTemplates as template}
+                  <option value={template.value}>{template.label}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              <span>Type</span>
+              <select name="employment_type">
+                <option value="employee">Employee</option>
+                <option value="contractor">Contractor</option>
+              </select>
+            </label>
+            <label>
+              <span>Job Title</span>
+              <input name="job_title" />
+            </label>
+            <label>
+              <span>Primary Department</span>
+              <select name="primary_schedule_department">
+                <option value="">Unassigned</option>
+                {#each data.departments as department}
+                  <option value={department}>{department}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              <span>Start Date</span>
+              <input name="start_date" type="date" />
+            </label>
+            <label>
+              <span>Pay Type</span>
+              <select name="pay_type">
+                <option value="">Unset</option>
+                <option value="hourly">Hourly</option>
+                <option value="salary">Salary</option>
+              </select>
+            </label>
+            <fieldset class="department-checks">
+              <legend>Schedule Departments</legend>
+              {#if data.departments.length === 0}
+                <p>No departments yet.</p>
+              {:else}
+                {#each data.departments as department}
+                  <label>
+                    <input type="checkbox" name="schedule_departments" value={department} />
+                    <span>{department}</span>
+                  </label>
+                {/each}
+              {/if}
+            </fieldset>
+          </div>
+        </details>
+        <button type="submit">Invite</button>
+      </form>
+
+      <div class="invite-list">
+        {#if activeInvites.length === 0}
+          <p class="empty">No active invites.</p>
+        {:else}
+          {#each activeInvites as invite}
+            <div class="invite-row">
+              <div>
+                <strong>{invite.email}</strong>
+                <span>{[invite.job_title, labelFor(permissionTemplates, invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
+                <span>{inviteDepartmentSummary(invite)}</span>
+                <span>Expires {formatDate(invite.expires_at)}</span>
+              </div>
+              <code>{invite.invite_code}</code>
+              <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
+                <input type="hidden" name="invite_id" value={invite.id} />
+                <button type="submit" class="text-action warn-text">Revoke</button>
+              </form>
+            </div>
+          {/each}
+        {/if}
+      </div>
+
+      {#if usedInvites.length > 0}
+        <details class="used-invites">
+          <summary>Used invites ({usedInvites.length})</summary>
+          <div class="used-list">
+            {#each usedInvites as invite}
+              <div>
+                <strong>{invite.email}</strong>
+                <span>Used {formatDate(invite.used_at)}</span>
+              </div>
+            {/each}
+          </div>
+        </details>
+      {/if}
+    </section>
 
     <section class="tool-row" aria-label="Onboarding tools">
       <div class="tool-copy">
@@ -430,6 +604,120 @@
     grid-template-columns: minmax(14rem, 1fr) minmax(12rem, 0.42fr) auto;
   }
 
+  .invite-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+  }
+
+  .invite-context {
+    grid-column: 1 / -1;
+  }
+
+  .invite-context summary,
+  .used-invites summary {
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .invite-context-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-top: 0.55rem;
+  }
+
+  .department-checks {
+    grid-column: 1 / -1;
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    margin: 0;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .department-checks legend {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 0 0.2rem;
+    text-transform: uppercase;
+  }
+
+  .department-checks label {
+    align-items: center;
+    display: flex;
+    gap: 0.3rem;
+    line-height: 1;
+  }
+
+  .department-checks input {
+    accent-color: var(--color-success, #2f6f4e);
+    height: 0.86rem;
+    margin: 0;
+    width: 0.86rem;
+  }
+
+  .department-checks span {
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+  }
+
+  .department-checks p {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .invite-list,
+  .used-list {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.75rem;
+  }
+
+  .invite-row,
+  .used-list div {
+    display: grid;
+    gap: 0.48rem;
+    padding: 0.72rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .invite-row span,
+  .used-list span {
+    color: var(--color-text-muted);
+  }
+
+  .invite-row strong,
+  .used-list strong {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
+  .text-action {
+    min-height: auto;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: var(--color-text-muted);
+  }
+
+  .warn-text {
+    color: #fcd34d;
+  }
+
+  code {
+    color: var(--color-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+  }
+
   .workspace-section {
     padding: 1rem;
   }
@@ -627,8 +915,13 @@
   @media (max-width: 1050px) {
     .tool-row,
     .send-form,
+    .invite-form,
     .packet-form,
     .packet-form.compact {
+      grid-template-columns: 1fr;
+    }
+
+    .invite-context-grid {
       grid-template-columns: 1fr;
     }
 

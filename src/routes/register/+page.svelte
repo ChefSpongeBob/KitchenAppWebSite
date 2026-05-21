@@ -179,7 +179,7 @@
 		}
 	];
 
-	let activeIndex = 0;
+	let activeIndex = form?.error ? slides.findIndex((slide) => slide.id === 'purchase') : 0;
 	let touchStartX = 0;
 	let touchStartY = 0;
 
@@ -226,9 +226,14 @@
 
 	let showPassword = false;
 	let showConfirmPassword = false;
+	let passwordFeedback = '';
 
 	$: inviteMode = Boolean(data.inviteCode);
-	$: activeSlide = slides[activeIndex];
+	$: visibleSlides = inviteMode
+		? slides.filter((slide) => slide.id !== 'tier' && slide.id !== 'business')
+		: slides;
+	$: activeSlide = visibleSlides[activeIndex] ?? visibleSlides[0];
+	$: activeIndex = Math.min(activeIndex, visibleSlides.length - 1);
 
 	onMount(() => {
 		try {
@@ -250,11 +255,49 @@
 	});
 
 	function nextSlide() {
-		activeIndex = Math.min(activeIndex + 1, slides.length - 1);
+		if (activeSlide.id === 'security' && !validatePasswordBeforeAccountStep()) return;
+		activeIndex = Math.min(activeIndex + 1, visibleSlides.length - 1);
 	}
 
 	function previousSlide() {
+		passwordFeedback = '';
 		activeIndex = Math.max(activeIndex - 1, 0);
+	}
+
+	function clearPasswordInputs(message: string) {
+		password = '';
+		confirmPassword = '';
+		showPassword = false;
+		showConfirmPassword = false;
+		passwordFeedback = message;
+	}
+
+	function validatePasswordBeforeAccountStep() {
+		passwordFeedback = '';
+		if (!password || !confirmPassword) {
+			clearPasswordInputs('Enter and confirm the password.');
+			return false;
+		}
+		if (password.length < 10) {
+			clearPasswordInputs('Password must be at least 10 characters.');
+			return false;
+		}
+		if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+			clearPasswordInputs('Password must include letters and numbers.');
+			return false;
+		}
+		if (password !== confirmPassword) {
+			clearPasswordInputs('Passwords do not match.');
+			return false;
+		}
+		return true;
+	}
+
+	function handleRegisterSubmit(event: SubmitEvent) {
+		if (validatePasswordBeforeAccountStep()) return;
+		event.preventDefault();
+		const securityIndex = visibleSlides.findIndex((slide) => slide.id === 'security');
+		activeIndex = securityIndex >= 0 ? securityIndex : activeIndex;
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -329,10 +372,6 @@
 							<li>{bullet}</li>
 						{/each}
 					</ul>
-				{/if}
-
-				{#if form?.error}
-					<p class="tour-feedback error">{form.error}</p>
 				{/if}
 
 				{#if activeSlide.id === 'tier'}
@@ -470,8 +509,6 @@
 
 							<label for="address-country">Business country</label>
 							<input id="address-country" bind:value={addressCountry} placeholder="United States" />
-						{:else}
-							<p class="invite-note">Invite detected. This account will attach to the invited workspace.</p>
 						{/if}
 					</div>
 				{/if}
@@ -545,11 +582,18 @@
 							<input id="register-email-updates" type="checkbox" bind:checked={emailUpdates} value="1" />
 							<span>Email updates</span>
 						</label>
+
+						{#if passwordFeedback}
+							<p class="tour-feedback error password-feedback">{passwordFeedback}</p>
+						{/if}
 					</div>
 				{/if}
 
 				{#if activeSlide.id === 'purchase'}
-					<form class="form-zone inline-signup" method="POST">
+					<form class="form-zone inline-signup" method="POST" on:submit={handleRegisterSubmit}>
+						{#if form?.error}
+							<p class="tour-feedback error form-feedback">{form.error}</p>
+						{/if}
 						<input type="hidden" name="display_name" value={displayName} />
 						<input type="hidden" name="real_name" value={realName} />
 						<input type="hidden" name="birthday" value={birthday} />
@@ -678,11 +722,6 @@
 									/>
 									<strong>App Store</strong>
 								</button>
-							</div>
-						{:else}
-							<div class="payment-placeholder">
-								<h2>Workspace Billing</h2>
-								<p>This invite joins an existing workspace. Billing is managed by the workspace owner.</p>
 							</div>
 						{/if}
 
@@ -879,6 +918,11 @@
 
 	.tour-feedback.error {
 		color: #ffc9cf;
+	}
+
+	.password-feedback,
+	.form-feedback {
+		grid-column: span 2;
 	}
 
 	.tour-shot {
@@ -1122,13 +1166,6 @@
 		color: #f5fbff;
 	}
 
-	.invite-note {
-		grid-column: span 2;
-		margin: 0;
-		font-size: 0.82rem;
-		color: rgba(214, 236, 255, 0.9);
-	}
-
 	.tier-showcase {
 		grid-column: span 2;
 		display: grid;
@@ -1359,7 +1396,6 @@
 	.tour-description,
 	.tour-bullets li,
 	.agreement-toggle,
-	.invite-note,
 	.auth-note,
 	.purchase-mode-card span,
 	.addon-card span,
@@ -1530,7 +1566,8 @@
 		.password-row,
 		.submit-btn,
 		.auth-note,
-		.invite-note,
+		.password-feedback,
+		.form-feedback,
 		.tier-showcase,
 		.purchase-mode-grid,
 		.store-pref-grid,

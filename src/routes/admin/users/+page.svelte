@@ -16,30 +16,8 @@
     approved_departments: string[];
   };
 
-  type InviteOption = {
-    id: string;
-    email: string;
-    invite_code: string;
-    role: string;
-    permission_template: string;
-    employment_type: string;
-    job_title: string;
-    department: string;
-    primary_schedule_department: string;
-    schedule_departments: string[];
-    start_date: string;
-    pay_type: string;
-    onboarding_required: number;
-    created_at: number;
-    expires_at: number | null;
-    used_at: number | null;
-    revoked_at: number | null;
-  };
-
   export let data: {
     users: UserOption[];
-    invites: InviteOption[];
-    departments: string[];
   };
 
   let staffSearch = '';
@@ -47,8 +25,6 @@
   $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
   $: adminUsers = activeUsers.filter((user) => ['owner', 'admin', 'manager'].includes(user.role));
-  $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
-  $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
   $: filteredStaff = activeUsers.filter((user) => {
     const query = staffSearch.trim().toLowerCase();
     if (!query) return true;
@@ -58,35 +34,11 @@
     return haystack.includes(query);
   });
 
-  const formatDate = (value: number | null) => (value ? new Date(value * 1000).toLocaleDateString() : 'None');
-
-  const accessTypes = [
-    { value: 'staff', label: 'Employee' },
-    { value: 'manager', label: 'Manager' },
-    { value: 'admin', label: 'Admin' },
-    { value: 'owner', label: 'Owner' }
-  ];
-
-  const permissionTemplates = [
-    { value: 'staff', label: 'Staff' },
-    { value: 'shift_lead', label: 'Shift Lead' },
-    { value: 'hourly_manager', label: 'Hourly Manager' },
-    { value: 'foh_manager', label: 'FOH Manager' },
-    { value: 'boh_manager', label: 'BOH Manager' },
-    { value: 'general_manager', label: 'General Manager' },
-    { value: 'owner', label: 'Owner' }
-  ];
-
-  const labelFor = (items: Array<{ value: string; label: string }>, value: string) =>
-    items.find((item) => item.value === value)?.label ?? value;
-
-  const roleLabel = (role: string) => labelFor(accessTypes, role) || 'Employee';
-
-  const inviteDepartmentSummary = (invite: InviteOption) => {
-    const departments = invite.schedule_departments.length
-      ? invite.schedule_departments
-      : [invite.primary_schedule_department || invite.department].filter(Boolean);
-    return departments.length ? departments.join(', ') : 'No departments';
+  const roleLabel = (role: string) => {
+    const normalized = role.toLowerCase();
+    if (normalized === 'owner') return 'Owner';
+    if (normalized === 'admin' || normalized === 'manager') return 'Admin';
+    return 'Employee';
   };
 
   const departmentSummary = (user: UserOption) =>
@@ -119,8 +71,8 @@
     <section class="people-hero" aria-label="People overview">
       <div>
         <span class="kicker">People Operations</span>
-        <h2>Staff access, invites, and employee records</h2>
-        <p>Manage who can enter the workspace, review restricted accounts, and open employee profiles from one cleaner roster.</p>
+        <h2>Staff access and employee records</h2>
+        <p>Manage active staff, restricted accounts, and employee profiles from one cleaner roster.</p>
       </div>
 
       <div class="people-metrics">
@@ -135,10 +87,6 @@
         <div>
           <span>Restricted</span>
           <strong>{restrictedUsers.length}</strong>
-        </div>
-        <div>
-          <span>Invites</span>
-          <strong>{activeInvites.length}</strong>
         </div>
       </div>
     </section>
@@ -193,124 +141,7 @@
         </div>
       </div>
 
-      <aside class="people-side" aria-label="Invite and review tools">
-        <section class="side-section invite-section">
-          <header class="side-head">
-            <div>
-              <span class="kicker">Invites</span>
-              <h2>Registration Access</h2>
-            </div>
-            <span>{activeInvites.length} active</span>
-          </header>
-
-          <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
-            <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
-            <details class="invite-context">
-              <summary>Employment</summary>
-              <div class="invite-context-grid">
-                <label>
-                  <span>Access</span>
-                  <select name="access_type">
-                    {#each accessTypes as accessType}
-                      <option value={accessType.value}>{accessType.label}</option>
-                    {/each}
-                  </select>
-                </label>
-                <label>
-                  <span>Template</span>
-                  <select name="permission_template">
-                    {#each permissionTemplates as template}
-                      <option value={template.value}>{template.label}</option>
-                    {/each}
-                  </select>
-                </label>
-                <label>
-                  <span>Type</span>
-                  <select name="employment_type">
-                    <option value="employee">Employee</option>
-                    <option value="contractor">Contractor</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Job Title</span>
-                  <input name="job_title" />
-                </label>
-                <label>
-                  <span>Primary Department</span>
-                  <select name="primary_schedule_department">
-                    <option value="">Unassigned</option>
-                    {#each data.departments as department}
-                      <option value={department}>{department}</option>
-                    {/each}
-                  </select>
-                </label>
-                <label>
-                  <span>Start Date</span>
-                  <input name="start_date" type="date" />
-                </label>
-                <label>
-                  <span>Pay Type</span>
-                  <select name="pay_type">
-                    <option value="">Unset</option>
-                    <option value="hourly">Hourly</option>
-                    <option value="salary">Salary</option>
-                  </select>
-                </label>
-                <fieldset class="department-checks">
-                  <legend>Schedule Departments</legend>
-                  {#if data.departments.length === 0}
-                    <p>No departments yet.</p>
-                  {:else}
-                    {#each data.departments as department}
-                      <label>
-                        <input type="checkbox" name="schedule_departments" value={department} />
-                        <span>{department}</span>
-                      </label>
-                    {/each}
-                  {/if}
-                </fieldset>
-              </div>
-            </details>
-            <button type="submit">Invite</button>
-          </form>
-
-          <div class="invite-list">
-            {#if activeInvites.length === 0}
-              <p class="empty">No active invites.</p>
-            {:else}
-              {#each activeInvites as invite}
-                <div class="invite-row">
-                  <div>
-                    <strong>{invite.email}</strong>
-                    <span>{[invite.job_title, labelFor(permissionTemplates, invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
-                    <span>{inviteDepartmentSummary(invite)}</span>
-                    <span>Expires {formatDate(invite.expires_at)}</span>
-                  </div>
-                  <code>{invite.invite_code}</code>
-                  <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
-                    <input type="hidden" name="invite_id" value={invite.id} />
-                    <button type="submit" class="text-action warn-text">Revoke</button>
-                  </form>
-                </div>
-              {/each}
-            {/if}
-          </div>
-
-          {#if usedInvites.length > 0}
-            <details class="used-invites">
-              <summary>Used invites ({usedInvites.length})</summary>
-              <div class="used-list">
-                {#each usedInvites as invite}
-                  <div>
-                    <strong>{invite.email}</strong>
-                    <span>Used {formatDate(invite.used_at)}</span>
-                  </div>
-                {/each}
-              </div>
-            </details>
-          {/if}
-        </section>
-
+      <aside class="people-side" aria-label="Access review tools">
         <section class="side-section attention-section">
           <header class="side-head">
             <div>
@@ -403,7 +234,7 @@
 
   .people-metrics {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     border: 1px solid var(--color-divider);
     border-radius: 18px;
     overflow: hidden;
@@ -457,9 +288,7 @@
   }
 
   .side-head > span,
-  .invite-row span,
   .restricted-row span,
-  .used-list span,
   .identity-copy small,
   .department-copy,
   .empty {
@@ -591,133 +420,30 @@
     background: color-mix(in srgb, #78350f 28%, var(--color-surface));
   }
 
-  .text-action {
-    min-height: auto;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    color: var(--color-text-muted);
-  }
-
-  .warn-text {
-    color: #fcd34d;
-  }
-
   .side-section {
     display: grid;
     gap: 0.75rem;
   }
 
-  .invite-form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.5rem;
-  }
-
-  .invite-context {
-    grid-column: 1 / -1;
-  }
-
-  .invite-context summary {
-    color: var(--color-text-muted);
-    cursor: pointer;
-    font-size: 0.85rem;
-  }
-
-  .invite-context-grid {
-    display: grid;
-    gap: 0.5rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding-top: 0.55rem;
-  }
-
-  .invite-context-grid label {
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .invite-context-grid span {
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .department-checks {
-    grid-column: 1 / -1;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-sm);
-    display: grid;
-    gap: 0.4rem;
-    margin: 0;
-    padding: 0.6rem;
-  }
-
-  .department-checks legend {
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    padding: 0 0.2rem;
-    text-transform: uppercase;
-  }
-
-  .department-checks label {
-    align-items: center;
-    display: flex;
-    gap: 0.45rem;
-  }
-
-  .department-checks input {
-    accent-color: var(--color-success, #2f6f4e);
-  }
-
-  .department-checks p {
-    color: var(--color-text-muted);
-    margin: 0;
-  }
-
-  .invite-list,
-  .restricted-list,
-  .used-list {
+  .restricted-list {
     display: grid;
     gap: 0.55rem;
   }
 
-  .invite-row,
-  .restricted-row,
-  .used-list div {
+  .restricted-row {
     display: grid;
     gap: 0.48rem;
     padding: 0.72rem 0;
     border-top: 1px solid var(--color-divider);
   }
 
-  .invite-row div,
-  .restricted-row div:first-child,
-  .used-list div {
+  .restricted-row div:first-child {
     min-width: 0;
   }
 
-  .invite-row strong,
-  .restricted-row strong,
-  .used-list strong {
+  .restricted-row strong {
     display: block;
     overflow-wrap: anywhere;
-  }
-
-  code {
-    color: var(--color-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.78rem;
-    overflow-wrap: anywhere;
-  }
-
-  .used-invites summary {
-    color: var(--color-text-muted);
-    cursor: pointer;
-    font-size: 0.85rem;
   }
 
   .empty {
@@ -795,12 +521,7 @@
   }
 
   @media (max-width: 560px) {
-    .people-metrics,
-    .invite-form {
-      grid-template-columns: 1fr;
-    }
-
-    .invite-context-grid {
+    .people-metrics {
       grid-template-columns: 1fr;
     }
 
