@@ -596,6 +596,8 @@
 						{#if passwordFeedback}
 							<p class="tour-feedback error password-feedback">{passwordFeedback}</p>
 						{/if}
+
+						<button type="button" class="primary inline-continue" on:click={nextSlide}>Continue</button>
 					</div>
 				{/if}
 

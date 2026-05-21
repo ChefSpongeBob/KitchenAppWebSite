@@ -6,6 +6,10 @@ import {
 	getSessionCookieName,
 	getSessionCookieOptions
 } from '$lib/server/authCookies';
+import {
+	ACTIVE_BUSINESS_COOKIE,
+	getActiveBusinessCookieDeleteOptions
+} from '$lib/server/activeBusiness';
 import { hasColumn } from '$lib/server/dbSchema';
 import { bootstrapBusinessForUser, getUserBusinessContext } from '$lib/server/business';
 import { effectiveAppRoleFromBusinessRole } from '$lib/server/permissions';
@@ -81,6 +85,7 @@ async function revokeActiveSession(
 	cookies.delete(primaryCookie, getSessionCookieDeleteOptions(request));
 	cookies.delete('session_id', { path: '/' });
 	cookies.delete('session_id_pwa', { path: '/' });
+	cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 }
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -250,6 +255,9 @@ export const actions: Actions = {
 
 			const now = Math.floor(Date.now() / 1000);
 			const expires = now + 60 * 60 * 24 * 30;
+
+			// A fresh sign-in should replace this browser's previous account context.
+			await revokeActiveSession(db, cookies, request);
 
 			const sessionId = crypto.randomUUID();
 			const sessionToken = crypto.randomUUID();

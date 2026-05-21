@@ -851,10 +851,10 @@ export const actions: Actions = {
 					status: 'pending_setup',
 					now
 				});
-				throw redirect(303, '/login?registered=success&purchase=pending');
+				throw redirect(303, '/register/welcome?purchase=pending');
 			}
 
-			throw redirect(303, '/login?registered=success');
+			throw redirect(303, '/register/welcome');
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;
