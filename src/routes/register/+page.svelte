@@ -374,6 +374,16 @@
 					</ul>
 				{/if}
 
+				{#if !inviteMode && activeSlide.id === 'intro'}
+					<form method="GET" action="/register" class="invite-code-entry">
+						<label for="invite-code-entry">Invite code</label>
+						<div>
+							<input id="invite-code-entry" name="invite" autocomplete="one-time-code" />
+							<button type="submit">Continue</button>
+						</div>
+					</form>
+				{/if}
+
 				{#if activeSlide.id === 'tier'}
 					<div class="form-zone inline-signup">
 						<div class="tier-showcase">
@@ -908,6 +918,51 @@
 		font-size: 0.88rem;
 		line-height: 1.35;
 		color: rgba(236, 245, 255, 0.92);
+	}
+
+	.invite-code-entry {
+		display: grid;
+		gap: 0.3rem;
+		width: min(100%, 22rem);
+		margin-top: 0.35rem;
+	}
+
+	.invite-code-entry label {
+		color: rgba(17, 18, 20, 0.58);
+		font-size: 0.76rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.invite-code-entry div {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 0.5rem;
+	}
+
+	.invite-code-entry input {
+		width: 100%;
+		min-height: 2.5rem;
+		border: 1px solid rgba(17, 18, 20, 0.16);
+		border-radius: 0;
+		padding: 0.58rem 0.68rem;
+		background: rgba(255, 255, 255, 0.84);
+		color: #111214;
+		font: inherit;
+	}
+
+	.invite-code-entry button {
+		min-height: 2.5rem;
+		border: 1px solid #111214;
+		border-radius: 0;
+		padding: 0.58rem 0.82rem;
+		background: #111214;
+		color: #ffffff;
+		cursor: pointer;
+		font: inherit;
+		font-size: 0.8rem;
+		font-weight: 700;
 	}
 
 	.tour-feedback {
