@@ -1083,12 +1083,12 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
-          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND COALESCE(dse.business_id, ?) = ?
+          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND dse.business_id = ?
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
-        .bind(businessId, businessId, businessId)
+        .bind(businessId, businessId)
         .all<AdminUser>()
     : await db
         .prepare(
@@ -1102,12 +1102,12 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
-          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND COALESCE(dse.business_id, ?) = ?
+          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND dse.business_id = ?
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
-        .bind(businessId, businessId, businessId)
+        .bind(businessId, businessId)
         .all<AdminUser>();
 
   const users = result.results ?? [];
@@ -4302,17 +4302,17 @@ export async function toggleSpecialsAccess(request: Request, locals: App.Locals)
       `
       SELECT user_id
       FROM daily_specials_editors
-      WHERE user_id = ? AND COALESCE(business_id, ?) = ?
+      WHERE user_id = ? AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(userId, businessId, businessId)
+    .bind(userId, businessId)
     .first<{ user_id: string }>();
 
   if (existing) {
     await db
-      .prepare(`DELETE FROM daily_specials_editors WHERE user_id = ? AND COALESCE(business_id, ?) = ?`)
-      .bind(userId, businessId, businessId)
+      .prepare(`DELETE FROM daily_specials_editors WHERE user_id = ? AND business_id = ?`)
+      .bind(userId, businessId)
       .run();
     return { success: true };
   }

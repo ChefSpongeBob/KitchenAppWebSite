@@ -39,7 +39,7 @@ const privateRoutes = [
   ['/whiteboard', 'Whiteboard'],
   ['/meeting-notes', 'Meeting notes'],
   ['/menu', 'Menu'],
-  ['/specials', 'Specials']
+  ['/specials', 'Highlights']
 ];
 
 const adminRoutes = [

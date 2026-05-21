@@ -62,9 +62,12 @@ export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
     .prepare(
       `
       CREATE TABLE IF NOT EXISTS daily_specials_editors (
-        user_id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
         granted_by TEXT,
         updated_at INTEGER NOT NULL,
+        PRIMARY KEY (business_id, user_id),
+        FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (granted_by) REFERENCES users(id) ON DELETE SET NULL
       )
@@ -90,11 +93,11 @@ export async function userCanEditDailySpecials(
       SELECT user_id
       FROM daily_specials_editors
       WHERE user_id = ?
-        AND (? IS NULL OR business_id = ?)
+        AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(userId, businessId ?? null, businessId ?? null)
+    .bind(userId, businessId ?? '')
     .first<{ user_id: string }>();
 
   return Boolean(row);

@@ -34,9 +34,9 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Daily specials saved.', 'success');
+        pushToast('Daily highlights saved.', 'success');
       } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'Those daily specials could not be saved.', 'error');
+        pushToast(result.data?.error ?? 'Those daily highlights could not be saved.', 'error');
       }
     };
   };

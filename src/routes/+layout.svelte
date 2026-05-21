@@ -233,6 +233,7 @@
     "/docs",
     "/whiteboard",
     "/temper",
+    "/conversions",
     "/menu",
     "/settings",
     "/meeting-notes",

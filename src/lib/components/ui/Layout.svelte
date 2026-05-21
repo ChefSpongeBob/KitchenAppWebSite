@@ -12,6 +12,7 @@
     pathname.startsWith('/lists') ||
     pathname.startsWith('/docs') ||
     pathname.startsWith('/recipes') ||
+    pathname.startsWith('/conversions') ||
     pathname.startsWith('/settings');
 </script>
 

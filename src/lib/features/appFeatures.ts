@@ -12,7 +12,8 @@ export type AppFeatureKey =
   | 'recipes'
   | 'documents'
   | 'menus'
-  | 'meeting_notes';
+  | 'meeting_notes'
+  | 'conversions';
 
 export type AppFeatureDefinition = {
   key: AppFeatureKey;
@@ -71,7 +72,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
   {
     key: 'daily_specials',
     label: 'Daily Highlights',
-    description: 'Daily highlights and specials content.',
+    description: 'Daily highlights content.',
     userRoutePrefixes: ['/specials'],
     adminRoutePrefixes: []
   },
@@ -108,6 +109,13 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Meeting Notes',
     description: 'Internal admin meeting notes workspace.',
     userRoutePrefixes: ['/meeting-notes'],
+    adminRoutePrefixes: []
+  },
+  {
+    key: 'conversions',
+    label: 'Conversions',
+    description: 'Cooking and baking measurement reference tools.',
+    userRoutePrefixes: ['/conversions'],
     adminRoutePrefixes: []
   }
 ];

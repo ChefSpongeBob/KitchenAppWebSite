@@ -41,7 +41,7 @@ export const actions: Actions = {
 
     const canEdit = await userCanEditDailySpecials(db, locals.userId, locals.userRole, locals.businessId);
     if (!canEdit) {
-      return fail(403, { error: 'You do not have permission to edit daily specials.' });
+      return fail(403, { error: 'You do not have permission to edit daily highlights.' });
     }
 
     const formData = await request.formData();

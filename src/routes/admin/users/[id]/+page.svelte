@@ -250,8 +250,8 @@
                 class:success-action={data.employee.can_manage_specials === 1 || data.employee.role === 'admin'}
               >
                 {data.employee.can_manage_specials === 1 || data.employee.role === 'admin'
-                  ? 'Specials Allowed'
-                  : 'Grant Specials'}
+                  ? 'Highlights Allowed'
+                  : 'Grant Highlights'}
               </button>
             </form>
 

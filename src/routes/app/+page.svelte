@@ -74,7 +74,6 @@
   let guidedSteps: GuidedStep[] = [];
   let time = '';
   let greeting = '';
-  let topGreeting = '';
   let userName = data.userName ?? 'Team';
   let announcement = data.announcement ?? { content: '', updatedAt: 0 };
   let employeeSpotlight = data.employeeSpotlight ?? { employeeName: '', shoutout: '', updatedAt: 0 };
@@ -114,7 +113,7 @@
       ? [{
           selector: '[data-guide="specials-focus"]',
           title: 'Daily Highlights',
-          description: 'Open this tile to review specials and shift highlights before service starts.',
+          description: 'Open this tile to review shift highlights before service starts.',
           placement: 'top' as const
         }]
       : []),
@@ -187,7 +186,6 @@
     time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const h = now.getHours();
     greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    topGreeting = h < 12 ? 'Morning Brief' : h < 18 ? 'Service Brief' : 'Evening Brief';
   }
 
   function handleMove(e: MouseEvent | TouchEvent) {
@@ -330,7 +328,7 @@
   {/if}
 
   <section class="page-header" data-guide="home-brief" in:fly={{ y: 20, duration: 500 }}>
-    <h1>{topGreeting}</h1>
+    <h1>{greeting}</h1>
     <p class="header-sub">Kitchen operations snapshot</p>
     <span class="brief-rule" aria-hidden="true"></span>
   </section>
@@ -351,7 +349,7 @@
     >
       <div class="greeting-main">
         <div class="greeting-copy">
-          <h2>{greeting}</h2>
+          <h2>{userName}</h2>
           <span class="time">{time}</span>
         </div>
         {#if featureAccess.scheduling}
@@ -443,6 +441,21 @@
           {/each}
         </div>
       {/if}
+    </a>
+    {/if}
+
+    {#if featureAccess.conversions}
+    <a
+      href="/conversions"
+      class="tile conversion-card"
+      style="transform: translate({px * 3.25}px, {py * 3.25}px);"
+      in:fly={{ y: 20, duration: 542 }}
+    >
+      <div class="tile-head">
+        <span class="tile-label">Conversions</span>
+      </div>
+      <strong>Kitchen measures</strong>
+      <small>Quick chart + converter</small>
     </a>
     {/if}
 
@@ -833,6 +846,19 @@
     font-size: 0.78rem;
   }
   .idea { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-muted); }
+  .conversion-card {
+    gap: 0.22rem;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+  .conversion-card strong {
+    font-size: 1rem;
+    line-height: 1.18;
+  }
+  .conversion-card small {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
   .today-area { margin: 1rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: none; }
   .today-head { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; margin-bottom: 0.5rem; }
   .today-head h3 { margin: 0; font-size: var(--text-md); }

@@ -15,6 +15,7 @@ export const primaryNav: NavItem[] = [
   { label: 'Recipes', route: '/recipes', icon: 'restaurant', featureKey: 'recipes' },
   { label: 'Todo', route: '/todo', icon: 'task_alt', featureKey: 'todo' },
   { label: 'Docs', route: '/docs', icon: 'description', featureKey: 'documents' },
+  { label: 'Conversions', route: '/conversions', icon: 'calculate', featureKey: 'conversions' },
   { label: 'Whiteboard', route: '/whiteboard', icon: 'lightbulb', featureKey: 'whiteboard' },
   { label: 'Temps', route: '/temper', icon: 'thermostat', featureKey: 'temps' }
 ];
