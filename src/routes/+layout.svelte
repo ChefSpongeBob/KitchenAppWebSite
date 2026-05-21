@@ -108,6 +108,11 @@
     }
   ];
 
+  function canSeeAppSidebarFeature(featureKey: AppFeatureKey | undefined) {
+    if (!featureKey) return true;
+    return (data.featureModes ?? defaultAppFeatureModes)[featureKey] === "all";
+  }
+
   function canSeeFeature(featureKey: AppFeatureKey | undefined) {
     if (!featureKey) return true;
     const role = data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
@@ -250,7 +255,7 @@
     marketingPrefixRoutes.some((prefix) => routeSplashTargetPath.startsWith(prefix));
   $: showRouteSplash = Boolean($navigating) && Boolean(navTargetPath) && !navTargetPath.startsWith("/register");
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
-  $: filteredPrimaryNav = primaryNav.filter((item) => canSeeFeature(item.featureKey));
+  $: filteredPrimaryNav = primaryNav.filter((item) => canSeeAppSidebarFeature(item.featureKey));
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
       ...group,

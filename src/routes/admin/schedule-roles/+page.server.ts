@@ -3,6 +3,7 @@ import { requireAdmin } from '$lib/server/admin';
 import {
   createScheduleDepartment,
   createScheduleRoleDefinition,
+  deleteScheduleDepartment,
   deleteScheduleRoleDefinition,
   loadScheduleDepartments,
   loadScheduleRoleDefinitions
@@ -28,5 +29,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
   create_department: ({ request, locals }) => createScheduleDepartment(request, locals),
   create_role: ({ request, locals }) => createScheduleRoleDefinition(request, locals),
+  delete_department: ({ request, locals }) => deleteScheduleDepartment(request, locals),
   delete_role: ({ request, locals }) => deleteScheduleRoleDefinition(request, locals)
 };

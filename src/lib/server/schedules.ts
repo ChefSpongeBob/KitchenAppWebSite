@@ -217,26 +217,46 @@ function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
 
 async function loadScheduleDepartmentsFromTable(db: DB, businessId?: string | null): Promise<ScheduleDepartment[]> {
   const businessFilter = businessId ? `AND (business_id = ? OR business_id IS NULL)` : '';
-  const rows = await db
-    .prepare(
-      `
-      SELECT name
-      FROM schedule_departments
-      WHERE is_active = 1
-        ${businessFilter}
-      ORDER BY sort_order ASC, name ASC
-      `
-    )
-    .bind(...(businessId ? [businessId] : []))
-    .all<{ name: string }>();
+  const [rows, hiddenRows] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT name
+        FROM schedule_departments
+        WHERE is_active = 1
+          ${businessFilter}
+        ORDER BY sort_order ASC, name ASC
+        `
+      )
+      .bind(...(businessId ? [businessId] : []))
+      .all<{ name: string }>(),
+    businessId
+      ? db
+          .prepare(
+            `
+            SELECT name
+            FROM schedule_departments
+            WHERE is_active = 0
+              AND business_id = ?
+            `
+          )
+          .bind(businessId)
+          .all<{ name: string }>()
+      : Promise.resolve({ results: [] as { name: string }[] })
+  ]);
 
   const departments = (rows.results ?? [])
     .map((row) => String(row.name ?? '').trim())
     .filter((department) => department.length > 0);
+  const hiddenDepartments = new Set(
+    (hiddenRows.results ?? []).map((row) => String(row.name ?? '').trim()).filter(Boolean)
+  );
 
-  const merged: ScheduleDepartment[] = [...scheduleDepartments];
+  const merged: ScheduleDepartment[] = scheduleDepartments.filter(
+    (department) => !hiddenDepartments.has(department)
+  );
   for (const department of departments) {
-    if (!merged.includes(department)) merged.push(department);
+    if (!hiddenDepartments.has(department) && !merged.includes(department)) merged.push(department);
   }
 
   return merged;
@@ -3157,6 +3177,132 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   return { success: true };
 }
 
+async function saveScheduleWeekDraftFromForm(
+  db: DB,
+  form: FormData,
+  locals: App.Locals,
+  businessId: string
+) {
+  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const payload = String(form.get('payload') ?? '').trim();
+  if (!payload) return { ok: false as const, failure: fail(400, { error: 'No schedule data was submitted.' }) };
+  const teamPayload = String(form.get('team_payload') ?? '').trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return { ok: false as const, failure: fail(400, { error: 'Schedule data could not be read.' }) };
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { ok: false as const, failure: fail(400, { error: 'Schedule data must be a list of shifts.' }) };
+  }
+
+  const rows: ScheduleDraftRow[] = [];
+  const rosterUserIdsFromPayload: string[] = [];
+  const departments = await loadScheduleDepartments(db, businessId);
+  const roleOptionsByDepartment = await loadScheduleRoleOptionsByDepartment(db, businessId);
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const row = entry as Record<string, unknown>;
+    const shiftDate = String(row.shiftDate ?? '').trim();
+    const userId = String(row.userId ?? '').trim();
+    const department = String(row.department ?? '').trim();
+    const role = String(row.role ?? '').trim();
+    const detail = String(row.detail ?? '').trim();
+    const startTime = String(row.startTime ?? '').trim();
+    const endLabel = String(row.endLabel ?? '').trim();
+    const breakMinutes = Math.max(0, Math.round(Number(row.breakMinutes ?? 0) || 0));
+    const notes = String(row.notes ?? '').trim();
+
+    if (!shiftDate && !userId && !department && !role && !startTime && !detail && !endLabel && !notes) {
+      continue;
+    }
+
+    if (!shiftDate || !userId || !department || !role || !startTime) {
+      return {
+        ok: false as const,
+        failure: fail(400, { error: 'Every shift needs a date, employee, department, role, and start time.' })
+      };
+    }
+
+    if (!isValidScheduleDepartment(department, departments)) {
+      return { ok: false as const, failure: fail(400, { error: `Invalid department on ${shiftDate}.` }) };
+    }
+
+    if (!roleIsAllowed(roleOptionsByDepartment, department, role)) {
+      return { ok: false as const, failure: fail(400, { error: `Invalid role for ${department} on ${shiftDate}.` }) };
+    }
+
+    rows.push({
+      shiftDate,
+      userId,
+      department,
+      role,
+      detail,
+      startTime,
+      endLabel,
+      breakMinutes,
+      notes
+    });
+  }
+
+  const assignmentError = await validateScheduleAssignments(
+    db,
+    rows.map((row) => ({
+      userId: row.userId,
+      department: row.department as ScheduleDepartment,
+      shiftDate: row.shiftDate
+    })),
+    businessId
+  );
+  if (assignmentError) {
+    return { ok: false as const, failure: fail(400, { error: assignmentError }) };
+  }
+
+  if (teamPayload) {
+    let parsedTeam: unknown;
+    try {
+      parsedTeam = JSON.parse(teamPayload);
+    } catch {
+      return { ok: false as const, failure: fail(400, { error: 'Team data could not be read.' }) };
+    }
+    if (!Array.isArray(parsedTeam)) {
+      return { ok: false as const, failure: fail(400, { error: 'Team data must be a list of employees.' }) };
+    }
+    for (const value of parsedTeam) {
+      const userId = String(value ?? '').trim();
+      if (userId) rosterUserIdsFromPayload.push(userId);
+    }
+  }
+
+  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId ?? null, businessId);
+  const now = Math.floor(Date.now() / 1000);
+  const shiftUserIds = rows.map((row) => row.userId);
+  const rosterUserIds = Array.from(new Set([...rosterUserIdsFromPayload, ...shiftUserIds]));
+  if (rosterUserIds.length > 0) {
+    const assignableById = await loadScheduleAssignableUsersById(db, rosterUserIds, businessId);
+    for (const userId of rosterUserIds) {
+      if (!assignableById.has(userId)) {
+        return { ok: false as const, failure: fail(400, { error: 'One or more scheduled employees are no longer active.' }) };
+      }
+    }
+  }
+
+  await db.prepare(`DELETE FROM schedule_shifts WHERE week_id = ? AND business_id = ?`).bind(week.id, businessId).run();
+  await insertScheduleShifts(db, week.id, toShiftInsertRows(rows), now, businessId);
+
+  await replaceWeekTeamRoster(db, week.id, rosterUserIds, now, businessId);
+
+  await db
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
+    .bind(now, locals.userId, week.id)
+    .run();
+
+  return { ok: true as const, week };
+}
+
 export async function deleteScheduleShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -3280,9 +3426,14 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim();
   if (!weekStart) return fail(400, { error: 'Missing week start.' });
+  const payload = String(form.get('payload') ?? '').trim();
 
-  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
-  const publishValidation = await validatePublishWeek(db, week.id, weekStart, businessId);
+  const week = payload
+    ? await saveScheduleWeekDraftFromForm(db, form, locals, businessId)
+    : { ok: true as const, week: await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId) };
+  if (!week.ok) return week.failure;
+
+  const publishValidation = await validatePublishWeek(db, week.week.id, weekStart, businessId);
   if (publishValidation.errors.length > 0) {
     return fail(400, {
       error: summarizePublishIssues('Cannot publish schedule: ', publishValidation.errors)
@@ -3298,7 +3449,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
       WHERE id = ?
       `
     )
-    .bind(now, now, locals.userId, week.id)
+    .bind(now, now, locals.userId, week.week.id)
     .run();
 
   const warningSummary = summarizePublishIssues('Published with warning: ', publishValidation.warnings);
@@ -3883,7 +4034,36 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
     .first<{ id: string }>();
 
   if (existing) {
-    return fail(400, { error: 'That department already exists.' });
+    const inactive = await db
+      .prepare(
+        `
+        SELECT id
+        FROM schedule_departments
+        WHERE LOWER(name) = LOWER(?)
+          AND is_active = 0
+          AND (business_id = ? OR business_id IS NULL)
+        LIMIT 1
+        `
+      )
+      .bind(departmentName, businessId)
+      .first<{ id: string }>();
+
+    if (!inactive) {
+      return fail(400, { error: 'That department already exists.' });
+    }
+
+    await db
+      .prepare(
+        `
+        UPDATE schedule_departments
+        SET is_active = 1, updated_at = ?, business_id = ?
+        WHERE id = ?
+        `
+      )
+      .bind(Math.floor(Date.now() / 1000), businessId, inactive.id)
+      .run();
+
+    return { success: true, message: 'Department restored.' };
   }
 
   const maxSort = await db
@@ -3911,6 +4091,109 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
     .run();
 
   return { success: true, message: 'Department added.' };
+}
+
+export async function deleteScheduleDepartment(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
+  const form = await request.formData();
+  const departmentName = String(form.get('department_name') ?? '').trim();
+  if (!departmentName) return fail(400, { error: 'Missing department.' });
+
+  const departments = await loadScheduleDepartments(db, businessId);
+  if (!isValidScheduleDepartment(departmentName, departments)) {
+    return fail(404, { error: 'That department could not be found.' });
+  }
+  if (departments.length <= 1) {
+    return fail(400, { error: 'At least one schedule department must remain.' });
+  }
+
+  const activeUsageChecks = await Promise.all([
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_shifts WHERE department = ? AND business_id = ?`)
+      .bind(departmentName, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_open_shifts WHERE department = ? AND business_id = ?`)
+      .bind(departmentName, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_template_shifts WHERE department = ? AND business_id = ?`)
+      .bind(departmentName, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_templates WHERE department = ? AND business_id = ?`)
+      .bind(departmentName, businessId)
+      .first<{ count: number }>()
+  ]);
+
+  const usageCount = activeUsageChecks.reduce((total, row) => total + (row?.count ?? 0), 0);
+  if (usageCount > 0) {
+    return fail(400, {
+      error: 'That department is still used by schedules, open shifts, or templates. Clear those first.'
+    });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const existing = await db
+    .prepare(
+      `
+      SELECT id
+      FROM schedule_departments
+      WHERE LOWER(name) = LOWER(?)
+        AND (business_id = ? OR business_id IS NULL)
+      LIMIT 1
+      `
+    )
+    .bind(departmentName, businessId)
+    .first<{ id: string }>();
+
+  if (existing) {
+    await db
+      .prepare(
+        `
+        UPDATE schedule_departments
+        SET is_active = 0, updated_at = ?, business_id = ?
+        WHERE id = ?
+        `
+      )
+      .bind(now, businessId, existing.id)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `
+        INSERT INTO schedule_departments (
+          id, name, sort_order, is_active, created_at, updated_at, business_id
+        )
+        VALUES (?, ?, 999, 0, ?, ?, ?)
+        `
+      )
+      .bind(crypto.randomUUID(), departmentName, now, now, businessId)
+      .run();
+  }
+
+  await db
+    .prepare(
+      `
+      DELETE FROM schedule_role_definitions
+      WHERE department = ?
+        AND business_id = ?
+      `
+    )
+    .bind(departmentName, businessId)
+    .run();
+  await db
+    .prepare(`DELETE FROM user_schedule_departments WHERE department = ? AND business_id = ?`)
+    .bind(departmentName, businessId)
+    .run();
+
+  return { success: true, message: 'Department deleted.' };
 }
 
 export async function deleteScheduleRoleDefinition(request: Request, locals: App.Locals) {

@@ -228,15 +228,13 @@
 <style>
   .creator-panel {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.9rem;
     margin-top: 0.95rem;
-    padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: clamp(0.85rem, 2vw, 1.1rem);
+    border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01) 40%, rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 16px 34px rgba(4, 5, 7, 0.16);
+    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+    box-shadow: none;
   }
 
   .creator-header {
@@ -280,11 +278,10 @@
 
   .panel-block {
     display: grid;
-    gap: 0.45rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 0.68rem;
-    background: rgba(255, 255, 255, 0.015);
+    gap: 0.65rem;
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.8rem;
+    background: transparent;
   }
 
   .grid-form {
@@ -304,12 +301,13 @@
   }
 
   .row-card {
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    border-radius: 10px;
-    background: rgba(132, 146, 166, 0.08);
-    padding: 0.5rem;
-    display: grid;
-    gap: 0.35rem;
+    border-top: 1px solid var(--color-divider);
+    background: transparent;
+    padding: 0.6rem 0 0;
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
   }
 
   .inline-form {
@@ -326,30 +324,30 @@
 
   .feedback-banner {
     margin: 0;
-    padding: 0.65rem 0.82rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
-    color: #bbf7d0;
+    padding: 0.55rem 0;
+    border-top: 1px solid color-mix(in srgb, var(--color-success) 34%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-success) 18%, transparent);
+    background: transparent;
+    color: color-mix(in srgb, var(--color-success) 76%, var(--color-text));
     font-size: 0.8rem;
   }
 
   input,
   select {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--color-border);
     border-radius: 9px;
     padding: 0.4rem 0.52rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--surface-wash), var(--color-surface-alt);
     color: var(--color-text);
     font-size: 0.8rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid rgba(132, 146, 166, 0.22);
+    border: 1px solid color-mix(in srgb, var(--color-success) 46%, var(--color-border));
     border-radius: 9px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-primary-contrast);
+    background: transparent;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     padding: 0.36rem 0.58rem;
     cursor: pointer;
     font-size: 0.76rem;
@@ -358,9 +356,9 @@
   }
 
   button.danger {
-    border-color: rgba(239, 68, 68, 0.38);
-    background: linear-gradient(180deg, rgba(239, 68, 68, 0.24), rgba(239, 68, 68, 0.1));
-    color: #fecaca;
+    border-color: color-mix(in srgb, var(--color-danger, #b42318) 52%, var(--color-border));
+    background: transparent;
+    color: color-mix(in srgb, var(--color-danger, #b42318) 82%, var(--color-text));
   }
 
   @media (max-width: 900px) {

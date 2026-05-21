@@ -499,6 +499,11 @@
     teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
   }
 
+  function preparePublishPayload() {
+    prepareWeekPayload();
+    warnBeforePublish();
+  }
+
   function prepareLaborTargets() {
     laborTargetsPayload = JSON.stringify(laborTargets);
   }
@@ -1107,9 +1112,11 @@
                   <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
                   <a href="/admin/schedule-roles" class="menu-item menu-link">Department Roles</a>
                   <a href="/admin/users" class="menu-item menu-link">Employees</a>
-                    <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate">
+                    <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate" on:submit={preparePublishPayload}>
                       <input type="hidden" name="week_start" value={data.weekStart} />
-                      <button type="submit" class="menu-item menu-item-primary" on:click={warnBeforePublish}>Publish</button>
+                      <input type="hidden" name="payload" value={serializeWeekPayload()} />
+                      <input type="hidden" name="team_payload" value={JSON.stringify(employeeRows.map((row) => row.userId))} />
+                      <button type="submit" class="menu-item menu-item-primary">Publish</button>
                     </form>
                   </div>
                 </details>
@@ -1424,8 +1431,8 @@
 
     <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell" on:submit={prepareWeekPayload}>
       <input type="hidden" name="week_start" value={data.weekStart} />
-      <input type="hidden" name="payload" value={weekPayload} />
-      <input type="hidden" name="team_payload" value={teamPayload} />
+      <input type="hidden" name="payload" value={serializeWeekPayload()} />
+      <input type="hidden" name="team_payload" value={JSON.stringify(employeeRows.map((row) => row.userId))} />
 
         <div class="planner-head">
           <div>
@@ -1451,7 +1458,7 @@
               type="submit"
               formaction="?/publish_week"
               class="planner-publish-btn"
-              on:click={warnBeforePublish}
+              on:click={preparePublishPayload}
             >
               Publish Schedule
             </button>
@@ -1795,7 +1802,7 @@
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
     border: 1px solid var(--color-divider);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 97%, transparent);
     box-shadow: none;
   }
 
@@ -2061,7 +2068,7 @@
   }
 
   .menu-item-primary {
-    color: #ffd7d9;
+    color: color-mix(in srgb, var(--color-danger, #b42318) 78%, var(--color-text));
     background: transparent;
   }
 
@@ -2318,7 +2325,7 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: color-mix(in srgb, var(--color-surface) 96%, black 4%);
+    background: color-mix(in srgb, var(--color-surface) 98%, var(--color-surface-alt));
   }
 
   .corner-cell {
@@ -2379,7 +2386,7 @@
     position: sticky;
     left: 0;
     z-index: 3;
-    background: color-mix(in srgb, var(--color-surface) 96%, black 4%);
+    background: color-mix(in srgb, var(--color-surface) 98%, var(--color-surface-alt));
     padding: 0.9rem;
     display: flex;
     align-items: start;
@@ -2402,13 +2409,13 @@
   }
 
   .employee-availability {
-    color: #bfdbfe;
+    color: color-mix(in srgb, #2563eb 68%, var(--color-text));
     font-size: 0.72rem;
     line-height: 1.35;
   }
 
   .employee-timeoff {
-    color: #fca5a5;
+    color: color-mix(in srgb, var(--color-danger, #b42318) 76%, var(--color-text));
     font-size: 0.72rem;
     line-height: 1.35;
   }
@@ -2427,7 +2434,7 @@
 
   .empty-employee-cell {
     position: static;
-    background: rgba(255,255,255,0.02);
+    background: color-mix(in srgb, var(--color-surface-alt) 52%, transparent);
   }
 
   input,
@@ -2444,8 +2451,8 @@
   button {
     border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
     border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 84%, var(--color-primary) 16%);
-    color: var(--color-primary-contrast);
+    background: transparent;
+    color: var(--color-text);
     min-height: 2.3rem;
     padding: 0.5rem 0.76rem;
     cursor: pointer;
@@ -2465,8 +2472,8 @@
   }
 
   .menu-item.autofill-preferred {
-    background: rgba(22, 163, 74, 0.12);
-    color: #dcfce7;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-success) 76%, var(--color-text));
   }
 
   .shift-editor-dock {
@@ -2476,8 +2483,17 @@
     bottom: 0;
     z-index: 9999;
     padding: 0.8rem clamp(0.7rem, 2.2vw, 1rem) calc(0.8rem + var(--safe-bottom));
-    background: linear-gradient(180deg, rgba(4, 5, 7, 0), rgba(4, 5, 7, 0.56) 35%, rgba(4, 5, 7, 0.74));
+    background: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in srgb, var(--color-bg) 74%, transparent) 34%,
+      color-mix(in srgb, var(--color-bg) 94%, transparent)
+    );
     pointer-events: none;
+  }
+
+  :global([data-theme='dark']) .shift-editor-dock {
+    background: linear-gradient(180deg, rgba(4, 5, 7, 0), rgba(4, 5, 7, 0.56) 35%, rgba(4, 5, 7, 0.74));
   }
 
   .shift-editor-dialog {
@@ -2568,30 +2584,30 @@
   }
 
   .duplicate-day-btn-active {
-    border-color: rgba(132, 146, 166, 0.3);
-    background: rgba(132, 146, 166, 0.18);
-    color: #ffe4e6;
+    border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+    background: color-mix(in srgb, var(--color-surface-alt) 74%, transparent);
+    color: var(--color-text);
   }
 
   .shift-warning {
     margin: 0;
     font-size: 0.78rem;
     line-height: 1.4;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--color-divider);
     border-radius: 10px;
     padding: 0.55rem 0.62rem;
   }
 
   .shift-warning.availability-warning {
-    color: #bfdbfe;
+    color: color-mix(in srgb, #2563eb 72%, var(--color-text));
     border-color: rgba(59, 130, 246, 0.24);
-    background: rgba(59, 130, 246, 0.08);
+    background: color-mix(in srgb, #2563eb 7%, transparent);
   }
 
   .shift-warning.timeoff-warning {
-    color: #fecaca;
-    border-color: rgba(239, 68, 68, 0.24);
-    background: rgba(239, 68, 68, 0.08);
+    color: color-mix(in srgb, var(--color-danger, #b42318) 76%, var(--color-text));
+    border-color: color-mix(in srgb, var(--color-danger, #b42318) 24%, var(--color-border));
+    background: color-mix(in srgb, var(--color-danger, #b42318) 7%, transparent);
   }
 
   .shift-editor-actions {
@@ -2605,15 +2621,15 @@
 
   .remove-btn,
   .remove-row-btn {
-    color: #ffb6b6;
-    border-color: rgba(239, 68, 68, 0.24);
-    background: rgba(120, 12, 18, 0.14);
+    color: color-mix(in srgb, var(--color-danger, #b42318) 82%, var(--color-text));
+    border-color: color-mix(in srgb, var(--color-danger, #b42318) 34%, var(--color-border));
+    background: transparent;
   }
 
   .create-shift-btn {
-    border-color: rgba(22, 163, 74, 0.25);
-    background: rgba(22, 163, 74, 0.12);
-    color: #dcfce7;
+    border-color: color-mix(in srgb, var(--color-success) 42%, var(--color-border));
+    background: transparent;
+    color: color-mix(in srgb, var(--color-success) 76%, var(--color-text));
     flex: 1 1 8rem;
   }
 
@@ -2722,7 +2738,7 @@
       display: block;
       position: fixed;
       inset: 0;
-      background: rgba(4, 5, 7, 0.62);
+      background: color-mix(in srgb, var(--color-text) 16%, transparent);
       border: 0;
       padding: 0;
       z-index: 19;
@@ -2737,12 +2753,10 @@
       bottom: calc(1rem + var(--safe-bottom));
       width: min(20rem, calc(100vw - 1.5rem - var(--safe-left) - var(--safe-right)));
       padding: 0.9rem;
-      border: 1px solid rgba(255,255,255,0.08);
+      border: 1px solid var(--color-divider);
       border-radius: var(--radius-lg);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
-        color-mix(in srgb, var(--color-surface) 95%, black 5%);
-      box-shadow: 0 18px 48px rgba(4, 5, 7, 0.35);
+      background: var(--color-surface);
+      box-shadow: var(--shadow-md);
       transform: translateX(calc(-100% - 1rem));
       transition: transform 180ms ease;
       z-index: 20;
@@ -2773,8 +2787,8 @@
       min-height: 2rem;
       padding: 0.42rem 0.8rem;
       font-size: 0.76rem;
-      border-color: rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06);
+      border-color: var(--color-border);
+      background: transparent;
       color: var(--color-text);
     }
 
@@ -2784,8 +2798,8 @@
   }
 
   .mobile-add-btn {
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--color-border);
+    background: transparent;
     color: var(--color-text);
     min-height: 2rem;
     font-size: 0.72rem;
@@ -2803,9 +2817,9 @@
       justify-content: space-between;
       gap: 0.6rem;
       padding: 0.7rem;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid var(--color-divider);
       border-radius: 12px;
-      background: rgba(255,255,255,0.025);
+      background: transparent;
     }
 
     .mobile-team-copy {

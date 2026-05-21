@@ -332,7 +332,6 @@
   <section class="page-header" data-guide="home-brief" in:fly={{ y: 20, duration: 500 }}>
     <h1>{topGreeting}</h1>
     <p class="header-sub">Kitchen operations snapshot</p>
-    <img class="divider" src="/knife-divider.svg" alt="" aria-hidden="true" />
     <span class="brief-rule" aria-hidden="true"></span>
   </section>
 
@@ -359,7 +358,7 @@
           <div class="announcement-block">
             <div class="shift-title-row">
               <span class="tile-label">Today's Shift</span>
-              <img src="/kitchen-icons/knife.svg" alt="" aria-hidden="true" class="shift-fish-icon" />
+              <img src="/crimini-mark.svg" alt="" aria-hidden="true" class="shift-fish-icon" />
             </div>
             {#if todaySchedule.length === 0}
               <div class="shift-empty-state">
@@ -595,27 +594,17 @@
   .page-header { padding: 3rem 1rem 0.5rem; }
   .page-header h1 { margin: 0; font-size: 2.2rem; font-weight: var(--weight-semibold); letter-spacing: -0.03em; }
   .header-sub { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: 0.9rem; }
-  .divider {
-    display: block;
-    width: 112px;
-    height: auto;
-    margin-top: -6px;
-    margin-left: 1.35rem;
-    transform: rotate(45deg);
-    transform-origin: left center;
-    filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--color-text-muted) 12%, transparent));
-    opacity: 1;
-  }
-  :global([data-theme='dark']) .divider {
-    filter:
-      invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%)
-      drop-shadow(0 2px 8px color-mix(in srgb, var(--color-text-muted) 14%, transparent));
-  }
   .brief-rule {
     display: block;
-    width: 100%;
-    margin-top: 0.9rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+    width: min(100%, 560px);
+    height: 1px;
+    margin-top: 1rem;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-text) 34%, transparent),
+      color-mix(in srgb, var(--color-text) 12%, transparent) 58%,
+      transparent
+    );
   }
 
   .mosaic { display: grid; grid-template-columns: 1.2fr 1fr; grid-auto-rows: 118px; gap: 10px; padding: 1rem; }
@@ -652,10 +641,15 @@
     width: 1.9rem;
     height: 1.9rem;
     object-fit: contain;
+    filter: brightness(0) saturate(100%) invert(13%) sepia(8%) saturate(747%) hue-rotate(169deg) brightness(92%) contrast(91%);
+    opacity: 0.72;
+    flex: 0 0 auto;
+  }
+
+  :global([data-theme='dark']) .shift-fish-icon {
     filter:
       brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
     opacity: 0.96;
-    flex: 0 0 auto;
   }
   .announcement-block :global(p) {
     margin: 0;
@@ -872,11 +866,6 @@
       font-size: 0.82rem;
     }
 
-    .divider {
-      width: 92px;
-      margin-top: -5px;
-      margin-left: 1rem;
-    }
     .mosaic {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       grid-auto-rows: minmax(108px, auto);

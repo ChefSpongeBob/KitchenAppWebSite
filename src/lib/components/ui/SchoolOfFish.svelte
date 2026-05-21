@@ -28,6 +28,11 @@
     width: 1.3rem;
     height: 1.3rem;
     object-fit: contain;
+    filter: brightness(0) saturate(100%) invert(13%) sepia(8%) saturate(747%) hue-rotate(169deg) brightness(92%) contrast(91%);
+    opacity: 0.72;
+  }
+
+  :global([data-theme='dark']) .fish {
     filter:
       brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
     opacity: 0.88;

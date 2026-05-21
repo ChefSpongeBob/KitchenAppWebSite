@@ -79,7 +79,7 @@
   color-scheme: light;
 
   --color-primary: #6f7d90;
-  --color-primary-contrast: #ffffff;
+  --color-primary-contrast: #131a22;
   --color-primary-soft: rgba(115, 128, 147, 0.11);
   --color-accent: #8b96a8;
 
@@ -251,17 +251,15 @@ body::before {
     url("/kitchen-icons/chicken-leg.svg"),
     url("/kitchen-icons/fries.svg"),
     url("/kitchen-icons/whisk.svg"),
-    url("/kitchen-icons/knife.svg"),
     url("/crimini-mark.svg"),
     url("/kitchen-icons/fries.svg");
   background-repeat: no-repeat;
-  background-size: 92px auto, 82px auto, 62px auto, 72px auto, 98px auto, 86px auto, 56px auto;
+  background-size: 92px auto, 82px auto, 62px auto, 72px auto, 86px auto, 56px auto;
   background-position:
     left 2.5rem top 8rem,
     right 2.5rem top 13rem,
     left 6rem top 22rem,
     center top 5.5rem,
-    right 6rem bottom 13rem,
     left 3rem bottom 7rem,
     right 8rem bottom 22rem;
   filter: none;
@@ -497,7 +495,7 @@ a:focus-visible {
   color-scheme: light;
 
   --color-primary: #111214;
-  --color-primary-contrast: #ffffff;
+  --color-primary-contrast: #111214;
   --color-primary-soft: rgba(17, 18, 20, 0.07);
   --color-accent: #8f826e;
 

@@ -83,8 +83,14 @@
       {#each data.departments as department}
         <article class="role-card">
           <div class="role-card-head">
-            <strong>{department}</strong>
-            <span>{rolesForDepartment(department).length} roles</span>
+            <div>
+              <strong>{department}</strong>
+              <span>{rolesForDepartment(department).length} roles</span>
+            </div>
+            <form method="POST" action="?/delete_department" use:enhance={withFeedback}>
+              <input type="hidden" name="department_name" value={department} />
+              <button type="submit" class="danger-btn compact-danger">Delete</button>
+            </form>
           </div>
 
           <div class="role-list">
@@ -196,6 +202,7 @@
   }
 
   .role-card-head span {
+    display: block;
     color: var(--color-text-muted);
     margin: 0.2rem 0 0;
     font-size: 0.8rem;
@@ -242,6 +249,14 @@
   .danger-btn {
     min-height: 2.1rem;
     padding-inline: 0.8rem;
+    border-color: color-mix(in srgb, var(--color-danger, #b42318) 48%, var(--color-border));
+    background: transparent;
+    color: color-mix(in srgb, var(--color-danger, #b42318) 82%, var(--color-text));
+  }
+
+  .compact-danger {
+    min-height: 1.9rem;
+    padding-inline: 0.65rem;
   }
 
     @media (max-width: 920px) {
