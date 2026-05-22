@@ -252,7 +252,7 @@
 
   .confirmation {
     margin: 0;
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     font-size: 0.74rem;
     text-align: right;
   }

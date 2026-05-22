@@ -48,6 +48,7 @@
     guided?: boolean;
     userName?: string;
     announcement?: { content: string; updatedAt: number };
+    canEditAnnouncement?: boolean;
     employeeSpotlight?: EmployeeSpotlight;
     dailySpecials?: DailySpecial[];
     todayTasks?: HomeTask[];
@@ -380,7 +381,12 @@
       {#if featureAccess.announcements}
         <div class="shift-summary">
           <div class="announcement-copy">
-            <span class="tile-label">Announcements</span>
+            <div class="announcement-label-row">
+              <span class="tile-label">Announcements</span>
+              {#if data.canEditAnnouncement}
+                <a href="/announcements">Edit</a>
+              {/if}
+            </div>
             {#if announcement.content}
               <p>{announcement.content}</p>
             {:else}
@@ -676,6 +682,18 @@
   .announcement-copy {
     display: grid;
     gap: 0.35rem;
+  }
+  .announcement-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+  .announcement-label-row a {
+    color: var(--color-text);
+    font-size: 0.72rem;
+    font-weight: var(--weight-semibold);
+    text-decoration: none;
   }
   .shift-summary {
     display: grid;

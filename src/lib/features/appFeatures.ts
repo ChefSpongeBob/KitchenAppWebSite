@@ -59,7 +59,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     key: 'announcements',
     label: 'Announcements',
     description: 'Homepage announcement content block.',
-    userRoutePrefixes: [],
+    userRoutePrefixes: ['/announcements'],
     adminRoutePrefixes: []
   },
   {

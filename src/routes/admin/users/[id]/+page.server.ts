@@ -9,11 +9,13 @@ import {
   loadAdminEmployeeProfile,
   loadAdminUsers,
   makeUserAdmin,
+  removeUserAdmin,
   requestEmployeeOnboardingChanges,
   requireAdmin,
   revokeEmployeeSessions,
   saveEmployeeProfile,
   sendEmployeeOnboardingPackage,
+  toggleAnnouncementAccess,
   toggleScheduleDepartmentApproval,
   toggleSpecialsAccess
 } from '$lib/server/admin';
@@ -82,6 +84,8 @@ export const actions: Actions = {
   deny_user: ({ request, locals }) => denyUser(request, locals),
   delete_user: ({ request, locals }) => deleteUser(request, locals),
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
+  remove_user_admin: ({ request, locals }) => removeUserAdmin(request, locals),
+  toggle_announcement_access: ({ request, locals }) => toggleAnnouncementAccess(request, locals),
   toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),
   save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals),

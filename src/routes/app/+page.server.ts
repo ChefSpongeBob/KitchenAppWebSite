@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { buildFeatureAccess, defaultAppFeatureModes } from '$lib/features/appFeatures';
-import { loadHomepageAnnouncement } from '$lib/server/announcements';
+import { loadHomepageAnnouncement, userCanEditHomepageAnnouncement } from '$lib/server/announcements';
 import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
@@ -69,6 +69,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       featureAccess,
       userName: 'Team',
       announcement: { content: '', updatedAt: 0 },
+      canEditAnnouncement: false,
       employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
       dailySpecials: [],
       todayTasks: [],
@@ -90,6 +91,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const announcementPromise = featureAccess.announcements
     ? loadHomepageAnnouncement(db, businessId)
     : Promise.resolve({ content: '', updatedAt: 0 });
+  const announcementEditorPromise =
+    featureAccess.announcements && locals.userId
+      ? userCanEditHomepageAnnouncement(db, locals.userId, locals.userRole, businessId)
+      : Promise.resolve(false);
   const employeeSpotlightPromise = featureAccess.employee_spotlight
     ? loadEmployeeSpotlight(db, businessId)
     : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 });
@@ -166,6 +171,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     reviewEnabled,
     nodeTable,
     announcement,
+    canEditAnnouncement,
     employeeSpotlight,
     dailySpecials,
     user,
@@ -177,6 +183,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     reviewEnabledPromise,
     nodeTablePromise,
     announcementPromise,
+    announcementEditorPromise,
     employeeSpotlightPromise,
     dailySpecialsPromise,
     userPromise,
@@ -262,6 +269,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     featureAccess,
     userName,
     announcement,
+    canEditAnnouncement,
     employeeSpotlight,
     dailySpecials,
     todayTasks,

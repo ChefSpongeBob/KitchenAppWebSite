@@ -167,7 +167,7 @@
 
   .feedback-banner {
     padding: 0.62rem 0;
-    color: #86efac;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   .creator,

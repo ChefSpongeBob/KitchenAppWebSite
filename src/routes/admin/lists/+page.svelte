@@ -637,7 +637,7 @@
     border: 1px solid color-mix(in srgb, #16a34a 34%, var(--color-border));
     border-radius: 12px;
     background: color-mix(in srgb, #16a34a 14%, transparent);
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   .empty-note {

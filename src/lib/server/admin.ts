@@ -3,8 +3,8 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import {
   ensureAnnouncementsSchema,
-  getHomepageAnnouncementId,
-  loadHomepageAnnouncement
+  loadHomepageAnnouncement,
+  saveHomepageAnnouncement
 } from '$lib/server/announcements';
 import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 import {
@@ -145,6 +145,7 @@ export type AdminUser = {
   role: string;
   is_active: number;
   can_manage_specials: number;
+  can_manage_announcements: number;
   approved_departments: ScheduleDepartment[];
 };
 
@@ -1065,6 +1066,7 @@ export async function loadAdminTodos(db: D1, businessId: string) {
 
 export async function loadAdminUsers(db: D1, businessId: string) {
   await ensureBusinessSchema(db);
+  await ensureAnnouncementsSchema(db);
   await ensureDailySpecialsSchema(db);
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -1080,15 +1082,17 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.email,
             COALESCE(bu.role, 'staff') AS role,
             CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active,
-            CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
+            CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials,
+            CASE WHEN ae.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_announcements
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
           LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND dse.business_id = ?
+          LEFT JOIN announcement_editors ae ON ae.user_id = u.id AND ae.business_id = ?
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
-        .bind(businessId, businessId)
+        .bind(businessId, businessId, businessId)
         .all<AdminUser>()
     : await db
         .prepare(
@@ -1099,15 +1103,17 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.email,
             COALESCE(bu.role, 'staff') AS role,
             COALESCE(bu.is_active, 1) AS is_active,
-            CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials
+            CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials,
+            CASE WHEN ae.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_announcements
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
           LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND dse.business_id = ?
+          LEFT JOIN announcement_editors ae ON ae.user_id = u.id AND ae.business_id = ?
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
-        .bind(businessId, businessId)
+        .bind(businessId, businessId, businessId)
         .all<AdminUser>();
 
   const users = result.results ?? [];
@@ -3962,22 +3968,7 @@ export async function saveAnnouncement(request: Request, locals: App.Locals) {
 
   const formData = await request.formData();
   const content = String(formData.get('content') ?? '').trim();
-  const now = Math.floor(Date.now() / 1000);
-
-  await db
-    .prepare(
-      `
-      INSERT INTO announcements (id, content, updated_by, updated_at, business_id)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        content = excluded.content,
-        updated_by = excluded.updated_by,
-        updated_at = excluded.updated_at,
-        business_id = excluded.business_id
-      `
-    )
-    .bind(getHomepageAnnouncementId(businessId), content, locals.userId ?? null, now, businessId)
-    .run();
+  await saveHomepageAnnouncement(db, businessId, locals.userId, content);
 
   return { success: true };
 }
@@ -4048,6 +4039,54 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
 
   await writeAuditLog(db, {
     action: 'admin_role_granted',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
+  return { success: true };
+}
+
+export async function removeUserAdmin(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (userId === locals.userId) return fail(400, { error: 'You cannot restrict your own admin access.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
+
+  const businessUser = await db
+    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+    .bind(businessId, userId)
+    .first<{ role: string }>();
+
+  if (!businessUser) return fail(404, { error: 'User not found in this business.' });
+  if (businessUser.role === 'owner') return fail(400, { error: 'Owner admin access cannot be restricted here.' });
+  if (!['admin', 'manager'].includes(businessUser.role)) return { success: true };
+  if ((await countAdmins(db, businessId)) <= 1) {
+    return fail(400, { error: 'At least one admin must remain active.' });
+  }
+
+  await db
+    .prepare(
+      `
+      UPDATE business_users
+      SET role = 'staff', updated_at = ?
+      WHERE business_id = ? AND user_id = ?
+      `
+    )
+    .bind(Math.floor(Date.now() / 1000), businessId, userId)
+    .run();
+
+  await writeAuditLog(db, {
+    action: 'admin_role_restricted',
     request,
     businessId,
     actorUserId: locals.userId ?? null,
@@ -4325,6 +4364,55 @@ export async function toggleSpecialsAccess(request: Request, locals: App.Locals)
       `
     )
     .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000), businessId)
+    .run();
+
+  return { success: true };
+}
+
+export async function toggleAnnouncementAccess(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureAnnouncementsSchema(db);
+  await ensureTenantSchema(db, true);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT user_id
+      FROM announcement_editors
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ user_id: string }>();
+
+  if (existing) {
+    await db
+      .prepare(`DELETE FROM announcement_editors WHERE business_id = ? AND user_id = ?`)
+      .bind(businessId, userId)
+      .run();
+    return { success: true };
+  }
+
+  await db
+    .prepare(
+      `
+      INSERT INTO announcement_editors (business_id, user_id, granted_by, updated_at)
+      VALUES (?, ?, ?, ?)
+      `
+    )
+    .bind(businessId, userId, locals.userId ?? null, Math.floor(Date.now() / 1000))
     .run();
 
   return { success: true };

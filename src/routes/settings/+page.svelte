@@ -961,7 +961,7 @@
 
   .status-pill-approved {
     border-color: color-mix(in srgb, #16a34a 38%, var(--color-border));
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     background: color-mix(in srgb, #16a34a 14%, transparent);
   }
 

@@ -245,7 +245,7 @@
   }
 
   .status-pill.published {
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   .filter-bar {

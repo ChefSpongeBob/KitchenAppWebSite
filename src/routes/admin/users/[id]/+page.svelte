@@ -14,6 +14,7 @@
     role: string;
     is_active: number;
     can_manage_specials: number;
+    can_manage_announcements: number;
     approved_departments: ScheduleDepartment[];
   };
 
@@ -90,6 +91,8 @@
 
   const isDepartmentApproved = (employee: Employee, department: ScheduleDepartment) =>
     employee.approved_departments.includes(department);
+
+  const isAdminRole = (role: string) => ['owner', 'admin', 'manager'].includes(role);
 
   const formatBirthday = (value: string) =>
     value ? new Date(`${value}T00:00:00`).toLocaleDateString() : 'Not set';
@@ -184,7 +187,7 @@
         </div>
         <div>
           <span>Role</span>
-          <strong>{data.employee.role === 'admin' ? 'Admin' : 'Staff'}</strong>
+          <strong>{isAdminRole(data.employee.role) ? 'Admin' : 'Staff'}</strong>
         </div>
         <div>
           <span>Departments</span>
@@ -236,24 +239,46 @@
               </form>
             {/if}
 
-            {#if data.employee.role !== 'admin'}
+            {#if data.employee.role === 'owner'}
+              <button type="button" class="success-action" disabled>Admin Access</button>
+            {:else if isAdminRole(data.employee.role)}
+              <form method="POST" action="?/remove_user_admin" use:enhance={withFeedback}>
+                <input type="hidden" name="user_id" value={data.employee.id} />
+                <button type="submit" class="warn-action">Restrict Admin</button>
+              </form>
+            {:else}
               <form method="POST" action="?/make_user_admin" use:enhance={withFeedback}>
                 <input type="hidden" name="user_id" value={data.employee.id} />
-                <button type="submit">Make Admin</button>
+                <button type="submit">Grant Admin</button>
               </form>
             {/if}
 
-            <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
-              <input type="hidden" name="user_id" value={data.employee.id} />
-              <button
-                type="submit"
-                class:success-action={data.employee.can_manage_specials === 1 || data.employee.role === 'admin'}
-              >
-                {data.employee.can_manage_specials === 1 || data.employee.role === 'admin'
-                  ? 'Highlights Allowed'
-                  : 'Grant Highlights'}
-              </button>
-            </form>
+            {#if isAdminRole(data.employee.role)}
+              <button type="button" class="success-action" disabled>Highlights Access</button>
+              <button type="button" class="success-action" disabled>Announcements Access</button>
+            {:else}
+              <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
+                <input type="hidden" name="user_id" value={data.employee.id} />
+                <button
+                  type="submit"
+                  class:warn-action={data.employee.can_manage_specials === 1}
+                >
+                  {data.employee.can_manage_specials === 1 ? 'Restrict Highlights' : 'Grant Highlights'}
+                </button>
+              </form>
+
+              <form method="POST" action="?/toggle_announcement_access" use:enhance={withFeedback}>
+                <input type="hidden" name="user_id" value={data.employee.id} />
+                <button
+                  type="submit"
+                  class:warn-action={data.employee.can_manage_announcements === 1}
+                >
+                  {data.employee.can_manage_announcements === 1
+                    ? 'Restrict Announcements'
+                    : 'Grant Announcements'}
+                </button>
+              </form>
+            {/if}
 
             <form method="POST" action="?/revoke_employee_sessions" use:enhance={withFeedback}>
               <input type="hidden" name="user_id" value={data.employee.id} />
@@ -721,6 +746,11 @@
     cursor: pointer;
   }
 
+  button:disabled {
+    cursor: default;
+    opacity: 0.86;
+  }
+
   .form-actions button,
   .send-onboarding button {
     width: auto;
@@ -736,7 +766,7 @@
   .success-action,
   .department-chip.department-chip-active {
     border-color: color-mix(in srgb, #16a34a 40%, var(--color-border));
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     background: color-mix(in srgb, #16a34a 18%, transparent);
   }
 
@@ -773,7 +803,7 @@
 
   .status-pill-approved {
     border-color: color-mix(in srgb, #16a34a 38%, var(--color-border));
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     background: color-mix(in srgb, #16a34a 14%, transparent);
   }
 

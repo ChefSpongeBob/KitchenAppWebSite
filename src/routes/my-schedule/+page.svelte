@@ -613,7 +613,7 @@
 
   .offer-badge.requested {
     border-color: rgba(22, 163, 74, 0.24);
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   .offer-badge.pending {

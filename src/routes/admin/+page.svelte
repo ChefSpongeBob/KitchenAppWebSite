@@ -986,7 +986,7 @@
 
   .status-cell.all,
   .status-cell.admin {
-    color: #86efac;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   .status-cell.off {
@@ -1017,7 +1017,7 @@
   }
 
   .visibility-cell.all {
-    color: #86efac;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     border-color: rgba(34, 197, 94, 0.34);
     background: rgba(15, 118, 41, 0.14);
   }
@@ -1111,7 +1111,7 @@
   }
 
   .feed-card li.tone-ok strong {
-    color: #86efac;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   .feed-card li.tone-warn strong {
@@ -1455,7 +1455,7 @@
     border: 1px solid rgba(22, 163, 74, 0.22);
     border-radius: 12px;
     background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
-    color: #bbf7d0;
+    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
   input,
