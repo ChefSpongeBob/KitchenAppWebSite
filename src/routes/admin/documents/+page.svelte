@@ -241,7 +241,7 @@
   .danger {
     border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
     background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
-    color: #fecaca;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 
   @media (max-width: 900px) {

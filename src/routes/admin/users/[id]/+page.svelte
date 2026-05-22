@@ -240,7 +240,7 @@
             {/if}
 
             {#if data.employee.role === 'owner'}
-              <button type="button" class="success-action" disabled>Admin Access</button>
+              <span class="access-state success-action">Admin Access</span>
             {:else if isAdminRole(data.employee.role)}
               <form method="POST" action="?/remove_user_admin" use:enhance={withFeedback}>
                 <input type="hidden" name="user_id" value={data.employee.id} />
@@ -254,8 +254,8 @@
             {/if}
 
             {#if isAdminRole(data.employee.role)}
-              <button type="button" class="success-action" disabled>Highlights Access</button>
-              <button type="button" class="success-action" disabled>Announcements Access</button>
+              <span class="access-state success-action">Highlights Access</span>
+              <span class="access-state success-action">Announcements Access</span>
             {:else}
               <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
                 <input type="hidden" name="user_id" value={data.employee.id} />
@@ -746,11 +746,6 @@
     cursor: pointer;
   }
 
-  button:disabled {
-    cursor: default;
-    opacity: 0.86;
-  }
-
   .form-actions button,
   .send-onboarding button {
     width: auto;
@@ -770,9 +765,20 @@
     background: color-mix(in srgb, #16a34a 18%, transparent);
   }
 
+  .access-state {
+    display: flex;
+    align-items: center;
+    min-height: 2.45rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 0.55rem 0.78rem;
+    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
+  }
+
   .danger-action {
     border-color: color-mix(in srgb, #ef4444 36%, var(--color-border));
-    color: #ffb6b6;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
     background: color-mix(in srgb, #7f1d1d 32%, var(--color-surface));
   }
 

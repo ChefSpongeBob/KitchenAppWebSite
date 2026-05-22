@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
@@ -166,7 +166,7 @@
   }
 
   .danger {
-    color: #fca5a5;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 
   .note-body {

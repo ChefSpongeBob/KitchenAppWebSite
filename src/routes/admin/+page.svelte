@@ -908,7 +908,7 @@
   }
 
   .temp-hit-row span.hot {
-    color: #fca5a5;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
     border-color: rgba(248, 113, 113, 0.35);
     background: rgba(120, 12, 18, 0.18);
   }
@@ -990,7 +990,7 @@
   }
 
   .status-cell.off {
-    color: #fca5a5;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 
   .status-cell.all i {
@@ -1029,7 +1029,7 @@
   }
 
   .visibility-cell.off {
-    color: #fca5a5;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
     border-color: rgba(248, 113, 113, 0.35);
     background: rgba(120, 12, 18, 0.16);
   }
@@ -1115,7 +1115,7 @@
   }
 
   .feed-card li.tone-warn strong {
-    color: #fca5a5;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 
   :global(html[data-mobile-view='compact']) .command-center {
@@ -1500,7 +1500,7 @@
 
   .danger {
     border-color: rgba(239, 68, 68, 0.3);
-    color: #ffb6b6;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
     background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
   }
 

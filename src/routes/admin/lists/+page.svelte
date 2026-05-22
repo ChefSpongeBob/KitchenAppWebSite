@@ -675,7 +675,7 @@
 
   .danger {
     border-color: color-mix(in srgb, #ef4444 36%, var(--color-border));
-    color: #ffb6b6;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
     background: color-mix(in srgb, #7f1d1d 34%, var(--color-surface));
   }
 

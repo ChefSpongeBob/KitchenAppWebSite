@@ -808,7 +808,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .alert { margin-top: 0.35rem; color: #fca5a5; font-size: 0.78rem; }
+  .alert { margin-top: 0.35rem; color: color-mix(in srgb, var(--color-error) 76%, var(--color-text)); font-size: 0.78rem; }
   .specials-empty {
     color: var(--color-text-muted);
   }
