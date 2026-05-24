@@ -39,6 +39,26 @@
             : '';
     };
   };
+
+  const withResetFeedback: SubmitFunction = ({ formElement }) => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        formElement.reset();
+        await invalidateAll();
+        pushToast('Menu saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That menu could not be saved.', 'error');
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Menu saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That menu could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -56,7 +76,7 @@
 
     <details class="creator" open>
       <summary>Add menu</summary>
-      <form method="POST" action="?/create_menu" enctype="multipart/form-data" use:enhance={withFeedback} class="menu-form">
+      <form method="POST" action="?/create_menu" enctype="multipart/form-data" use:enhance={withResetFeedback} class="menu-form">
         <input type="hidden" name="section" value="Menu" />
         <input type="hidden" name="category" value="Menu" />
         <input type="hidden" name="file_url" value="" />
@@ -193,8 +213,8 @@
   }
 
   .danger {
-    border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
-    background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-error) 38%, var(--color-border));
+    background: color-mix(in srgb, var(--color-error) 30%, var(--color-surface));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 

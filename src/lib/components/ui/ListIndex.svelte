@@ -23,7 +23,6 @@
             <small>{item.description}</small>
           {/if}
         </span>
-        <span class="row-action">Open</span>
       </a>
     {/each}
   </nav>
@@ -83,11 +82,6 @@
     line-height: 1.35;
   }
 
-  .row-action {
-    flex: 0 0 auto;
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-  }
   @media (max-width: 640px) {
     .list-row {
       align-items: start;

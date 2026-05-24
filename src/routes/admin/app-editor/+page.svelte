@@ -374,12 +374,12 @@
   }
 
   .dot.live {
-    background: #16a34a;
+    background: var(--color-success);
     box-shadow: none;
   }
 
   .dot.off {
-    background: #dc2626;
+    background: var(--color-error);
     box-shadow: none;
   }
 
@@ -503,7 +503,7 @@
   }
 
   .remove-logo input {
-    accent-color: #ef4444;
+    accent-color: var(--color-error);
   }
 
   .feature-list {
@@ -549,14 +549,14 @@
 
   .status-text {
     font-size: 0.72rem;
-    color: #22c55e;
+    color: var(--color-success);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-weight: var(--weight-semibold);
   }
 
   .status-text.off {
-    color: #ef4444;
+    color: var(--color-error);
   }
 
   .mode-field select {

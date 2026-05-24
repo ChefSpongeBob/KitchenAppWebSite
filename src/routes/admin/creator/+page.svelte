@@ -189,6 +189,26 @@
             : '';
     };
   };
+
+  const withResetFeedback: SubmitFunction = ({ formElement }) => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        formElement.reset();
+        await invalidateAll();
+        pushToast('Creator changes saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That creator change could not be saved.', 'error');
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Creator changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That creator change could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -234,7 +254,7 @@
 
       {#if editorType === 'list'}
         {#if listDomain === 'checklists'}
-          <form method="POST" action="?/create_checklist_category" use:enhance={withFeedback} class="create-form">
+          <form method="POST" action="?/create_checklist_category" use:enhance={withResetFeedback} class="create-form">
             <input name="title" placeholder="New checklist category" required />
             <input name="description" placeholder="Description" />
             <input type="hidden" name="create_shift_sections" value="1" />
@@ -266,7 +286,7 @@
             </div>
           {/if}
         {:else}
-          <form method="POST" action="?/create_list_section" use:enhance={withFeedback} class="create-form">
+          <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="create-form">
             <input type="hidden" name="domain" value={listDomain} />
             <input name="title" placeholder={`New ${listDomainLabel(listDomain)} category`} required />
             <input name="description" placeholder="Description" />
@@ -298,6 +318,14 @@
                       <button type="submit" class="danger">Delete Category</button>
                     </form>
 
+                    <form method="POST" action="?/add_list_item" use:enhance={withResetFeedback} class="inline-form">
+                      <input type="hidden" name="section_id" value={section.id} />
+                      <input name="content" placeholder="New item" required />
+                      <input name="details" placeholder="Optional details" />
+                      <input name="par_count" type="number" min="0" step="0.1" value="0" />
+                      <button type="submit">Add Item</button>
+                    </form>
+
                     <div class="entity-items">
                       {#if section.items.length === 0}
                         <p class="empty">No items yet.</p>
@@ -319,14 +347,6 @@
                         {/each}
                       {/if}
                     </div>
-
-                    <form method="POST" action="?/add_list_item" use:enhance={withFeedback} class="inline-form">
-                      <input type="hidden" name="section_id" value={section.id} />
-                      <input name="content" placeholder="New item" required />
-                      <input name="details" placeholder="Optional details" />
-                      <input name="par_count" type="number" min="0" step="0.1" value="0" />
-                      <button type="submit">Add Item</button>
-                    </form>
                   </div>
                 </details>
               {/each}
@@ -366,6 +386,14 @@
                       </form>
                     </div>
 
+                    <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
+                      <input name="category" value={category} required />
+                      <input name="title" placeholder="Recipe title" required />
+                      <textarea name="ingredients" rows="4" placeholder="Ingredients" required></textarea>
+                      <textarea name="instructions" rows="6" placeholder="Instructions" required></textarea>
+                      <button type="submit">Add Recipe</button>
+                    </form>
+
                     <div class="entity-items">
                       {#if items.length === 0}
                         <p class="empty">No recipes yet.</p>
@@ -391,14 +419,6 @@
                         {/each}
                       {/if}
                     </div>
-
-                    <form method="POST" action="?/create_recipe" use:enhance={withFeedback} class="inline-form">
-                      <input name="category" value={category} required />
-                      <input name="title" placeholder="Recipe title" required />
-                      <textarea name="ingredients" rows="4" placeholder="Ingredients" required></textarea>
-                      <textarea name="instructions" rows="6" placeholder="Instructions" required></textarea>
-                      <button type="submit">Add Recipe</button>
-                    </form>
                   </div>
                 </details>
               {/each}
@@ -436,6 +456,26 @@
                         <button type="submit" class="danger">Delete Category + Content</button>
                       </form>
                     </div>
+
+                    <form
+                      method="POST"
+                      action="?/create_document"
+                      enctype="multipart/form-data"
+                      use:enhance={withResetFeedback}
+                      class="inline-form"
+                    >
+                      <input name="title" placeholder="Document title" required />
+                      <input type="hidden" name="section" value="Docs" />
+                      <input type="hidden" name="category" value={category} />
+                      <input type="hidden" name="file_url" value="" />
+                      <input type="hidden" name="content" value="" />
+                      <input name="file" type="file" accept="application/pdf,image/*" />
+                      <select name="is_active">
+                        <option value="1" selected>Active</option>
+                        <option value="0">Inactive</option>
+                      </select>
+                      <button type="submit">Add Document</button>
+                    </form>
 
                     <div class="entity-items">
                       {#if items.length === 0}
@@ -475,26 +515,6 @@
                         {/each}
                       {/if}
                     </div>
-
-                    <form
-                      method="POST"
-                      action="?/create_document"
-                      enctype="multipart/form-data"
-                      use:enhance={withFeedback}
-                      class="inline-form"
-                    >
-                      <input name="title" placeholder="Document title" required />
-                      <input type="hidden" name="section" value="Docs" />
-                      <input type="hidden" name="category" value={category} />
-                      <input type="hidden" name="file_url" value="" />
-                      <input type="hidden" name="content" value="" />
-                      <input name="file" type="file" accept="application/pdf,image/*" />
-                      <select name="is_active">
-                        <option value="1" selected>Active</option>
-                        <option value="0">Inactive</option>
-                      </select>
-                      <button type="submit">Add Document</button>
-                    </form>
                   </div>
                 </details>
               {/each}
@@ -643,9 +663,9 @@
   .feedback-banner {
     margin: 0;
     padding: 0.65rem 0.82rem;
-    border: 1px solid color-mix(in srgb, #16a34a 34%, var(--color-border));
+    border: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
     border-radius: 10px;
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     font-size: 0.8rem;
   }
@@ -675,8 +695,8 @@
   }
 
   button.danger {
-    border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
-    background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-error) 38%, var(--color-border));
+    background: color-mix(in srgb, var(--color-error) 30%, var(--color-surface));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 

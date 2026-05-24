@@ -788,9 +788,9 @@
   }
 
   .status-pill-approved {
-    border-color: color-mix(in srgb, #16a34a 38%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-success) 38%, var(--color-border));
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
   }
 
   .status-pill-submitted,
@@ -892,17 +892,17 @@
   }
 
   button.danger {
-    border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
-    background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-error) 38%, var(--color-border));
+    background: color-mix(in srgb, var(--color-error) 30%, var(--color-surface));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 
   .feedback-banner {
     margin: 0;
     padding: 0.65rem 0.82rem;
-    border: 1px solid color-mix(in srgb, #16a34a 34%, var(--color-border));
+    border: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
     border-radius: 10px;
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     font-size: 0.8rem;
   }

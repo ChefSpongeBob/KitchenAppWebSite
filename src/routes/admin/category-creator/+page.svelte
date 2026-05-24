@@ -71,6 +71,26 @@
     };
   };
 
+  const withResetFeedback: SubmitFunction = ({ formElement }) => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        formElement.reset();
+        await invalidateAll();
+        pushToast('Category changes saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That category change could not be saved.', 'error');
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Category changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That category change could not be saved.'
+            : '';
+    };
+  };
+
   $: filteredListSections = [
     ...data.sections.preplists,
     ...data.sections.inventory,
@@ -116,7 +136,7 @@
     <section class="panel-block">
       <h3>{editorType === 'recipe' ? 'Create Recipe Category' : 'Create Category'}</h3>
       {#if editorType === 'list'}
-        <form method="POST" action="?/create_list_section" use:enhance={withFeedback} class="grid-form">
+        <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="grid-form">
           <input type="hidden" name="domain" value={listDomain} />
           <label>
             <span>Name</span>
@@ -129,7 +149,7 @@
           <button type="submit">Create</button>
         </form>
       {:else}
-        <form method="POST" action="?/create_creator_category" use:enhance={withFeedback} class="grid-form single-column">
+        <form method="POST" action="?/create_creator_category" use:enhance={withResetFeedback} class="grid-form single-column">
           <input type="hidden" name="editor_type" value={editorType} />
           <label>
             <span>Name</span>

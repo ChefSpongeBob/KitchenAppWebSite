@@ -12,7 +12,6 @@ export type AppFeatureKey =
   | 'recipes'
   | 'documents'
   | 'menus'
-  | 'meeting_notes'
   | 'conversions';
 
 export type AppFeatureDefinition = {
@@ -103,13 +102,6 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     description: 'Menu document page and menu viewer.',
     userRoutePrefixes: ['/menu'],
     adminRoutePrefixes: ['/admin/menus']
-  },
-  {
-    key: 'meeting_notes',
-    label: 'Meeting Notes',
-    description: 'Internal admin meeting notes workspace.',
-    userRoutePrefixes: ['/meeting-notes'],
-    adminRoutePrefixes: []
   },
   {
     key: 'conversions',

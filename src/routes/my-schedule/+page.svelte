@@ -612,7 +612,7 @@
   }
 
   .offer-badge.requested {
-    border-color: rgba(22, 163, 74, 0.24);
+    border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 

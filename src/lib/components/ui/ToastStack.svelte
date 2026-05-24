@@ -71,16 +71,16 @@
   }
 
   .toast-success {
-    border-color: rgba(22, 163, 74, 0.28);
+    border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
     background:
-      linear-gradient(180deg, rgba(22, 163, 74, 0.22), rgba(22, 163, 74, 0.08)),
+      linear-gradient(180deg, color-mix(in srgb, var(--color-success) 22%, transparent), color-mix(in srgb, var(--color-success) 8%, transparent)),
       color-mix(in srgb, var(--color-surface) 92%, black 8%);
   }
 
   .toast-error {
-    border-color: rgba(239, 68, 68, 0.28);
+    border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
     background:
-      linear-gradient(180deg, rgba(120, 12, 18, 0.42), rgba(120, 12, 18, 0.16)),
+      linear-gradient(180deg, color-mix(in srgb, var(--color-error) 42%, transparent), color-mix(in srgb, var(--color-error) 16%, transparent)),
       color-mix(in srgb, var(--color-surface) 92%, black 8%);
   }
 

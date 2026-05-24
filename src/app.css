@@ -512,9 +512,9 @@ a:focus-visible {
   --color-border: rgba(17, 18, 20, 0.13);
   --color-divider: rgba(17, 18, 20, 0.1);
 
-  --color-success: #2f7d4f;
-  --color-warning: #9a6428;
-  --color-error: #a73535;
+  --color-success: #6f7151;
+  --color-warning: #9a6a35;
+  --color-error: #8e4036;
 
   --radius-sm: 7px;
   --radius-md: 10px;
@@ -551,9 +551,9 @@ a:focus-visible {
   --color-border: rgba(248, 244, 236, 0.13);
   --color-divider: rgba(248, 244, 236, 0.1);
 
-  --color-success: #5bb17a;
-  --color-warning: #d0974f;
-  --color-error: #dd6b6b;
+  --color-success: #c8bd94;
+  --color-warning: #d6a362;
+  --color-error: #d28a76;
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.18);
   --shadow-sm: 0 5px 16px rgba(0, 0, 0, 0.2);

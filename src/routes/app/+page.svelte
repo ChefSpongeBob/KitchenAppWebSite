@@ -60,6 +60,7 @@
     tempSeries?: Record<string, number[]>;
     refreshedAt?: number;
     featureAccess?: AppFeatureAccess;
+    businessName?: string;
   };
   type GuidedStep = {
     selector: string;
@@ -75,6 +76,7 @@
   let guidedSteps: GuidedStep[] = [];
   let time = '';
   let greeting = '';
+  let businessName = data.businessName?.trim() || 'Crimini';
   let userName = data.userName ?? 'Team';
   let announcement = data.announcement ?? { content: '', updatedAt: 0 };
   let employeeSpotlight = data.employeeSpotlight ?? { employeeName: '', shoutout: '', updatedAt: 0 };
@@ -330,7 +332,7 @@
 
   <section class="page-header" data-guide="home-brief" in:fly={{ y: 20, duration: 500 }}>
     <h1>{greeting}</h1>
-    <p class="header-sub">Kitchen operations snapshot</p>
+    <p class="header-sub">{businessName}</p>
     <span class="brief-rule" aria-hidden="true"></span>
   </section>
 
@@ -599,11 +601,6 @@
     {#if featureAccess.temps}
       <a href="/temper" class="card-link" data-guide="quick-temps">
         <DashboardCard title="Temps" />
-      </a>
-    {/if}
-    {#if isAdmin && featureAccess.meeting_notes}
-      <a href="/meeting-notes" class="card-link">
-        <DashboardCard title="Meeting Notes" />
       </a>
     {/if}
   </section>

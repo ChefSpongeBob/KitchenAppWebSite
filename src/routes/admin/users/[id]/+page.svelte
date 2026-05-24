@@ -760,9 +760,9 @@
 
   .success-action,
   .department-chip.department-chip-active {
-    border-color: color-mix(in srgb, #16a34a 40%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border));
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: color-mix(in srgb, #16a34a 18%, transparent);
+    background: color-mix(in srgb, var(--color-success) 18%, transparent);
   }
 
   .access-state {
@@ -777,9 +777,9 @@
   }
 
   .danger-action {
-    border-color: color-mix(in srgb, #ef4444 36%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-error) 36%, var(--color-border));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
-    background: color-mix(in srgb, #7f1d1d 32%, var(--color-surface));
+    background: color-mix(in srgb, var(--color-error) 32%, var(--color-surface));
   }
 
   .department-chip {
@@ -808,9 +808,9 @@
   }
 
   .status-pill-approved {
-    border-color: color-mix(in srgb, #16a34a 38%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-success) 38%, var(--color-border));
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
   }
 
   .status-pill-submitted,
@@ -874,7 +874,7 @@
   }
 
   .onboarding-item.item-approved {
-    border-color: color-mix(in srgb, #16a34a 30%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border));
   }
 
   .onboarding-item-main {

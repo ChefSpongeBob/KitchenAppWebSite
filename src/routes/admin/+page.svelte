@@ -38,6 +38,13 @@
     updatedAt: number;
   };
 
+  type SavedReminder = {
+    id: string;
+    content: string;
+    created_at: number;
+    updated_at: number;
+  };
+
   type EmployeeSpotlight = {
     employeeName: string;
     shoutout: string;
@@ -55,6 +62,7 @@
   export let data: {
     guided?: boolean;
     todos: Todo[];
+    savedReminders: SavedReminder[];
     users: UserOption[];
     whiteboardIdeas: WhiteboardIdea[];
     announcement: Announcement;
@@ -146,6 +154,26 @@
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
+        await invalidateAll();
+        pushToast('Admin changes saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That action could not be completed.', 'error');
+      }
+      adminMessage =
+        result.type === 'success'
+          ? 'Admin changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That action could not be completed.'
+            : '';
+    };
+  };
+
+  const withAdminResetFeedback: SubmitFunction = ({ formElement }) => {
+    adminMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        formElement.reset();
         await invalidateAll();
         pushToast('Admin changes saved.', 'success');
       } else if (result.type === 'failure') {
@@ -479,9 +507,26 @@
       <div class="control-head">
         <h2>Reminders</h2>
       </div>
-      {#if reminders.length === 0}
+      <form method="POST" action="?/create_reminder" use:enhance={withAdminResetFeedback} class="reminder-create">
+        <input name="content" placeholder="Add reminder" required />
+        <button type="submit" class="reminder-add">Add</button>
+      </form>
+      {#each data.savedReminders as reminder}
+        <div class="saved-reminder">
+          <form method="POST" action="?/update_reminder" use:enhance={withAdminFeedback}>
+            <input type="hidden" name="id" value={reminder.id} />
+            <input name="content" value={reminder.content} required />
+            <button type="submit" class="reminder-save">Save</button>
+          </form>
+          <form method="POST" action="?/delete_reminder" use:enhance={withAdminFeedback}>
+            <input type="hidden" name="id" value={reminder.id} />
+            <button type="submit" class="danger reminder-delete">Delete</button>
+          </form>
+        </div>
+      {/each}
+      {#if reminders.length === 0 && data.savedReminders.length === 0}
         <p class="reminders-empty">Clear.</p>
-      {:else}
+      {:else if reminders.length > 0}
         <ul class="reminders-list">
           {#each reminders as reminder}
             <li>{reminder}</li>
@@ -530,7 +575,7 @@
         <span>{data.todos.length}</span>
       </summary>
 
-      <form method="POST" action="?/create_todo" use:enhance={withAdminFeedback} class="add-row">
+      <form method="POST" action="?/create_todo" use:enhance={withAdminResetFeedback} class="add-row">
         <input name="title" placeholder="Task title" required />
         <input name="description" placeholder="Description" />
         <select name="assigned_to">
@@ -760,11 +805,11 @@
   }
 
   .kpi-card small.up {
-    color: #22c55e;
+    color: var(--color-success);
   }
 
   .kpi-card small.down {
-    color: #f87171;
+    color: var(--color-error);
   }
 
   .kpi-card small.neutral {
@@ -830,11 +875,11 @@
   }
 
   .temp-line {
-    stroke: #34d399;
+    stroke: var(--color-success);
   }
 
   .temp-dot {
-    fill: #6ee7b7;
+    fill: color-mix(in srgb, var(--color-success) 78%, white 22%);
   }
 
   .chart-labels {
@@ -909,8 +954,8 @@
 
   .temp-hit-row span.hot {
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
-    border-color: rgba(248, 113, 113, 0.35);
-    background: rgba(120, 12, 18, 0.18);
+    border-color: color-mix(in srgb, var(--color-error) 35%, transparent);
+    background: color-mix(in srgb, var(--color-error) 18%, transparent);
   }
 
   .command-bottom {
@@ -994,7 +1039,7 @@
   }
 
   .status-cell.all i {
-    background: #16a34a;
+    background: var(--color-success);
   }
 
   .status-cell.admin i {
@@ -1002,7 +1047,7 @@
   }
 
   .status-cell.off i {
-    background: #ef4444;
+    background: var(--color-error);
   }
 
   .visibility-cell {
@@ -1018,8 +1063,8 @@
 
   .visibility-cell.all {
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    border-color: rgba(34, 197, 94, 0.34);
-    background: rgba(15, 118, 41, 0.14);
+    border-color: color-mix(in srgb, var(--color-success) 34%, transparent);
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
   }
 
   .visibility-cell.admin {
@@ -1030,12 +1075,12 @@
 
   .visibility-cell.off {
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
-    border-color: rgba(248, 113, 113, 0.35);
-    background: rgba(120, 12, 18, 0.16);
+    border-color: color-mix(in srgb, var(--color-error) 35%, transparent);
+    background: color-mix(in srgb, var(--color-error) 16%, transparent);
   }
 
   :global(html[data-theme='light']) .status-cell.all {
-    color: #14532d;
+    color: color-mix(in srgb, var(--color-success) 72%, var(--color-text));
   }
 
   :global(html[data-theme='light']) .status-cell.admin {
@@ -1043,12 +1088,12 @@
   }
 
   :global(html[data-theme='light']) .status-cell.off {
-    color: #7f1d1d;
+    color: color-mix(in srgb, var(--color-error) 72%, var(--color-text));
   }
 
   :global(html[data-theme='light']) .status-cell.all i {
-    background: #15803d;
-    border-color: rgba(21, 128, 61, 0.4);
+    background: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
   }
 
   :global(html[data-theme='light']) .status-cell.admin i {
@@ -1057,14 +1102,14 @@
   }
 
   :global(html[data-theme='light']) .status-cell.off i {
-    background: #b91c1c;
-    border-color: rgba(185, 28, 28, 0.42);
+    background: var(--color-error);
+    border-color: color-mix(in srgb, var(--color-error) 42%, transparent);
   }
 
   :global(html[data-theme='light']) .visibility-cell.all {
-    color: #14532d;
-    border-color: rgba(21, 128, 61, 0.4);
-    background: rgba(34, 197, 94, 0.2);
+    color: color-mix(in srgb, var(--color-success) 72%, var(--color-text));
+    border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+    background: color-mix(in srgb, var(--color-success) 20%, transparent);
   }
 
   :global(html[data-theme='light']) .visibility-cell.admin {
@@ -1074,9 +1119,9 @@
   }
 
   :global(html[data-theme='light']) .visibility-cell.off {
-    color: #7f1d1d;
-    border-color: rgba(185, 28, 28, 0.38);
-    background: rgba(248, 113, 113, 0.2);
+    color: color-mix(in srgb, var(--color-error) 72%, var(--color-text));
+    border-color: color-mix(in srgb, var(--color-error) 38%, transparent);
+    background: color-mix(in srgb, var(--color-error) 20%, transparent);
   }
 
   .feed-card ul {
@@ -1271,6 +1316,108 @@
     gap: 0.45rem;
   }
 
+  .reminder-create {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .reminder-create input,
+  .saved-reminder input {
+    min-width: 0;
+    width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.38rem 0.48rem;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: 0.78rem;
+  }
+
+  .reminder-create button {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 0.32rem 0.62rem;
+    background: transparent;
+    color: var(--color-text-soft);
+    font-size: 0.72rem;
+  }
+
+  .saved-reminder {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.18rem;
+    padding: 0.22rem 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .saved-reminder form:first-child {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.18rem;
+  }
+
+  .saved-reminder input {
+    border-color: transparent;
+    padding-left: 0.12rem;
+  }
+
+  .saved-reminder input:focus {
+    border-color: var(--color-border);
+    background: var(--color-surface-alt);
+  }
+
+  .saved-reminder button {
+    min-width: 0;
+    min-height: 0;
+    border-radius: 999px;
+    border-color: transparent;
+    padding: 0.25rem 0.4rem;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .saved-reminder .reminder-save:hover,
+  .saved-reminder .reminder-save:focus-visible {
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .saved-reminder .reminder-delete {
+    border-color: transparent !important;
+    padding-right: 0.12rem;
+  }
+
+  .saved-reminder > form:last-child {
+    position: relative;
+    margin-left: 0.18rem;
+    padding-left: 0.46rem;
+  }
+
+  .saved-reminder > form:last-child::before {
+    content: '';
+    position: absolute;
+    top: 18%;
+    bottom: 18%;
+    left: 0;
+    width: 1px;
+    background: linear-gradient(180deg, transparent, var(--color-divider) 28%, var(--color-divider) 72%, transparent);
+  }
+
+  .saved-reminder .reminder-delete:hover,
+  .saved-reminder .reminder-delete:focus-visible {
+    border-bottom-color: color-mix(in srgb, var(--color-error) 42%, transparent) !important;
+  }
+
   .reminders-list li,
   .reminders-empty {
     margin: 0;
@@ -1452,9 +1599,9 @@
   .feedback-banner {
     margin: 0;
     padding: 0.72rem 0.9rem;
-    border: 1px solid rgba(22, 163, 74, 0.22);
+    border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
     border-radius: 12px;
-    background: linear-gradient(180deg, rgba(22, 163, 74, 0.18), rgba(22, 163, 74, 0.06));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-success) 18%, transparent), color-mix(in srgb, var(--color-success) 6%, transparent));
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
@@ -1499,9 +1646,9 @@
   }
 
   .danger {
-    border-color: rgba(239, 68, 68, 0.3);
+    border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
-    background: linear-gradient(180deg, rgba(120, 12, 18, 0.45), rgba(120, 12, 18, 0.16));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-error) 45%, transparent), color-mix(in srgb, var(--color-error) 16%, transparent));
   }
 
   .warn-action {
@@ -1525,13 +1672,13 @@
   }
 
   .status-approved {
-    border-color: #16a34a;
-    color: #16a34a;
+    border-color: var(--color-success);
+    color: var(--color-success);
   }
 
   .status-rejected {
-    border-color: #ef4444;
-    color: #ef4444;
+    border-color: var(--color-error);
+    color: var(--color-error);
   }
 
   .docs-form {

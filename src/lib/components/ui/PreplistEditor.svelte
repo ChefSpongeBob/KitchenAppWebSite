@@ -239,8 +239,8 @@
   }
 
   .sheet-row.done {
-    border-color: color-mix(in srgb, #16a34a 34%, var(--color-border));
-    background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-success) 34%, var(--color-border));
+    background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
   }
 
   .sheet-row.done::before {

@@ -173,7 +173,6 @@ npm run smoke:local
 - [ ] `/todo`
 - [ ] `/whiteboard`
 - [ ] `/temper`
-- [ ] `/meeting-notes`
 - [ ] `/menu`
 - [ ] `/specials`
 - [ ] API polling does not spike requests while tab is hidden

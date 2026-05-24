@@ -108,18 +108,6 @@
     }
   ];
 
-  function canSeeAppSidebarFeature(featureKey: AppFeatureKey | undefined) {
-    if (!featureKey) return true;
-    return (data.featureModes ?? defaultAppFeatureModes)[featureKey] === "all";
-  }
-
-  function canSeeFeature(featureKey: AppFeatureKey | undefined) {
-    if (!featureKey) return true;
-    const role = data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
-    const mode = (data.featureModes ?? defaultAppFeatureModes)[featureKey];
-    return canRoleAccessFeature(mode, role);
-  }
-
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
   }
@@ -237,7 +225,6 @@
     "/conversions",
     "/menu",
     "/settings",
-    "/meeting-notes",
     "/specials",
     "/billing"
   ];
@@ -257,11 +244,18 @@
     marketingPrefixRoutes.some((prefix) => routeSplashTargetPath.startsWith(prefix));
   $: showRouteSplash = Boolean($navigating) && Boolean(navTargetPath) && !navTargetPath.startsWith("/register");
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
-  $: filteredPrimaryNav = primaryNav.filter((item) => canSeeAppSidebarFeature(item.featureKey));
+  $: activeFeatureModes = data.featureModes ?? defaultAppFeatureModes;
+  $: filteredPrimaryNav = primaryNav.filter(
+    (item) => !item.featureKey || activeFeatureModes[item.featureKey] === "all"
+  );
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canSeeFeature(item.featureKey))
+      items: group.items.filter((item) => {
+        if (!item.featureKey) return true;
+        const role = data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
+        return canRoleAccessFeature(activeFeatureModes[item.featureKey], role);
+      })
     }))
     .filter((group) => group.items.length > 0);
   $: userBusinesses = data.user?.businesses ?? [];
@@ -406,15 +400,6 @@
     <img class="menu-icon" src="/crimini-mark.svg" alt="" aria-hidden="true" />
   </button>
 
-  <button
-    class="theme-toggle tap"
-    on:click={toggleTheme}
-    aria-label={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-    title={themeMode === "dark" ? "Light mode" : "Dark mode"}
-  >
-    <span class="material-icons">{themeMode === "dark" ? "light_mode" : "dark_mode"}</span>
-  </button>
-
   <!-- ===== Overlay ===== -->
   {#if sidebarOpen}
     <div
@@ -438,7 +423,6 @@
         {/if}
         <div class="brand-copy">
           <strong>{data.user?.businessName?.trim() || 'Crimini'}</strong>
-          <small>Service Workspace</small>
         </div>
         {#if userBusinesses.length > 1}
           <form method="POST" action="/workspace/switch" class="workspace-switch-form">
@@ -491,6 +475,20 @@
           </a>
         {/each}
       {/if}
+      <div class="sidebar-footer">
+        <button
+          class="sidebar-theme-toggle tap"
+          class:active={themeMode === "dark"}
+          on:click={toggleTheme}
+          aria-pressed={themeMode === "dark"}
+          aria-label={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          <span>Dark Mode</span>
+          <span class="material-icons" aria-hidden="true">
+            {themeMode === "dark" ? "toggle_on" : "toggle_off"}
+          </span>
+        </button>
+      </div>
     </div>
   </aside>
   {/if}
@@ -509,8 +507,9 @@
         {#if isRouteSplashMarketing}
           <img src="/crimini-full-logo.jpg" alt="Crimini" class="route-splash-logo route-splash-logo-marketing" />
         {:else}
-          <img src={data.user?.businessLogoUrl || "/favicon-splash.svg"} alt="" aria-hidden="true" class="route-splash-logo" />
-          <p class="route-splash-copy">Prepping...</p>
+          <img src="/crimini-mushrooms-only.svg" alt="" aria-hidden="true" class="route-splash-logo route-splash-logo-app" />
+          <p class="route-splash-copy">Prepping . . .</p>
+          <div class="route-splash-loader" aria-hidden="true"></div>
         {/if}
       </div>
     </div>
@@ -590,8 +589,7 @@
     padding-top: calc(3.92rem + var(--safe-top));
   }
 
-  :global(html[data-mobile-view='compact']) .hamburger,
-  :global(html[data-mobile-view='compact']) .theme-toggle {
+  :global(html[data-mobile-view='compact']) .hamburger {
     width: 2.45rem;
     height: 2.45rem;
     top: calc(0.62rem + var(--safe-top));
@@ -684,6 +682,11 @@
     width: min(360px, 76vw);
   }
 
+  .route-splash-logo-app {
+    width: min(220px, 58vw);
+    filter: none;
+  }
+
   .route-splash-copy {
     margin: 0;
     color: #111214;
@@ -691,6 +694,34 @@
     text-transform: uppercase;
     font-size: 0.74rem;
     font-weight: 700;
+  }
+
+  .route-splash-loader {
+    width: 140px;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(17, 18, 20, 0.1);
+  }
+
+  .route-splash-loader::after {
+    content: "";
+    display: block;
+    width: 44%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(64, 61, 54, 0.44), rgba(17, 18, 20, 0.86));
+    animation: route-splash-load 1.1s ease-in-out infinite;
+  }
+
+  @keyframes route-splash-load {
+    0% {
+      transform: translateX(-120%);
+    }
+
+    100% {
+      transform: translateX(300%);
+    }
   }
 
   .app-content {
@@ -928,30 +959,6 @@
     object-fit: contain;
   }
 
-  .theme-toggle {
-    position: fixed;
-    top: calc(0.75rem + var(--safe-top));
-    right: calc(0.75rem + var(--safe-right));
-    z-index: 1001;
-
-    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-sm);
-    width: 2.7rem;
-    height: 2.7rem;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(12px);
-    color: var(--color-text);
-  }
-
-  .theme-toggle .material-icons {
-    font-size: 1.25rem;
-    line-height: 1;
-  }
-
   .hamburger.open,
   .hamburger:focus-visible {
     border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
@@ -1000,19 +1007,55 @@
 
   .sidebar-inner {
     min-height: 100%;
-    padding: 78px 14px 24px;
+    padding: 0 14px 24px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .sidebar-footer {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding: 0.72rem 0.15rem 0.1rem;
+    background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+  }
+
+  .sidebar-theme-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.7rem 0.42rem 0.2rem;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: var(--weight-medium);
+  }
+
+  .sidebar-theme-toggle:hover,
+  .sidebar-theme-toggle.active {
+    color: var(--color-text);
+  }
+
+  .sidebar-theme-toggle .material-icons {
+    font-size: 1.42rem;
+    line-height: 1;
   }
 
   .sidebar-brand {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 10px;
-    padding: 0 8px 10px;
+    gap: 0.38rem;
+    margin-bottom: 0.15rem;
+    padding: calc(0.72rem + var(--safe-top)) 8px 0.62rem;
     border-bottom: 1px solid var(--color-divider);
     position: sticky;
     top: 0;
@@ -1033,6 +1076,7 @@
     color: var(--color-primary-contrast);
     font-weight: var(--weight-bold);
     letter-spacing: 0.03em;
+    margin-left: 3.25rem;
   }
 
   .brand-mark-image {
@@ -1042,9 +1086,11 @@
   }
 
   .brand-copy {
+    flex: 1 0 100%;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    padding-top: 0.18rem;
   }
 
   .brand-copy strong {
@@ -1053,14 +1099,9 @@
     line-height: 1.1;
   }
 
-  .brand-copy small {
-    color: var(--color-text-muted);
-    font-size: 0.73rem;
-  }
-
   .workspace-switch-form {
     flex: 1 0 100%;
-    margin-left: 50px;
+    margin-left: 0;
   }
 
   .workspace-switch-form select {
@@ -1360,18 +1401,19 @@
     margin-top: 0.2rem;
   }
 
-  .hamburger,
-  .theme-toggle {
-    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
-    border-color: color-mix(in srgb, var(--color-border) 88%, transparent);
-    box-shadow: var(--shadow-xs);
-    backdrop-filter: blur(10px);
+  .hamburger {
+    background: transparent;
+    border-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .hamburger:hover,
-  .theme-toggle:hover {
-    background: var(--color-surface-alt);
-    border-color: var(--color-text);
+  .hamburger.open,
+  .hamburger:focus-visible {
+    background: transparent;
+    border-color: transparent;
   }
 
   .sidebar {
@@ -1389,11 +1431,20 @@
     border-bottom-color: var(--color-divider);
   }
 
+  .sidebar-footer {
+    background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+  }
+
   .brand-mark {
     border-radius: 999px;
     background: transparent;
     color: var(--color-text);
     border-color: var(--color-border);
+  }
+
+  .brand-mark-image {
+    background: transparent;
+    border-color: transparent;
   }
 
   .side-group-summary,
@@ -1449,6 +1500,133 @@
     color: var(--color-text);
   }
 
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle)) {
+    width: fit-content !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--color-text-soft) !important;
+    padding: 0.28rem 0.18rem !important;
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+  }
+
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle):hover),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle):focus-visible) {
+    border-bottom-color: var(--color-text) !important;
+    background: transparent !important;
+    color: var(--color-text) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).active),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle)[aria-pressed='true']) {
+    border-bottom-color: var(--color-text) !important;
+    background: transparent !important;
+    color: var(--color-text) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger-btn),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger-action),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).remove-btn),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).text-action.danger) {
+    border-bottom-color: color-mix(in srgb, var(--color-error) 46%, var(--color-border)) !important;
+    background: transparent !important;
+    color: color-mix(in srgb, var(--color-error) 72%, var(--color-text)) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).success),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).approve-action),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).success-action),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).text-action.success) {
+    border-bottom-color: color-mix(in srgb, var(--color-success) 46%, var(--color-border)) !important;
+    background: transparent !important;
+    color: color-mix(in srgb, var(--color-success) 72%, var(--color-text)) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).warn-action),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).warn-text) {
+    border-bottom-color: color-mix(in srgb, var(--color-warning) 46%, var(--color-border)) !important;
+    background: transparent !important;
+    color: color-mix(in srgb, var(--color-warning) 72%, var(--color-text)) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(.inline-action),
+  .app-shell:not(.marketing-app) :global(.inline-link),
+  .app-shell:not(.marketing-app) :global(.source-link),
+  .app-shell:not(.marketing-app) :global(.control-link),
+  .app-shell:not(.marketing-app) :global(.week-nav-btn),
+  .app-shell:not(.marketing-app) :global(.settings-link),
+  .app-shell:not(.marketing-app) :global(.doc-actions a),
+  .app-shell:not(.marketing-app) :global(.toolbar-actions a),
+  .app-shell:not(.marketing-app) :global(.menu-link) {
+    width: fit-content !important;
+    min-width: 0 !important;
+    min-height: auto !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--color-text-soft) !important;
+    padding: 0.28rem 0.18rem !important;
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    text-decoration: none;
+    transition: border-color 150ms ease, color 150ms ease;
+  }
+
+  .app-shell:not(.marketing-app) :global(.action-btn),
+  .app-shell:not(.marketing-app) :global(.viewer header a) {
+    width: fit-content !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--color-text-soft) !important;
+    padding: 0.28rem 0.18rem !important;
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    text-decoration: none;
+  }
+
+  .app-shell:not(.marketing-app) :global(.inline-action:hover),
+  .app-shell:not(.marketing-app) :global(.inline-link:hover),
+  .app-shell:not(.marketing-app) :global(.source-link:hover),
+  .app-shell:not(.marketing-app) :global(.control-link:hover),
+  .app-shell:not(.marketing-app) :global(.week-nav-btn:hover),
+  .app-shell:not(.marketing-app) :global(.settings-link:hover),
+  .app-shell:not(.marketing-app) :global(.doc-actions a:hover),
+  .app-shell:not(.marketing-app) :global(.toolbar-actions a:hover),
+  .app-shell:not(.marketing-app) :global(.menu-link:hover),
+  .app-shell:not(.marketing-app) :global(.action-btn:hover),
+  .app-shell:not(.marketing-app) :global(.viewer header a:hover) {
+    border-bottom-color: var(--color-text) !important;
+    color: var(--color-text) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(.menu-list button) {
+    width: 100% !important;
+    justify-self: stretch;
+    border-bottom-color: var(--color-divider) !important;
+    padding: 0.56rem 0.12rem !important;
+    text-align: left;
+  }
+
+  .app-shell:not(.marketing-app) :global(.menu-list button.active),
+  .app-shell:not(.marketing-app) :global(.menu-list button:hover) {
+    border-bottom-color: var(--color-text) !important;
+    background: transparent !important;
+  }
+
   @media (max-width: 760px) {
     .marketing-header {
       padding-inline: 0.55rem;
@@ -1482,13 +1660,17 @@
     }
 
     .sidebar-inner {
-      padding-top: calc(72px + var(--safe-top));
+      padding-top: 0;
       padding-bottom: calc(16px + var(--safe-bottom));
     }
 
     .sidebar-brand {
       padding-inline: 6px;
-      top: calc(var(--safe-top) * -1);
+      padding-top: calc(0.62rem + var(--safe-top));
+    }
+
+    .brand-mark {
+      margin-left: 3rem;
     }
 
     .side-item {

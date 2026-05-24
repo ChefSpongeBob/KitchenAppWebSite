@@ -13,6 +13,7 @@ import {
   loadAdminAnnouncement,
   loadAdminEmployeeSpotlight,
   loadAdminNodeNames,
+  loadAdminReminders,
   loadAdminTodos,
   loadAdminWhiteboardIdeas,
   rejectWhiteboard,
@@ -20,6 +21,9 @@ import {
   requireAdmin,
   saveAnnouncement,
   saveEmployeeSpotlight,
+  createAdminReminder,
+  updateAdminReminder,
+  deleteAdminReminder,
   toggleSpecialsAccess,
   usersHasIsActiveColumn
 } from '$lib/server/admin';
@@ -93,6 +97,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return {
       guided,
       todos: [],
+      savedReminders: [],
       users: [],
       nodeNames: [],
       whiteboardIdeas: [],
@@ -137,8 +142,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const businessId = requireBusinessId(locals);
   await cleanupExpiredRejectedWhiteboardIdeas(db, businessId);
 
-  const [todos, users, nodeNames, whiteboardIdeas, announcement, employeeSpotlight, hasIsActive] = await Promise.all([
+  const [todos, savedReminders, users, nodeNames, whiteboardIdeas, announcement, employeeSpotlight, hasIsActive] = await Promise.all([
     featureAccess.todo ? loadAdminTodos(db, businessId) : Promise.resolve([]),
+    loadAdminReminders(db, businessId),
     loadAdminAssignableUsers(db, businessId),
     featureAccess.temps ? loadAdminNodeNames(db, businessId) : Promise.resolve([]),
     featureAccess.whiteboard ? loadAdminWhiteboardIdeas(db, businessId) : Promise.resolve([]),
@@ -417,6 +423,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   return {
     guided,
     todos,
+    savedReminders,
     users,
     nodeNames,
     whiteboardIdeas,
@@ -476,6 +483,9 @@ export const actions: Actions = {
     adminFeatureEnabled(locals, 'todo') ? createTodo(request, locals) : blockedFeatureError('ToDo'),
   delete_todo: ({ request, locals }) =>
     adminFeatureEnabled(locals, 'todo') ? deleteTodo(request, locals) : blockedFeatureError('ToDo'),
+  create_reminder: ({ request, locals }) => createAdminReminder(request, locals),
+  update_reminder: ({ request, locals }) => updateAdminReminder(request, locals),
+  delete_reminder: ({ request, locals }) => deleteAdminReminder(request, locals),
   approve_whiteboard: ({ request, locals }) =>
     adminFeatureEnabled(locals, 'whiteboard')
       ? approveWhiteboard(request, locals)

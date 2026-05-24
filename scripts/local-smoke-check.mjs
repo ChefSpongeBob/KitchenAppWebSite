@@ -37,7 +37,6 @@ const privateRoutes = [
   ['/temper', 'Temperatures'],
   ['/todo', 'ToDo'],
   ['/whiteboard', 'Whiteboard'],
-  ['/meeting-notes', 'Meeting notes'],
   ['/menu', 'Menu'],
   ['/specials', 'Highlights']
 ];

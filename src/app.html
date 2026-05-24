@@ -7,6 +7,26 @@
 		<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="format-detection" content="telephone=no, email=no, address=no" />
+		<script>
+			(function () {
+				const pathname = window.location.pathname;
+				const marketingRoutes = new Set([
+					'/',
+					'/features',
+					'/how-it-works',
+					'/about',
+					'/pricing',
+					'/privacy',
+					'/account-deletion',
+					'/register',
+					'/login',
+					'/forgot-password'
+				]);
+				const isMarketingRoute =
+					marketingRoutes.has(pathname) || pathname.startsWith('/reset-password/');
+				document.documentElement.dataset.bootSplash = isMarketingRoute ? 'marketing' : 'app';
+			})();
+		</script>
 		<style>
 			html,
 			body {
@@ -62,10 +82,16 @@
 
 			.boot-inner {
 				position: relative;
-				display: grid;
+				display: none;
 				justify-items: center;
+				gap: 0.55rem;
 				padding: 2rem;
 				text-align: center;
+			}
+
+			html[data-boot-splash='marketing'] .boot-marketing,
+			html[data-boot-splash='app'] .boot-app {
+				display: grid;
 			}
 
 			.boot-copy {
@@ -80,16 +106,63 @@
 				display: block;
 				filter: drop-shadow(0 10px 24px rgba(17, 18, 20, 0.1));
 			}
+
+			.boot-logo-app {
+				width: min(220px, 58vw);
+				filter: none;
+			}
+
+			.boot-prepping {
+				margin: 0;
+				color: #111214;
+				font-size: 0.74rem;
+				font-weight: 700;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+			}
+
+			.boot-loader {
+				width: 140px;
+				height: 3px;
+				overflow: hidden;
+				border-radius: 999px;
+				background: rgba(17, 18, 20, 0.1);
+			}
+
+			.boot-loader::after {
+				content: '';
+				display: block;
+				width: 44%;
+				height: 100%;
+				border-radius: inherit;
+				background: linear-gradient(90deg, rgba(64, 61, 54, 0.44), rgba(17, 18, 20, 0.86));
+				animation: boot-splash-load 1.1s ease-in-out infinite;
+			}
+
+			@keyframes boot-splash-load {
+				0% {
+					transform: translateX(-120%);
+				}
+
+				100% {
+					transform: translateX(300%);
+				}
+			}
 		</style>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="tap">
 		<div class="app-shell">
 			<div class="boot-splash" aria-hidden="true">
-				<div class="boot-inner">
+				<div class="boot-inner boot-marketing">
 					<div class="boot-copy">
 						<img class="boot-logo" src="/crimini-full-logo.jpg" alt="Crimini" />
 					</div>
+				</div>
+				<div class="boot-inner boot-app">
+					<img class="boot-logo boot-logo-app" src="/crimini-mushrooms-only.svg" alt="" />
+					<p class="boot-prepping">Prepping . . .</p>
+					<div class="boot-loader"></div>
 				</div>
 			</div>
 			<div style="display: contents">%sveltekit.body%</div>

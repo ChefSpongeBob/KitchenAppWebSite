@@ -73,12 +73,6 @@
     { id: 'documents', title: 'Documents (PDF/Image)' }
   ];
 
-  const sectionsByType: Record<'preplists' | 'inventory' | 'orders', Section[]> = {
-    preplists: data.preplists,
-    inventory: data.inventory,
-    orders: data.orders
-  };
-
   const checklistGroupSlug = (slug: string) => slug.replace(/-(opening|midday|closing)$/i, '');
   const toTitle = (value: string) =>
     value
@@ -87,47 +81,79 @@
       .trim()
       .replace(/\b\w/g, (char) => char.toUpperCase());
 
-  const checklistGroupMap = new Map<string, ChecklistSection[]>();
-  for (const section of data.checklists) {
-    const group = checklistGroupSlug(section.slug);
-    const current = checklistGroupMap.get(group) ?? [];
-    current.push(section);
-    checklistGroupMap.set(group, current);
-  }
-
-  const checklistCategories: ChecklistCategory[] = Array.from(checklistGroupMap.entries())
-    .map(([id, sections]) => ({
-      id,
-      title: toTitle(id),
-      sections: sections.sort((a, b) => a.title.localeCompare(b.title))
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title));
-
-  const documentGroupMap = new Map<string, DocumentItem[]>();
-  for (const document of data.documents) {
-    const groupKey = document.category?.trim() || 'General';
-    const bucket = documentGroupMap.get(groupKey) ?? [];
-    bucket.push(document);
-    documentGroupMap.set(groupKey, bucket);
-  }
-  const documentGroups = Array.from(documentGroupMap.entries())
-    .map(([category, docs]) => ({
-      id: category,
-      title: category,
-      docs: docs.sort((a, b) => a.title.localeCompare(b.title))
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title));
-
   let editorType: EditorType = 'preplists';
   let selectedCategory = '';
   let editorOpen = false;
   let feedbackMessage = '';
+  let sectionsByType: Record<'preplists' | 'inventory' | 'orders', Section[]>;
+  let checklistCategories: ChecklistCategory[] = [];
+  let documentGroups: Array<{ id: string; title: string; docs: DocumentItem[] }> = [];
+
+  $: sectionsByType = {
+    preplists: data.preplists,
+    inventory: data.inventory,
+    orders: data.orders
+  };
+
+  $: checklistCategories = (() => {
+    const groups = new Map<string, ChecklistSection[]>();
+    for (const section of data.checklists) {
+      const group = checklistGroupSlug(section.slug);
+      const current = groups.get(group) ?? [];
+      current.push(section);
+      groups.set(group, current);
+    }
+    return Array.from(groups.entries())
+      .map(([id, sections]) => ({
+        id,
+        title: toTitle(id),
+        sections: sections.sort((a, b) => a.title.localeCompare(b.title))
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  })();
+
+  $: documentGroups = (() => {
+    const groups = new Map<string, DocumentItem[]>();
+    for (const document of data.documents) {
+      const groupKey = document.category?.trim() || 'General';
+      const bucket = groups.get(groupKey) ?? [];
+      bucket.push(document);
+      groups.set(groupKey, bucket);
+    }
+    return Array.from(groups.entries())
+      .map(([category, docs]) => ({
+        id: category,
+        title: category,
+        docs: docs.sort((a, b) => a.title.localeCompare(b.title))
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  })();
 
   const withFeedback: SubmitFunction = () => {
     feedbackMessage = '';
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
+        await invalidateAll();
+        pushToast('Editor changes saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That editor change could not be saved.', 'error');
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Editor changes saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That editor change could not be saved.'
+            : '';
+    };
+  };
+
+  const withResetFeedback: SubmitFunction = ({ formElement }) => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        formElement.reset();
         await invalidateAll();
         pushToast('Editor changes saved.', 'success');
       } else if (result.type === 'failure') {
@@ -266,7 +292,7 @@
     {#if editorOpen && editorType === 'documents'}
       <section class="editor-block">
         <h3>Documents</h3>
-        <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withFeedback} class="add-row docs-form">
+        <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withResetFeedback} class="add-row docs-form">
           <input name="title" placeholder="Document title" required />
           <input name="section" placeholder="Section" value="Docs" />
           <input name="category" placeholder="Category" value="General" />
@@ -325,6 +351,11 @@
                 <h4>{section.title}</h4>
                 <span>{section.items.length} items</span>
               </summary>
+              <form method="POST" action="?/add_checklist_item" use:enhance={withResetFeedback} class="add-row checklist-add">
+                <input type="hidden" name="section_id" value={section.id} />
+                <input name="content" placeholder={`Add item to ${section.title}`} required />
+                <button type="submit">Add Item</button>
+              </form>
               <table class="sheet">
                 <thead>
                   <tr>
@@ -354,11 +385,6 @@
                   {/each}
                 </tbody>
               </table>
-              <form method="POST" action="?/add_checklist_item" use:enhance={withFeedback} class="add-row checklist-add">
-                <input type="hidden" name="section_id" value={section.id} />
-                <input name="content" placeholder={`Add item to ${section.title}`} required />
-                <button type="submit">Add Item</button>
-              </form>
             </details>
           {/each}
         {/if}
@@ -369,6 +395,13 @@
         {#if !currentListSection}
           <p class="empty-note">No section available for this type.</p>
         {:else}
+          <form method="POST" action="?/add_list_item" use:enhance={withResetFeedback} class="add-row">
+            <input type="hidden" name="section_id" value={currentListSection.id} />
+            <input name="content" placeholder={`Add item to ${currentListSection.title}`} required />
+            <input name="details" placeholder="Reference / pan size" />
+            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
+            <button type="submit">Add Item</button>
+          </form>
           <table class="sheet">
             <thead>
               <tr>
@@ -402,13 +435,6 @@
               {/each}
             </tbody>
           </table>
-          <form method="POST" action="?/add_list_item" use:enhance={withFeedback} class="add-row">
-            <input type="hidden" name="section_id" value={currentListSection.id} />
-            <input name="content" placeholder={`Add item to ${currentListSection.title}`} required />
-            <input name="details" placeholder="Reference / pan size" />
-            <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
-            <button type="submit">Add Item</button>
-          </form>
         {/if}
       </section>
     {/if}
@@ -634,9 +660,9 @@
   .feedback-banner {
     margin: 0 0 0.8rem;
     padding: 0.72rem 0.9rem;
-    border: 1px solid color-mix(in srgb, #16a34a 34%, var(--color-border));
+    border: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
     border-radius: 12px;
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    background: color-mix(in srgb, var(--color-success) 14%, transparent);
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
   }
 
@@ -674,9 +700,9 @@
   }
 
   .danger {
-    border-color: color-mix(in srgb, #ef4444 36%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-error) 36%, var(--color-border));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
-    background: color-mix(in srgb, #7f1d1d 34%, var(--color-surface));
+    background: color-mix(in srgb, var(--color-error) 34%, var(--color-surface));
   }
 
   @media (max-width: 900px) {

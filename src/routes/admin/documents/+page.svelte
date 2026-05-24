@@ -49,6 +49,26 @@
             : '';
     };
   };
+
+  const withResetFeedback: SubmitFunction = ({ formElement }) => {
+    feedbackMessage = '';
+    return async ({ result }) => {
+      await applyAction(result);
+      if (result.type === 'success') {
+        formElement.reset();
+        await invalidateAll();
+        pushToast('Document saved.', 'success');
+      } else if (result.type === 'failure') {
+        pushToast(result.data?.error ?? 'That document could not be saved.', 'error');
+      }
+      feedbackMessage =
+        result.type === 'success'
+          ? 'Document saved.'
+          : result.type === 'failure'
+            ? result.data?.error ?? 'That document could not be saved.'
+            : '';
+    };
+  };
 </script>
 
 <Layout>
@@ -66,7 +86,7 @@
 
     <details class="creator" open>
       <summary>Add document</summary>
-      <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withFeedback} class="editor-form">
+      <form method="POST" action="?/create_document" enctype="multipart/form-data" use:enhance={withResetFeedback} class="editor-form">
         <div class="field-grid">
           <input name="title" placeholder="Document title" required />
           <input name="section" placeholder="Section" value="Docs" />
@@ -239,8 +259,8 @@
   }
 
   .danger {
-    border-color: color-mix(in srgb, #ef4444 38%, var(--color-border));
-    background: color-mix(in srgb, #7f1d1d 30%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-error) 38%, var(--color-border));
+    background: color-mix(in srgb, var(--color-error) 30%, var(--color-surface));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 

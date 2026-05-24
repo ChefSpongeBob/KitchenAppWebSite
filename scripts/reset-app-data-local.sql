@@ -2,6 +2,7 @@ PRAGMA foreign_keys = OFF;
 BEGIN TRANSACTION;
 
 DELETE FROM announcements;
+DELETE FROM admin_reminders;
 DELETE FROM app_feature_flags;
 DELETE FROM business_invites;
 DELETE FROM business_trials;
@@ -21,7 +22,6 @@ DELETE FROM employee_spotlight;
 DELETE FROM iot_ingest_guard;
 DELETE FROM list_items;
 DELETE FROM list_sections;
-DELETE FROM meeting_notes;
 DELETE FROM recipes;
 DELETE FROM schedule_shift_offers;
 DELETE FROM schedule_shifts;

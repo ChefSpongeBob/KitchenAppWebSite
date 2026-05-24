@@ -1,5 +1,4 @@
 import { fail, type Actions } from '@sveltejs/kit';
-import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import type { PageServerLoad } from './$types';
 import {
   appFeatureDefinitions,
@@ -84,7 +83,8 @@ async function uploadBrandLogo(
   const typeExtension = extensionFromContentType(contentType);
   const extension = filenameExtension || typeExtension || 'jpg';
   const key = `businesses/${businessId}/branding/sidebar-logo-${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  await bucket.put(key, file.stream() as unknown as WorkerReadableStream, {
+  // This path is capped at 5MB; a sized body avoids local workerd stream failures.
+  await bucket.put(key, await file.arrayBuffer(), {
     httpMetadata: {
       contentType: contentType === 'image/pjpeg' ? 'image/jpeg' : contentType,
       cacheControl: 'public, max-age=31536000, immutable'

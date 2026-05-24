@@ -26,7 +26,17 @@
   });
 
   function size(v: number) {
-    return 80 + v * 6;
+    return 62 + v * 5;
+  }
+
+  function ideaFontSize(idea: Idea) {
+    const cloudSize = size(idea.votes);
+    const lengthPenalty = Math.min(0.16, Math.max(0, idea.text.length - 24) * 0.005);
+    return Math.max(0.5, Math.min(0.82, cloudSize * 0.0102 - lengthPenalty)).toFixed(3);
+  }
+
+  function voteFontSize(votes: number) {
+    return Math.max(0.48, Math.min(0.66, size(votes) * 0.0068)).toFixed(3);
   }
 
   async function loadIdeas() {
@@ -118,21 +128,23 @@
         "
       >
         <button
-          class="cloud-puff"
+          class="cloud-puff card-hit"
           type="button"
           style="
             --cloud-size:{size(idea.votes)}px;
+            --idea-font:{ideaFontSize(idea)}rem;
+            --vote-font:{voteFontSize(idea.votes)}rem;
             --floatDur:{motions[idea.id]?.floatDur || 6}s;
             --pulseDur:{motions[idea.id]?.pulseDur || 4}s;
             --delay:{motions[idea.id]?.delay || 0}s;
           "
           on:click={() => upvote(idea.id)}
         >
-          <svg class="cloud-shape" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 19A1.5 1.5 0 0 1 5 20.5A1.5 1.5 0 0 1 3.5 22A1.5 1.5 0 0 1 2 20.5A1.5 1.5 0 0 1 3.5 19m5-3a2.5 2.5 0 0 1 2.5 2.5A2.5 2.5 0 0 1 8.5 21A2.5 2.5 0 0 1 6 18.5A2.5 2.5 0 0 1 8.5 16m6-1c-1.19 0-2.27-.5-3-1.35c-.73.85-1.81 1.35-3 1.35c-1.96 0-3.59-1.41-3.93-3.26A4.02 4.02 0 0 1 2 8a4 4 0 0 1 4-4c.26 0 .5.03.77.07C7.5 3.41 8.45 3 9.5 3c1.19 0 2.27.5 3 1.35c.73-.85 1.81-1.35 3-1.35c1.96 0 3.59 1.41 3.93 3.26A4.02 4.02 0 0 1 22 10a4 4 0 0 1-4 4l-.77-.07c-.73.66-1.68 1.07-2.73 1.07" />
-          </svg>
-          <span>{idea.text}</span>
-          <small>{idea.votes}</small>
+          <img class="cloud-shape" src="/whiteboard-thought-cloud.svg" alt="" aria-hidden="true" />
+          <span class="cloud-content">
+            <span class="idea-text">{idea.text}</span>
+            <small>{idea.votes}</small>
+          </span>
         </button>
       </div>
     {/each}
@@ -203,17 +215,20 @@
 
   .cloud-puff {
     position: relative;
-    width: calc(var(--cloud-size) * 1.62);
-    min-height: calc(var(--cloud-size) * 1.28);
-    padding: calc(var(--cloud-size) * 0.22) calc(var(--cloud-size) * 0.28) calc(var(--cloud-size) * 0.38);
+    width: calc(var(--cloud-size) * 1.96);
+    min-height: calc(var(--cloud-size) * 1.18);
+    padding: calc(var(--cloud-size) * 0.14) calc(var(--cloud-size) * 0.34) calc(var(--cloud-size) * 0.2);
     cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    display: grid;
+    place-items: center;
     align-items: center;
     text-align: center;
-    border: 0;
-    background: transparent;
+    border: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--color-text);
     animation: cloudFloat var(--floatDur) ease-in-out infinite, cloudBreathe var(--pulseDur) ease-in-out infinite;
     animation-delay: var(--delay);
     isolation: isolate;
@@ -221,20 +236,14 @@
 
   .cloud-shape {
     position: absolute;
-    inset: -5% -5% -8%;
-    width: 110%;
-    height: 113%;
+    inset: -8% -7% -12%;
+    width: 114%;
+    height: 120%;
     z-index: -1;
-    overflow: visible;
-    color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border) 68%);
-    filter: drop-shadow(0 1px 2px rgba(4, 5, 7, 0.18));
-  }
-
-  .cloud-shape path {
-    fill: color-mix(in srgb, var(--color-surface-soft) 90%, white 10%);
-    stroke: currentColor;
-    stroke-width: 0.55;
-    stroke-linejoin: round;
+    display: block;
+    object-fit: contain;
+    pointer-events: none;
+    filter: drop-shadow(0 10px 18px rgba(17, 18, 20, 0.08));
   }
 
   @keyframes cloudFloat { 0% { transform: translateY(0) } 50% { transform: translateY(-8px) } 100% { transform: translateY(0) } }
@@ -244,22 +253,42 @@
     100% { filter: saturate(1); }
   }
 
-  span {
-    position: relative;
+  .cloud-content {
+    position: absolute;
     z-index: 1;
-    max-width: min(calc(var(--cloud-size) * 1.02), 16ch);
-    font-size: 0.85rem;
+    display: grid;
+    place-items: center;
+    gap: calc(var(--cloud-size) * 0.018);
+    left: 7%;
+    top: 22%;
+    width: 54%;
+    height: 42%;
+    transform: none;
+  }
+
+  .idea-text {
+    display: -webkit-box;
+    max-width: 100%;
+    max-height: 3.54em;
+    overflow: hidden;
+    line-clamp: 3;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    font-size: var(--idea-font);
+    font-weight: var(--weight-semibold);
     line-height: 1.18;
     color: var(--color-text);
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    text-wrap: balance;
+    text-align: center;
   }
 
   small {
     position: relative;
     z-index: 1;
     opacity: 0.78;
-    font-size: 0.75rem;
-    margin-top: 4px;
+    font-size: var(--vote-font);
+    margin-top: 0;
     color: var(--color-text-muted);
   }
 

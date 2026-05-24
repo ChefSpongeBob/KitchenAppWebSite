@@ -138,6 +138,13 @@ export type AdminTodo = {
   assigned_email: string | null;
 };
 
+export type AdminReminder = {
+  id: string;
+  content: string;
+  created_at: number;
+  updated_at: number;
+};
+
 export type AdminUser = {
   id: string;
   display_name: string | null;
@@ -1062,6 +1069,24 @@ export async function loadAdminTodos(db: D1, businessId: string) {
     .bind(businessId)
     .all<AdminTodo>();
   return todos.results ?? [];
+}
+
+export async function loadAdminReminders(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
+  if (!(await tableExists(db, 'admin_reminders'))) return [];
+
+  const reminders = await db
+    .prepare(
+      `
+      SELECT id, content, created_at, updated_at
+      FROM admin_reminders
+      WHERE business_id = ?
+      ORDER BY updated_at DESC, created_at DESC
+      `
+    )
+    .bind(businessId)
+    .all<AdminReminder>();
+  return reminders.results ?? [];
 }
 
 export async function loadAdminUsers(db: D1, businessId: string) {
@@ -3680,6 +3705,72 @@ export async function deleteTodo(request: Request, locals: App.Locals) {
   await db.prepare(`DELETE FROM todo_assignments WHERE todo_id = ? AND business_id = ?`).bind(id, businessId).run();
   await db.prepare(`DELETE FROM todo_completion_log WHERE todo_id = ? AND business_id = ?`).bind(id, businessId).run();
   await db.prepare(`DELETE FROM todos WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  return { success: true };
+}
+
+export async function createAdminReminder(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
+
+  const formData = await request.formData();
+  const content = String(formData.get('content') ?? '').trim();
+  if (!content) return fail(400, { error: 'Reminder is required.' });
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO admin_reminders (id, business_id, content, created_by, updated_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), businessId, content, locals.userId ?? null, locals.userId ?? null, now, now)
+    .run();
+
+  return { success: true };
+}
+
+export async function updateAdminReminder(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
+
+  const formData = await request.formData();
+  const id = String(formData.get('id') ?? '').trim();
+  const content = String(formData.get('content') ?? '').trim();
+  if (!id || !content) return fail(400, { error: 'Reminder is required.' });
+
+  await db
+    .prepare(
+      `
+      UPDATE admin_reminders
+      SET content = ?, updated_by = ?, updated_at = ?
+      WHERE id = ? AND business_id = ?
+      `
+    )
+    .bind(content, locals.userId ?? null, Math.floor(Date.now() / 1000), id, businessId)
+    .run();
+
+  return { success: true };
+}
+
+export async function deleteAdminReminder(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db);
+
+  const formData = await request.formData();
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) return fail(400, { error: 'Missing reminder id.' });
+
+  await db.prepare(`DELETE FROM admin_reminders WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
 
