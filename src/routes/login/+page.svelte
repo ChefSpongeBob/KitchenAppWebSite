@@ -23,9 +23,15 @@
 		| undefined;
 
 	let showPassword = false;
+	let emailValue = '';
+	let lastSeededEmail = '';
 
 	$: activeSession = data?.activeSession ?? null;
-	$: emailValue = form?.email ?? activeSession?.email ?? '';
+	$: seededEmail = form?.email ?? activeSession?.email ?? '';
+	$: if (seededEmail !== lastSeededEmail) {
+		emailValue = seededEmail;
+		lastSeededEmail = seededEmail;
+	}
 	$: statusMessage = (() => {
 		const params = $page.url.searchParams;
 		if (form?.error) return { tone: 'error', text: form.error };
@@ -66,7 +72,7 @@
 					name="email"
 					type="email"
 					required
-					value={emailValue}
+					bind:value={emailValue}
 					autocomplete="email"
 					autocapitalize="none"
 					autocorrect="off"
