@@ -41,13 +41,13 @@ expect('src/routes/billing/+page.svelte', 'Billing page supports native purchase
   source.includes('Manage subscription')
 );
 
-expect('docs/store-billing-setup.md', 'Store billing setup doc exists', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'Store billing setup doc exists', (source) =>
   source.includes('crimini.plan.small.monthly') &&
   source.includes('APP_STORE_PRIVATE_KEY') &&
   source.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON')
 );
 
-expect('STORE_RELEASE_READINESS.md', 'Store readiness tracker references billing setup', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'Store readiness tracker references billing setup', (source) =>
   source.includes('Native app id / bundle id') && source.includes('Cloudflare Secrets')
 );
 

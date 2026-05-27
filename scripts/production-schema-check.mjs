@@ -41,7 +41,7 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
   source.includes('idx_schedule_departments_business_active_order')
 );
 
-expect('docs/release-deploy-playbook.md', 'deploy playbook includes schema verification', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'deploy playbook includes schema verification', (source) =>
   source.includes('npm run test:production-schema') &&
   source.includes('npm run schema:readiness:prod')
 );

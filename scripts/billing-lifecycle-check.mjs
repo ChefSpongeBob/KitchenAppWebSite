@@ -101,7 +101,7 @@ expect('src/lib/billing/nativeBilling.ts', 'web app has native billing bridge', 
   source.includes('nativeStoreForPlatform')
 );
 
-expect('docs/billing-trial-tenant-lifecycle.md', 'lifecycle documentation exists', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'lifecycle documentation exists', (source) =>
   source.includes('Trial identity claims') && source.includes('pre-purge snapshot')
 );
 

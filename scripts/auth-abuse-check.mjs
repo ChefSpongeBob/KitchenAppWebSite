@@ -61,7 +61,7 @@ expect('src/routes/settings/+page.server.ts', 'user session controls are wired',
   source.includes('revoke_other_sessions')
 );
 
-expect('docs/auth-abuse-account-safety.md', 'auth abuse documentation exists', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'auth abuse documentation exists', (source) =>
   source.includes('Login attempts are rate-limited') && source.includes('Audit logs store hashed')
 );
 

@@ -60,13 +60,13 @@ expect('scripts/prod-smoke-check.mjs', 'production smoke covers critical routes 
   source.includes('/api/internal/schema-readiness')
 );
 
-expect('docs/release-deploy-playbook.md', 'deploy playbook includes alerting and backup procedure', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'deploy playbook includes alerting and backup procedure', (source) =>
   source.includes('Create/confirm backup before migrations') &&
   source.includes('Alert watchlist') &&
-  source.includes('docs/observability-incident-readiness.md')
+  source.includes('Backup And Restore')
 );
 
-expect('docs/observability-incident-readiness.md', 'incident readiness documentation exists', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'incident readiness documentation exists', (source) =>
   source.includes('Structured Logs') &&
   source.includes('Alert Targets') &&
   source.includes('Backup And Restore')

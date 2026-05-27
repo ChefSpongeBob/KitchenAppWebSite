@@ -141,8 +141,8 @@ expect('src/routes/api/camera/upload/+server.ts', 'camera uploads have hard size
   source.includes('status: 413')
 );
 
-expect('docs/scale-performance-audit.md', 'scale audit document exists', (source) =>
-  source.includes('Query Areas Reviewed') && source.includes('Next Scale Notes')
+expect('docs/PROJECT_HANDOFF.md', 'scale readiness notes exist', (source) =>
+  source.includes('Scale/performance static checks pass') && source.includes('Next Phase List')
 );
 
 const failed = checks.filter((check) => !check.ok);
