@@ -25,7 +25,7 @@
 
 <section class="welcome-shell">
 	<div class="welcome-mark">
-		<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystems, LLC" />
+		<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
 	</div>
 	<h1>Welcome</h1>
 	<p>Taking you to sign in.</p>

@@ -94,7 +94,7 @@
 		<p class="eyebrow">Pricing</p>
 		<h1>Straightforward pricing for active kitchen teams.</h1>
 		<p>
-			Choose a plan by team size and operational complexity. Add-ons stay optional on every tier.
+			Choose a plan by team size and operational complexity. Monitoring add-ons are optional on Small and Medium, included on Large.
 		</p>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Trial</a>

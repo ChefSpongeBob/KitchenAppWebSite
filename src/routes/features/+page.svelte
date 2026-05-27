@@ -242,7 +242,7 @@
 		</div>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Create Workspace</a>
-			<a href="/app" class="btn">View App Routes</a>
+			<a href="/how-it-works" class="btn">How It Works</a>
 		</div>
 	</section>
 </Layout>

@@ -189,7 +189,7 @@
 
 	<section class="quick-proof" data-reveal style="--reveal-delay: 60ms;">
 		<div class="body-logo-lockup" aria-label="Crimini by NNS, LLC">
-			<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystems, LLC" />
+			<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
 		</div>
 		<p class="proof-line">
 			<strong>Schedule + Coverage Control</strong>

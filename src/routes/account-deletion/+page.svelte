@@ -82,7 +82,7 @@
 		<div class="legal-section">
 			<h2>Contact</h2>
 			<p>
-				Send deletion requests to NexusNorthSystems, LLC using the business contact channel connected
+				Send deletion requests to Crimini by NNS, LLC using the business contact channel connected
 				to your Crimini workspace.
 			</p>
 		</div>
