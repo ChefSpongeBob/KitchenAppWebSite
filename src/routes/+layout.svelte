@@ -238,6 +238,7 @@
       currentPath.startsWith(`${prefix}/`) ||
       currentPath.startsWith("/app")
   );
+  $: effectiveThemeMode = isAppChromeRoute ? themeMode : "light";
   $: routeSplashTargetPath = navTargetPath || currentPath;
   $: isRouteSplashMarketing =
     marketingExactRoutes.has(routeSplashTargetPath) ||
@@ -299,7 +300,7 @@
     if (savedTheme === "light" || savedTheme === "dark") {
       themeMode = savedTheme;
     }
-    applyTheme(themeMode);
+    applyTheme(effectiveThemeMode);
     syncMobileView();
 
     requestAnimationFrame(setupScrollReveal);
@@ -321,7 +322,7 @@
 
   $: if (browser) {
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
-    applyTheme(themeMode);
+    applyTheme(effectiveThemeMode);
   }
 </script>
 
