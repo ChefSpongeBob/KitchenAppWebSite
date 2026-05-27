@@ -8,6 +8,10 @@ import {
   loadScheduleWeek
 } from '$lib/server/schedules';
 
+function canManageSchedule(role: string | null | undefined) {
+  return role === 'owner' || role === 'admin' || role === 'manager';
+}
+
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.userId) {
     throw redirect(303, '/login');
@@ -22,7 +26,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       nextWeekStart: addDays(weekStart, 7),
       week: null,
       days: [],
-      isAdmin: locals.userRole === 'admin',
+      isAdmin: canManageSchedule(locals.userRole),
       departments: ['General'],
       visibleDepartments: ['General']
     };
@@ -36,7 +40,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const approvedDepartments = approvalsByUser.get(locals.userId) ?? [];
   const defaultDepartments =
-    locals.userRole === 'admin'
+    canManageSchedule(locals.userRole)
       ? [...departments]
       : approvedDepartments.filter((department) => departments.includes(department));
 
@@ -46,7 +50,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     nextWeekStart: addDays(weekStart, 7),
     week: schedule.week,
     days: schedule.days,
-    isAdmin: locals.userRole === 'admin',
+    isAdmin: canManageSchedule(locals.userRole),
     departments,
     visibleDepartments: defaultDepartments
   };

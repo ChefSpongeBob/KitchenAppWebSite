@@ -215,6 +215,14 @@ function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
   );
 }
 
+function canManageSchedule(role: string | null | undefined) {
+  return role === 'owner' || role === 'admin' || role === 'manager';
+}
+
+function requireScheduleManager(locals: App.Locals) {
+  return Boolean(locals.userId && canManageSchedule(locals.userRole));
+}
+
 async function loadScheduleDepartmentsFromTable(db: DB, businessId?: string | null): Promise<ScheduleDepartment[]> {
   const businessFilter = businessId ? `AND (business_id = ? OR business_id IS NULL)` : '';
   const [rows, hiddenRows] = await Promise.all([
@@ -2632,7 +2640,7 @@ export async function withdrawScheduleOpenShiftRequest(request: Request, locals:
 export async function approveScheduleShiftOffer(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -2690,8 +2698,8 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
   );
   await db.prepare(`DELETE FROM schedule_shift_offers WHERE shift_id = ? AND business_id = ?`).bind(shiftId, businessId).run();
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, offer.week_id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, offer.week_id, businessId)
     .run();
 
   return { success: true, message: 'Shift request approved.' };
@@ -2700,7 +2708,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
 export async function declineScheduleShiftOffer(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -2726,7 +2734,7 @@ export async function declineScheduleShiftOffer(request: Request, locals: App.Lo
 export async function approveScheduleOpenShiftRequest(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -2833,8 +2841,8 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
     .bind(row.open_shift_id, businessId)
     .run();
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, row.week_id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, row.week_id, businessId)
     .run();
 
   return { success: true, message: 'Open shift assigned.' };
@@ -2843,7 +2851,7 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
 export async function declineScheduleOpenShiftRequest(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
@@ -2868,7 +2876,7 @@ export async function declineScheduleOpenShiftRequest(request: Request, locals: 
 export async function approveScheduleTimeOffRequest(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -2906,7 +2914,7 @@ export async function approveScheduleTimeOffRequest(request: Request, locals: Ap
 export async function declineScheduleTimeOffRequest(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -2944,7 +2952,7 @@ export async function declineScheduleTimeOffRequest(request: Request, locals: Ap
 export async function saveScheduleShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3043,8 +3051,8 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
   }
 
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, week.id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, week.id, businessId)
     .run();
 
   return { success: true };
@@ -3053,7 +3061,7 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
 export async function saveScheduleWeekDraft(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3170,8 +3178,8 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   await replaceWeekTeamRoster(db, week.id, rosterUserIds, now, businessId);
 
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, week.id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, week.id, businessId)
     .run();
 
   return { success: true };
@@ -3296,8 +3304,8 @@ async function saveScheduleWeekDraftFromForm(
   await replaceWeekTeamRoster(db, week.id, rosterUserIds, now, businessId);
 
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, week.id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, week.id, businessId)
     .run();
 
   return { ok: true as const, week };
@@ -3306,7 +3314,7 @@ async function saveScheduleWeekDraftFromForm(
 export async function deleteScheduleShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3322,7 +3330,7 @@ export async function deleteScheduleShift(request: Request, locals: App.Locals) 
 export async function createScheduleOpenShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3403,7 +3411,7 @@ export async function createScheduleOpenShift(request: Request, locals: App.Loca
 export async function deleteScheduleOpenShift(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
@@ -3418,7 +3426,7 @@ export async function deleteScheduleOpenShift(request: Request, locals: App.Loca
 export async function publishScheduleWeek(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3446,10 +3454,10 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
       `
       UPDATE schedule_weeks
       SET status = 'published', published_at = ?, updated_at = ?, updated_by = ?
-      WHERE id = ?
+      WHERE id = ? AND business_id = ?
       `
     )
-    .bind(now, now, locals.userId, week.week.id)
+    .bind(now, now, locals.userId, week.week.id, businessId)
     .run();
 
   const warningSummary = summarizePublishIssues('Published with warning: ', publishValidation.warnings);
@@ -3462,7 +3470,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
 export async function markScheduleWeekDraft(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3478,10 +3486,10 @@ export async function markScheduleWeekDraft(request: Request, locals: App.Locals
       `
       UPDATE schedule_weeks
       SET status = 'draft', updated_at = ?, updated_by = ?
-      WHERE id = ?
+      WHERE id = ? AND business_id = ?
       `
     )
-    .bind(now, locals.userId, week.id)
+    .bind(now, locals.userId, week.id, businessId)
     .run();
 
   return { success: true };
@@ -3490,7 +3498,7 @@ export async function markScheduleWeekDraft(request: Request, locals: App.Locals
 export async function copyPreviousScheduleWeek(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
   const businessId = requireBusinessId(locals);
 
   await ensureScheduleSchema(db);
@@ -3538,8 +3546,8 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   await replaceWeekTeamRoster(db, targetWeek.id, source.rosterUserIds, now, businessId);
 
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, targetWeek.id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, targetWeek.id, businessId)
     .run();
 
   return { success: true, message: 'Last week pasted into this schedule.' };
@@ -3548,7 +3556,7 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
 export async function saveScheduleAutofillPreference(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -3579,7 +3587,7 @@ export async function saveScheduleAutofillPreference(request: Request, locals: A
 export async function saveScheduleLaborTargets(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
@@ -3650,7 +3658,7 @@ function weekdayOffset(weekStart: string, date: string) {
 export async function saveScheduleTemplateFromWeek(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
@@ -3793,7 +3801,7 @@ export async function saveScheduleTemplateFromWeek(request: Request, locals: App
 export async function applyScheduleTemplateToWeek(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
@@ -3935,8 +3943,8 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
   }
 
   await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ?`)
-    .bind(now, locals.userId, week.id)
+    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
+    .bind(now, locals.userId, week.id, businessId)
     .run();
 
   return { success: true, message: mode === 'replace' ? 'Template replaced this week.' : 'Template merged into this week.' };
@@ -3945,7 +3953,7 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
 export async function createScheduleRoleDefinition(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -4009,7 +4017,7 @@ export async function createScheduleRoleDefinition(request: Request, locals: App
 export async function createScheduleDepartment(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -4096,7 +4104,7 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
 export async function deleteScheduleDepartment(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -4199,7 +4207,7 @@ export async function deleteScheduleDepartment(request: Request, locals: App.Loc
 export async function deleteScheduleRoleDefinition(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId || locals.userRole !== 'admin') return fail(403, { error: 'Admin access required.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
