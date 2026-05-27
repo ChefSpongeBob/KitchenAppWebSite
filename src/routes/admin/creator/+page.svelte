@@ -272,11 +272,49 @@
                     <small>{category.sections.length} section{category.sections.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
+                    <div class="category-tools">
+                      <form method="POST" action="?/update_checklist_category" use:enhance={withFeedback} class="inline-form">
+                        <input type="hidden" name="base_slug" value={category.id} />
+                        <input name="title" value={category.title} required />
+                        <button type="submit">Rename Category</button>
+                      </form>
+                      <form method="POST" action="?/delete_checklist_category" use:enhance={withFeedback}>
+                        <input type="hidden" name="base_slug" value={category.id} />
+                        <button type="submit" class="danger">Delete Category</button>
+                      </form>
+                    </div>
+
                     <div class="entity-items">
                       {#each category.sections as section}
                         <div class="entity-item">
-                          <strong>{checklistSectionLabel(section.slug)}</strong>
-                          <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
+                          <div class="section-head">
+                            <strong>{checklistSectionLabel(section.slug)}</strong>
+                            <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
+                          </div>
+                          <form method="POST" action="?/add_checklist_item" use:enhance={withResetFeedback} class="inline-form">
+                            <input type="hidden" name="section_id" value={section.id} />
+                            <input name="content" placeholder="New checklist item" required />
+                            <button type="submit">Add Item</button>
+                          </form>
+                          {#if section.items.length === 0}
+                            <p class="empty">No items yet.</p>
+                          {:else}
+                            <div class="entity-items nested">
+                              {#each section.items as item}
+                                <div class="entity-item compact">
+                                  <form method="POST" action="?/update_checklist_item" use:enhance={withFeedback} class="inline-form">
+                                    <input type="hidden" name="id" value={item.id} />
+                                    <input name="content" value={item.content} required />
+                                    <button type="submit">Save Item</button>
+                                  </form>
+                                  <form method="POST" action="?/delete_checklist_item" use:enhance={withFeedback}>
+                                    <input type="hidden" name="id" value={item.id} />
+                                    <button type="submit" class="danger">Delete</button>
+                                  </form>
+                                </div>
+                              {/each}
+                            </div>
+                          {/if}
                         </div>
                       {/each}
                     </div>
@@ -625,6 +663,10 @@
     gap: 0.4rem;
   }
 
+  .entity-items.nested {
+    gap: 0.3rem;
+  }
+
   .entity-item {
     border: 1px solid var(--color-divider);
     border-radius: 9px;
@@ -632,6 +674,17 @@
     background: transparent;
     display: grid;
     gap: 0.35rem;
+  }
+
+  .entity-item.compact {
+    padding: 0.34rem;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    align-items: center;
   }
 
   .category-tools {
@@ -686,7 +739,7 @@
     border: 1px solid var(--color-border);
     border-radius: 9px;
     background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
+    color: var(--color-text);
     padding: 0.36rem 0.58rem;
     cursor: pointer;
     font-size: 0.76rem;

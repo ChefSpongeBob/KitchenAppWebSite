@@ -3356,6 +3356,124 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
   return { success: true };
 }
 
+function checklistSuffixFromSlug(baseSlug: string, slug: string) {
+  if (slug === baseSlug) return '';
+  const suffix = slug.slice(baseSlug.length).replace(/^-/, '');
+  return suffix ? `-${suffix}` : '';
+}
+
+export async function updateChecklistCategory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db, true);
+
+  const formData = await request.formData();
+  const previousBaseSlug = normalizeSlug(String(formData.get('base_slug') ?? ''));
+  const nextTitle = String(formData.get('title') ?? '').trim();
+  const nextBaseSlug = normalizeSlug(String(formData.get('next_slug') ?? nextTitle));
+  const description = String(formData.get('description') ?? '').trim();
+
+  if (!previousBaseSlug || !nextTitle) {
+    return fail(400, { error: 'Checklist category title is required.' });
+  }
+  if (!nextBaseSlug || !/^[a-z0-9-]+$/.test(nextBaseSlug)) {
+    return fail(400, { error: 'Checklist category slug can only use letters, numbers, and hyphens.' });
+  }
+
+  const sections = await db
+    .prepare(
+      `
+      SELECT id, slug
+      FROM checklist_sections
+      WHERE business_id = ?
+        AND (slug = ? OR slug LIKE ?)
+      ORDER BY slug ASC
+      `
+    )
+    .bind(businessId, previousBaseSlug, `${previousBaseSlug}-%`)
+    .all<{ id: string; slug: string }>();
+
+  const currentSections = sections.results ?? [];
+  if (currentSections.length === 0) {
+    return fail(404, { error: 'Checklist category not found.' });
+  }
+
+  const currentIds = new Set(currentSections.map((section) => section.id));
+  const nextSlugs = currentSections.map((section) => `${nextBaseSlug}${checklistSuffixFromSlug(previousBaseSlug, section.slug)}`);
+  for (const nextSlug of nextSlugs) {
+    const conflict = await db
+      .prepare(
+        `
+        SELECT id
+        FROM checklist_sections
+        WHERE business_id = ? AND slug = ?
+        LIMIT 1
+        `
+      )
+      .bind(businessId, nextSlug)
+      .first<{ id: string }>();
+    if (conflict && !currentIds.has(conflict.id)) {
+      return fail(400, { error: `Checklist section slug "${nextSlug}" already exists.` });
+    }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const section of currentSections) {
+    const suffix = checklistSuffixFromSlug(previousBaseSlug, section.slug);
+    const nextSlug = `${nextBaseSlug}${suffix}`;
+    const suffixLabel = suffix ? suffix.slice(1).replace(/\b\w/g, (letter) => letter.toUpperCase()) : '';
+    const sectionTitle = suffixLabel ? `${nextTitle} ${suffixLabel} Checklist` : `${nextTitle} Checklist`;
+    await db
+      .prepare(
+        `
+        UPDATE checklist_sections
+        SET slug = ?, title = ?, description = ?, updated_at = ?
+        WHERE id = ? AND business_id = ?
+        `
+      )
+      .bind(nextSlug, sectionTitle, description || null, now, section.id, businessId)
+      .run();
+  }
+
+  return { success: true };
+}
+
+export async function deleteChecklistCategory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureTenantSchema(db, true);
+
+  const formData = await request.formData();
+  const baseSlug = normalizeSlug(String(formData.get('base_slug') ?? ''));
+  if (!baseSlug) return fail(400, { error: 'Missing checklist category.' });
+
+  const sections = await db
+    .prepare(
+      `
+      SELECT id
+      FROM checklist_sections
+      WHERE business_id = ?
+        AND (slug = ? OR slug LIKE ?)
+      `
+    )
+    .bind(businessId, baseSlug, `${baseSlug}-%`)
+    .all<{ id: string }>();
+
+  const sectionIds = (sections.results ?? []).map((section) => section.id);
+  if (sectionIds.length === 0) return fail(404, { error: 'Checklist category not found.' });
+
+  for (const sectionId of sectionIds) {
+    await db.prepare(`DELETE FROM checklist_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
+    await db.prepare(`DELETE FROM checklist_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId).run();
+  }
+
+  return { success: true };
+}
+
 export async function addListItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
