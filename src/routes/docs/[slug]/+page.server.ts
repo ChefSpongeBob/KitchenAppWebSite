@@ -22,7 +22,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
       `
       SELECT title, content, file_url, category, slug
       FROM documents
-      WHERE slug = ? AND is_active = 1 AND business_id = ?
+      WHERE slug = ?
+        AND is_active = 1
+        AND business_id = ?
+        AND LOWER(TRIM(COALESCE(category, ''))) != 'menu'
+        AND LOWER(TRIM(COALESCE(section, ''))) != 'menu'
+        AND LOWER(TRIM(COALESCE(slug, ''))) NOT LIKE 'menu%'
       LIMIT 1
       `
     )

@@ -10,7 +10,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   const { results } = await db.prepare(`
     SELECT id, title, ingredients, instructions, created_at
     FROM recipes
-    WHERE category = ? AND business_id = ?
+    WHERE LOWER(TRIM(category)) = LOWER(TRIM(?)) AND business_id = ?
     ORDER BY title COLLATE NOCASE ASC
   `).bind(params.category, businessId).all();
 

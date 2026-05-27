@@ -198,7 +198,7 @@
     border: 1px solid var(--color-border);
     border-radius: 10px;
     background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
+    color: var(--color-text);
     min-height: 2.35rem;
     padding: 0.48rem 0.75rem;
     cursor: pointer;

@@ -1040,6 +1040,33 @@ export async function loadAdminDocumentCategories(db: D1, businessId: string) {
     new Set(
       (rows.results ?? [])
         .map((row) => String(row.category ?? '').trim())
+        .filter((category) => category.toLowerCase() !== 'menu')
+        .filter(Boolean)
+    )
+  );
+}
+
+export async function loadAdminRecipeCategories(db: D1, businessId: string) {
+  await ensureTenantSchema(db);
+  await ensureCreatorCategoryRegistry(db);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT category
+      FROM creator_category_registry
+      WHERE business_id = ?
+        AND editor_type = 'recipe'
+      ORDER BY category ASC
+      `
+    )
+    .bind(businessId)
+    .all<{ category: string }>();
+
+  return Array.from(
+    new Set(
+      (rows.results ?? [])
+        .map((row) => String(row.category ?? '').trim().toLowerCase())
         .filter(Boolean)
     )
   );

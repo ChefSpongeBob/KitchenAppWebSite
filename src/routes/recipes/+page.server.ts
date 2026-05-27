@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { loadAdminRecipeCategories } from '$lib/server/admin';
 import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -8,11 +9,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return { categories: [], recipeIndex: [], query };
   }
   const businessId = requireBusinessId(locals);
-
-  const { results: categories } = await db
-    .prepare(`SELECT DISTINCT category FROM recipes WHERE business_id = ? ORDER BY category ASC`)
-    .bind(businessId)
-    .all();
+  const categories = await loadAdminRecipeCategories(db, businessId);
 
   const { results: recipeRows } = await db
     .prepare(
@@ -26,13 +23,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     .bind(businessId)
     .all<{ id: number; title: string; category: string }>();
 
-  const dbCategories = (categories?.map((c) => String(c.category || '').trim().toLowerCase()) ?? [])
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
+  const recipeIndex = (recipeRows ?? []).map((recipe) => ({
+    ...recipe,
+    category: String(recipe.category ?? '').trim().toLowerCase()
+  }));
 
   return {
-    categories: dbCategories,
-    recipeIndex: recipeRows ?? [],
+    categories,
+    recipeIndex,
     query
   };
 };

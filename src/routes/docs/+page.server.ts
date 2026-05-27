@@ -38,6 +38,9 @@ export const load: PageServerLoad = async ({ locals }) => {
         WHERE is_active = 1
           AND business_id = ?
           AND LOWER(TRIM(COALESCE(category, ''))) IN (${placeholders})
+          AND LOWER(TRIM(COALESCE(category, ''))) != 'menu'
+          AND LOWER(TRIM(COALESCE(section, ''))) != 'menu'
+          AND LOWER(TRIM(COALESCE(slug, ''))) NOT LIKE 'menu%'
         ORDER BY section ASC, category ASC, title ASC
       `
     )

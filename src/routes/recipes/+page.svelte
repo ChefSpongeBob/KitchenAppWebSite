@@ -1,7 +1,6 @@
 <script lang="ts">
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { goto } from '$app/navigation';
-  import { recipeCategories } from '$lib/assets/recipeCategories';
   import EmptyState from '$lib/components/ui/EmptyState.svelte';
 
   type RecipeIndexItem = {
@@ -11,9 +10,7 @@
   };
 
   export let data: { categories?: string[]; recipeIndex?: RecipeIndexItem[]; query?: string };
-  const categories = (data.categories?.length ? data.categories : [...recipeCategories]).map((c) =>
-    c.trim().toLowerCase()
-  );
+  const categories = (data.categories ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean);
   const recipeIndex = data.recipeIndex ?? [];
   let search = data.query ?? '';
 
@@ -71,12 +68,16 @@
   {/if}
 
   <div class="category-list">
-    {#each categories as category}
-      <button type="button" on:click={() => goto(recipeCategoryHref(category))}>
-        <span>{category}</span>
-        <small>{countByCategory(category)} recipe{countByCategory(category) === 1 ? '' : 's'}</small>
-      </button>
-    {/each}
+    {#if categories.length === 0}
+      <EmptyState title="No recipe categories yet." compact />
+    {:else}
+      {#each categories as category}
+        <button type="button" on:click={() => goto(recipeCategoryHref(category))}>
+          <span>{category}</span>
+          <small>{countByCategory(category)} recipe{countByCategory(category) === 1 ? '' : 's'}</small>
+        </button>
+      {/each}
+    {/if}
   </div>
 </section>
 
