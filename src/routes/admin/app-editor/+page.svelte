@@ -578,7 +578,7 @@
     border: 1px solid var(--color-border);
     border-radius: 10px;
     background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
+    color: var(--color-text);
     padding: 0.44rem 0.72rem;
     cursor: pointer;
     font-size: 0.79rem;

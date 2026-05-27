@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { cameraBetaEnabled } from '$lib/config/features';
   import {
     canRoleAccessFeature,
     defaultAppFeatureModes,
@@ -38,9 +37,7 @@
     { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
     { href: '/admin/schedule-settings', label: 'Schedule Settings', matches: prefix('/admin/schedule-settings'), featureKey: 'scheduling' },
     { href: '/admin/schedule-roles', label: 'Schedule Roles', matches: prefix('/admin/schedule-roles'), featureKey: 'scheduling' },
-    ...(cameraBetaEnabled
-      ? [{ href: '/admin/camera', label: 'Camera Activity (Beta)', matches: prefix('/admin/camera') }]
-      : [])
+    { href: '/admin/camera', label: 'Camera & Sensors', matches: prefix('/admin/camera') }
   ];
 
   $: currentPath = $page.url.pathname;

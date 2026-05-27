@@ -368,6 +368,9 @@ export const actions: Actions = {
     if (!db) {
       return fail(503, { error: 'Database is not configured.' });
     }
+    if (!locals.businessId) {
+      return fail(400, { error: 'No active business was found for this account.' });
+    }
 
     const formData = await request.formData();
     const nextModes: Partial<Record<AppFeatureKey, AppFeatureMode>> = {};
