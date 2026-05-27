@@ -13,10 +13,10 @@
 </svelte:head>
 
 <AuthShell
-	eyebrow="Secure Reset"
+	eyebrow=""
 	title="Create a new password"
-	subtitle="Choose a new password for your workspace account. Once saved, existing sessions are revoked."
-	supportText="Reset links are single-use and expire automatically. After saving, sign in again with the new password."
+	subtitle=""
+	supportText=""
 >
 	{#if data.valid}
 		<form method="POST" class="auth-form">
@@ -24,8 +24,6 @@
 				<h2>Set new password</h2>
 				{#if data.email}
 					<p>{data.email}</p>
-				{:else}
-					<p>Enter and confirm your new password.</p>
 				{/if}
 			</div>
 

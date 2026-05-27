@@ -27,7 +27,7 @@
 	let lastSeededEmail = '';
 
 	$: activeSession = data?.activeSession ?? null;
-	$: seededEmail = form?.email ?? activeSession?.email ?? '';
+	$: seededEmail = form?.email ?? '';
 	$: if (seededEmail !== lastSeededEmail) {
 		emailValue = seededEmail;
 		lastSeededEmail = seededEmail;

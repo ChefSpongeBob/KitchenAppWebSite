@@ -1,4 +1,5 @@
 import { fail, type Actions } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { sendPasswordResetEmail } from '$lib/server/email';
 import {
 	createPasswordResetRecord,
@@ -13,7 +14,7 @@ import {
 	checkRateLimit,
 	getRequestIpAddress,
 	rateLimitFailure,
-	writeAuditLog
+	writeAuditLogSafe
 } from '$lib/server/security';
 
 const MIN_RESET_RESPONSE_MS = 450;
@@ -29,109 +30,126 @@ async function finishResetRequest(startedAt: number, email: string) {
 export const actions: Actions = {
 	default: async ({ request, locals, platform, url, getClientAddress }) => {
 		const startedAt = Date.now();
-		const formData = await request.formData();
-		const email = String(formData.get('email') ?? '').trim().toLowerCase();
+		let email = '';
 
-		if (!email) {
-			return fail(400, { error: 'Enter the email address for your account.', email });
-		}
+		try {
+			const formData = await request.formData();
+			email = String(formData.get('email') ?? '').trim().toLowerCase();
 
-		const db = locals.DB;
-		if (!db) {
-			return fail(503, { error: 'Password reset is temporarily unavailable. Please try again in a moment.', email });
-		}
-
-		await ensurePasswordResetSchema(db);
-
-		const ipAddress = getRequestIpAddress(request, getClientAddress);
-		const [ipLimit, emailLimit] = await Promise.all([
-			checkRateLimit(db, {
-				action: 'password_reset_ip',
-				identifier: ipAddress,
-				limit: 10,
-				windowSeconds: 60 * 60,
-				blockSeconds: 60 * 60
-			}),
-			checkRateLimit(db, {
-				action: 'password_reset_email',
-				identifier: email,
-				limit: 4,
-				windowSeconds: 60 * 60,
-				blockSeconds: 60 * 60
-			})
-		]);
-
-		if (!ipLimit.allowed || !emailLimit.allowed) {
-			await writeAuditLog(db, {
-				action: 'password_reset_rate_limited',
-				request,
-				getClientAddress,
-				email
-			});
-			return rateLimitFailure();
-		}
-
-		const user = await findUserByEmail(db, email);
-
-		if (!user || !user.password_hash || user.is_active !== 1) {
-			await writeAuditLog(db, {
-				action: 'password_reset_requested_unknown_or_inactive',
-				request,
-				getClientAddress,
-				email
-			});
-			return finishResetRequest(startedAt, email);
-		}
-
-		const token = generatePasswordResetToken();
-		const tokenHash = await sha256Hex(token);
-		const requestedIp = (() => {
-			try {
-				return getClientAddress?.() ?? null;
-			} catch {
-				return request.headers.get('cf-connecting-ip') ?? null;
+			if (!email) {
+				return fail(400, { error: 'Enter the email address for your account.', email });
 			}
-		})();
 
-		const resetRecord = await createPasswordResetRecord({
-			db,
-			userId: user.id,
-			email: user.email,
-			tokenHash,
-			requestedIp
-		});
+			const db = locals.DB;
+			if (!db) {
+				return fail(503, { error: 'Password reset is temporarily unavailable. Please try again.', email });
+			}
 
-		const emailResult = await sendPasswordResetEmail({
-			env: platform?.env,
-			origin: url.origin,
-			userEmail: user.email,
-			displayName: user.display_name,
-			resetToken: token
-		});
+			await ensurePasswordResetSchema(db);
 
-		if (!emailResult.sent) {
-			await deletePasswordResetRecordById(db, resetRecord.id);
-			await writeAuditLog(db, {
-				action: 'password_reset_email_failed',
+			const ipAddress = getRequestIpAddress(request, getClientAddress);
+			let ipLimit = { allowed: true, retryAfterSeconds: 0 };
+			let emailLimit = { allowed: true, retryAfterSeconds: 0 };
+			try {
+				[ipLimit, emailLimit] = await Promise.all([
+					checkRateLimit(db, {
+						action: 'password_reset_ip',
+						identifier: ipAddress,
+						limit: 10,
+						windowSeconds: 60 * 60,
+						blockSeconds: 60 * 60
+					}),
+					checkRateLimit(db, {
+						action: 'password_reset_email',
+						identifier: email,
+						limit: 4,
+						windowSeconds: 60 * 60,
+						blockSeconds: 60 * 60
+					})
+				]);
+			} catch (error) {
+				if (!dev) throw error;
+				console.warn('Local password reset rate limit skipped:', error instanceof Error ? error.message : String(error));
+			}
+
+			if (!ipLimit.allowed || !emailLimit.allowed) {
+				await writeAuditLogSafe(db, {
+					action: 'password_reset_rate_limited',
+					request,
+					getClientAddress,
+					email
+				});
+				return rateLimitFailure();
+			}
+
+			const user = await findUserByEmail(db, email);
+
+			if (!user || !user.password_hash || user.is_active !== 1) {
+				await writeAuditLogSafe(db, {
+					action: 'password_reset_requested_unknown_or_inactive',
+					request,
+					getClientAddress,
+					email
+				});
+				return finishResetRequest(startedAt, email);
+			}
+
+			const token = generatePasswordResetToken();
+			const tokenHash = await sha256Hex(token);
+			const requestedIp = (() => {
+				try {
+					return getClientAddress?.() ?? null;
+				} catch {
+					return request.headers.get('cf-connecting-ip') ?? null;
+				}
+			})();
+
+			const resetRecord = await createPasswordResetRecord({
+				db,
+				userId: user.id,
+				email: user.email,
+				tokenHash,
+				requestedIp
+			});
+
+			const emailResult = await sendPasswordResetEmail({
+				env: platform?.env,
+				origin: url.origin,
+				userEmail: user.email,
+				displayName: user.display_name,
+				resetToken: token
+			});
+
+			if (!emailResult.sent) {
+				await deletePasswordResetRecordById(db, resetRecord.id);
+				await writeAuditLogSafe(db, {
+					action: 'password_reset_email_failed',
+					request,
+					getClientAddress,
+					targetUserId: user.id,
+					email
+				});
+				return fail(503, {
+					error: emailResult.reason ?? 'Reset instructions could not be sent right now. Please try again.',
+					email
+				});
+			}
+
+			await writeAuditLogSafe(db, {
+				action: 'password_reset_requested',
 				request,
 				getClientAddress,
 				targetUserId: user.id,
 				email
 			});
+
+			return finishResetRequest(startedAt, email);
+		} catch (error) {
+			console.error('Password reset request failed:', error instanceof Error ? error.message : String(error));
 			return fail(503, {
-				error: emailResult.reason ?? 'Reset instructions could not be sent right now. Please try again.',
+				error: dev ? 'Local reset request failed. Check the dev server log.' : 'Password reset is temporarily unavailable. Please try again.',
 				email
 			});
 		}
-
-		await writeAuditLog(db, {
-			action: 'password_reset_requested',
-			request,
-			getClientAddress,
-			targetUserId: user.id,
-			email
-		});
-
-		return finishResetRequest(startedAt, email);
 	}
 };
