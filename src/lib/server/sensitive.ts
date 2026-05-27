@@ -173,7 +173,7 @@ export async function canAccessEmployeeSensitiveData(
   if (targetUserId && actorUserId === targetUserId) return true;
 
   const normalizedRole = String(actorBusinessRole ?? '').trim().toLowerCase();
-  if (normalizedRole === 'owner' || normalizedRole === 'admin') return true;
+  if (normalizedRole === 'owner' || normalizedRole === 'admin' || normalizedRole === 'manager') return true;
 
   const permission = await db
     .prepare(

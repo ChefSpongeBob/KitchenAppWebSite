@@ -4864,6 +4864,18 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
     return fail(400, { error: 'This employee already has an active onboarding package.' });
   }
 
+  await writeAuditLog(db, {
+    action: 'employee_onboarding_package_sent',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId,
+    metadata: {
+      packageId: created.packageId,
+      payrollClassification
+    }
+  });
+
   return { success: true, message: 'Onboarding package sent.' };
 }
 
@@ -5025,6 +5037,21 @@ export async function submitEmployeeOnboardingItem(
 
   await refreshEmployeeOnboardingPackageStatus(db, item.package_id, businessId);
 
+  await writeAuditLog(db, {
+    action: 'employee_onboarding_item_submitted',
+    request,
+    businessId,
+    actorUserId: locals.userId,
+    targetUserId: locals.userId,
+    metadata: {
+      packageId: item.package_id,
+      itemId: item.id,
+      itemType: item.item_type,
+      formKey: item.form_key,
+      sensitive: isSensitiveOnboardingFormKey(item.form_key)
+    }
+  });
+
   return { success: true, message: 'Onboarding item submitted.' };
 }
 
@@ -5130,6 +5157,23 @@ async function reviewEmployeeOnboardingItem(
     businessId,
     status === 'approved' ? (locals.userId ?? null) : null
   );
+
+  await writeAuditLog(db, {
+    action:
+      status === 'approved'
+        ? 'employee_onboarding_item_approved'
+        : 'employee_onboarding_item_changes_requested',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: item.user_id,
+    metadata: {
+      packageId: item.package_id,
+      itemId: item.id,
+      itemType: item.item_type,
+      formKey: item.form_key
+    }
+  });
 
   return {
     success: true,
