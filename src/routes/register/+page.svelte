@@ -5,6 +5,8 @@
 	export let form:
 		| {
 				error?: string;
+				activeSlideId?: string;
+				values?: Partial<RegisterFormValues>;
 		  }
 		| null;
 
@@ -36,6 +38,42 @@
 			align?: ShotAlign;
 			frame?: ShotFrame;
 		};
+	};
+
+	type RegisterFormValues = {
+		displayName: string;
+		realName: string;
+		birthday: string;
+		email: string;
+		confirmEmail: string;
+		userPhone: string;
+		userAddressLine1: string;
+		userAddressLine2: string;
+		userCity: string;
+		userState: string;
+		userPostalCode: string;
+		emergencyContactName: string;
+		emergencyContactPhone: string;
+		emergencyContactRelationship: string;
+		emailUpdates: boolean;
+		businessName: string;
+		planTier: string;
+		addOnTempMonitoring: boolean;
+		addOnCameraMonitoring: boolean;
+		legalName: string;
+		registryId: string;
+		contactEmail: string;
+		contactPhone: string;
+		websiteUrl: string;
+		addressLine1: string;
+		addressLine2: string;
+		addressCity: string;
+		addressState: string;
+		addressPostalCode: string;
+		addressCountry: string;
+		purchaseMode: 'trial' | 'buy_now';
+		storeBillingPreference: 'both' | 'google_play' | 'app_store';
+		liabilityAgreementAccepted: boolean;
 	};
 
 	const slides: Slide[] = [
@@ -179,47 +217,50 @@
 		}
 	];
 
-	let activeIndex = form?.error ? slides.findIndex((slide) => slide.id === 'purchase') : 0;
+	const formValues = form?.values ?? {};
+	const requestedActiveSlideId = form?.activeSlideId ?? (form?.error ? 'purchase' : 'intro');
+	let activeIndex = Math.max(0, slides.findIndex((slide) => slide.id === requestedActiveSlideId));
+	let appliedFormSlide = false;
 	let touchStartX = 0;
 	let touchStartY = 0;
 
-	let planTier = 'small';
-	let addOnTempMonitoring = false;
-	let addOnCameraMonitoring = false;
-	let displayName = '';
-	let realName = '';
-	let birthday = '';
-	let email = '';
-	let confirmEmail = '';
-	let businessName = '';
-	let legalName = '';
-	let registryId = '';
-	let contactEmail = '';
-	let contactPhone = '';
-	let websiteUrl = '';
-	let addressLine1 = '';
-	let addressLine2 = '';
-	let addressCity = '';
-	let addressState = '';
-	let addressPostalCode = '';
-	let addressCountry = '';
+	let planTier = formValues.planTier ?? 'small';
+	let addOnTempMonitoring = formValues.addOnTempMonitoring ?? false;
+	let addOnCameraMonitoring = formValues.addOnCameraMonitoring ?? false;
+	let displayName = formValues.displayName ?? '';
+	let realName = formValues.realName ?? '';
+	let birthday = formValues.birthday ?? '';
+	let email = formValues.email ?? '';
+	let confirmEmail = formValues.confirmEmail ?? '';
+	let businessName = formValues.businessName ?? '';
+	let legalName = formValues.legalName ?? '';
+	let registryId = formValues.registryId ?? '';
+	let contactEmail = formValues.contactEmail ?? '';
+	let contactPhone = formValues.contactPhone ?? '';
+	let websiteUrl = formValues.websiteUrl ?? '';
+	let addressLine1 = formValues.addressLine1 ?? '';
+	let addressLine2 = formValues.addressLine2 ?? '';
+	let addressCity = formValues.addressCity ?? '';
+	let addressState = formValues.addressState ?? '';
+	let addressPostalCode = formValues.addressPostalCode ?? '';
+	let addressCountry = formValues.addressCountry ?? '';
 
-	let userPhone = '';
-	let userAddressLine1 = '';
-	let userAddressLine2 = '';
-	let userCity = '';
-	let userState = '';
-	let userPostalCode = '';
-	let emergencyContactName = '';
-	let emergencyContactPhone = '';
-	let emergencyContactRelationship = '';
+	let userPhone = formValues.userPhone ?? '';
+	let userAddressLine1 = formValues.userAddressLine1 ?? '';
+	let userAddressLine2 = formValues.userAddressLine2 ?? '';
+	let userCity = formValues.userCity ?? '';
+	let userState = formValues.userState ?? '';
+	let userPostalCode = formValues.userPostalCode ?? '';
+	let emergencyContactName = formValues.emergencyContactName ?? '';
+	let emergencyContactPhone = formValues.emergencyContactPhone ?? '';
+	let emergencyContactRelationship = formValues.emergencyContactRelationship ?? '';
 	let password = '';
 	let confirmPassword = '';
-	let emailUpdates = true;
+	let emailUpdates = formValues.emailUpdates ?? true;
 	let clientFingerprint = '';
-	let purchaseMode: 'trial' | 'buy_now' = 'trial';
-	let storeBillingPreference: 'both' | 'google_play' | 'app_store' = 'both';
-	let liabilityAgreementAccepted = false;
+	let purchaseMode: 'trial' | 'buy_now' = formValues.purchaseMode ?? 'trial';
+	let storeBillingPreference: 'both' | 'google_play' | 'app_store' = formValues.storeBillingPreference ?? 'both';
+	let liabilityAgreementAccepted = formValues.liabilityAgreementAccepted ?? false;
 	$: basePlanPrice = planTier === 'large' ? 275 : planTier === 'medium' ? 120 : 50;
 	$: addOnTotal = (addOnTempMonitoring ? 30 : 0) + (addOnCameraMonitoring ? 30 : 0);
 	$: estimatedMonthlyTotal = basePlanPrice + addOnTotal;
@@ -232,6 +273,10 @@
 	$: visibleSlides = inviteMode
 		? slides.filter((slide) => slide.id !== 'tier' && slide.id !== 'business')
 		: slides;
+	$: if (!appliedFormSlide && form?.activeSlideId && visibleSlides.some((slide) => slide.id === form.activeSlideId)) {
+		activeIndex = visibleSlides.findIndex((slide) => slide.id === form.activeSlideId);
+		appliedFormSlide = true;
+	}
 	$: activeSlide = visibleSlides[activeIndex] ?? visibleSlides[0];
 	$: activeIndex = Math.min(activeIndex, visibleSlides.length - 1);
 

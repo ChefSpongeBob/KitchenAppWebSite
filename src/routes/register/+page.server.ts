@@ -18,8 +18,46 @@ import {
 } from '$lib/server/trial';
 import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { validateNewPassword } from '$lib/server/passwordReset';
-import { checkRateLimit, rateLimitFailure, writeAuditLog } from '$lib/server/security';
+import { checkRateLimit, writeAuditLog } from '$lib/server/security';
 import type { PageServerLoad } from './$types';
+
+type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
+
+type RegisterFormValues = {
+	displayName: string;
+	realName: string;
+	birthday: string;
+	email: string;
+	confirmEmail: string;
+	userPhone: string;
+	userAddressLine1: string;
+	userAddressLine2: string;
+	userCity: string;
+	userState: string;
+	userPostalCode: string;
+	emergencyContactName: string;
+	emergencyContactPhone: string;
+	emergencyContactRelationship: string;
+	emailUpdates: boolean;
+	businessName: string;
+	planTier: string;
+	addOnTempMonitoring: boolean;
+	addOnCameraMonitoring: boolean;
+	legalName: string;
+	registryId: string;
+	contactEmail: string;
+	contactPhone: string;
+	websiteUrl: string;
+	addressLine1: string;
+	addressLine2: string;
+	addressCity: string;
+	addressState: string;
+	addressPostalCode: string;
+	addressCountry: string;
+	purchaseMode: 'trial' | 'buy_now';
+	storeBillingPreference: 'both' | 'google_play' | 'app_store';
+	liabilityAgreementAccepted: boolean;
+};
 
 function parseInviteDepartments(value: string | null | undefined, fallback = '') {
 	try {
@@ -108,8 +146,18 @@ function normalizeWebsite(raw: string) {
 	}
 }
 
+function registerFailure(
+	status: number,
+	error: string,
+	activeSlideId: RegisterActiveSlideId,
+	values: Partial<RegisterFormValues>
+) {
+	return fail(status, { error, activeSlideId, values });
+}
+
 export const actions: Actions = {
 	default: async ({ request, locals, url }) => {
+		let submittedValues: Partial<RegisterFormValues> = {};
 		try {
 			const formData = await request.formData();
 
@@ -159,46 +207,88 @@ export const actions: Actions = {
 			const storeBillingPreference = String(formData.get('store_billing_preference') || 'both')
 				.trim()
 				.toLowerCase();
+			const safeStoreBillingPreference =
+				storeBillingPreference === 'google_play' || storeBillingPreference === 'app_store'
+					? storeBillingPreference
+					: 'both';
 			const liabilityAgreementAccepted =
 				String(formData.get('liability_agreement_accepted') || '0') === '1';
 			const liabilityAgreementVersion = String(formData.get('liability_agreement_version') || '')
 				.trim()
 				.slice(0, 32);
 
+			submittedValues = {
+				displayName,
+				realName,
+				birthday,
+				email,
+				confirmEmail,
+				userPhone,
+				userAddressLine1,
+				userAddressLine2,
+				userCity,
+				userState,
+				userPostalCode,
+				emergencyContactName,
+				emergencyContactPhone,
+				emergencyContactRelationship,
+				emailUpdates: wantsEmailUpdates,
+				businessName,
+				planTier: planTierRaw,
+				addOnTempMonitoring,
+				addOnCameraMonitoring,
+				legalName,
+				registryId,
+				contactEmail,
+				contactPhone,
+				websiteUrl: websiteRaw,
+				addressLine1,
+				addressLine2,
+				addressCity,
+				addressState,
+				addressPostalCode,
+				addressCountry,
+				purchaseMode,
+				storeBillingPreference: safeStoreBillingPreference,
+				liabilityAgreementAccepted
+			};
+
 			if (!displayName || !email || !confirmEmail || !password || !confirmPassword) {
-				return fail(400, { error: 'All fields required.' });
+				return registerFailure(400, 'All fields required.', 'security', submittedValues);
 			}
 			if (!inviteCode && !businessName) {
-				return fail(400, { error: 'Business name is required to create your workspace.' });
+				return registerFailure(400, 'Business name is required to create your workspace.', 'business', submittedValues);
 			}
 			if (email !== confirmEmail) {
-				return fail(400, { error: 'Emails do not match.' });
+				return registerFailure(400, 'Emails do not match.', 'security', submittedValues);
 			}
 			const passwordError = validateNewPassword(password, confirmPassword);
-			if (passwordError) return passwordError;
+			if (passwordError) {
+				return registerFailure(400, String(passwordError.data?.error ?? 'Enter a valid password.'), 'security', submittedValues);
+			}
 			if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
-				return fail(400, { error: 'Birthday must use a valid date.' });
+				return registerFailure(400, 'Birthday must use a valid date.', 'security', submittedValues);
 			}
 			if (contactEmail && !looksLikeEmail(contactEmail)) {
-				return fail(400, { error: 'Enter a valid business contact email.' });
+				return registerFailure(400, 'Enter a valid business contact email.', 'business', submittedValues);
 			}
 			if (!liabilityAgreementAccepted) {
-				return fail(400, { error: 'You must accept the liability agreement to continue.' });
+				return registerFailure(400, 'You must accept the liability agreement to continue.', 'purchase', submittedValues);
 			}
 			if (liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
-				return fail(400, { error: 'Please refresh and accept the latest liability agreement.' });
+				return registerFailure(400, 'Please refresh and accept the latest liability agreement.', 'purchase', submittedValues);
 			}
 
 			const websiteUrl = normalizeWebsite(websiteRaw);
 			if (websiteRaw && !websiteUrl) {
-				return fail(400, { error: 'Enter a valid business website URL.' });
+				return registerFailure(400, 'Enter a valid business website URL.', 'business', submittedValues);
 			}
 
 			const planTier = PLAN_TIER_MAP[planTierRaw] ?? 'starter';
 
 			const db = locals.DB;
 			if (!db) {
-				return fail(503, { error: 'Database is not configured yet.' });
+				return registerFailure(503, 'Database is not configured yet.', 'purchase', submittedValues);
 			}
 			const buyNowRequested = !inviteCode && purchaseMode === 'buy_now';
 
@@ -228,7 +318,7 @@ export const actions: Actions = {
 					request,
 					email
 				});
-				return rateLimitFailure();
+				return registerFailure(429, 'Too many attempts. Try again shortly.', 'security', submittedValues);
 			}
 
 			const hasNormalized = await hasEmailNormalizedColumn(db);
@@ -260,7 +350,7 @@ export const actions: Actions = {
 					request,
 					email
 				});
-				return fail(400, { error: 'Account already exists.' });
+				return registerFailure(400, 'Account already exists.', 'security', submittedValues);
 			}
 
 			const now = Math.floor(Date.now() / 1000);
@@ -286,7 +376,7 @@ export const actions: Actions = {
 						'abuse',
 						trialEligibility.reason ?? 'trial_reuse'
 					);
-					return fail(400, { error: 'Free trial unavailable. Choose purchase to continue.' });
+					return registerFailure(400, 'Free trial unavailable. Choose purchase to continue.', 'purchase', submittedValues);
 				}
 			}
 
@@ -371,15 +461,15 @@ export const actions: Actions = {
 
 				if (businessInvite) {
 					if (businessInvite.revoked_at !== null || businessInvite.used_at !== null) {
-						return fail(400, { error: 'Invite code is invalid.' });
+						return registerFailure(400, 'Invite code is invalid.', 'security', submittedValues);
 					}
 
 					if (businessInvite.email_normalized !== email) {
-						return fail(400, { error: 'Invite code does not match this email address.' });
+						return registerFailure(400, 'Invite code does not match this email address.', 'security', submittedValues);
 					}
 
 					if (businessInvite.expires_at !== null && businessInvite.expires_at < now) {
-						return fail(400, { error: 'Invite code has expired.' });
+						return registerFailure(400, 'Invite code has expired.', 'security', submittedValues);
 					}
 				} else {
 					invite = await db
@@ -402,15 +492,15 @@ export const actions: Actions = {
 						}>();
 
 					if (!invite || invite.revoked_at !== null || invite.used_at !== null) {
-						return fail(400, { error: 'Invite code is invalid.' });
+						return registerFailure(400, 'Invite code is invalid.', 'security', submittedValues);
 					}
 
 					if (invite.email_normalized !== email) {
-						return fail(400, { error: 'Invite code does not match this email address.' });
+						return registerFailure(400, 'Invite code does not match this email address.', 'security', submittedValues);
 					}
 
 					if (invite.expires_at !== null && invite.expires_at < now) {
-						return fail(400, { error: 'Invite code has expired.' });
+						return registerFailure(400, 'Invite code has expired.', 'security', submittedValues);
 					}
 				}
 			}
@@ -755,9 +845,12 @@ export const actions: Actions = {
 			}
 
 			if (!resolvedBusinessId) {
-				return fail(400, {
-					error: 'Could not attach this account to a workspace. Ask your admin for a fresh invite.'
-				});
+				return registerFailure(
+					400,
+					'Could not attach this account to a workspace. Ask your admin for a fresh invite.',
+					'security',
+					submittedValues
+				);
 			}
 
 			await db
@@ -844,7 +937,7 @@ export const actions: Actions = {
 				await upsertStoreBillingPlaceholder(db, {
 					businessId: resolvedBusinessId,
 					ownerUserId: userId,
-					preferredStore: storeBillingPreference,
+					preferredStore: safeStoreBillingPreference,
 					planTier,
 					addOnTempMonitoring,
 					addOnCameraMonitoring,
@@ -862,12 +955,12 @@ export const actions: Actions = {
 			const message = err instanceof Error ? err.message : String(err ?? '');
 			console.error('Register action failed:', message);
 			if (message.includes('UNIQUE constraint failed')) {
-				return fail(400, { error: 'Account already exists.' });
+				return registerFailure(400, 'Account already exists.', 'security', submittedValues);
 			}
 			if (message.includes('D1_ERROR: no such table')) {
-				return fail(503, { error: 'Database tables are not ready yet.' });
+				return registerFailure(503, 'Database tables are not ready yet.', 'purchase', submittedValues);
 			}
-			return fail(500, { error: 'Registration failed. Please try again.' });
+			return registerFailure(500, 'Registration failed. Please try again.', 'purchase', submittedValues);
 		}
 	}
 };
