@@ -7,6 +7,23 @@ import {
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
+function truncate(value: string | null, maxLength: number) {
+  if (!value) return null;
+  return value.slice(0, maxLength);
+}
+
+function safeMediaUrl(value: string | null) {
+  if (!value) return true;
+  if (value.startsWith('/api/camera/media/')) return true;
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export async function POST({ request, platform }) {
   if (!cameraBetaEnabled) {
     return json({ error: 'Not found.' }, { status: 404 });
@@ -35,11 +52,14 @@ export async function POST({ request, platform }) {
     payload = Object.fromEntries(formData.entries());
   }
 
-  const cameraId = String(payload.camera_id ?? payload.device_id ?? '').trim() || null;
-  const cameraName = String(payload.camera_name ?? payload.name ?? '').trim() || null;
-  const eventType = String(payload.event_type ?? payload.type ?? 'activity').trim() || 'activity';
+  const cameraId = truncate(String(payload.camera_id ?? payload.device_id ?? '').trim() || null, 80);
+  const cameraName = truncate(String(payload.camera_name ?? payload.name ?? '').trim() || null, 120);
+  const eventType = truncate(String(payload.event_type ?? payload.type ?? 'activity').trim() || 'activity', 80) ?? 'activity';
   const imageUrl = String(payload.image_url ?? payload.image ?? payload.thumbnail_url ?? '').trim() || null;
   const clipUrl = String(payload.clip_url ?? payload.video_url ?? payload.clip ?? '').trim() || null;
+  if (!safeMediaUrl(imageUrl) || !safeMediaUrl(clipUrl)) {
+    return json({ error: 'Invalid media URL.' }, { status: 400 });
+  }
   const durationRaw = Number(payload.clip_duration_seconds ?? payload.duration_seconds ?? payload.duration ?? 60);
   const clipDurationSeconds = Number.isFinite(durationRaw) ? Math.max(0, Math.floor(durationRaw)) : 60;
   const createdAt = Number(payload.ts ?? payload.timestamp ?? Math.floor(Date.now() / 1000));

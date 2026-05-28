@@ -2,8 +2,13 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 
 function authorized(request: Request, env: App.Platform['env'] | undefined) {
 	const token = env?.BILLING_WEBHOOK_TOKEN?.trim();
-	if (!token) return true;
-	return request.url.includes(`token=${encodeURIComponent(token)}`);
+	if (!token) return false;
+
+	const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
+	if (bearer === token) return true;
+
+	const url = new URL(request.url);
+	return url.searchParams.get('token') === token;
 }
 
 function decodePubSubMessage(body: Record<string, unknown>) {

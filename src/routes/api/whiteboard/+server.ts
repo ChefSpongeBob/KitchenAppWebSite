@@ -189,8 +189,12 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
   }
 
   if (action === 'add') {
+    if (!locals.userId) {
+      return json({ error: 'Login required.' }, { status: 401 });
+    }
     const content = String(payload.content ?? '').trim();
     if (!content) return json({ error: 'Missing content' }, { status: 400 });
+    if (content.length > 240) return json({ error: 'Idea is too long.' }, { status: 400 });
 
     const now = Math.floor(Date.now() / 1000);
     const id = crypto.randomUUID();

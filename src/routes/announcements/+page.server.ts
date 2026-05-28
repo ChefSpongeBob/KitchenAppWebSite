@@ -55,6 +55,9 @@ export const actions: Actions = {
 
     const formData = await request.formData();
     const content = String(formData.get('content') ?? '').trim();
+    if (content.length > 2000) {
+      return fail(400, { error: 'Announcement is too long.' });
+    }
     await saveHomepageAnnouncement(db, locals.businessId, locals.userId, content);
 
     return { success: true };

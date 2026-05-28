@@ -96,6 +96,18 @@ expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google pl
   source.includes('store_webhook_events') && source.includes("'google_play'")
 );
 
+expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires exact configured token', (source) =>
+  source.includes('if (!token) return false') &&
+  source.includes("request.headers.get('authorization')") &&
+  source.includes("url.searchParams.get('token') === token")
+);
+
+expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play webhook requires exact configured token', (source) =>
+  source.includes('if (!token) return false') &&
+  source.includes("request.headers.get('authorization')") &&
+  source.includes("url.searchParams.get('token') === token")
+);
+
 expect('src/lib/billing/nativeBilling.ts', 'web app has native billing bridge', (source) =>
   source.includes("registerPlugin<CriminiBillingPlugin>('CriminiBilling')") &&
   source.includes('nativeStoreForPlatform')

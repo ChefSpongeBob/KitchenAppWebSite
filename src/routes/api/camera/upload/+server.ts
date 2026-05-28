@@ -10,6 +10,26 @@ import { ensureTenantSchema } from '$lib/server/tenant';
 
 const MAX_CAMERA_STILL_BYTES = 8 * 1024 * 1024;
 const MAX_CAMERA_CLIP_BYTES = 25 * 1024 * 1024;
+const STILL_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const CLIP_EXTENSIONS = new Set(['mp4', 'webm', 'ogg']);
+
+function normalizeUploadKind(value: string) {
+  if (value === 'still' || value === 'clip') return value;
+  return null;
+}
+
+function contentTypeMatchesKind(contentType: string, kind: 'still' | 'clip') {
+  const normalized = contentType.toLowerCase();
+  if (!normalized || normalized === 'application/octet-stream') return true;
+  return kind === 'clip' ? normalized.startsWith('video/') : normalized.startsWith('image/');
+}
+
+function normalizeExtension(value: string, kind: 'still' | 'clip') {
+  const ext = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const allowed = kind === 'clip' ? CLIP_EXTENSIONS : STILL_EXTENSIONS;
+  if (!allowed.has(ext)) return null;
+  return ext === 'jpeg' ? 'jpg' : ext;
+}
 
 export async function POST({ request, platform, url }) {
   if (!cameraBetaEnabled) {
@@ -24,7 +44,13 @@ export async function POST({ request, platform, url }) {
   if (!device) return json({ error: 'Device credentials required.' }, { status: 401 });
 
   const contentType = request.headers.get('content-type') ?? 'application/octet-stream';
-  const kind = (url.searchParams.get('kind') ?? 'still').trim() || 'still';
+  const kind = normalizeUploadKind((url.searchParams.get('kind') ?? 'still').trim() || 'still');
+  if (!kind) {
+    return json({ error: 'Invalid camera upload type.' }, { status: 400 });
+  }
+  if (!contentTypeMatchesKind(contentType, kind)) {
+    return json({ error: 'Invalid camera upload content type.' }, { status: 415 });
+  }
   const maxUploadBytes = kind === 'clip' ? MAX_CAMERA_CLIP_BYTES : MAX_CAMERA_STILL_BYTES;
   const declaredLength = Number(request.headers.get('content-length') ?? NaN);
   if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
@@ -46,7 +72,13 @@ export async function POST({ request, platform, url }) {
   const filename = (url.searchParams.get('filename') ?? '').trim();
   const explicitTimestamp = Number(url.searchParams.get('ts') ?? url.searchParams.get('timestamp') ?? NaN);
   const explicitExt = filename.includes('.') ? filename.split('.').pop() ?? '' : '';
-  const ext = explicitExt || extensionFromContentType(contentType, kind === 'clip' ? 'mp4' : 'jpg');
+  const ext = normalizeExtension(
+    explicitExt || extensionFromContentType(contentType, kind === 'clip' ? 'mp4' : 'jpg'),
+    kind
+  );
+  if (!ext) {
+    return json({ error: 'Unsupported camera upload file type.' }, { status: 415 });
+  }
   const timestamp = Math.floor(Date.now() / 1000);
   const safeCameraId = cameraId.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
   const businessId = device.businessId;

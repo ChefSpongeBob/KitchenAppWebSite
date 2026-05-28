@@ -49,6 +49,9 @@ export const actions: Actions = {
 
     for (const category of dailySpecialCategories) {
       const content = String(formData.get(category) ?? '').trim();
+      if (content.length > 1000) {
+        return fail(400, { error: 'Daily highlight is too long.' });
+      }
       const storageCategory = getDailySpecialStorageCategory(category, locals.businessId);
       await db
         .prepare(

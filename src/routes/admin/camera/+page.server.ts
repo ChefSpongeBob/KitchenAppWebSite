@@ -38,6 +38,25 @@ type CameraSource = {
 
 type IoTDevice = Awaited<ReturnType<typeof loadIoTDevices>>[number];
 
+type UrlValidation = { value: string | null; error?: never } | { value?: never; error: string };
+
+function normalizeOptionalCameraUrl(value: string, label: string): UrlValidation {
+  const normalized = value.trim();
+  if (!normalized) return { value: null };
+  if (normalized.startsWith('/api/camera/media/')) return { value: normalized };
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return { value: normalized };
+    }
+  } catch {
+    // Fall through to the shared validation message.
+  }
+
+  return { error: `${label} must be an http(s) URL or internal camera media path.` };
+}
+
 export const load: PageServerLoad = async ({ locals, platform }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -160,11 +179,16 @@ export const actions: Actions = {
     const cameraId = String(formData.get('camera_id') ?? '').trim();
     const scopedCameraId = cameraId ? `${businessId}:${cameraId}` : null;
     const name = String(formData.get('name') ?? '').trim();
-    const liveUrl = String(formData.get('live_url') ?? '').trim();
-    const previewImageUrl = String(formData.get('preview_image_url') ?? '').trim();
+    const liveUrl = normalizeOptionalCameraUrl(String(formData.get('live_url') ?? ''), 'Live URL');
+    const previewImageUrl = normalizeOptionalCameraUrl(
+      String(formData.get('preview_image_url') ?? ''),
+      'Preview URL'
+    );
     const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
     if (!name) return fail(400, { error: 'Camera name is required.' });
+    if (liveUrl.error) return fail(400, { error: liveUrl.error });
+    if (previewImageUrl.error) return fail(400, { error: previewImageUrl.error });
 
     await db
       .prepare(
@@ -185,8 +209,8 @@ export const actions: Actions = {
         id,
         scopedCameraId,
         name,
-        liveUrl || null,
-        previewImageUrl || null,
+        liveUrl.value,
+        previewImageUrl.value,
         isActive,
         Math.floor(Date.now() / 1000),
         businessId
