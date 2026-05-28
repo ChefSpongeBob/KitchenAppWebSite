@@ -1,7 +1,6 @@
 ﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -47,7 +46,7 @@
     title="Daily Highlights"
   />
 
-  <section class="grid">
+  <section class="highlight-list">
     {#each specials as special}
       <details class="special-panel" open={Boolean(special.content)}>
         <summary>
@@ -59,33 +58,31 @@
               {special.content ? special.content : 'No highlight posted.'}
           </span>
         </summary>
-        <DashboardCard title={special.label} description={`Updated ${formatUpdatedAt(special.updatedAt)}`}>
-          <div class="special-copy">
-            {#if special.content}
-              {#each special.content.split('\n') as line}
-                <p>{line}</p>
-              {/each}
-            {:else}
-              <p class="muted">No highlight posted.</p>
-            {/if}
-          </div>
-        </DashboardCard>
+        <div class="special-copy">
+          {#if special.content}
+            {#each special.content.split('\n') as line}
+              <p>{line}</p>
+            {/each}
+          {:else}
+            <p class="muted">No highlight posted.</p>
+          {/if}
+        </div>
       </details>
     {/each}
   </section>
 
   {#if canEdit}
-    <PageHeader title="Edit Highlights" />
     <form method="POST" action="?/save_specials" use:enhance={withSpecialsFeedback} class="editor">
-      <section class="grid">
+      <section class="highlight-list editor-list">
         {#each specials as special}
-          <DashboardCard title={special.label} description={`Updated ${formatUpdatedAt(special.updatedAt)}`}>
+          <label class="editor-row">
+            <span>{special.label}</span>
             <textarea
               name={special.category}
               rows="6"
-              placeholder={`Add today's ${special.label.toLowerCase()} update...`}
+              placeholder={special.label}
             >{special.content}</textarea>
-          </DashboardCard>
+          </label>
         {/each}
       </section>
       <div class="actions">
@@ -100,18 +97,19 @@
     display: grid;
     gap: 1rem;
     margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-divider);
   }
 
-  .grid {
+  .highlight-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
+    gap: 0.65rem;
   }
 
   .special-panel {
     border: 1px solid var(--color-border);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
     overflow: hidden;
   }
 
@@ -136,8 +134,7 @@
 
   .summary-copy strong {
     font-size: 0.95rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    letter-spacing: -0.02em;
   }
 
   .summary-copy small {
@@ -159,14 +156,24 @@
 
   textarea {
     width: 100%;
-    min-height: 9rem;
+    min-height: 7rem;
     border: 1px solid var(--color-border);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
     color: var(--color-text);
-    padding: 0.9rem 1rem;
+    padding: 0.75rem 0.85rem;
     font: inherit;
     resize: vertical;
+  }
+
+  .editor-row {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .editor-row span {
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
   }
 
   .actions {
@@ -179,7 +186,7 @@
     background: var(--color-surface);
     color: var(--color-text);
     padding: 0.7rem 1rem;
-    border-radius: 999px;
+    border-radius: var(--radius-sm);
     font: inherit;
     cursor: pointer;
   }
@@ -187,6 +194,7 @@
   .special-copy {
     display: grid;
     gap: 0.45rem;
+    padding: 0 1rem 1rem;
   }
 
   .special-copy p {

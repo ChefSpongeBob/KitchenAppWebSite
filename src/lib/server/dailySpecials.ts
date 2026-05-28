@@ -84,7 +84,7 @@ export async function userCanEditDailySpecials(
   businessId?: string | null
 ) {
   if (!userId) return false;
-  if (role === 'admin') return true;
+  if (role === 'admin' || role === 'owner' || role === 'manager') return true;
   await ensureTenantSchema(db, true);
 
   const row = await db

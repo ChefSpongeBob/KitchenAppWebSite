@@ -1,7 +1,6 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -34,7 +33,7 @@
   }
 
   function expandedText(todo: Todo, includeCompletedBy = false) {
-    const description = todo.description?.trim() || 'No description provided.';
+    const description = todo.description?.trim() || '';
     const assigned = todo.assigned_name ?? todo.assigned_email ?? 'Anyone';
     const completedBy = includeCompletedBy ? `\nCompleted by: ${todo.display_name ?? 'Unknown'}` : '';
     const completedAt = includeCompletedBy && todo.completed_at
@@ -78,10 +77,13 @@
             aria-expanded={expandedId === todo.id}
             on:click={() => toggleExpand(todo.id)}
           >
-            <DashboardCard
-              title={todo.title}
-              description={expandedId === todo.id ? expandedText(todo) : ''}
-            />
+            <span>
+              <strong>{todo.title}</strong>
+              <small>Assigned to {todo.assigned_name ?? todo.assigned_email ?? 'Anyone'}</small>
+            </span>
+            {#if expandedId === todo.id && expandedText(todo)}
+              <p>{expandedText(todo)}</p>
+            {/if}
           </button>
           <form method="POST" action="?/complete" use:enhance={withTodoFeedback}>
             <input type="hidden" name="id" value={todo.id} />
@@ -89,6 +91,9 @@
           </form>
         </div>
       {/each}
+      {#if activeTodos.length === 0}
+        <p class="empty-state">No active tasks.</p>
+      {/if}
     </div>
   {/if}
 
@@ -96,12 +101,18 @@
     <div class="card-list" role="region" aria-label="Completed Tasks">
       {#each completedTodos as todo (todo.id)}
         <button class="card-hit" type="button" aria-expanded={expandedId === todo.id} on:click={() => toggleExpand(todo.id)}>
-          <DashboardCard
-            title={todo.title}
-            description={expandedId === todo.id ? expandedText(todo, true) : ''}
-          />
+          <span>
+            <strong>{todo.title}</strong>
+            <small>{todo.completed_at ? new Date(todo.completed_at * 1000).toLocaleString() : 'Completed'}</small>
+          </span>
+          {#if expandedId === todo.id}
+            <p>{expandedText(todo, true)}</p>
+          {/if}
         </button>
       {/each}
+      {#if completedTodos.length === 0}
+        <p class="empty-state">No completed tasks.</p>
+      {/if}
     </div>
   {/if}
 </Layout>
@@ -116,7 +127,7 @@
   .tabs button {
     flex: 1;
     padding: 0.68rem;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     border: var(--surface-outline);
     background: var(--surface-wash), var(--color-surface);
     color: var(--color-text-muted);
@@ -131,15 +142,55 @@
     border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border) 45%);
   }
 
-  .card-list { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 6rem; }
-  .card-wrapper { display: flex; flex-direction: column; gap: 4px; }
+  .card-list {
+    display: grid;
+    gap: 0.65rem;
+    padding-bottom: 6rem;
+  }
+
+  .card-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    align-items: start;
+    padding: 0.82rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .card-wrapper:first-child {
+    border-top: 0;
+  }
 
   .card-hit {
+    display: grid;
+    gap: 0.35rem;
+    width: 100%;
     text-align: left;
     border: none;
     background: transparent;
     padding: 0;
     cursor: pointer;
+    color: var(--color-text);
+  }
+
+  .card-hit span {
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  .card-hit strong {
+    font-size: 1rem;
+  }
+
+  .card-hit small {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
+
+  .card-hit p {
+    margin: 0.25rem 0 0;
+    color: var(--color-text-soft);
+    white-space: pre-line;
   }
 
   .complete-button {
@@ -150,9 +201,16 @@
     font-size: 0.74rem;
     font-weight: var(--weight-semibold);
     padding: 0.34rem 0.7rem;
-    border-radius: 999px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     width: auto;
+  }
+
+  .empty-state {
+    margin: 0;
+    padding: 0.9rem 0;
+    border-top: 1px solid var(--color-divider);
+    color: var(--color-text-muted);
   }
 
   @media (max-width: 760px) {
@@ -168,6 +226,14 @@
     .card-list {
       gap: 0.75rem;
       padding-bottom: 5.25rem;
+    }
+
+    .card-wrapper {
+      grid-template-columns: 1fr;
+    }
+
+    .complete-button {
+      width: 100%;
     }
   }
 </style>

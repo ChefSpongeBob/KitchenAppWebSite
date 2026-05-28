@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { pushToast } from '$lib/client/toasts';
 
@@ -26,7 +27,7 @@
   });
 
   function size(v: number) {
-    return 62 + v * 5;
+    return Math.min(128, 54 + v * 4);
   }
 
   function ideaFontSize(idea: Idea) {
@@ -105,6 +106,7 @@
   });
 </script>
 
+<Layout>
 <PageHeader title="Whiteboard" />
 
 <section class="whiteboard-shell">
@@ -150,6 +152,7 @@
     {/each}
   </section>
 </section>
+</Layout>
 
 <style>
   .whiteboard-shell {
@@ -165,11 +168,7 @@
   }
 
   .whiteboard-shell::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 4px;
-    background: color-mix(in srgb, var(--color-primary) 45%, transparent);
+    content: none;
   }
 
   .input-row {
@@ -206,9 +205,7 @@
     padding: 1rem;
     border: var(--surface-outline);
     border-radius: var(--radius-lg);
-    background:
-      radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 32%),
-      color-mix(in srgb, var(--color-surface-alt) 74%, var(--color-surface) 26%);
+    background: color-mix(in srgb, var(--color-surface-alt) 74%, var(--color-surface) 26%);
   }
 
   .wrap { display: inline-block; }
@@ -259,10 +256,10 @@
     display: grid;
     place-items: center;
     gap: calc(var(--cloud-size) * 0.018);
-    left: 7%;
-    top: 22%;
-    width: 54%;
-    height: 42%;
+    left: 8%;
+    top: 18%;
+    width: 50%;
+    height: 48%;
     transform: none;
   }
 

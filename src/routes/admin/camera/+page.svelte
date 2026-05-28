@@ -295,8 +295,8 @@
               <div class="device-row" class:revoked={device.isActive !== 1}>
                 <div>
                   <strong>{device.displayName}</strong>
-                  <span>{device.deviceType} · {device.externalDeviceId}</span>
-                  <small>{device.keyPrefix}… · Last seen {formatShortTime(device.lastSeenAt)}</small>
+                  <span>{device.deviceType} / {device.externalDeviceId}</span>
+                  <small>{device.keyPrefix}... / Last seen {formatShortTime(device.lastSeenAt)}</small>
                 </div>
                 {#if device.isActive === 1}
                   <form method="POST" action="?/revoke_iot_device" use:enhance={withFeedback}>
@@ -323,7 +323,7 @@
         <header class="feed-head">
           <div>
             <h2>{camera.title}</h2>
-            <small>{camera.latestLabel} · {formatTimestamp(camera.latestAt)}</small>
+            <small>{camera.latestLabel} / {formatTimestamp(camera.latestAt)}</small>
           </div>
           <span class:inactive={camera.is_active !== 1}>
             {camera.is_active === 1 ? 'Live' : 'Idle'}

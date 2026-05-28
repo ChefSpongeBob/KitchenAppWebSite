@@ -9,10 +9,14 @@
     pathname.startsWith('/admin') ||
     pathname.startsWith('/schedule') ||
     pathname.startsWith('/my-schedule') ||
+    pathname.startsWith('/todo') ||
     pathname.startsWith('/lists') ||
     pathname.startsWith('/docs') ||
     pathname.startsWith('/announcements') ||
+    pathname.startsWith('/whiteboard') ||
+    pathname.startsWith('/temper') ||
     pathname.startsWith('/recipes') ||
+    pathname.startsWith('/specials') ||
     pathname.startsWith('/conversions') ||
     pathname.startsWith('/settings');
 </script>

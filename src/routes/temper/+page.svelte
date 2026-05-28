@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
   import { onMount } from 'svelte';
+  import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { startVisiblePolling } from '$lib/client/polling';
 
@@ -107,6 +108,7 @@
     }));
 </script>
 
+<Layout>
 <PageHeader title="Kitchen Temps" />
 
 <section class="status-strip" aria-label="Temperature status">
@@ -162,6 +164,7 @@
     {/each}
   </div>
 {/if}
+</Layout>
 
 <style>
   .status-strip {
