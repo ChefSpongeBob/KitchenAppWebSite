@@ -37,6 +37,13 @@ export async function ensureUserPreferencesSchema(db: D1) {
       CREATE TABLE IF NOT EXISTS user_preferences (
         user_id TEXT PRIMARY KEY,
         email_updates INTEGER NOT NULL DEFAULT 1,
+        sms_updates INTEGER NOT NULL DEFAULT 0,
+        dark_mode INTEGER NOT NULL DEFAULT 0,
+        language TEXT NOT NULL DEFAULT 'en',
+        welcome_tour_completed_at INTEGER,
+        welcome_tour_variant TEXT,
+        user_home_tour_completed_at INTEGER,
+        admin_tour_completed_at INTEGER,
         updated_at INTEGER NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
@@ -44,6 +51,9 @@ export async function ensureUserPreferencesSchema(db: D1) {
     )
     .run();
 
+  await ensureOptionalColumn(db, 'user_preferences', 'sms_updates', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureOptionalColumn(db, 'user_preferences', 'dark_mode', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureOptionalColumn(db, 'user_preferences', 'language', "TEXT NOT NULL DEFAULT 'en'");
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_completed_at', 'INTEGER');
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_variant', 'TEXT');
   await ensureOptionalColumn(db, 'user_preferences', 'user_home_tour_completed_at', 'INTEGER');

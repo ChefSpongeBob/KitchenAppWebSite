@@ -21,7 +21,21 @@ const productionColumnAssumptions = new Map<string, string[]>([
       'updated_at'
     ]
   ],
-  ['user_preferences', ['user_id', 'email_updates', 'sms_updates', 'dark_mode', 'language', 'updated_at']]
+  [
+    'user_preferences',
+    [
+      'user_id',
+      'email_updates',
+      'sms_updates',
+      'dark_mode',
+      'language',
+      'welcome_tour_completed_at',
+      'welcome_tour_variant',
+      'user_home_tour_completed_at',
+      'admin_tour_completed_at',
+      'updated_at'
+    ]
+  ]
 ]);
 
 function cacheKey(tableName: string) {

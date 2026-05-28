@@ -19,6 +19,7 @@ import {
 import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { validateNewPassword } from '$lib/server/passwordReset';
 import { checkRateLimit, writeAuditLog } from '$lib/server/security';
+import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
@@ -92,19 +93,6 @@ async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
 
 async function hasRoleColumn(db: App.Platform['env']['DB']) {
 	return hasColumn(db, 'users', 'role');
-}
-
-async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
-	if (!dev) return;
-
-	await db.prepare(`
-		CREATE TABLE IF NOT EXISTS user_preferences (
-			user_id TEXT PRIMARY KEY,
-			email_updates INTEGER NOT NULL DEFAULT 1,
-			updated_at INTEGER NOT NULL,
-			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-		)
-	`).run();
 }
 
 async function ensureUserInvitesTable(db: App.Platform['env']['DB']) {
@@ -596,13 +584,16 @@ export const actions: Actions = {
 				}
 			}
 
-			await ensureUserPreferencesTable(db);
+			await ensureUserPreferencesSchema(db);
 			await ensureEmployeeProfilesTable(db);
 			await db
 				.prepare(
 					`
-			INSERT OR REPLACE INTO user_preferences (user_id, email_updates, updated_at)
-			VALUES (?, ?, ?)
+			INSERT INTO user_preferences (user_id, email_updates, sms_updates, dark_mode, language, updated_at)
+			VALUES (?, ?, 0, 0, 'en', ?)
+			ON CONFLICT(user_id) DO UPDATE SET
+				email_updates = excluded.email_updates,
+				updated_at = excluded.updated_at
 		`
 				)
 				.bind(userId, wantsEmailUpdates ? 1 : 0, now)

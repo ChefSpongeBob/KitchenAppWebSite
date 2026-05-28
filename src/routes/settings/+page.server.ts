@@ -1,7 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
-import { dev } from '$app/environment';
 import { fail, redirect } from '@sveltejs/kit';
-import { getTableColumns, hasTable } from '$lib/server/dbSchema';
+import { getTableColumns } from '$lib/server/dbSchema';
 import {
   ensureEmployeeProfileEditRequestsTable,
   ensureEmployeeProfilesTable,
@@ -24,56 +23,16 @@ import {
   revokeSessionById,
   writeAuditLog
 } from '$lib/server/security';
-
-let userPreferencesSchemaEnsured = false;
-
-async function ensureUserPreferencesTable(db: App.Platform['env']['DB']) {
-  if (!dev) {
-    userPreferencesSchemaEnsured = true;
-    return;
-  }
-
-  if (userPreferencesSchemaEnsured) return;
-  try {
-    await db
-      .prepare(
-        `
-        CREATE TABLE IF NOT EXISTS user_preferences (
-          user_id TEXT PRIMARY KEY,
-          email_updates INTEGER NOT NULL DEFAULT 1,
-          sms_updates INTEGER NOT NULL DEFAULT 0,
-          dark_mode INTEGER NOT NULL DEFAULT 0,
-          language TEXT NOT NULL DEFAULT 'en',
-          updated_at INTEGER NOT NULL,
-          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-      `
-      )
-      .run();
-    userPreferencesSchemaEnsured = true;
-  } catch (error) {
-    console.error('Failed to ensure user_preferences table:', error);
-  }
-}
+import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 
 async function getUsersColumns(db: App.Platform['env']['DB']) {
   return getTableColumns(db, 'users');
 }
 
-async function ensureUserPreferenceColumns(db: App.Platform['env']['DB']) {
-  if (!dev) return;
-
-  if (!(await hasTable(db, 'user_preferences'))) return;
-  const columns = await getTableColumns(db, 'user_preferences');
-  if (!columns.has('sms_updates')) {
-    await db.prepare(`ALTER TABLE user_preferences ADD COLUMN sms_updates INTEGER NOT NULL DEFAULT 0`).run();
-  }
-  if (!columns.has('dark_mode')) {
-    await db.prepare(`ALTER TABLE user_preferences ADD COLUMN dark_mode INTEGER NOT NULL DEFAULT 0`).run();
-  }
-  if (!columns.has('language')) {
-    await db.prepare(`ALTER TABLE user_preferences ADD COLUMN language TEXT NOT NULL DEFAULT 'en'`).run();
-  }
+function resolveActiveTab(requestedTab: string | null, shouldShowOnboarding: boolean) {
+  if (requestedTab === 'personal' || requestedTab === 'contact') return 'profile';
+  if (['availability', 'profile', 'onboarding', 'app'].includes(String(requestedTab))) return requestedTab;
+  return shouldShowOnboarding ? 'onboarding' : 'profile';
 }
 
 function resolveSessionToken(cookies: Parameters<PageServerLoad>[0]['cookies']) {
@@ -88,8 +47,7 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
   const businessId = locals.businessId;
   if (!businessId) throw redirect(303, '/login');
 
-  await ensureUserPreferencesTable(db);
-  await ensureUserPreferenceColumns(db);
+  await ensureUserPreferencesSchema(db);
   await ensureEmployeeProfilesTable(db);
   await ensureEmployeeProfileEditRequestsTable(db);
 
@@ -148,12 +106,10 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
   ]);
 
   return {
-    activeTab:
-      ['availability', 'personal', 'contact', 'onboarding', 'app'].includes(String(url.searchParams.get('tab')))
-        ? String(url.searchParams.get('tab'))
-        : onboarding.package && onboarding.package.status !== 'approved'
-          ? 'onboarding'
-          : 'personal',
+    activeTab: resolveActiveTab(
+      url.searchParams.get('tab'),
+      Boolean(onboarding.package && onboarding.package.status !== 'approved')
+    ),
     user: {
       id: user.id,
       username: user.display_name ?? '',
@@ -443,8 +399,7 @@ export const actions: Actions = {
     const db = locals.DB;
     if (!db) throw redirect(303, '/login');
 
-    await ensureUserPreferencesTable(db);
-    await ensureUserPreferenceColumns(db);
+    await ensureUserPreferencesSchema(db);
 
     const formData = await request.formData();
     const emailUpdates = String(formData.get('email_updates') ?? '0') === '1';
