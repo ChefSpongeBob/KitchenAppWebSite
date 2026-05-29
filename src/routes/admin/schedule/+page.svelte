@@ -3,7 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
   import ScheduleBuilderCell from '$lib/components/ui/ScheduleBuilderCell.svelte';
-  import { applyAction, enhance } from '$app/forms';
+  import { applyAction, deserialize, enhance } from '$app/forms';
   import { invalidate } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import {
@@ -15,6 +15,7 @@
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
+  import { onDestroy } from 'svelte';
 
   type UserOption = {
     id: string;
@@ -181,6 +182,10 @@
   let gridRenderVersion = 0;
   let weekPayload = '';
   let teamPayload = '';
+  let autosaveTimer: number | null = null;
+  let autosaveState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+  let autosaveError = '';
+  let autosaveRequestId = 0;
   let laborTargetsPayload = '';
   let laborTargets = data.laborTargets.map((target) => ({ ...target }));
   let openShiftDate = data.weekStart;
@@ -488,6 +493,7 @@
 
   function markDirty() {
     hasUnsavedChanges = true;
+    queueDraftAutosave();
   }
 
   function bumpGridRender() {
@@ -502,6 +508,61 @@
   function preparePublishPayload() {
     prepareWeekPayload();
     warnBeforePublish();
+  }
+
+  function buildDraftFormData() {
+    prepareWeekPayload();
+    const formData = new FormData();
+    formData.set('week_start', data.weekStart);
+    formData.set('payload', weekPayload);
+    formData.set('team_payload', teamPayload);
+    return formData;
+  }
+
+  function queueDraftAutosave() {
+    if (typeof window === 'undefined') return;
+    autosaveState = 'idle';
+    autosaveError = '';
+    if (autosaveTimer) window.clearTimeout(autosaveTimer);
+    autosaveTimer = window.setTimeout(() => {
+      autosaveTimer = null;
+      void autosaveDraft();
+    }, 850);
+  }
+
+  async function autosaveDraft() {
+    const requestId = ++autosaveRequestId;
+    autosaveState = 'saving';
+    autosaveError = '';
+
+    try {
+      const response = await fetch('?/save_week', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'x-sveltekit-action': 'true'
+        },
+        body: buildDraftFormData()
+      });
+      const result = deserialize(await response.text());
+      if (requestId !== autosaveRequestId) return;
+
+      if (result.type === 'success') {
+        hasUnsavedChanges = false;
+        autosaveState = 'saved';
+        return;
+      }
+
+      autosaveState = 'error';
+      autosaveError =
+        result.type === 'failure'
+          ? String(result.data?.error ?? 'Autosave failed.')
+          : 'Autosave failed.';
+    } catch {
+      if (requestId !== autosaveRequestId) return;
+      autosaveState = 'error';
+      autosaveError = 'Autosave failed.';
+    }
   }
 
   function prepareLaborTargets() {
@@ -1046,6 +1107,10 @@
     editorDraft = null;
     isShiftEditorOpen = false;
   }
+
+  onDestroy(() => {
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+  });
 </script>
 
 <Layout padded={false}>
@@ -1431,8 +1496,8 @@
 
     <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell" on:submit={prepareWeekPayload}>
       <input type="hidden" name="week_start" value={data.weekStart} />
-      <input type="hidden" name="payload" value={serializeWeekPayload()} />
-      <input type="hidden" name="team_payload" value={JSON.stringify(employeeRows.map((row) => row.userId))} />
+      <input type="hidden" name="payload" value={weekPayload} />
+      <input type="hidden" name="team_payload" value={teamPayload} />
 
         <div class="planner-head">
           <div>
@@ -1444,6 +1509,13 @@
                 ? `Tracked Hours: ${formatHours(totalScheduledHours)}`
                 : `${selectedSection} Hours: ${formatHours(visibleScheduledHours)}`}
             </span>
+            {#if autosaveState === 'saving'}
+              <span class="autosave-state">Saving draft...</span>
+            {:else if autosaveState === 'saved'}
+              <span class="autosave-state">Draft saved</span>
+            {:else if autosaveState === 'error'}
+              <span class="autosave-state autosave-state-error">{autosaveError}</span>
+            {/if}
             <div class="hours-breakdown">
               {#each availableDepartments as department}
                 <span class="hours-chip">
@@ -1787,6 +1859,7 @@
   .schedule-shell {
     display: grid;
     gap: 1.1rem;
+    padding-bottom: clamp(2rem, 4vh, 3rem);
   }
 
   .week-actions,
@@ -2093,6 +2166,15 @@
     color: var(--color-text-muted);
     font-size: 0.82rem;
     padding-top: 0.3rem;
+  }
+
+  .autosave-state {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .autosave-state-error {
+    color: color-mix(in srgb, var(--color-danger, #b42318) 78%, var(--color-text));
   }
 
   .planner-hours-shell {
@@ -2584,9 +2666,11 @@
   }
 
   .duplicate-day-btn-active {
-    border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
-    background: color-mix(in srgb, var(--color-surface-alt) 74%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 58%, var(--color-border));
+    background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface-alt));
     color: var(--color-text);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent);
+    font-weight: var(--weight-semibold);
   }
 
   .shift-warning {

@@ -33,9 +33,9 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Daily highlights saved.', 'success');
+        pushToast('Daily specials saved.', 'success');
       } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'Those daily highlights could not be saved.', 'error');
+        pushToast(result.data?.error ?? 'Those daily specials could not be saved.', 'error');
       }
     };
   };
@@ -43,7 +43,7 @@
 
 <Layout>
   <PageHeader
-    title="Daily Highlights"
+    title="Daily Specials"
   />
 
   <section class="highlight-list">
@@ -55,7 +55,7 @@
             <small>{formatUpdatedAt(special.updatedAt)}</small>
           </div>
           <span class="summary-preview">
-              {special.content ? special.content : 'No highlight posted.'}
+              {special.content ? special.content : 'No special posted.'}
           </span>
         </summary>
         <div class="special-copy">
@@ -64,7 +64,7 @@
               <p>{line}</p>
             {/each}
           {:else}
-            <p class="muted">No highlight posted.</p>
+            <p class="muted">No special posted.</p>
           {/if}
         </div>
       </details>
@@ -86,7 +86,7 @@
         {/each}
       </section>
       <div class="actions">
-        <button type="submit">Save Highlights</button>
+        <button type="submit">Save Specials</button>
       </div>
     </form>
   {/if}

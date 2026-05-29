@@ -104,7 +104,10 @@
     {
       label: "Systems",
       icon: "videocam",
-      items: [{ label: "Camera & Sensors", route: "/admin/camera", icon: "videocam" }]
+      items: [
+        { label: "Camera & Sensors", route: "/admin/camera", icon: "videocam" },
+        { label: "Vendors", route: "/admin/vendors", icon: "local_shipping", featureKey: "vendors" }
+      ]
     }
   ];
 
@@ -223,6 +226,8 @@
     "/whiteboard",
     "/temper",
     "/conversions",
+    "/vendors",
+    "/reports",
     "/menu",
     "/settings",
     "/specials",
@@ -247,7 +252,9 @@
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
   $: activeFeatureModes = data.featureModes ?? defaultAppFeatureModes;
   $: filteredPrimaryNav = primaryNav.filter(
-    (item) => !item.featureKey || activeFeatureModes[item.featureKey] === "all"
+    (item) =>
+      (!item.adminOnly || isAdminAccount) &&
+      (!item.featureKey || canRoleAccessFeature(activeFeatureModes[item.featureKey], data.user?.role))
   );
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
@@ -1000,6 +1007,31 @@
 
   .sidebar::-webkit-scrollbar {
     display: none;
+  }
+
+  @media (min-width: 761px) {
+    .sidebar {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--color-text) 28%, transparent) transparent;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      display: block;
+      width: 6px;
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--color-text) 24%, transparent);
+      border-radius: 999px;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb:hover {
+      background: color-mix(in srgb, var(--color-text) 38%, transparent);
+    }
   }
 
   .sidebar.open {

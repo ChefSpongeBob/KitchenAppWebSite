@@ -186,6 +186,7 @@
   .schedule-shell {
     display: grid;
     gap: 1rem;
+    padding-bottom: clamp(2rem, 4vh, 3rem);
   }
 
   .subnav {

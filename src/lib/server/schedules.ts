@@ -9,6 +9,7 @@ import {
   type ScheduleDepartment
 } from '$lib/assets/schedule';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { recordSchedulePublishSnapshot } from '$lib/server/history';
 import { ensureBusinessSchema } from '$lib/server/business';
 
 type DB = App.Platform['env']['DB'];
@@ -3459,6 +3460,8 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
     )
     .bind(now, now, locals.userId, week.week.id, businessId)
     .run();
+
+  await recordSchedulePublishSnapshot(db, businessId, week.week.id, weekStart, locals.userId, now);
 
   const warningSummary = summarizePublishIssues('Published with warning: ', publishValidation.warnings);
   return {

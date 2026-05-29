@@ -254,7 +254,7 @@
             {/if}
 
             {#if isAdminRole(data.employee.role)}
-              <span class="access-state success-action">Highlights Access</span>
+              <span class="access-state success-action">Specials Access</span>
               <span class="access-state success-action">Announcements Access</span>
             {:else}
               <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
@@ -263,7 +263,7 @@
                   type="submit"
                   class:warn-action={data.employee.can_manage_specials === 1}
                 >
-                  {data.employee.can_manage_specials === 1 ? 'Restrict Highlights' : 'Grant Highlights'}
+                  {data.employee.can_manage_specials === 1 ? 'Restrict Specials' : 'Grant Specials'}
                 </button>
               </form>
 

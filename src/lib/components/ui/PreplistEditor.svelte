@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ItemAttachmentPreview from '$lib/components/ui/ItemAttachmentPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -14,6 +15,16 @@
     amount_text?: string | null;
     par_count: number;
     is_checked: number;
+    attachments?: Array<{
+      id: string;
+      targetType: 'recipe' | 'document';
+      title: string;
+      category: string;
+      content?: string;
+      fileUrl?: string;
+      ingredients?: string;
+      instructions?: string;
+    }>;
   };
 
   export let title = 'Prep List';
@@ -29,6 +40,7 @@
 
   let amountDrafts: Record<string, string> = {};
   let syncedDraftKey = '';
+  let openAttachmentItems = new Set<string>();
 
   $: {
     const nextKey = items
@@ -55,6 +67,16 @@
       ...amountDrafts,
       [id]: value
     };
+  }
+
+  function toggleAttachments(id: string) {
+    const next = new Set(openAttachmentItems);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    openAttachmentItems = next;
   }
 
   const withPrepFeedback =
@@ -111,7 +133,15 @@
             </button>
             <input type="hidden" name={`is_checked_${item.id}`} value={isDone(item) ? 0 : 1} />
 
-            <div class="item-cell">{item.content}</div>
+            <div class="item-cell">
+              {#if item.attachments?.length}
+                <button type="button" class="item-link" on:click={() => toggleAttachments(item.id)}>
+                  {item.content}
+                </button>
+              {:else}
+                {item.content}
+              {/if}
+            </div>
 
             <div class="number-form">
               <span class="field-tag">{valueLabel.toUpperCase()}:</span>
@@ -137,6 +167,10 @@
               <span class="field-tag">PAR:</span>
               <span>{item.par_count}</span>
             </div>
+
+            {#if openAttachmentItems.has(item.id)}
+              <ItemAttachmentPreview attachments={item.attachments ?? []} />
+            {/if}
           </div>
         {/each}
         <div class="actions-row">
@@ -270,6 +304,19 @@
     font-size: 0.95rem;
     color: var(--color-text);
     font-weight: var(--weight-medium);
+  }
+
+  .item-link {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    font: inherit;
+    font-weight: var(--weight-semibold);
+    text-align: left;
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .number-input {

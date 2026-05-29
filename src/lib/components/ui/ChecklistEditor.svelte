@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ItemAttachmentPreview from '$lib/components/ui/ItemAttachmentPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -10,6 +11,16 @@
     id: string;
     content: string;
     is_checked: number;
+    attachments?: Array<{
+      id: string;
+      targetType: 'recipe' | 'document';
+      title: string;
+      category: string;
+      content?: string;
+      fileUrl?: string;
+      ingredients?: string;
+      instructions?: string;
+    }>;
   };
 
   export let title = 'Checklist';
@@ -20,6 +31,17 @@
   export let infoCardSections: Array<{ title: string; lines: string[] }> = [];
 
   const isDone = (item: ChecklistItem) => Number(item.is_checked) === 1;
+  let openAttachmentItems = new Set<string>();
+
+  function toggleAttachments(id: string) {
+    const next = new Set(openAttachmentItems);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    openAttachmentItems = next;
+  }
 
   const withChecklistFeedback =
     (successMessage: string, errorMessage: string): SubmitFunction =>
@@ -68,9 +90,19 @@
             </form>
 
             <div class="item-cell">
-              <strong>{item.content}</strong>
+              {#if item.attachments?.length}
+                <button type="button" class="item-link" on:click={() => toggleAttachments(item.id)}>
+                  {item.content}
+                </button>
+              {:else}
+                <strong>{item.content}</strong>
+              {/if}
               <small>{#if isDone(item)}Complete{:else}Incomplete{/if}</small>
             </div>
+
+            {#if openAttachmentItems.has(item.id)}
+              <ItemAttachmentPreview attachments={item.attachments ?? []} />
+            {/if}
           </div>
         {/each}
       </div>
@@ -190,6 +222,20 @@
     font-size: 0.98rem;
     color: var(--color-text);
     font-weight: var(--weight-medium);
+  }
+
+  .item-link {
+    width: fit-content;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.98rem;
+    font-weight: var(--weight-semibold);
+    text-align: left;
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .item-cell small {

@@ -1,4 +1,4 @@
-﻿import { dev } from '$app/environment';
+import { dev } from '$app/environment';
 import { fail, redirect } from '@sveltejs/kit';
 import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import {
@@ -12,7 +12,6 @@ import {
   getEmployeeSpotlightId,
   loadEmployeeSpotlight
 } from '$lib/server/employeeSpotlight';
-import { normalizeRecipeCategory } from '$lib/assets/recipeCategories';
 import {
   ensureScheduleSchema,
   loadScheduleDepartmentApprovalsByUser,
@@ -40,6 +39,13 @@ import {
   sensitiveConfigurationFailure,
   writeSensitiveRecordAudit
 } from '$lib/server/sensitive';
+import {
+  deleteAttachmentsForSourceItem,
+  deleteAttachmentsForSourceItems,
+  deleteAttachmentsForTarget,
+  loadItemAttachmentsForItems,
+  type ItemAttachment
+} from '$lib/server/itemAttachments';
 
 type D1 = App.Platform['env']['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -74,6 +80,7 @@ export type AdminSectionItem = {
   par_count: number;
   is_checked: number;
   sort_order: number;
+  attachments?: ItemAttachment[];
 };
 
 export type AdminSectionGroup = {
@@ -92,6 +99,7 @@ export type AdminChecklistItem = {
   par_count: number;
   is_checked: number;
   sort_order: number;
+  attachments?: ItemAttachment[];
 };
 
 export type AdminChecklistGroup = {
@@ -848,6 +856,15 @@ export async function loadAdminSections(db: D1, businessId: string) {
     }
   }
 
+  const itemIds = Array.from(grouped.values()).flatMap((section) => section.items.map((item) => item.id));
+  const attachmentsByItem = await loadItemAttachmentsForItems(db, businessId, 'list_item', itemIds);
+  for (const section of grouped.values()) {
+    section.items = section.items.map((item) => ({
+      ...item,
+      attachments: attachmentsByItem.get(item.id) ?? []
+    }));
+  }
+
   const sections = Array.from(grouped.values());
   return {
     preplists: sections.filter((section) => section.domain === 'preplists'),
@@ -913,6 +930,15 @@ export async function loadAdminChecklists(db: D1, businessId: string) {
     }
   }
 
+  const itemIds = Array.from(grouped.values()).flatMap((section) => section.items.map((item) => item.id));
+  const attachmentsByItem = await loadItemAttachmentsForItems(db, businessId, 'checklist_item', itemIds);
+  for (const section of grouped.values()) {
+    section.items = section.items.map((item) => ({
+      ...item,
+      attachments: attachmentsByItem.get(item.id) ?? []
+    }));
+  }
+
   return Array.from(grouped.values());
 }
 
@@ -937,8 +963,16 @@ export async function loadAdminCreatorCatalog(db: D1, businessId: string): Promi
   const preplists = new Set<string>();
   const inventory = new Set<string>();
   const orders = new Set<string>();
-  const recipes = new Set<string>();
-  const documents = new Set<string>();
+  const recipes = new Map<string, string>();
+  const documents = new Map<string, string>();
+  const addRecipeCategory = (value: string) => {
+    const category = normalizeCategoryName(value);
+    if (category) recipes.set(category.toLowerCase(), category);
+  };
+  const addDocumentCategory = (value: string) => {
+    const category = normalizeCategoryName(value);
+    if (category) documents.set(category.toLowerCase(), category);
+  };
 
   try {
     const listRows = await db
@@ -979,8 +1013,7 @@ export async function loadAdminCreatorCatalog(db: D1, businessId: string): Promi
       .bind(businessId)
       .all<{ category: string }>();
     for (const row of recipeRows.results ?? []) {
-      const category = String(row.category ?? '').trim();
-      if (category) recipes.add(category);
+      addRecipeCategory(String(row.category ?? ''));
     }
   } catch {
     // Leave empty when recipe table is unavailable.
@@ -1003,8 +1036,8 @@ export async function loadAdminCreatorCatalog(db: D1, businessId: string): Promi
     for (const row of registryRows.results ?? []) {
       const category = String(row.category ?? '').trim();
       if (!category) continue;
-      if (row.editor_type === 'recipe') recipes.add(category);
-      if (row.editor_type === 'document') documents.add(category);
+      if (row.editor_type === 'recipe') addRecipeCategory(category);
+      if (row.editor_type === 'document') addDocumentCategory(category);
     }
   } catch {
     // Leave empty when registry table is unavailable.
@@ -1014,8 +1047,8 @@ export async function loadAdminCreatorCatalog(db: D1, businessId: string): Promi
     preplists: Array.from(preplists.values()),
     inventory: Array.from(inventory.values()),
     orders: Array.from(orders.values()),
-    recipes: Array.from(recipes.values()),
-    documents: Array.from(documents.values())
+    recipes: Array.from(recipes.values()).sort((a, b) => a.localeCompare(b)),
+    documents: Array.from(documents.values()).sort((a, b) => a.localeCompare(b))
   };
 }
 
@@ -1066,7 +1099,7 @@ export async function loadAdminRecipeCategories(db: D1, businessId: string) {
   return Array.from(
     new Set(
       (rows.results ?? [])
-        .map((row) => String(row.category ?? '').trim().toLowerCase())
+        .map((row) => normalizeCategoryName(String(row.category ?? '')))
         .filter(Boolean)
     )
   );
@@ -3313,6 +3346,16 @@ export async function deleteListSection(request: Request, locals: App.Locals) {
   const sectionId = String(formData.get('section_id') ?? '').trim();
   if (!sectionId) return fail(400, { error: 'Missing section id.' });
 
+  const items = await db
+    .prepare(`SELECT id FROM list_items WHERE section_id = ? AND business_id = ?`)
+    .bind(sectionId, businessId)
+    .all<{ id: string }>();
+  await deleteAttachmentsForSourceItems(
+    db,
+    businessId,
+    'list_item',
+    (items.results ?? []).map((item) => item.id)
+  );
   await db.prepare(`DELETE FROM list_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
   await db.prepare(`DELETE FROM list_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId).run();
 
@@ -3494,6 +3537,16 @@ export async function deleteChecklistCategory(request: Request, locals: App.Loca
   if (sectionIds.length === 0) return fail(404, { error: 'Checklist category not found.' });
 
   for (const sectionId of sectionIds) {
+    const items = await db
+      .prepare(`SELECT id FROM checklist_items WHERE section_id = ? AND business_id = ?`)
+      .bind(sectionId, businessId)
+      .all<{ id: string }>();
+    await deleteAttachmentsForSourceItems(
+      db,
+      businessId,
+      'checklist_item',
+      (items.results ?? []).map((item) => item.id)
+    );
     await db.prepare(`DELETE FROM checklist_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
     await db.prepare(`DELETE FROM checklist_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId).run();
   }
@@ -3615,6 +3668,7 @@ export async function deleteListItem(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing list item id.' });
 
+  await deleteAttachmentsForSourceItem(db, businessId, 'list_item', id);
   await db.prepare(`DELETE FROM list_items WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
@@ -3700,6 +3754,7 @@ export async function deleteChecklistItem(request: Request, locals: App.Locals) 
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing checklist item id.' });
 
+  await deleteAttachmentsForSourceItem(db, businessId, 'checklist_item', id);
   await db.prepare(`DELETE FROM checklist_items WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
@@ -3713,7 +3768,7 @@ export async function createRecipe(request: Request, locals: App.Locals) {
 
   const f = await request.formData();
   const title = String(f.get('title') ?? '').trim();
-  const category = normalizeRecipeCategory(String(f.get('category') ?? ''));
+  const category = normalizeCategoryName(String(f.get('category') ?? ''));
   const ingredients = String(f.get('ingredients') ?? '').trim();
   const materialsNeeded = String(f.get('materials_needed') ?? f.get('procedure') ?? '').trim();
   const instruction = String(f.get('instruction') ?? '').trim();
@@ -3726,6 +3781,7 @@ export async function createRecipe(request: Request, locals: App.Locals) {
   if (!title || !category || !ingredients || !instructions) {
     return fail(400, { error: 'All recipe fields are required.' });
   }
+  await ensureCreatorCategoryRegistry(db);
   await db
     .prepare(
       `
@@ -3734,6 +3790,15 @@ export async function createRecipe(request: Request, locals: App.Locals) {
       `
     )
     .bind(title, category, ingredients, instructions, businessId)
+    .run();
+  await db
+    .prepare(
+      `
+      INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
+      VALUES (?, ?, 'recipe', ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), businessId, category, Math.floor(Date.now() / 1000))
     .run();
 
   return { success: true };
@@ -3749,7 +3814,7 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
   const f = await request.formData();
   const id = Number(f.get('id'));
   const title = String(f.get('title') ?? '').trim();
-  const category = normalizeRecipeCategory(String(f.get('category') ?? ''));
+  const category = normalizeCategoryName(String(f.get('category') ?? ''));
   const ingredients = String(f.get('ingredients') ?? '').trim();
   const materialsNeeded = String(f.get('materials_needed') ?? f.get('procedure') ?? '').trim();
   const instruction = String(f.get('instruction') ?? '').trim();
@@ -3764,6 +3829,7 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
   if (!title || !category || !ingredients || !instructions) {
     return fail(400, { error: 'All recipe fields are required.' });
   }
+  await ensureCreatorCategoryRegistry(db);
 
   await db
     .prepare(
@@ -3774,6 +3840,15 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
       `
     )
     .bind(title, category, ingredients, instructions, id, businessId)
+    .run();
+  await db
+    .prepare(
+      `
+      INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
+      VALUES (?, ?, 'recipe', ?, ?)
+      `
+    )
+    .bind(crypto.randomUUID(), businessId, category, Math.floor(Date.now() / 1000))
     .run();
 
   return { success: true };
@@ -3790,6 +3865,7 @@ export async function deleteRecipe(request: Request, locals: App.Locals) {
   const id = Number(f.get('id'));
   if (!Number.isFinite(id)) return fail(400, { error: 'Invalid recipe id.' });
 
+  await deleteAttachmentsForTarget(db, businessId, 'recipe', String(id));
   await db.prepare(`DELETE FROM recipes WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
 }
@@ -4080,8 +4156,12 @@ export async function createDocument(request: Request, locals: App.Locals) {
       return fail(503, { error: 'Document media bucket is not configured. Use File URL for now.' });
     }
 
-    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
-    fileUrl = uploaded.url;
+    try {
+      const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
+      fileUrl = uploaded.url;
+    } catch {
+      return fail(503, { error: 'File upload storage is unavailable locally.' });
+    }
   }
 
   if (!fileUrl) {
@@ -4145,12 +4225,16 @@ export async function updateDocument(request: Request, locals: App.Locals) {
       return fail(503, { error: 'Document media bucket is not configured. Use File URL for now.' });
     }
 
-    const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
-    const previousKey = documentMediaKeyFromUrl(existingFileUrl);
-    if (previousKey && previousKey !== uploaded.key) {
-      await locals.MEDIA_BUCKET.delete(previousKey);
+    try {
+      const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
+      const previousKey = documentMediaKeyFromUrl(existingFileUrl);
+      if (previousKey && previousKey !== uploaded.key) {
+        await locals.MEDIA_BUCKET.delete(previousKey);
+      }
+      fileUrl = uploaded.url;
+    } catch {
+      return fail(503, { error: 'File upload storage is unavailable locally.' });
     }
-    fileUrl = uploaded.url;
   }
 
   await db
@@ -4183,6 +4267,7 @@ export async function deleteDocument(request: Request, locals: App.Locals) {
     .bind(id, businessId)
     .first<{ file_url: string | null }>();
 
+  await deleteAttachmentsForTarget(db, businessId, 'document', id);
   await db.prepare(`DELETE FROM documents WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
 
   const mediaKey = documentMediaKeyFromUrl(existing?.file_url ?? '');
@@ -5408,4 +5493,3 @@ export async function revokeEmployeeSessions(request: Request, locals: App.Local
 
   return { success: true, message: 'Active sessions revoked.' };
 }
-

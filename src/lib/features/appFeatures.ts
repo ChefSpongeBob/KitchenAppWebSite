@@ -12,6 +12,7 @@ export type AppFeatureKey =
   | 'recipes'
   | 'documents'
   | 'menus'
+  | 'vendors'
   | 'conversions';
 
 export type AppFeatureDefinition = {
@@ -70,8 +71,8 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
   },
   {
     key: 'daily_specials',
-    label: 'Daily Highlights',
-    description: 'Daily highlights content.',
+    label: 'Daily Specials',
+    description: 'Daily specials content.',
     userRoutePrefixes: ['/specials'],
     adminRoutePrefixes: []
   },
@@ -102,6 +103,13 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     description: 'Menu document page and menu viewer.',
     userRoutePrefixes: ['/menu'],
     adminRoutePrefixes: ['/admin/menus']
+  },
+  {
+    key: 'vendors',
+    label: 'Vendors',
+    description: 'Admin vendor contacts and website links.',
+    userRoutePrefixes: [],
+    adminRoutePrefixes: ['/vendors', '/admin/vendors']
   },
   {
     key: 'conversions',

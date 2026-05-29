@@ -1,16 +1,20 @@
 import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
+import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
+import { recordListItemActivity } from '$lib/server/history';
 
 type DB = App.Platform['env']['DB'];
 type ChecklistLocals = {
   DB?: DB;
   businessId?: string | null;
+  userId?: string | null;
 };
 
 type ChecklistItem = {
   id: string;
   content: string;
   is_checked: number;
+  attachments?: ItemAttachment[];
 };
 
 type DefaultItem = {
@@ -147,6 +151,14 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       .bind(section.id, businessId)
       .all<ChecklistItem>();
 
+    const rows = items.results ?? [];
+    const attachmentsByItem = await loadItemAttachmentsForItems(
+      db,
+      businessId,
+      'checklist_item',
+      rows.map((item) => item.id)
+    );
+
     return {
       title: pageTitle,
       subtitle: options.subtitle,
@@ -154,7 +166,10 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       infoCardTitle: options.infoCardTitle ?? '',
       infoCardIntro: options.infoCardIntro ?? '',
       infoCardSections: options.infoCardSections ?? [],
-      items: items.results ?? []
+      items: rows.map((item) => ({
+        ...item,
+        attachments: attachmentsByItem.get(item.id) ?? []
+      }))
     };
   };
 
@@ -187,6 +202,17 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         )
         .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
         .run();
+
+      await recordListItemActivity(
+        db,
+        businessId,
+        'checklists',
+        section.id,
+        id,
+        isChecked === 1 ? 'completed' : 'reopened',
+        locals.userId,
+        String(isChecked)
+      );
 
       return { success: true };
     },

@@ -18,6 +18,16 @@
   type ListDomain = 'preplists' | 'checklists' | 'inventory' | 'orders';
   type EditorType = 'category' | 'list' | 'recipe' | 'document' | 'menu';
 
+  type ItemAttachment = {
+    id: string;
+    sourceType: 'list_item' | 'checklist_item';
+    sourceItemId: string;
+    targetType: 'recipe' | 'document';
+    targetId: string;
+    title: string;
+    category: string;
+  };
+
   type ListItem = {
     id: string;
     content: string;
@@ -26,6 +36,7 @@
     par_count: number;
     is_checked: number;
     sort_order: number;
+    attachments?: ItemAttachment[];
   };
 
   type ListSection = {
@@ -42,6 +53,7 @@
     content: string;
     is_checked: number;
     sort_order: number;
+    attachments?: ItemAttachment[];
   };
 
   type ChecklistSection = {
@@ -94,6 +106,8 @@
   let listDomain: ListDomain = data.initialListDomain;
   let feedbackMessage = '';
   let lastAppliedRouteSelection = '';
+  let attachmentDrafts: Record<string, { targetType: 'recipe' | 'document'; category: string; targetId: string }> = {};
+  let reverseAttachmentDrafts: Record<string, { domain: ListDomain; category: string; sourceRef: string }> = {};
 
   function normalizeKey(value: string) {
     return value.trim().toLowerCase();
@@ -127,6 +141,112 @@
   function documentsByCategory(category: string) {
     const key = normalizeKey(category);
     return data.documents.filter((document) => normalizeKey(document.category) === key && !isMenuDocument(document));
+  }
+
+  function attachmentTargetLabel(type: 'recipe' | 'document') {
+    return type === 'recipe' ? 'Recipe' : 'Doc';
+  }
+
+  function attachmentDraftKey(sourceType: 'list_item' | 'checklist_item', itemId: string) {
+    return `${sourceType}:${itemId}`;
+  }
+
+  function attachmentDraft(sourceType: 'list_item' | 'checklist_item', itemId: string) {
+    const key = attachmentDraftKey(sourceType, itemId);
+    return (
+      attachmentDrafts[key] ?? {
+        targetType: 'recipe',
+        category: data.creatorCatalog.recipes[0] ?? '',
+        targetId: ''
+      }
+    );
+  }
+
+  function updateAttachmentDraft(
+    sourceType: 'list_item' | 'checklist_item',
+    itemId: string,
+    patch: Partial<{ targetType: 'recipe' | 'document'; category: string; targetId: string }>
+  ) {
+    const key = attachmentDraftKey(sourceType, itemId);
+    const current = attachmentDraft(sourceType, itemId);
+    const nextType = patch.targetType ?? current.targetType;
+    const categoryOptions = nextType === 'recipe' ? data.creatorCatalog.recipes : documentCategories;
+    const nextCategory = patch.category ?? (patch.targetType ? categoryOptions[0] ?? '' : current.category);
+    attachmentDrafts = {
+      ...attachmentDrafts,
+      [key]: {
+        targetType: nextType,
+        category: nextCategory,
+        targetId: patch.targetId ?? ''
+      }
+    };
+  }
+
+  function attachmentCategoryOptions(sourceType: 'list_item' | 'checklist_item', itemId: string) {
+    const draft = attachmentDraft(sourceType, itemId);
+    return draft.targetType === 'recipe' ? data.creatorCatalog.recipes : documentCategories;
+  }
+
+  function attachmentTargetOptions(sourceType: 'list_item' | 'checklist_item', itemId: string) {
+    const draft = attachmentDraft(sourceType, itemId);
+    return draft.targetType === 'recipe'
+      ? recipesByCategory(draft.category).map((recipe) => ({ id: `recipe:${recipe.id}`, title: recipe.title }))
+      : documentsByCategory(draft.category).map((document) => ({ id: `document:${document.id}`, title: document.title }));
+  }
+
+  function reverseDraftKey(targetType: 'recipe' | 'document', targetId: number | string) {
+    return `${targetType}:${targetId}`;
+  }
+
+  function reverseAttachmentDraft(targetType: 'recipe' | 'document', targetId: number | string) {
+    const key = reverseDraftKey(targetType, targetId);
+    return (
+      reverseAttachmentDrafts[key] ?? {
+        domain: 'preplists',
+        category: filteredReverseCategoryOptions('preplists')[0]?.id ?? '',
+        sourceRef: ''
+      }
+    );
+  }
+
+  function filteredReverseCategoryOptions(domain: ListDomain) {
+    if (domain === 'checklists') return checklistCategories.map((category) => ({ id: category.id, title: category.title }));
+    return data.sections[domain].map((section) => ({ id: section.id, title: section.title }));
+  }
+
+  function updateReverseAttachmentDraft(
+    targetType: 'recipe' | 'document',
+    targetId: number | string,
+    patch: Partial<{ domain: ListDomain; category: string; sourceRef: string }>
+  ) {
+    const key = reverseDraftKey(targetType, targetId);
+    const current = reverseAttachmentDraft(targetType, targetId);
+    const nextDomain = patch.domain ?? current.domain;
+    const categoryOptions = filteredReverseCategoryOptions(nextDomain);
+    reverseAttachmentDrafts = {
+      ...reverseAttachmentDrafts,
+      [key]: {
+        domain: nextDomain,
+        category: patch.category ?? (patch.domain ? categoryOptions[0]?.id ?? '' : current.category),
+        sourceRef: patch.sourceRef ?? ''
+      }
+    };
+  }
+
+  function reverseItemOptions(targetType: 'recipe' | 'document', targetId: number | string) {
+    const draft = reverseAttachmentDraft(targetType, targetId);
+    if (draft.domain === 'checklists') {
+      const category = checklistCategories.find((entry) => entry.id === draft.category);
+      return (category?.sections ?? []).flatMap((section) =>
+        section.items.map((item) => ({
+          id: `checklist_item:${item.id}`,
+          title: `${checklistSectionLabel(section.slug)}: ${item.content}`
+        }))
+      );
+    }
+
+    const section = data.sections[draft.domain].find((entry) => entry.id === draft.category);
+    return (section?.items ?? []).map((item) => ({ id: `list_item:${item.id}`, title: item.content }));
   }
 
   function isMenuDocument(document: DocumentRow) {
@@ -301,6 +421,7 @@
                           {:else}
                             <div class="entity-items nested">
                               {#each section.items as item}
+                                {@const draft = attachmentDraft('checklist_item', item.id)}
                                 <div class="entity-item compact">
                                   <form method="POST" action="?/update_checklist_item" use:enhance={withFeedback} class="inline-form">
                                     <input type="hidden" name="id" value={item.id} />
@@ -311,6 +432,53 @@
                                     <input type="hidden" name="id" value={item.id} />
                                     <button type="submit" class="danger">Delete</button>
                                   </form>
+                                  <details class="attach-editor">
+                                    <summary>Attach Recipe/Doc</summary>
+                                    <form method="POST" action="?/create_item_attachment" use:enhance={withFeedback} class="attach-form">
+                                      <input type="hidden" name="source_type" value="checklist_item" />
+                                      <input type="hidden" name="source_item_id" value={item.id} />
+                                      <select
+                                        name="target_type"
+                                        aria-label="Attachment type"
+                                        on:change={(event) =>
+                                          updateAttachmentDraft('checklist_item', item.id, {
+                                            targetType: (event.currentTarget as HTMLSelectElement).value as 'recipe' | 'document'
+                                          })}
+                                      >
+                                        <option value="recipe" selected={draft.targetType === 'recipe'}>Recipe</option>
+                                        <option value="document" selected={draft.targetType === 'document'}>Doc</option>
+                                      </select>
+                                      <select
+                                        aria-label="Attachment category"
+                                        on:change={(event) =>
+                                          updateAttachmentDraft('checklist_item', item.id, {
+                                            category: (event.currentTarget as HTMLSelectElement).value
+                                          })}
+                                      >
+                                        {#each attachmentCategoryOptions('checklist_item', item.id) as category}
+                                          <option value={category} selected={draft.category === category}>{category}</option>
+                                        {/each}
+                                      </select>
+                                      <select name="target_ref" required>
+                                        <option value="">Choose item</option>
+                                        {#each attachmentTargetOptions('checklist_item', item.id) as target}
+                                          <option value={target.id} selected={draft.targetId === target.id}>{target.title}</option>
+                                        {/each}
+                                      </select>
+                                      <button type="submit">Save</button>
+                                    </form>
+                                    {#if item.attachments?.length}
+                                      <div class="attachment-list">
+                                        {#each item.attachments as attachment}
+                                          <form method="POST" action="?/delete_item_attachment" use:enhance={withFeedback} class="attachment-chip">
+                                            <input type="hidden" name="id" value={attachment.id} />
+                                            <span>{attachmentTargetLabel(attachment.targetType)}: {attachment.title}</span>
+                                            <button type="submit" class="text-danger" aria-label="Remove attachment">Remove</button>
+                                          </form>
+                                        {/each}
+                                      </div>
+                                    {/if}
+                                  </details>
                                 </div>
                               {/each}
                             </div>
@@ -369,6 +537,7 @@
                         <p class="empty">No items yet.</p>
                       {:else}
                         {#each section.items as item}
+                          {@const draft = attachmentDraft('list_item', item.id)}
                           <div class="entity-item">
                             <form method="POST" action="?/update_list_item" use:enhance={withFeedback} class="inline-form">
                               <input type="hidden" name="id" value={item.id} />
@@ -381,6 +550,53 @@
                               <input type="hidden" name="id" value={item.id} />
                               <button type="submit" class="danger">Delete</button>
                             </form>
+                            <details class="attach-editor">
+                              <summary>Attach Recipe/Doc</summary>
+                              <form method="POST" action="?/create_item_attachment" use:enhance={withFeedback} class="attach-form">
+                                <input type="hidden" name="source_type" value="list_item" />
+                                <input type="hidden" name="source_item_id" value={item.id} />
+                                      <select
+                                        name="target_type"
+                                        aria-label="Attachment type"
+                                        on:change={(event) =>
+                                          updateAttachmentDraft('list_item', item.id, {
+                                      targetType: (event.currentTarget as HTMLSelectElement).value as 'recipe' | 'document'
+                                    })}
+                                >
+                                  <option value="recipe" selected={draft.targetType === 'recipe'}>Recipe</option>
+                                  <option value="document" selected={draft.targetType === 'document'}>Doc</option>
+                                </select>
+                                <select
+                                  aria-label="Attachment category"
+                                  on:change={(event) =>
+                                    updateAttachmentDraft('list_item', item.id, {
+                                      category: (event.currentTarget as HTMLSelectElement).value
+                                    })}
+                                >
+                                  {#each attachmentCategoryOptions('list_item', item.id) as category}
+                                    <option value={category} selected={draft.category === category}>{category}</option>
+                                  {/each}
+                                </select>
+                                <select name="target_ref" required>
+                                  <option value="">Choose item</option>
+                                  {#each attachmentTargetOptions('list_item', item.id) as target}
+                                    <option value={target.id} selected={draft.targetId === target.id}>{target.title}</option>
+                                  {/each}
+                                </select>
+                                <button type="submit">Save</button>
+                              </form>
+                              {#if item.attachments?.length}
+                                <div class="attachment-list">
+                                  {#each item.attachments as attachment}
+                                    <form method="POST" action="?/delete_item_attachment" use:enhance={withFeedback} class="attachment-chip">
+                                      <input type="hidden" name="id" value={attachment.id} />
+                                      <span>{attachmentTargetLabel(attachment.targetType)}: {attachment.title}</span>
+                                      <button type="submit" class="text-danger" aria-label="Remove attachment">Remove</button>
+                                    </form>
+                                  {/each}
+                                </div>
+                              {/if}
+                            </details>
                           </div>
                         {/each}
                       {/if}
@@ -424,19 +640,23 @@
                       </form>
                     </div>
 
-                    <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
-                      <input name="category" value={category} required />
-                      <input name="title" placeholder="Recipe title" required />
-                      <textarea name="ingredients" rows="4" placeholder="Ingredients" required></textarea>
-                      <textarea name="instructions" rows="6" placeholder="Instructions" required></textarea>
-                      <button type="submit">Add Recipe</button>
-                    </form>
+                    <details class="add-editor">
+                      <summary>Add Recipe</summary>
+                      <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
+                        <input name="category" value={category} required />
+                        <input name="title" placeholder="Recipe title" required />
+                        <textarea name="ingredients" rows="4" placeholder="Ingredients" required></textarea>
+                        <textarea name="instructions" rows="6" placeholder="Instructions" required></textarea>
+                        <button type="submit">Save Recipe</button>
+                      </form>
+                    </details>
 
                     <div class="entity-items">
                       {#if items.length === 0}
                         <p class="empty">No recipes yet.</p>
                       {:else}
                         {#each items as recipe}
+                          {@const reverseDraft = reverseAttachmentDraft('recipe', recipe.id)}
                           <div class="entity-item">
                             <details>
                               <summary>{recipe.title}</summary>
@@ -453,6 +673,43 @@
                               <input type="hidden" name="id" value={recipe.id} />
                               <button type="submit" class="danger">Delete</button>
                             </form>
+                            <details class="attach-editor">
+                              <summary>Attach to Item</summary>
+                              <form method="POST" action="?/attach_target_to_item" use:enhance={withFeedback} class="attach-form">
+                                <input type="hidden" name="target_type" value="recipe" />
+                                <input type="hidden" name="target_id" value={recipe.id} />
+                                <select
+                                  aria-label="List type"
+                                  on:change={(event) =>
+                                    updateReverseAttachmentDraft('recipe', recipe.id, {
+                                      domain: (event.currentTarget as HTMLSelectElement).value as ListDomain
+                                    })}
+                                >
+                                  <option value="preplists" selected={reverseDraft.domain === 'preplists'}>Prep Lists</option>
+                                  <option value="checklists" selected={reverseDraft.domain === 'checklists'}>Checklists</option>
+                                  <option value="inventory" selected={reverseDraft.domain === 'inventory'}>Inventory</option>
+                                  <option value="orders" selected={reverseDraft.domain === 'orders'}>Orders</option>
+                                </select>
+                                <select
+                                  aria-label="List category"
+                                  on:change={(event) =>
+                                    updateReverseAttachmentDraft('recipe', recipe.id, {
+                                      category: (event.currentTarget as HTMLSelectElement).value
+                                    })}
+                                >
+                                  {#each filteredReverseCategoryOptions(reverseDraft.domain) as category}
+                                    <option value={category.id} selected={reverseDraft.category === category.id}>{category.title}</option>
+                                  {/each}
+                                </select>
+                                <select name="source_ref" required>
+                                  <option value="">Choose item</option>
+                                  {#each reverseItemOptions('recipe', recipe.id) as item}
+                                    <option value={item.id} selected={reverseDraft.sourceRef === item.id}>{item.title}</option>
+                                  {/each}
+                                </select>
+                                <button type="submit">Save</button>
+                              </form>
+                            </details>
                           </div>
                         {/each}
                       {/if}
@@ -678,6 +935,69 @@
 
   .entity-item.compact {
     padding: 0.34rem;
+  }
+
+  .attach-editor {
+    padding-top: 0.1rem;
+  }
+
+  .add-editor {
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.45rem;
+  }
+
+  .add-editor > summary,
+  .attach-editor > summary {
+    width: fit-content;
+    cursor: pointer;
+    list-style: none;
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .add-editor > summary::-webkit-details-marker,
+  .attach-editor > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .add-editor .inline-form {
+    margin-top: 0.5rem;
+  }
+
+  .attach-form {
+    margin-top: 0.42rem;
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto;
+    gap: 0.34rem;
+    align-items: center;
+  }
+
+  .attachment-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+  }
+
+  .attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    padding: 0.22rem 0.42rem;
+    border: 1px solid var(--color-divider);
+    border-radius: 999px;
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+  }
+
+  .text-danger {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-error) 72%, var(--color-text));
+    font-size: 0.72rem;
   }
 
   .section-head {

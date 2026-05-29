@@ -28,6 +28,7 @@ import {
   updateListSection,
   updateRecipe
 } from '$lib/server/admin';
+import { attachTargetToItem, createItemAttachment, deleteItemAttachment } from '$lib/server/itemAttachments';
 import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -106,5 +107,8 @@ export const actions: Actions = {
   delete_recipe: ({ request, locals }) => deleteRecipe(request, locals),
   create_document: ({ request, locals }) => createDocument(request, locals),
   update_document: ({ request, locals }) => updateDocument(request, locals),
-  delete_document: ({ request, locals }) => deleteDocument(request, locals)
+  delete_document: ({ request, locals }) => deleteDocument(request, locals),
+  create_item_attachment: ({ request, locals }) => createItemAttachment(request, locals),
+  attach_target_to_item: ({ request, locals }) => attachTargetToItem(request, locals),
+  delete_item_attachment: ({ request, locals }) => deleteItemAttachment(request, locals)
 };

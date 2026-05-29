@@ -15,10 +15,10 @@ export type DailySpecial = {
 };
 
 const labels: Record<DailySpecialCategory, string> = {
-  'item-1': 'Highlight 1',
-  'item-2': 'Highlight 2',
-  'item-3': 'Highlight 3',
-  'item-4': 'Highlight 4'
+  'item-1': 'Special 1',
+  'item-2': 'Special 2',
+  'item-3': 'Special 3',
+  'item-4': 'Special 4'
 };
 
 export function getDailySpecialLabel(category: DailySpecialCategory) {

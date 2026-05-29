@@ -41,7 +41,7 @@ export const actions: Actions = {
 
     const canEdit = await userCanEditDailySpecials(db, locals.userId, locals.userRole, locals.businessId);
     if (!canEdit) {
-      return fail(403, { error: 'You do not have permission to edit daily highlights.' });
+      return fail(403, { error: 'You do not have permission to edit daily specials.' });
     }
 
     const formData = await request.formData();
@@ -50,7 +50,7 @@ export const actions: Actions = {
     for (const category of dailySpecialCategories) {
       const content = String(formData.get(category) ?? '').trim();
       if (content.length > 1000) {
-        return fail(400, { error: 'Daily highlight is too long.' });
+        return fail(400, { error: 'Daily special is too long.' });
       }
       const storageCategory = getDailySpecialStorageCategory(category, locals.businessId);
       await db

@@ -5,6 +5,7 @@ export type NavItem = {
   route: string;
   icon: string;
   featureKey?: AppFeatureKey;
+  adminOnly?: boolean;
 };
 
 export const primaryNav: NavItem[] = [
@@ -15,6 +16,8 @@ export const primaryNav: NavItem[] = [
   { label: 'Recipes', route: '/recipes', icon: 'restaurant', featureKey: 'recipes' },
   { label: 'Todo', route: '/todo', icon: 'task_alt', featureKey: 'todo' },
   { label: 'Docs', route: '/docs', icon: 'description', featureKey: 'documents' },
+  { label: 'Vendors', route: '/vendors', icon: 'local_shipping', featureKey: 'vendors', adminOnly: true },
+  { label: 'Reports', route: '/reports', icon: 'analytics', adminOnly: true },
   { label: 'Conversions', route: '/conversions', icon: 'calculate', featureKey: 'conversions' },
   { label: 'Whiteboard', route: '/whiteboard', icon: 'lightbulb', featureKey: 'whiteboard' },
   { label: 'Temps', route: '/temper', icon: 'thermostat', featureKey: 'temps' }

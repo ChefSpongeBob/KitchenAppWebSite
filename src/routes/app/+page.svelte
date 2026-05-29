@@ -115,8 +115,8 @@
     ...(featureAccess.daily_specials
       ? [{
           selector: '[data-guide="specials-focus"]',
-          title: 'Daily Highlights',
-          description: 'Open this tile to review shift highlights before service starts.',
+          title: 'Daily Specials',
+          description: 'Open this tile to review specials before service starts.',
           placement: 'top' as const
         }]
       : []),
@@ -293,6 +293,7 @@
       ...special,
       preview: special.content.trim()
     }));
+  $: specialsSummary = activeSpecials.map((special) => special.preview).join('\n');
 
   onMount(() => {
     updateTime();
@@ -411,20 +412,13 @@
       in:fly={{ y: 20, duration: 525 }}
     >
       <div class="tile-head">
-        <span class="tile-label">Daily Highlights</span>
+        <span class="tile-label">Specials</span>
         <small>{activeSpecials.length} posted</small>
       </div>
       {#if activeSpecials.length === 0}
-        <small class="specials-empty">No highlights up yet.</small>
+        <small class="specials-empty">No specials posted yet.</small>
       {:else}
-        <div class="specials-list">
-          {#each activeSpecials as special}
-            <div class="special-row">
-              <strong>{special.label}</strong>
-              <span>{special.preview}</span>
-            </div>
-          {/each}
-        </div>
+        <p class="specials-summary">{specialsSummary}</p>
       {/if}
     </a>
     {/if}
@@ -723,10 +717,6 @@
     display: grid;
     justify-items: start;
   }
-  .specials-list {
-    display: grid;
-    gap: 0.35rem;
-  }
   .specials-card {
     text-decoration: none;
     color: inherit;
@@ -783,25 +773,16 @@
     font-size: 0.8rem;
     line-height: 1.4;
   }
-  .special-row {
-    display: grid;
-    grid-template-columns: 4.8rem 1fr;
-    gap: 0.5rem;
-    align-items: start;
-    font-size: 0.76rem;
-  }
-  .special-row strong {
-    color: var(--color-text);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .special-row span {
+  .specials-summary {
+    margin: 0;
     color: var(--color-text-muted);
-    line-height: 1.35;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
     display: -webkit-box;
-    line-clamp: 2;
-    -webkit-line-clamp: 2;
+    line-clamp: 4;
+    -webkit-line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
@@ -937,9 +918,6 @@
     .announcement-block {
       padding-left: 0.7rem;
     }
-    .special-row {
-      grid-template-columns: 4.2rem 1fr;
-    }
     .tile-head {
       flex-wrap: wrap;
       row-gap: 0.2rem;
@@ -1005,10 +983,6 @@
     }
     .announcement-block {
       padding-left: 0.6rem;
-    }
-    .special-row {
-      grid-template-columns: 1fr;
-      gap: 0.18rem;
     }
   }
 

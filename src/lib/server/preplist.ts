@@ -1,6 +1,8 @@
 import { dev } from '$app/environment';
 import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
+import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
+import { recordListItemActivity, recordListSubmission } from '$lib/server/history';
 
 type ItemRow = {
   id: string;
@@ -10,11 +12,13 @@ type ItemRow = {
   amount_text?: string | null;
   par_count: number;
   is_checked: number;
+  attachments?: ItemAttachment[];
 };
 
 type DB = App.Platform['env']['DB'];
 type PreplistLocals = {
   DB?: DB;
+  userId?: string | null;
   userRole?: string | null;
   businessId?: string | null;
 };
@@ -153,16 +157,25 @@ export function createListPage(
       .bind(section.id, businessId)
       .all<ItemRow>();
 
+    const rows = items.results ?? [];
+    const attachmentsByItem = await loadItemAttachmentsForItems(
+      db,
+      businessId,
+      'list_item',
+      rows.map((item) => item.id)
+    );
+
     return {
       title: pageTitle,
       subtitle: options.subtitle,
-      items: (items.results ?? []).map((item) => ({
+      items: rows.map((item) => ({
         ...item,
         details: detailsEnabled ? (item.details ?? '') : '',
         amount_text:
           amountTextEnabled
             ? (item.amount_text ?? '')
-            : String(item.amount ?? 0)
+            : String(item.amount ?? 0),
+        attachments: attachmentsByItem.get(item.id) ?? []
       })),
       isAdmin: locals.userRole === 'admin',
       valueLabel: options.valueLabel,
@@ -191,6 +204,7 @@ export function createListPage(
 
       const now = Math.floor(Date.now() / 1000);
       let updatedCount = 0;
+      const valuesByItemId = new Map<string, string>();
       const useTextValues = options.valueType === 'text';
       const amountTextEnabled = useTextValues ? await hasAmountTextColumn(db) : false;
       for (const item of items.results ?? []) {
@@ -198,6 +212,7 @@ export function createListPage(
         if (raw === null) continue;
         if (useTextValues && amountTextEnabled) {
           const value = String(raw).trim();
+          valuesByItemId.set(item.id, value);
           await db
             .prepare(`UPDATE list_items SET amount_text = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
             .bind(value, now, item.id, businessId)
@@ -206,6 +221,7 @@ export function createListPage(
           const parsed = parseNonNegativeNumber(raw, options.valueLabel);
           if (!parsed.ok) return fail(400, { error: parsed.error });
 
+          valuesByItemId.set(item.id, String(parsed.value));
           await db
             .prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
             .bind(parsed.value, now, item.id, businessId)
@@ -215,6 +231,7 @@ export function createListPage(
       }
       if (updatedCount === 0) return fail(400, { error: `No ${options.valueLabel.toLowerCase()} values were submitted.` });
 
+      await recordListSubmission(db, businessId, domain, section.id, locals.userId, valuesByItemId);
       return { success: true };
     },
     new_prep_list: async ({ locals }: { locals: PreplistLocals }) => {
@@ -273,6 +290,17 @@ export function createListPage(
         )
         .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
         .run();
+
+      await recordListItemActivity(
+        db,
+        businessId,
+        domain,
+        section.id,
+        id,
+        isChecked === 1 ? 'completed' : 'reopened',
+        locals.userId,
+        String(isChecked)
+      );
 
       return { success: true };
     },

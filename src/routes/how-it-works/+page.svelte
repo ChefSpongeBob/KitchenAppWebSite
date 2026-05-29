@@ -49,7 +49,7 @@
 					focus: { x: 6, y: 52, w: 80, h: 15 }
 				},
 				{
-					label: 'Daily Highlights card',
+					label: 'Daily Specials card',
 					description: 'Quick service updates stay visible in this left tile.',
 					focus: { x: 4, y: 73, w: 42, h: 18 }
 				},
