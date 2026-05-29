@@ -825,11 +825,12 @@
     display: grid;
     gap: 0.75rem;
     margin-top: 0.95rem;
-    padding: 1rem;
-    border: var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-sm);
+    padding: 1rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .creator-header {
@@ -872,9 +873,10 @@
   .panel-block {
     display: grid;
     gap: 0.45rem;
-    border: 1px solid var(--color-divider);
-    border-radius: 12px;
-    padding: 0.68rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.68rem 0;
     background: transparent;
   }
 
@@ -884,10 +886,11 @@
   }
 
   .entity {
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 38%, transparent);
-    padding: 0.4rem;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    padding: 0.58rem 0;
   }
 
   .entity > summary {
@@ -925,9 +928,10 @@
   }
 
   .entity-item {
-    border: 1px solid var(--color-divider);
-    border-radius: 9px;
-    padding: 0.4rem;
+    border: 0;
+    border-left: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.3rem 0 0.3rem 0.62rem;
     background: transparent;
     display: grid;
     gap: 0.35rem;
@@ -985,8 +989,9 @@
     align-items: center;
     gap: 0.38rem;
     padding: 0.22rem 0.42rem;
-    border: 1px solid var(--color-divider);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     color: var(--color-text-muted);
     font-size: 0.74rem;
   }
@@ -1023,10 +1028,11 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.36rem;
-    padding: 0.48rem;
-    border: 1px solid var(--color-divider);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 30%, transparent);
+    padding: 0.48rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
   }
 
   .create-form button {
@@ -1035,10 +1041,11 @@
 
   .feedback-banner {
     margin: 0;
-    padding: 0.65rem 0.82rem;
-    border: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-success) 14%, transparent);
+    padding: 0.65rem 0;
+    border-top: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
+    border-bottom: 1px solid color-mix(in srgb, var(--color-success) 18%, var(--color-border));
+    border-radius: 0;
+    background: transparent;
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     font-size: 0.8rem;
   }
@@ -1046,19 +1053,21 @@
   input,
   textarea,
   select {
-    border: 1px solid var(--color-border);
-    border-radius: 9px;
-    padding: 0.4rem 0.52rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.4rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.8rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid var(--color-border);
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.36rem 0.58rem;
     cursor: pointer;
@@ -1069,7 +1078,7 @@
 
   button.danger {
     border-color: color-mix(in srgb, var(--color-error) 38%, var(--color-border));
-    background: color-mix(in srgb, var(--color-error) 30%, var(--color-surface));
+    background: transparent;
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 

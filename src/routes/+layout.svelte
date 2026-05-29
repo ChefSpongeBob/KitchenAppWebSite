@@ -987,6 +987,7 @@
     top: 0;
     left: 0;
     bottom: 0;
+    height: 100dvh;
     width: min(82vw, 300px);
 
     background: var(--surface-wash), color-mix(in srgb, var(--color-surface) 94%, black 6%);
@@ -1011,6 +1012,8 @@
 
   @media (min-width: 761px) {
     .sidebar {
+      overflow-y: scroll;
+      scrollbar-gutter: stable;
       scrollbar-width: thin;
       scrollbar-color: color-mix(in srgb, var(--color-text) 28%, transparent) transparent;
     }
@@ -1644,6 +1647,74 @@
   .app-shell:not(.marketing-app) :global(.viewer header a:hover) {
     border-bottom-color: var(--color-text) !important;
     color: var(--color-text) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(.app-panel),
+  .app-shell:not(.marketing-app) :global(.ui-section),
+  .app-shell:not(.marketing-app) :global(.panel),
+  .app-shell:not(.marketing-app) :global(.card),
+  .app-shell:not(.marketing-app) :global([class$='card']),
+  .app-shell:not(.marketing-app) :global([class*='-card']),
+  .app-shell:not(.marketing-app) :global([class$='tile']),
+  .app-shell:not(.marketing-app) :global([class*='-tile']) {
+    box-shadow: none !important;
+    background-image: none !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(.panel),
+  .app-shell:not(.marketing-app) :global(.editor-panel),
+  .app-shell:not(.marketing-app) :global(.settings-panel),
+  .app-shell:not(.marketing-app) :global(.admin-panel),
+  .app-shell:not(.marketing-app) :global(.form-panel),
+  .app-shell:not(.marketing-app) :global(.workspace-panel),
+  .app-shell:not(.marketing-app) :global(.section-card),
+  .app-shell:not(.marketing-app) :global(.editor-card),
+  .app-shell:not(.marketing-app) :global(.form-card),
+  .app-shell:not(.marketing-app) :global(.toggle-card),
+  .app-shell:not(.marketing-app) :global(.list-card),
+  .app-shell:not(.marketing-app) :global(.doc-card),
+  .app-shell:not(.marketing-app) :global(.recipe-card),
+  .app-shell:not(.marketing-app) :global(.vendor-card) {
+    border-radius: 0 !important;
+    border-color: var(--color-divider) !important;
+    background: transparent !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(input),
+  .app-shell:not(.marketing-app) :global(select),
+  .app-shell:not(.marketing-app) :global(textarea) {
+    border: 0 !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--color-text) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(input:focus),
+  .app-shell:not(.marketing-app) :global(select:focus),
+  .app-shell:not(.marketing-app) :global(textarea:focus) {
+    border-bottom-color: var(--color-text) !important;
+    box-shadow: none !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(table) {
+    border-collapse: collapse;
+  }
+
+  .app-shell:not(.marketing-app) :global(th),
+  .app-shell:not(.marketing-app) :global(td) {
+    border-color: var(--color-divider) !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(.status-pill),
+  .app-shell:not(.marketing-app) :global(.pill),
+  .app-shell:not(.marketing-app) :global(.badge),
+  .app-shell:not(.marketing-app) :global(.tag),
+  .app-shell:not(.marketing-app) :global(.chip) {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
   }
 
   .app-shell:not(.marketing-app) :global(.menu-list button) {

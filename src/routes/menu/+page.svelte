@@ -96,9 +96,10 @@
   .menu-list button {
     display: grid;
     gap: 0.15rem;
-    padding: 0.7rem 0.65rem;
+    padding: 0.7rem 0;
     border: 0;
-    border-radius: 12px;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     background: transparent;
     color: var(--color-text);
     text-align: left;
@@ -108,7 +109,8 @@
   .menu-list button:hover,
   .menu-list button:focus-visible,
   .menu-list button.active {
-    background: color-mix(in srgb, var(--color-surface-alt) 58%, transparent);
+    background: transparent;
+    border-bottom-color: var(--color-text);
     outline: none;
   }
 
@@ -138,9 +140,10 @@
   .viewer a {
     color: var(--color-text);
     text-decoration: none;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 0.42rem 0.7rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.42rem 0;
     font-size: 0.82rem;
     white-space: nowrap;
   }
@@ -157,7 +160,7 @@
     width: 100%;
     max-height: 78vh;
     object-fit: contain;
-    border-radius: 14px;
+    border-radius: 0;
     border: 1px solid var(--color-divider);
   }
 

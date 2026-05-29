@@ -22,18 +22,12 @@
     flex-direction: column;
     justify-content: space-between;
 
-    padding: var(--space-4);
-    border-radius: var(--radius-lg);
-
-    background: linear-gradient(
-      180deg,
-      rgba(255,255,255,0.04),
-      rgba(255,255,255,0.01)
-    );
-
-    border: 1px solid rgba(255,255,255,0.08);
-
-    backdrop-filter: blur(10px);
+    padding: var(--space-4) 0;
+    border-radius: 0;
+    background: transparent;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    backdrop-filter: none;
 
     min-height: 120px;
   }

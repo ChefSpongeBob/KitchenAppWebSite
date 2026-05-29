@@ -3,6 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
   import AvailabilityEditor from '$lib/components/ui/AvailabilityEditor.svelte';
+  import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -413,11 +414,12 @@
               {/if}
 
               {#if item.source_file_url}
-                <p class="form-note">
-                  <a href={item.source_file_url} target="_blank" rel="noreferrer">
-                    {item.source_file_name || 'View onboarding document'}
-                  </a>
-                </p>
+                <OnboardingFormPreview
+                  src={item.source_file_url}
+                  title={item.title}
+                  fileName={item.source_file_name}
+                  label="Active form"
+                />
               {/if}
 
               {#if item.status === 'approved'}
@@ -489,13 +491,152 @@
                           <input name="emergency_contact_relationship" value={formValue(item, 'emergency_contact_relationship', data.profile.emergency_contact_relationship)} required />
                         </label>
                       </div>
+                    {:else if item.form_key === 'federal_i9'}
+                      <div class="field-grid">
+                        <label>
+                          <span>Legal Last Name</span>
+                          <input name="legal_last_name" value={formValue(item, 'legal_last_name')} required />
+                        </label>
+                        <label>
+                          <span>Legal First Name</span>
+                          <input name="legal_first_name" value={formValue(item, 'legal_first_name')} required />
+                        </label>
+                        <label>
+                          <span>Other Last Names</span>
+                          <input name="other_last_names" value={formValue(item, 'other_last_names')} />
+                        </label>
+                        <label>
+                          <span>Date of Birth</span>
+                          <input name="date_of_birth" type="date" value={formValue(item, 'date_of_birth', data.profile.birthday)} required />
+                        </label>
+                        <label>
+                          <span>SSN Last Four</span>
+                          <input name="ssn_last_four" inputmode="numeric" maxlength="4" value={formValue(item, 'ssn_last_four')} />
+                        </label>
+                        <label>
+                          <span>Phone</span>
+                          <input name="phone" type="tel" value={formValue(item, 'phone', data.profile.phone)} />
+                        </label>
+                        <label>
+                          <span>Email</span>
+                          <input name="email" type="email" value={formValue(item, 'email', data.user.email)} />
+                        </label>
+                        <label>
+                          <span>Address Line 1</span>
+                          <input name="address_line_1" value={formValue(item, 'address_line_1', data.profile.address_line_1)} required />
+                        </label>
+                        <label>
+                          <span>City</span>
+                          <input name="city" value={formValue(item, 'city', data.profile.city)} required />
+                        </label>
+                        <label>
+                          <span>State</span>
+                          <input name="state" value={formValue(item, 'state', data.profile.state)} required />
+                        </label>
+                        <label>
+                          <span>Postal Code</span>
+                          <input name="postal_code" value={formValue(item, 'postal_code', data.profile.postal_code)} required />
+                        </label>
+                        <label>
+                          <span>Citizenship Status</span>
+                          <select name="citizenship_status">
+                            <option value="">Select</option>
+                            <option value="us_citizen" selected={formValue(item, 'citizenship_status') === 'us_citizen'}>U.S. Citizen</option>
+                            <option value="noncitizen_national" selected={formValue(item, 'citizenship_status') === 'noncitizen_national'}>Noncitizen National</option>
+                            <option value="lawful_permanent_resident" selected={formValue(item, 'citizenship_status') === 'lawful_permanent_resident'}>Lawful Permanent Resident</option>
+                            <option value="authorized_alien" selected={formValue(item, 'citizenship_status') === 'authorized_alien'}>Authorized Alien</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Document Choice</span>
+                          <input name="document_choice" value={formValue(item, 'document_choice')} placeholder="List A, or List B + C" />
+                        </label>
+                        <label>
+                          <span>Alien Registration Number</span>
+                          <input name="alien_registration_number" value={formValue(item, 'alien_registration_number')} />
+                        </label>
+                        <label>
+                          <span>I-94 Number</span>
+                          <input name="i94_number" value={formValue(item, 'i94_number')} />
+                        </label>
+                        <label>
+                          <span>Passport Number</span>
+                          <input name="passport_number" value={formValue(item, 'passport_number')} />
+                        </label>
+                        <label>
+                          <span>Passport Country</span>
+                          <input name="passport_country" value={formValue(item, 'passport_country')} />
+                        </label>
+                      </div>
+                    {:else if item.form_key === 'federal_w4'}
+                      <div class="field-grid">
+                        <label>
+                          <span>Filing Status</span>
+                          <select name="filing_status" required>
+                            <option value="">Select</option>
+                            <option value="single" selected={formValue(item, 'filing_status') === 'single'}>Single or Married Filing Separately</option>
+                            <option value="married" selected={formValue(item, 'filing_status') === 'married'}>Married Filing Jointly</option>
+                            <option value="head_of_household" selected={formValue(item, 'filing_status') === 'head_of_household'}>Head of Household</option>
+                          </select>
+                        </label>
+                        <label class="toggle-card">
+                          <input type="checkbox" name="multiple_jobs" value="1" checked={formValue(item, 'multiple_jobs') === 'yes'} />
+                          <div><strong>Multiple Jobs or Spouse Works</strong></div>
+                        </label>
+                        <label>
+                          <span>Dependents Amount</span>
+                          <input name="dependents_amount" inputmode="decimal" value={formValue(item, 'dependents_amount')} />
+                        </label>
+                        <label>
+                          <span>Other Income</span>
+                          <input name="other_income" inputmode="decimal" value={formValue(item, 'other_income')} />
+                        </label>
+                        <label>
+                          <span>Deductions</span>
+                          <input name="deductions" inputmode="decimal" value={formValue(item, 'deductions')} />
+                        </label>
+                        <label>
+                          <span>Extra Withholding</span>
+                          <input name="extra_withholding" inputmode="decimal" value={formValue(item, 'extra_withholding')} />
+                        </label>
+                        <label class="toggle-card">
+                          <input type="checkbox" name="exempt" value="1" checked={formValue(item, 'exempt') === 'yes'} />
+                          <div><strong>Claim Exempt</strong></div>
+                        </label>
+                      </div>
+                    {:else if item.form_key === 'state_withholding'}
+                      <div class="field-grid">
+                        <label>
+                          <span>State</span>
+                          <input name="state" value={formValue(item, 'state', data.profile.state)} required />
+                        </label>
+                        <label>
+                          <span>Filing Status</span>
+                          <input name="filing_status" value={formValue(item, 'filing_status')} required />
+                        </label>
+                        <label>
+                          <span>Allowances</span>
+                          <input name="allowances" inputmode="decimal" value={formValue(item, 'allowances')} />
+                        </label>
+                        <label>
+                          <span>Additional Withholding</span>
+                          <input name="additional_withholding" inputmode="decimal" value={formValue(item, 'additional_withholding')} />
+                        </label>
+                        <label class="toggle-card">
+                          <input type="checkbox" name="exempt" value="1" checked={formValue(item, 'exempt') === 'yes'} />
+                          <div><strong>Claim Exempt</strong></div>
+                        </label>
+                        <label class="field-span-2">
+                          <span>Notes</span>
+                          <input name="state_notes" value={formValue(item, 'state_notes')} />
+                        </label>
+                      </div>
                     {:else}
                       <div class="field-grid">
                         <label>
                           <span>Classification</span>
                           <select name="worker_classification">
-                            <option value="employee" selected={formValue(item, 'worker_classification') !== 'contractor'}>Employee</option>
-                            <option value="contractor" selected={formValue(item, 'worker_classification') === 'contractor'}>Contractor</option>
+                            <option value="employee" selected>Employee</option>
                           </select>
                         </label>
                         <label>
@@ -663,10 +804,12 @@
   .profile-header,
   .panel {
     position: relative;
-    border: 1px solid var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-sm);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     overflow: hidden;
   }
 
@@ -770,17 +913,18 @@
     flex: 0 0 auto;
     min-height: 2.4rem;
     padding-inline: 0.9rem;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
   }
 
   .settings-nav button.active {
-    border-color: color-mix(in srgb, var(--color-text-muted) 42%, transparent);
-    background: color-mix(in srgb, var(--color-surface-alt) 74%, var(--color-text) 6%);
-    color: var(--color-primary-contrast);
+    border-color: var(--color-text);
+    background: transparent;
+    color: var(--color-text);
   }
 
   .panel-head {
@@ -836,10 +980,12 @@
   .birthday-inline {
     display: grid;
     gap: 0.8rem;
-    padding: 0.9rem;
-    border-radius: 14px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 44%, transparent);
+    padding: 0.9rem 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
   }
 
   .birthday-inline__row {
@@ -906,10 +1052,11 @@
   input,
   select {
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.55rem 0.68rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.55rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.84rem;
   }
@@ -921,10 +1068,12 @@
   .toggle-card {
     gap: 0.7rem;
     align-items: start;
-    border: 1px solid var(--color-border);
-    border-radius: 14px;
-    padding: 0.9rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.9rem 0;
+    background: transparent;
   }
 
   .toggle-card input {
@@ -949,10 +1098,11 @@
     width: fit-content;
     min-height: 1.8rem;
     padding: 0.35rem 0.65rem;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     color: var(--color-text-muted);
-    background: color-mix(in srgb, var(--color-surface-alt) 44%, transparent);
+    background: transparent;
     font-size: 0.72rem;
     font-weight: var(--weight-medium);
     text-transform: uppercase;
@@ -962,20 +1112,20 @@
   .status-pill-approved {
     border-color: color-mix(in srgb, var(--color-success) 38%, var(--color-border));
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: color-mix(in srgb, var(--color-success) 14%, transparent);
+    background: transparent;
   }
 
   .status-pill-submitted,
   .status-pill-in_progress {
     border-color: color-mix(in srgb, #3b82f6 34%, var(--color-border));
-    color: #bfdbfe;
-    background: color-mix(in srgb, #3b82f6 14%, transparent);
+    color: color-mix(in srgb, var(--color-accent) 74%, var(--color-text));
+    background: transparent;
   }
 
   .status-pill-needs_changes {
     border-color: color-mix(in srgb, #f59e0b 38%, var(--color-border));
-    color: #fcd34d;
-    background: color-mix(in srgb, #f59e0b 14%, transparent);
+    color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
+    background: transparent;
   }
 
   .onboarding-summary {
@@ -1008,10 +1158,11 @@
   .onboarding-item {
     display: grid;
     gap: 0.75rem;
-    padding: 0.9rem;
-    border: 1px solid var(--color-border);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+    padding: 0.9rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
   }
 
   .onboarding-item.item-approved {
@@ -1036,9 +1187,10 @@
   }
 
   .manager-note {
-    padding: 0.7rem;
-    border-radius: 12px;
-    background: color-mix(in srgb, #f59e0b 12%, transparent);
+    padding: 0.7rem 0;
+    border-top: 1px solid color-mix(in srgb, var(--color-warning) 34%, var(--color-divider));
+    border-radius: 0;
+    background: transparent;
   }
 
   .utility-links {
@@ -1088,10 +1240,11 @@
 
   button,
   .logout-btn {
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
     min-height: 2.6rem;
     padding: 0.55rem 0.85rem;
     cursor: pointer;
@@ -1102,7 +1255,7 @@
   .logout-btn {
     border-color: color-mix(in srgb, var(--color-error) 36%, var(--color-border));
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
-    background: color-mix(in srgb, var(--color-error) 34%, var(--color-surface));
+    background: transparent;
   }
 
   .logout-form {

@@ -476,10 +476,10 @@
 
   .schedule-toolbar {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-    padding: 0.8rem 0.9rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: 0.8rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     display: flex;
     justify-content: space-between;
     gap: 1rem;
@@ -506,8 +506,9 @@
   .toolbar-actions a {
     text-decoration: none;
     color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     padding: 0.32rem 0.7rem;
     background: transparent;
     font-size: 0.78rem;
@@ -539,10 +540,10 @@
   }
 
   .day-card {
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
-    padding: 0.95rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
+    padding: 0.95rem 0;
     display: grid;
     gap: 0.8rem;
   }
@@ -561,10 +562,11 @@
   .shift-card {
     display: grid;
     gap: 0.3rem;
-    border: 1px solid var(--color-divider);
-    border-radius: 12px;
-    padding: 0.75rem 0.8rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 74%, transparent);
+    border: 0;
+    border-left: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.35rem 0 0.35rem 0.8rem;
+    background: transparent;
   }
 
   .shift-headline {
@@ -604,12 +606,13 @@
   }
 
   .offer-badge {
-    border: 1px solid rgba(245, 158, 11, 0.25);
-    color: #fcd34d;
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
+    color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
+    border-radius: 0;
     padding: 0.22rem 0.55rem;
     font-size: 0.72rem;
-    background: rgba(255,255,255,0.03);
+    background: transparent;
   }
 
   .offer-badge.requested {
@@ -618,17 +621,16 @@
   }
 
   .offer-badge.pending {
-    border-color: rgba(59, 130, 246, 0.22);
-    color: #bfdbfe;
+    border-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border));
+    color: var(--color-text-soft);
   }
 
   .offer-btn {
-    border: 1px solid rgba(255,255,255,0.1);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025)),
-      color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
     color: var(--color-text);
-    border-radius: 10px;
+    border-radius: 0;
     padding: 0.44rem 0.7rem;
     font-size: 0.76rem;
     min-height: 2rem;
@@ -637,16 +639,16 @@
 
   .offer-actions .offer-btn,
   .offer-popup-actions .offer-btn:last-child {
-    border-color: rgba(132, 146, 166, 0.22);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-primary-contrast);
+    border-color: var(--color-text);
+    background: transparent;
+    color: var(--color-text);
   }
 
   .offer-popup-actions .offer-btn:first-child,
   .shift-headline form .offer-btn,
   .shift-headline > .offer-btn {
-    border-color: rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.06);
+    border-color: var(--color-border);
+    background: transparent;
     color: var(--color-text);
   }
 
@@ -671,10 +673,10 @@
   }
 
   .offers-shell {
-    padding: 0.95rem 1rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: 0.95rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     display: grid;
     gap: 0.85rem;
   }
@@ -707,9 +709,10 @@
     display: flex;
     justify-content: space-between;
     gap: 0.9rem;
-    border: 1px solid var(--color-divider);
-    border-radius: 12px;
-    padding: 0.85rem;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.85rem 0;
     background: transparent;
   }
 
@@ -729,7 +732,7 @@
   .popup-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(4, 5, 7, 0.72);
+    background: color-mix(in srgb, var(--color-bg) 78%, transparent);
     display: grid;
     place-items: center;
     padding: 1rem;
@@ -739,11 +742,9 @@
   .offer-popup {
     width: min(100%, 28rem);
     border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
-      color-mix(in srgb, var(--color-surface) 95%, black 5%);
-    box-shadow: 0 18px 48px rgba(4, 5, 7, 0.35);
+    border-radius: 0;
+    background: var(--color-surface);
+    box-shadow: none;
     padding: 1rem;
     display: grid;
     gap: 0.9rem;
@@ -773,10 +774,11 @@
 
   .offer-popup-form select {
     width: 100%;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     padding: 0.42rem 0.56rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: transparent;
     color: var(--color-text);
     font-size: 0.8rem;
   }

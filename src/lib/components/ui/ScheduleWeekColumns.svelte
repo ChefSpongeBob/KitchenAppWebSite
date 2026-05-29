@@ -149,11 +149,11 @@
   }
 
   .day-column {
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     display: grid;
     grid-template-rows: auto 1fr;
     min-height: 100%;
@@ -167,7 +167,7 @@
     gap: 0.6rem;
     align-items: start;
     padding: 0.9rem 0.9rem 0.75rem;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .day-head h2 {
@@ -194,10 +194,11 @@
   }
 
   .shift-card {
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
-    padding: 0.7rem 0.75rem;
-    background: rgba(255,255,255,0.025);
+    border: 0;
+    border-left: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.35rem 0 0.35rem 0.75rem;
+    background: transparent;
     display: grid;
     gap: 0.25rem;
   }
@@ -215,10 +216,11 @@
   }
 
   .shift-meta span {
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     padding: 0.12rem 0.42rem;
-    background: rgba(255,255,255,0.03);
+    background: transparent;
   }
 
   .shift-time,

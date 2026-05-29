@@ -73,10 +73,12 @@
   .announcement-editor {
     display: grid;
     gap: 0.8rem;
-    padding: clamp(0.9rem, 2vw, 1.2rem);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
+    padding: clamp(0.9rem, 2vw, 1.2rem) 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
   }
 
   .announcement-preview span,
@@ -107,9 +109,10 @@
   textarea {
     width: 100%;
     min-height: 10rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.8rem;
     font: inherit;
@@ -118,9 +121,10 @@
 
   button {
     justify-self: end;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    background: var(--color-surface);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.68rem 1rem;
     font: inherit;

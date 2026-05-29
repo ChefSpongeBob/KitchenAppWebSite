@@ -319,10 +319,12 @@
 
 <style>
   .panel {
-    border: 1px solid var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-sm);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .editor-tile {
@@ -367,7 +369,7 @@
   .dot {
     width: 0.62rem;
     height: 0.62rem;
-    border-radius: 999px;
+    border-radius: 0;
     border: 1px solid var(--color-border);
     display: inline-block;
     flex: 0 0 auto;
@@ -434,30 +436,33 @@
 
   .branding-field input[type='text'] {
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.5rem 0.6rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.5rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.85rem;
   }
 
   .branding-field input[type='email'] {
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.5rem 0.6rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.5rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.85rem;
   }
 
   .branding-field input[type='file'] {
     width: 100%;
-    border: 1px dashed var(--color-border);
-    border-radius: 10px;
+    border: 0;
+    border-bottom: 1px dashed var(--color-border);
+    border-radius: 0;
     padding: 0.42rem 0.48rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
+    background: transparent;
     color: var(--color-text);
     font-size: 0.78rem;
   }
@@ -477,10 +482,10 @@
   .logo-preview {
     width: 3rem;
     height: 3rem;
-    border-radius: 11px;
+    border-radius: 0;
     overflow: hidden;
     border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
+    background: transparent;
     box-shadow: none;
     display: grid;
     place-items: center;
@@ -516,10 +521,11 @@
     grid-template-columns: minmax(0, 1fr) minmax(190px, 210px);
     gap: 0.65rem;
     align-items: center;
-    padding: 0.5rem 0.6rem;
-    border: 1px solid var(--color-border);
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
+    padding: 0.55rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
   }
 
   .feature-main {
@@ -561,10 +567,11 @@
 
   .mode-field select {
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.42rem 0.52rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.42rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.8rem;
   }
@@ -575,9 +582,10 @@
   }
 
   button {
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.44rem 0.72rem;
     cursor: pointer;

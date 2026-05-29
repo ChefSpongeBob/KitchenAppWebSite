@@ -290,10 +290,12 @@
 	}
 
 	.panel {
-		padding: 1rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-surface);
+		padding: 1rem 0;
+		border: 0;
+		border-top: 1px solid var(--color-divider);
+		border-bottom: 1px solid var(--color-divider);
+		border-radius: 0;
+		background: transparent;
 	}
 
 	.panel h2,
@@ -318,10 +320,11 @@
 	}
 
 	select {
-		padding: 0.55rem 0.6rem;
-		border-radius: 10px;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
+		padding: 0.55rem 0;
+		border-radius: 0;
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
+		background: transparent;
 		color: var(--color-text);
 	}
 
@@ -334,19 +337,20 @@
 	.primary,
 	.secondary,
 	.danger-btn {
-		padding: 0.62rem 0.9rem;
-		border-radius: 10px;
-		border: 1px solid var(--color-border);
+		padding: 0.34rem 0.18rem;
+		border-radius: 0;
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
 		font-weight: var(--weight-semibold);
 	}
 
 	.primary {
-		background: color-mix(in srgb, var(--color-primary) 24%, var(--color-surface));
+		background: transparent;
 		color: var(--color-text);
 	}
 
 	.secondary {
-		background: var(--color-surface-alt);
+		background: transparent;
 		color: var(--color-text);
 	}
 
@@ -359,8 +363,8 @@
 	}
 
 	.danger-btn {
-		background: color-mix(in srgb, var(--color-error) 18%, var(--color-surface));
-		color: var(--color-text);
+		background: transparent;
+		color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
 	}
 
 	.error {

@@ -250,10 +250,11 @@
     display: grid;
     gap: 0.9rem;
     margin-top: 0.95rem;
-    padding: clamp(0.85rem, 2vw, 1.1rem);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+    padding: clamp(0.85rem, 2vw, 1.1rem) 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     box-shadow: none;
   }
 
@@ -354,18 +355,20 @@
 
   input,
   select {
-    border: 1px solid var(--color-border);
-    border-radius: 9px;
-    padding: 0.4rem 0.52rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.4rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.8rem;
     width: 100%;
   }
 
   button {
-    border: 1px solid color-mix(in srgb, var(--color-success) 46%, var(--color-border));
-    border-radius: 9px;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-success) 46%, var(--color-border));
+    border-radius: 0;
     background: transparent;
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
     padding: 0.36rem 0.58rem;
@@ -376,9 +379,9 @@
   }
 
   button.danger {
-    border-color: color-mix(in srgb, var(--color-danger, #b42318) 52%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-error) 52%, var(--color-border));
     background: transparent;
-    color: color-mix(in srgb, var(--color-danger, #b42318) 82%, var(--color-text));
+    color: color-mix(in srgb, var(--color-error) 82%, var(--color-text));
   }
 
   @media (max-width: 900px) {

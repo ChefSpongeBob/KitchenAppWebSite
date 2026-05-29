@@ -41,70 +41,70 @@
 			filter: 'none'
 		},
 		{
-			tag: 'Unified Shift View',
-			title: 'One live homepage for schedules, tasks, and shift updates.',
-			subtitle: 'Staff sees priorities quickly while admins keep service aligned in real time.',
+			tag: 'Restaurant Workspace',
+			title: 'Launch one workspace for your restaurant, staff, and daily operations.',
+			subtitle: 'Create the business account, configure the app, invite the team, and keep each restaurant fully separate.',
 			image: '/marketing/FB_IMG_7461876514951404517.jpg',
 			fit: 'cover',
 			position: 'center 40%',
 			filter: 'saturate(1.24) contrast(1.18) brightness(1.04)'
 		},
 		{
-			tag: 'Scheduling Control',
-			title: 'Build schedules across departments with labor visibility built in.',
-			subtitle: 'Track coverage, manage shift offers and swaps, and route changes through manager approval.',
+			tag: 'Scheduling + Labor',
+			title: 'Build department schedules with labor visibility and manager approval.',
+			subtitle: 'Publish weekly coverage, handle availability, time off, shift offers, and swaps from one workflow.',
 			image: '/marketing/IMG_20230606_210739074_HDR.jpg',
 			fit: 'cover',
 			position: 'center 52%'
 		},
 		{
-			tag: 'Execution Tools',
-			title: 'Run prep, checklists, inventory, and orders in one workflow.',
-			subtitle: 'Keep stations synced with assignments, recipes, and SOP references.',
+			tag: 'Employee Onboarding',
+			title: 'Invite employees into a guided account and onboarding packet flow.',
+			subtitle: 'Send branded invites, collect employee setup details, and review required packet items before launch.',
 			image: '/marketing/FB_IMG_4126678697134084261.jpg',
 			fit: 'cover',
 			position: 'center 38%'
 		},
 		{
-			tag: 'Monitoring + Admin',
-			title: 'Track operational signal with temperature and optional camera monitoring.',
-			subtitle: 'Manage announcements, spotlight, and workspace controls from admin.',
+			tag: 'Daily Operations',
+			title: 'Run prep, checklists, recipes, docs, menus, and live updates in one app.',
+			subtitle: 'Keep service aligned with the homepage, tasks, announcements, specials, and optional monitoring.',
 			image: '/marketing/FB_IMG_3952972665318110830.jpg',
 			fit: 'cover',
 			position: 'center 42%'
 		}
 	];
 
-	const keyStats = ['Scheduling', 'Prep + lists', 'Docs + recipes', 'Team communication', 'Monitoring'];
+	const keyStats = ['Workspace setup', 'Employee onboarding', 'Scheduling', 'Daily execution', 'Monitoring'];
 
 	const coreCapabilities: CapabilityItem[] = [
 		{
-			title: 'Scheduling + Coverage',
-			detail: 'Build multi-department schedules with coverage, labor visibility, shift offers, swaps, and manager approval.'
+			title: 'Business Workspace',
+			detail: 'Create a restaurant workspace with business profile, branding, feature controls, and isolated business data.'
 		},
 		{
-			title: 'Daily Execution',
-			detail: 'Run todo, prep, checklists, inventory, and orders from one shared workspace.'
+			title: 'Employee Onboarding',
+			detail: 'Invite employees, collect profile details, send onboarding packets, and approve completion from admin.'
 		},
 		{
-			title: 'Recipes + Docs',
-			detail: 'Keep SOPs, documents, and recipes accessible while service is active.'
+			title: 'Scheduling + Labor',
+			detail: 'Build multi-department schedules with labor visibility, availability, time off, shift offers, swaps, and approvals.'
 		},
 		{
-			title: 'Admin + Monitoring',
-			detail: 'Manage users, feature visibility, and live operational signals from one control area.'
+			title: 'Lists + Daily Execution',
+			detail: 'Run todo, prep, checklists, inventory, orders, and item-level recipe or SOP references from one workspace.'
+		},
+		{
+			title: 'Docs + Menus + Recipes',
+			detail: 'Upload menus, documents, SOPs, handbooks, and recipes so staff can find the right reference quickly.'
 		},
 		{
 			title: 'Homepage Command View',
-			detail: 'Give every shift one place for announcements, spotlight, assignments, and current context.'
+			detail: 'Give every shift one place for schedules, announcements, specials, tasks, menus, temperatures, and current context.'
 		},
 		{
-			title: 'Labor + Shift Flow',
-			detail: 'Keep staffing changes organized with employee requests, offered shifts, swap routing, and approval control.'
-		},
-		{
-			title: 'Business-Ready Onboarding',
-			detail: 'Guide new workspaces through setup, business details, role flow, and launch steps.'
+			title: 'Monitoring + Vendor Tools',
+			detail: 'Prepare for temperature nodes, camera monitoring, vendors, history exports, and operational review.'
 		}
 	];
 
@@ -122,33 +122,33 @@
 	const workflowTimeline: WorkflowStep[] = [
 		{
 			step: '01',
-			title: 'Configure Your Operation',
-			description: 'Set departments, roles, user access, labor expectations, and approval paths to match your operation.',
+			title: 'Create The Workspace',
+			description: 'Register the business, choose the plan path, enter business details, and land in an isolated restaurant workspace.',
 			link: '/register#onboarding-slideshow',
-			linkLabel: 'View onboarding slideshow'
+			linkLabel: 'Start setup'
 		},
 		{
 			step: '02',
-			title: 'Build Weekly Coverage',
-			description: 'Create schedules, manage shift changes, assign tasks, and run lists, recipes, and docs from one workspace.',
+			title: 'Configure The Operation',
+			description: 'Set features, departments, roles, onboarding packet, lists, docs, recipes, menus, and scheduling structure.',
 			link: '/features',
 			linkLabel: 'See feature map'
 		},
 		{
 			step: '03',
-			title: 'Run Service With Live Visibility',
+			title: 'Invite Staff + Run Service',
 			description:
-				'Keep teams aligned with homepage updates, announcements, and live operational monitoring.',
+				'Employees join through branded invites, complete onboarding, then use schedules, tasks, docs, and daily updates inside the app.',
 			link: '/how-it-works',
-			linkLabel: 'See how it works'
+			linkLabel: 'See launch flow'
 		}
 	];
 
 	const operatorQuote = {
 		quote:
-			'The biggest win was having schedules, tasks, docs, and updates in one place so shifts run cleaner.',
+			'The real win is launching the restaurant workspace once, then keeping staff, schedules, onboarding, lists, docs, and daily updates connected.',
 		role: 'General Manager',
-		focus: 'Operations and communication'
+		focus: 'Launch and daily operations'
 	};
 
 	let activeSlide = 0;
@@ -193,15 +193,15 @@
 		</div>
 		<p class="proof-line">
 			<strong>Schedule + Coverage Control</strong>
-			<span>Department-aware builder, publish flow, and employee my-schedule visibility.</span>
+			<span>Department-aware builder, publish flow, availability, shift offers, swaps, and employee schedule visibility.</span>
+		</p>
+		<p class="proof-line">
+			<strong>Employee Launch Flow</strong>
+			<span>Branded invites, account setup, onboarding packet requirements, and admin review in one path.</span>
 		</p>
 		<p class="proof-line">
 			<strong>Execution + Knowledge Workspace</strong>
-			<span>Prep, checklists, inventory, orders, recipes, docs, and task assignments in one app.</span>
-		</p>
-		<p class="proof-line">
-			<strong>Live Manager Signal</strong>
-			<span>Announcements, whiteboard context, temperature visibility, and optional camera monitoring.</span>
+			<span>Prep, checklists, inventory, orders, recipes, docs, menus, tasks, announcements, and monitoring.</span>
 		</p>
 	</section>
 
@@ -217,10 +217,10 @@
 			<div class="summary-copy">
 				<header class="section-head">
 					<p class="eyebrow">Why Teams Switch</p>
-					<h2>A cleaner way to run daily kitchen operations.</h2>
+					<h2>A cleaner way to launch and run restaurant operations.</h2>
 					<p class="section-copy">
-						Crimini replaces fragmented tools with one workspace for scheduling, execution,
-						communication, and operational visibility.
+						Crimini gives each business its own workspace for setup, employees, scheduling,
+						onboarding, daily execution, documents, menus, and operational visibility.
 					</p>
 				</header>
 				<p class="stat-line">
@@ -237,7 +237,7 @@
 			<div class="core-copy">
 				<header class="section-head">
 					<p class="eyebrow">Core Features</p>
-					<h2>Built around real shift workflows.</h2>
+					<h2>Built around the full owner-to-service workflow.</h2>
 				</header>
 				<ul class="capability-list">
 					{#each coreCapabilities as feature}
@@ -261,7 +261,7 @@
 	<section class="overview-preview" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">App Preview</p>
-			<h2>Homepage, scheduling, and assignment views used in real service.</h2>
+			<h2>Workspace, scheduling, and daily operation views used by the team.</h2>
 		</header>
 		<div class="preview-grid">
 			{#each overviewScreens as shot}
@@ -275,7 +275,7 @@
 	<section class="execution-path" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">How Teams Adopt</p>
-			<h2>Launch in three clear steps.</h2>
+			<h2>From business signup to live service.</h2>
 		</header>
 		<div class="step-list">
 			{#each workflowTimeline as item}
@@ -298,8 +298,8 @@
 
 	<section class="bottom-cta" data-reveal>
 		<div>
-			<h2>One workspace for scheduling, execution, and monitoring.</h2>
-			<p>Launch the app, onboard your team, and run cleaner shifts with live visibility.</p>
+			<h2>One workspace from first signup to daily service.</h2>
+			<p>Create the business, configure the app, onboard employees, publish schedules, and run operations with live visibility.</p>
 		</div>
 		<div class="hero-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Create Workspace</a>

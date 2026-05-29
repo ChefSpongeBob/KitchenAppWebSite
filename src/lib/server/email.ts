@@ -125,16 +125,19 @@ export async function sendInviteEmail({
   origin,
   inviteeEmail,
   inviteCode,
-  expiresAt
+  expiresAt,
+  businessName
 }: {
   env?: EmailEnv | null;
   origin: string;
   inviteeEmail: string;
   inviteCode: string;
   expiresAt: number | null;
+  businessName?: string | null;
 }) {
   const baseUrl = getAppBaseUrl(origin, env);
   const registerUrl = `${baseUrl}/register?invite=${encodeURIComponent(inviteCode)}`;
+  const logoUrl = `${baseUrl}/crimini-full-logo.jpg`;
   const expirationText = expiresAt
     ? new Date(expiresAt * 1000).toLocaleDateString('en-US', {
         year: 'numeric',
@@ -143,35 +146,48 @@ export async function sendInviteEmail({
       })
     : 'soon';
 
-  const safeCode = escapeHtml(inviteCode);
   const safeRegisterUrl = escapeHtml(registerUrl);
+  const safeLogoUrl = escapeHtml(logoUrl);
+  const safeBusinessName = escapeHtml(businessName?.trim() || 'your workspace');
+  const subjectBusinessName = businessName?.trim() || 'Your team';
 
   return sendTransactionalEmail({
     env,
     to: inviteeEmail,
-    subject: 'You have been invited to Crimini',
+    subject: `${subjectBusinessName} invited you to Crimini`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
-        <h2 style="margin-bottom: 0.5rem;">You have been invited to Crimini</h2>
-        <p>An admin created an invite for this email address.</p>
-        <p>Use this invite code when you register:</p>
-        <p style="font-size: 1.1rem; font-weight: 700; letter-spacing: 0.06em;">${safeCode}</p>
-        <p>This invite currently expires on ${escapeHtml(expirationText)}.</p>
-        <p>
-          Register here:
-          <a href="${safeRegisterUrl}">${safeRegisterUrl}</a>
-        </p>
-        <p>After registering, an admin still needs to approve your access before first login.</p>
+      <div style="margin:0;padding:0;background:#f7f2e8;color:#181716;font-family:Georgia,'Times New Roman',serif;">
+        <div style="max-width:640px;margin:0 auto;padding:34px 18px;">
+          <div style="background:#fffdf8;border:1px solid #ded2bf;border-radius:28px;overflow:hidden;">
+            <div style="padding:28px 28px 18px;text-align:center;border-bottom:1px solid #ded2bf;">
+              <img src="${safeLogoUrl}" alt="Crimini" style="display:block;width:180px;max-width:70%;height:auto;margin:0 auto 18px;" />
+              <div style="height:1px;width:100%;background:linear-gradient(90deg,transparent,#b7aa98,transparent);"></div>
+            </div>
+            <div style="padding:34px 28px 30px;">
+              <p style="margin:0 0 8px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#7a6f61;">Employee Onboarding</p>
+              <h1 style="margin:0 0 14px;font-size:32px;line-height:1.05;font-weight:400;color:#181716;">Welcome to ${safeBusinessName}</h1>
+              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#4c463f;">Complete your Crimini setup and onboarding packet.</p>
+              <a href="${safeRegisterUrl}" style="display:inline-block;background:#181716;color:#fffdf8;text-decoration:none;border-radius:999px;padding:14px 24px;font-size:15px;letter-spacing:.03em;">Complete onboarding</a>
+              <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#746b60;">Expires ${escapeHtml(expirationText)}.</p>
+            </div>
+            <div style="padding:18px 28px 26px;border-top:1px solid #ded2bf;color:#746b60;font-size:12px;line-height:1.5;">
+              <p style="margin:0 0 8px;">If the button does not open, use this link:</p>
+              <a href="${safeRegisterUrl}" style="color:#181716;word-break:break-all;">${safeRegisterUrl}</a>
+              <p style="margin:18px 0 0;">Crimini by NNS, LLC</p>
+            </div>
+          </div>
+        </div>
       </div>
     `,
     text: [
-      'You have been invited to Crimini.',
+      `${subjectBusinessName} invited you to Crimini.`,
       '',
-      `Invite code: ${inviteCode}`,
-      `Register here: ${registerUrl}`,
-      `Invite expires: ${expirationText}`,
+      'Complete your setup and onboarding packet:',
+      registerUrl,
       '',
-      'After registering, an admin still needs to approve your access before first login.'
+      `Expires: ${expirationText}`,
+      '',
+      'Crimini by NNS, LLC'
     ].join('\n'),
     idempotencyKey: `invite/${inviteCode}`
   });

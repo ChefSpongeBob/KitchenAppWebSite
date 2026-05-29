@@ -54,14 +54,15 @@
 
   .input {
     width: 100%;
-    padding: var(--space-3);
+    padding: 0.62rem 0;
 
     font-size: var(--text-md);
     font-family: inherit;
 
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
 
     transition:
@@ -75,7 +76,7 @@
 
   .input:focus {
     outline: none;
-    border-color: var(--color-primary);
+    border-color: var(--color-text);
   }
 
   textarea.input {

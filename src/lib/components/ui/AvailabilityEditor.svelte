@@ -83,10 +83,11 @@
   .availability-editor__row {
     display: grid;
     gap: 0.85rem;
-    padding: 0.85rem 0.9rem;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    padding: 0.85rem 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    background: transparent;
   }
 
   .availability-editor__row--off {
@@ -136,10 +137,11 @@
 
   .availability-editor__times select {
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 0.55rem 0.68rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.55rem 0;
+    background: transparent;
     color: var(--color-text);
     font-size: 0.84rem;
   }

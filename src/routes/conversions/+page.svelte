@@ -244,10 +244,12 @@
 		display: grid;
 		gap: 0.95rem;
 		margin-bottom: 1rem;
-		padding: clamp(0.9rem, 2vw, 1.25rem);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		background: var(--color-surface);
+		padding: clamp(0.9rem, 2vw, 1.25rem) 0;
+		border: 0;
+		border-top: 1px solid var(--color-divider);
+		border-bottom: 1px solid var(--color-divider);
+		border-radius: 0;
+		background: transparent;
 		box-shadow: none;
 	}
 
@@ -273,9 +275,10 @@
 
 	button {
 		min-height: 2.35rem;
-		border: 1px solid var(--color-border);
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--color-surface) 90%, var(--color-surface-alt) 10%);
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
+		border-radius: 0;
+		background: transparent;
 		color: var(--color-text);
 		padding: 0.42rem 0.78rem;
 		font: inherit;
@@ -290,8 +293,8 @@
 	}
 
 	button.active {
-		background: var(--color-text);
-		color: var(--color-bg);
+		background: transparent;
+		color: var(--color-text);
 	}
 
 	.converter-grid {
@@ -320,9 +323,10 @@
 	select {
 		width: 100%;
 		min-height: 3rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-surface-alt);
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
+		border-radius: 0;
+		background: transparent;
 		color: var(--color-text);
 		padding: 0.68rem 0.75rem;
 		font: inherit;
@@ -348,9 +352,11 @@
 
 	.chart-block {
 		min-width: 0;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-surface);
+		border: 0;
+		border-top: 1px solid var(--color-divider);
+		border-bottom: 1px solid var(--color-divider);
+		border-radius: 0;
+		background: transparent;
 		overflow: hidden;
 	}
 

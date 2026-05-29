@@ -900,7 +900,7 @@ export const actions: Actions = {
 				)
 				.run();
 
-			if (inviteCode && roleValue !== 'admin') {
+			if (businessInvite && businessInvite.onboarding_required === 1 && businessInvite.employment_type !== 'contractor') {
 				await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null);
 			}
 

@@ -180,10 +180,11 @@
 
   .sheet-row {
     position: relative;
-    padding: 0.68rem 0.72rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-divider);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: 0.68rem 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    background: transparent;
     box-shadow: none;
   }
 
@@ -193,7 +194,7 @@
 
   .sheet-row.done {
     border-color: color-mix(in srgb, var(--color-success) 34%, var(--color-border));
-    background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    background: transparent;
   }
 
   .sheet-row.done::before {
@@ -203,10 +204,11 @@
   .check-btn {
     width: 2.2rem;
     height: 2.2rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
-    color: var(--color-primary-contrast);
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 1rem;
     line-height: 1;
@@ -252,11 +254,12 @@
 
   .submit-btn {
     min-height: 2.45rem;
-    padding: 0.6rem 0.9rem;
-    border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
-    color: var(--color-primary-contrast);
+    padding: 0.34rem 0.18rem;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 0.84rem;
     font-weight: var(--weight-semibold);
@@ -273,10 +276,12 @@
 
   .info-card {
     margin-top: 1rem;
-    padding: 1rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--color-divider);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: 1rem 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     box-shadow: none;
   }
 
@@ -304,9 +309,10 @@
   }
 
   .info-day {
-    padding: 0.8rem 0.85rem;
-    border-radius: 14px;
-    border: 1px solid var(--color-divider);
+    padding: 0.8rem 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
     background: transparent;
     display: grid;
     gap: 0.45rem;

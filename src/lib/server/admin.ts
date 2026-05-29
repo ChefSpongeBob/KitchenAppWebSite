@@ -1407,8 +1407,45 @@ export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: stri
   return request ?? null;
 }
 
-function defaultEmployeeOnboardingItems() {
-  return [
+function normalizeStateLabel(value: string | null | undefined) {
+  return String(value ?? '').trim().toUpperCase().slice(0, 24);
+}
+
+async function loadBusinessRegisteredState(db: D1, businessId: string) {
+  await ensureBusinessSchema(db);
+  const row = await db
+    .prepare(`SELECT address_state FROM businesses WHERE id = ? LIMIT 1`)
+    .bind(businessId)
+    .first<{ address_state: string | null }>();
+  return normalizeStateLabel(row?.address_state);
+}
+
+type DefaultEmployeeOnboardingItem = {
+  item_type: EmployeeOnboardingItem['item_type'];
+  form_key: string;
+  title: string;
+  description: string;
+  source_file_url: string;
+  source_file_name: string;
+  sort_order: number;
+};
+
+function defaultEmployeeOnboardingItems(state = ''): DefaultEmployeeOnboardingItem[] {
+  const normalizedState = normalizeStateLabel(state);
+  const stateItems: DefaultEmployeeOnboardingItem[] = normalizedState
+    ? [
+        {
+          item_type: 'form',
+          form_key: 'state_withholding',
+          title: `${normalizedState} withholding`,
+          description: 'Complete state withholding details for payroll setup.',
+          source_file_url: '',
+          source_file_name: '',
+          sort_order: 5
+        }
+      ]
+    : [];
+  const items: DefaultEmployeeOnboardingItem[] = [
     {
       item_type: 'form',
       form_key: 'personal_information',
@@ -1437,50 +1474,61 @@ function defaultEmployeeOnboardingItems() {
       sort_order: 2
     },
     {
-      item_type: 'document',
-      form_key: '',
-      title: 'I-9 employment eligibility',
-      description: 'Upload completed employment eligibility documentation for manager review.',
+      item_type: 'form',
+      form_key: 'federal_i9',
+      title: 'Federal I-9',
+      description: 'Complete employee employment eligibility attestation.',
       source_file_url: '',
       source_file_name: '',
       sort_order: 3
     },
     {
-      item_type: 'document',
-      form_key: '',
-      title: 'Tax withholding document',
-      description: 'Upload the completed W-4 or applicable tax withholding document.',
+      item_type: 'form',
+      form_key: 'federal_w4',
+      title: 'Federal W-4',
+      description: 'Complete federal withholding information for payroll.',
       source_file_url: '',
       source_file_name: '',
       sort_order: 4
     },
+    ...stateItems,
     {
       item_type: 'acknowledgement',
       form_key: '',
       title: 'Handbook acknowledgement',
-      description: 'Review the employee handbook or attached policy document, then acknowledge and sign.',
+      description: 'Review the employee handbook, then acknowledge and sign.',
       source_file_url: '',
       source_file_name: '',
-      sort_order: 5
+      sort_order: normalizedState ? 6 : 5
     },
     {
       item_type: 'acknowledgement',
       form_key: '',
-      title: 'Food safety acknowledgement',
-      description: 'Review food safety and restaurant operating policies, then acknowledge and sign.',
+      title: 'Policy acknowledgement',
+      description: 'Review attached company policies, then acknowledge and sign.',
       source_file_url: '',
       source_file_name: '',
-      sort_order: 6
+      sort_order: normalizedState ? 7 : 6
     }
-  ] satisfies Array<{
-    item_type: EmployeeOnboardingItem['item_type'];
-    form_key: string;
-    title: string;
-    description: string;
-    source_file_url: string;
-    source_file_name: string;
-    sort_order: number;
-  }>;
+  ];
+
+  return items;
+}
+
+export function buildEmployeeOnboardingRecommendations(state = '') {
+  return defaultEmployeeOnboardingItems(state).map((item) => ({
+    title: item.title,
+    type: item.item_type,
+    needsUpload: item.item_type === 'document'
+  }));
+}
+
+export async function loadEmployeeOnboardingRecommendations(db: D1, businessId: string) {
+  const state = await loadBusinessRegisteredState(db, businessId);
+  return {
+    state,
+    items: buildEmployeeOnboardingRecommendations(state)
+  };
 }
 
 type ComplianceClassification = {
@@ -1719,6 +1767,35 @@ function sanitizeSensitiveOnboardingPayload(formKey: string, payload: Record<str
     };
   }
 
+  if (formKey === 'federal_i9') {
+    return {
+      citizenship_status: payload.citizenship_status,
+      ssn_last_four: payload.ssn_last_four,
+      document_choice: payload.document_choice,
+      protected_record: 'Encrypted HR record'
+    };
+  }
+
+  if (formKey === 'federal_w4') {
+    return {
+      filing_status: payload.filing_status,
+      multiple_jobs: payload.multiple_jobs,
+      extra_withholding: payload.extra_withholding,
+      exempt: payload.exempt,
+      protected_record: 'Encrypted HR record'
+    };
+  }
+
+  if (formKey === 'state_withholding') {
+    return {
+      state: payload.state,
+      filing_status: payload.filing_status,
+      additional_withholding: payload.additional_withholding,
+      exempt: payload.exempt,
+      protected_record: 'Encrypted HR record'
+    };
+  }
+
   return {
     protected_record: 'Encrypted HR record'
   };
@@ -1746,7 +1823,11 @@ async function storeSensitiveOnboardingFormPayload(
     recordType: classification.sensitiveRecordType
   });
   const displayLastFour =
-    payload.account_last_four || payload.routing_last_four || payload.postal_code?.slice(-4) || '';
+    payload.ssn_last_four ||
+    payload.account_last_four ||
+    payload.routing_last_four ||
+    payload.postal_code?.slice(-4) ||
+    '';
 
   const record = await db
     .prepare(
@@ -1972,7 +2053,18 @@ function normalizeOnboardingItemType(value: string): EmployeeOnboardingItem['ite
 function normalizeOnboardingFormKey(value: string, itemType: EmployeeOnboardingItem['item_type']) {
   if (itemType !== 'form') return '';
   const normalized = value.trim().toLowerCase();
-  if (['personal_information', 'emergency_contact', 'payroll_setup'].includes(normalized)) return normalized;
+  if (
+    [
+      'personal_information',
+      'emergency_contact',
+      'payroll_setup',
+      'federal_i9',
+      'federal_w4',
+      'state_withholding'
+    ].includes(normalized)
+  ) {
+    return normalized;
+  }
   return 'personal_information';
 }
 
@@ -2045,6 +2137,80 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
       (!/^\d{4}$/.test(fields.routing_last_four) || !/^\d{4}$/.test(fields.account_last_four))
     ) {
       return { error: 'Direct deposit routing and account references must be the last four digits.' };
+    }
+    return { payload: fields };
+  }
+
+  if (formKey === 'federal_i9') {
+    const fields = {
+      legal_last_name: formString(formData, 'legal_last_name', 80),
+      legal_first_name: formString(formData, 'legal_first_name', 80),
+      other_last_names: formString(formData, 'other_last_names', 120),
+      address_line_1: formString(formData, 'address_line_1', 120),
+      city: formString(formData, 'city', 80),
+      state: formString(formData, 'state', 80),
+      postal_code: formString(formData, 'postal_code', 24),
+      date_of_birth: formString(formData, 'date_of_birth', 10),
+      ssn_last_four: formString(formData, 'ssn_last_four', 4),
+      email: formString(formData, 'email', 160),
+      phone: formString(formData, 'phone', 48),
+      citizenship_status: formString(formData, 'citizenship_status', 48),
+      document_choice: formString(formData, 'document_choice', 80),
+      alien_registration_number: formString(formData, 'alien_registration_number', 80),
+      i94_number: formString(formData, 'i94_number', 80),
+      passport_number: formString(formData, 'passport_number', 80),
+      passport_country: formString(formData, 'passport_country', 80)
+    };
+    if (
+      !requireFormFields(fields, [
+        'legal_last_name',
+        'legal_first_name',
+        'address_line_1',
+        'city',
+        'state',
+        'postal_code',
+        'date_of_birth',
+        'citizenship_status'
+      ])
+    ) {
+      return { error: 'Complete every required I-9 field.' };
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.date_of_birth)) {
+      return { error: 'Date of birth must use a valid date.' };
+    }
+    if (fields.ssn_last_four && !/^\d{4}$/.test(fields.ssn_last_four)) {
+      return { error: 'SSN reference must be the last four digits.' };
+    }
+    return { payload: fields };
+  }
+
+  if (formKey === 'federal_w4') {
+    const fields = {
+      filing_status: formString(formData, 'filing_status', 48),
+      multiple_jobs: String(formData.get('multiple_jobs') ?? '0') === '1' ? 'yes' : 'no',
+      dependents_amount: formString(formData, 'dependents_amount', 16),
+      other_income: formString(formData, 'other_income', 16),
+      deductions: formString(formData, 'deductions', 16),
+      extra_withholding: formString(formData, 'extra_withholding', 16),
+      exempt: String(formData.get('exempt') ?? '0') === '1' ? 'yes' : 'no'
+    };
+    if (!requireFormFields(fields, ['filing_status'])) {
+      return { error: 'Choose a federal filing status.' };
+    }
+    return { payload: fields };
+  }
+
+  if (formKey === 'state_withholding') {
+    const fields = {
+      state: formString(formData, 'state', 80),
+      filing_status: formString(formData, 'filing_status', 48),
+      allowances: formString(formData, 'allowances', 16),
+      additional_withholding: formString(formData, 'additional_withholding', 16),
+      exempt: String(formData.get('exempt') ?? '0') === '1' ? 'yes' : 'no',
+      state_notes: formString(formData, 'state_notes', 240)
+    };
+    if (!requireFormFields(fields, ['state', 'filing_status'])) {
+      return { error: 'Complete state and filing status for state withholding.' };
     }
     return { payload: fields };
   }
@@ -2284,6 +2450,111 @@ export async function createEmployeeOnboardingTemplateItem(request: Request, loc
     .run();
 
   return { success: true, message: 'Onboarding item added.' };
+}
+
+export async function installStandardEmployeeOnboardingTemplate(_request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  await ensureEmployeeOnboardingTables(db);
+
+  const state = await loadBusinessRegisteredState(db, businessId);
+  await db
+    .prepare(
+      `
+      UPDATE employee_onboarding_template_items
+      SET item_type = 'form',
+        form_key = CASE
+          WHEN LOWER(title) LIKE '%i-9%' OR LOWER(title) LIKE '%employment eligibility%' THEN 'federal_i9'
+          WHEN LOWER(title) LIKE '%w-4%' OR LOWER(title) LIKE '%federal withholding%' THEN 'federal_w4'
+          WHEN LOWER(title) LIKE '%withholding%' THEN 'state_withholding'
+          ELSE form_key
+        END,
+        updated_at = ?
+      WHERE business_id = ?
+        AND item_type = 'document'
+        AND COALESCE(form_key, '') = ''
+        AND (
+          LOWER(title) LIKE '%i-9%'
+          OR LOWER(title) LIKE '%employment eligibility%'
+          OR LOWER(title) LIKE '%w-4%'
+          OR LOWER(title) LIKE '%federal withholding%'
+          OR LOWER(title) LIKE '%withholding%'
+        )
+      `
+    )
+    .bind(Math.floor(Date.now() / 1000), businessId)
+    .run();
+
+  const defaults = defaultEmployeeOnboardingItems(state);
+  const existingRows = await db
+    .prepare(
+      `
+      SELECT LOWER(title) AS title, item_type, COALESCE(form_key, '') AS form_key
+      FROM employee_onboarding_template_items
+      WHERE business_id = ?
+      `
+    )
+    .bind(businessId)
+    .all<{ title: string; item_type: string; form_key: string }>();
+  const existingKeys = new Set(
+    (existingRows.results ?? []).map(
+      (row) => `${row.item_type}:${row.form_key}:${String(row.title ?? '').trim().toLowerCase()}`
+    )
+  );
+
+  const now = Math.floor(Date.now() / 1000);
+  let created = 0;
+
+  for (const item of defaults) {
+    const key = `${item.item_type}:${item.form_key}:${item.title.trim().toLowerCase()}`;
+    if (existingKeys.has(key)) continue;
+
+    await db
+      .prepare(
+        `
+        INSERT INTO employee_onboarding_template_items (
+          id,
+          business_id,
+          item_type,
+          form_key,
+          title,
+          description,
+          source_file_url,
+          source_file_name,
+          sort_order,
+          is_active,
+          created_at,
+          updated_at,
+          created_by
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        `
+      )
+      .bind(
+        crypto.randomUUID(),
+        businessId,
+        item.item_type,
+        item.form_key,
+        item.title,
+        item.description,
+        item.source_file_url,
+        item.source_file_name,
+        item.sort_order,
+        now,
+        now,
+        locals.userId ?? null
+      )
+      .run();
+    created += 1;
+  }
+
+  return {
+    success: true,
+    message: created ? 'Standard packet added.' : 'Standard packet already exists.'
+  };
 }
 
 export async function updateEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
@@ -2648,7 +2919,8 @@ async function createEmployeeOnboardingPackageForUser(
   const templateItems = (await loadEmployeeOnboardingTemplate(db, options.businessId)).filter(
     (item) => item.is_active === 1
   );
-  const onboardingItems = templateItems.length > 0 ? templateItems : defaultEmployeeOnboardingItems();
+  const businessState = await loadBusinessRegisteredState(db, options.businessId);
+  const onboardingItems = templateItems.length > 0 ? templateItems : defaultEmployeeOnboardingItems(businessState);
 
   for (const item of onboardingItems) {
     const onboardingItemId = crypto.randomUUID();
@@ -2779,11 +3051,27 @@ export async function ensureEmployeeOnboardingRequirement(
     .bind(businessId, userId)
     .first<{ role: string | null; is_active: number }>();
 
-  if (!membership || membership.is_active !== 1 || isAdminBusinessRole(membership.role)) {
+  if (!membership || membership.is_active !== 1) {
     return { required: false, approved: true, status: 'not_required' as const };
   }
 
   await ensureEmployeeOnboardingTables(db);
+  const employment = await db
+    .prepare(
+      `
+      SELECT employment_type
+      FROM employee_employment_records
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ employment_type: string | null }>();
+  const employmentType = String(employment?.employment_type ?? '').trim().toLowerCase();
+  if (employmentType === 'contractor') {
+    return { required: false, approved: true, status: 'not_required' as const };
+  }
+
   const latest = await db
     .prepare(
       `
@@ -2803,6 +3091,10 @@ export async function ensureEmployeeOnboardingRequirement(
 
   if (latest) {
     return { required: true, approved: false, status: latest.status, packageId: latest.id };
+  }
+
+  if (isAdminBusinessRole(membership.role) && !employmentType) {
+    return { required: false, approved: true, status: 'not_required' as const };
   }
 
   const created = await createEmployeeOnboardingPackageForUser(db, {
@@ -2898,9 +3190,31 @@ export async function loadEmployeeOnboardingDashboard(
       }
     ])
   );
+  const employmentRows = await db
+    .prepare(
+      `
+      SELECT user_id, employment_type
+      FROM employee_employment_records
+      WHERE business_id = ?
+      `
+    )
+    .bind(businessId)
+    .all<{ user_id: string; employment_type: string | null }>();
+  const employmentTypeByUser = new Map(
+    (employmentRows.results ?? []).map((row) => [
+      row.user_id,
+      String(row.employment_type ?? '').trim().toLowerCase()
+    ])
+  );
 
   return users
-    .filter((user) => !isAdminBusinessRole(user.role))
+    .filter((user) => {
+      const employmentType = employmentTypeByUser.get(user.id) ?? '';
+      if (employmentType === 'contractor') return false;
+      if (latestPackageByUser.has(user.id)) return true;
+      if (employmentType === 'employee') return true;
+      return !isAdminBusinessRole(user.role);
+    })
     .map((user) => {
       const packet = latestPackageByUser.get(user.id) ?? null;
       const counts = packet ? countsByPackage.get(packet.id) : null;
@@ -4934,8 +5248,8 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
     return fail(400, { error: 'Employee must be active before onboarding.' });
   }
 
-  if (isAdminBusinessRole(membership.role)) {
-    return fail(400, { error: 'Onboarding is for employee accounts.' });
+  if (payrollClassification === 'contractor') {
+    return fail(400, { error: 'Contractors do not receive employee onboarding packets.' });
   }
 
   const created = await createEmployeeOnboardingPackageForUser(db, {
@@ -5427,7 +5741,8 @@ export async function createUserInvite(
     origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
     inviteeEmail: email,
     inviteCode,
-    expiresAt
+    expiresAt,
+    businessName: locals.businessName
   });
 
   return {

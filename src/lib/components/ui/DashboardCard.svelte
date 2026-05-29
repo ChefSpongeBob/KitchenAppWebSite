@@ -32,10 +32,12 @@
 
   .card {
     position: relative;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: clamp(0.95rem, 1.8vw, 1.15rem);
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: clamp(0.85rem, 1.6vw, 1.05rem) 0;
     overflow-wrap: anywhere;
     color: var(--color-text);
     box-shadow: none;
@@ -56,14 +58,14 @@
   }
 
   .content {
-    margin-top: 8px;
+    margin-top: 0.5rem;
     color: var(--color-text);
   }
 
   @media (max-width: 760px) {
     .card {
-      padding: 14px;
-      border-radius: var(--radius-md);
+      padding: 0.85rem 0;
+      border-radius: 0;
     }
 
     .header h2 {

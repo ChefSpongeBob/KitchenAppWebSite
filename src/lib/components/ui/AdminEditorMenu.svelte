@@ -111,13 +111,13 @@
     width: 100%;
     appearance: none;
     padding: 0.52rem 2rem 0.52rem 2.2rem;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
     color: var(--color-text);
     font-size: 0.82rem;
     font-weight: var(--weight-medium);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    background: transparent;
   }
 </style>

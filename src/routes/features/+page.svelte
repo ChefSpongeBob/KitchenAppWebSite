@@ -17,64 +17,119 @@
 		position?: string;
 	};
 
-	const serviceModes = ['Front of House', 'Sushi', 'Kitchen', 'Cross-department managers', 'Multi-role staff'];
+	const serviceModes = ['Owner setup', 'Managers', 'Employees', 'Departments', 'Daily service'];
 	const missionPoints = [
-		'Built around real shift workflows instead of disconnected tools.',
-		'Combines scheduling, labor visibility, execution, and communication in one workspace.',
-		'Designed for fast scanning and low-friction daily usage.'
+		'Each business gets its own workspace, staff, records, schedules, and app configuration.',
+		'Owners can launch with the core setup first, then add modules and hardware as the operation grows.',
+		'Managers run scheduling, onboarding, execution, and communication from one connected admin flow.'
 	];
 
 	const featureBands: FeatureBand[] = [
 		{
-			title: 'Daily Execution Tools',
+			title: 'Workspace Setup',
 			summary:
-				'Run prep, checklists, inventory, orders, recipes, and documents from one workspace that stays readable during service.',
+				'Create the restaurant workspace, register the business, set branding, choose visible modules, and keep every business data pool separate.',
 			items: [
-				'Task lists and prep flow',
-				'Recipe directory with category structure',
-				'Internal docs and SOP access in-shift',
-				'Whiteboard and announcement context'
-			],
-			image: '/marketing/app/employee-homepage.png',
-			alt: 'Employee homepage showing shift context and updates',
-			position: 'top center'
-		},
-		{
-			title: 'Scheduling and Management Control',
-			summary:
-				'Build weekly coverage across departments, track labor, route shift changes through approval, and manage users from admin without jumping across tools.',
-			items: [
-				'Multi-department schedule builder',
-				'My schedule employee day view',
-				'Employee shift offers and swap requests',
-				'Manager approval for schedule changes',
-				'Labor tracking and coverage visibility',
-				'Role-aware admin controls'
+				'Business registry and restaurant display details',
+				'Business logo and app branding area',
+				'Feature controls for modules the team should see',
+				'Tenant-scoped users, records, schedules, docs, and uploads'
 			],
 			image: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard with operations controls',
+			alt: 'Admin dashboard showing workspace control area',
 			position: 'top center'
 		},
 		{
-			title: 'Employee Shift Flow',
+			title: 'Employee Onboarding',
 			summary:
-				'Give staff a clear place to see their schedule, offer shifts, request swaps, and keep managers in control of final approvals.',
+				'Invite staff into the correct business, collect account setup information, send onboarding packet requirements, and review completion from admin.',
 			items: [
-				'Published shifts visible from My Schedule',
-				'Offer available shifts to eligible employees',
-				'Request shift swaps without side conversations getting lost',
-				'Manager review before changes affect the live schedule',
-				'Department and role context stays attached to each shift'
+				'Branded employee invite email',
+				'Employee account setup from invite',
+				'Base packet for profile, emergency contact, payroll setup, I-9, W-4, and acknowledgements',
+				'State withholding slot when business state is registered',
+				'Admin review and employee file history'
+			],
+			image: '/marketing/app/employee-homepage.png',
+			alt: 'Employee workspace homepage',
+			position: 'top center'
+		},
+		{
+			title: 'Scheduling + Labor',
+			summary:
+				'Build weekly coverage across departments, track labor, publish schedules, and keep employee changes controlled through manager approval.',
+			items: [
+				'Multi-department schedule builder',
+				'Department and role based scheduling',
+				'My Schedule for employees',
+				'Availability and time-off requests',
+				'Shift offers, swaps, and manager approval',
+				'Labor and coverage visibility'
 			],
 			image: '/marketing/app/scheduling-builder.png',
 			alt: 'Schedule builder interface with shift controls',
+			position: 'top center'
+		},
+		{
+			title: 'Daily Execution',
+			summary:
+				'Move prep, checklists, inventory, orders, tasks, recipes, SOPs, and menus into one daily operations workspace.',
+			items: [
+				'Todo assignments and completion tracking',
+				'Prep lists, checklists, inventory, and order lists',
+				'Item attachments to recipes or documents',
+				'Menu uploads and employee menu access',
+				'Recipe categories and SOP/document access'
+			],
+			image: '/marketing/app/employee-homepage.png',
+			alt: 'Employee homepage showing shift context and operation tiles',
+			position: 'top center'
+		},
+		{
+			title: 'Communication + Monitoring',
+			summary:
+				'Keep managers and staff aligned with live homepage context, announcements, specials, whiteboard ideas, vendors, and optional monitoring.',
+			items: [
+				'Announcements and specials',
+				'Whiteboard ideas and voting',
+				'Employee spotlight',
+				'Vendor directory for admin users',
+				'Temperature node and camera monitoring readiness',
+				'History exports for schedules, prep, inventory, and orders'
+			],
+			image: '/marketing/app/admin-dashboard.png',
+			alt: 'Admin dashboard with operations visibility',
 			position: 'top center'
 		}
 	];
 
 	const capabilityRows: CapabilityRow[] = [
 		{
-			module: 'Schedule Builder + Publish',
+			module: 'Business workspace + tenant isolation',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Business registry + app branding',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Feature controls',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Employee invites + onboarding packet',
+			starter: 'Included',
+			growth: 'Included',
+			enterprise: 'Included'
+		},
+		{
+			module: 'Schedule builder + publish',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
@@ -92,51 +147,51 @@
 			enterprise: 'Included'
 		},
 		{
-			module: 'My Schedule (employee day view)',
+			module: 'My Schedule, availability, time off',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
-			module: 'Shift offers + shift swaps',
+			module: 'Shift offers, swaps, manager approval',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
-			module: 'Manager approval for schedule changes',
+			module: 'Prep, checklist, inventory, order lists',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
-			module: 'Lists (prep, checklists, inventory, orders)',
+			module: 'Recipes, documents, SOPs, menus',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
-			module: 'Recipes + documents + SOP pages',
+			module: 'Announcements, specials, whiteboard',
 			starter: 'Included',
 			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
-			module: 'Todo assignment + whiteboard moderation',
+			module: 'Vendors + history exports',
 			starter: 'Included',
-			growth: 'Advanced controls',
-			enterprise: 'Advanced + custom policy'
+			growth: 'Included',
+			enterprise: 'Included'
 		},
 		{
-			module: 'Temperature nodes + trend visibility',
-			starter: 'Optional add-on',
-			growth: 'Optional add-on',
+			module: 'Temperature monitoring',
+			starter: 'Add-on',
+			growth: 'Add-on',
 			enterprise: 'Included'
 		},
 		{
 			module: 'Camera monitoring',
-			starter: 'Optional add-on',
-			growth: 'Optional add-on',
+			starter: 'Add-on',
+			growth: 'Add-on',
 			enterprise: 'Included'
 		}
 	];
@@ -146,9 +201,9 @@
 <Layout>
 	<section class="head" data-reveal style="--reveal-delay: 40ms;">
 		<p class="eyebrow">Features</p>
-		<h1>Core workflows for cleaner daily kitchen operations.</h1>
+		<h1>Everything needed to launch and run a restaurant workspace.</h1>
 		<p class="head-copy">
-			Crimini keeps scheduling, labor tracking, shift changes, execution, communication, and monitoring in one operating flow.
+			Crimini connects business setup, employee onboarding, scheduling, daily execution, knowledge, communication, and monitoring in one operating flow.
 		</p>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Trial</a>
@@ -167,7 +222,7 @@
 		<div class="hero-copy">
 			<h2>Designed for real shift speed</h2>
 			<p>
-				Clear hierarchy, quick scans, and predictable actions so staff and managers can move faster during service.
+				Owners configure the workspace once, managers control the operation, and employees see only the tools and information they need.
 			</p>
 			<p class="pipe-line">
 				{#each serviceModes as mode}
@@ -180,7 +235,7 @@
 	<section class="principles-band" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">What We Build For</p>
-			<h2>Practical operations over flashy complexity.</h2>
+			<h2>Launch structure first. Daily speed after.</h2>
 		</header>
 		<ul>
 			{#each missionPoints as point}
@@ -209,7 +264,7 @@
 	<section class="capability-map" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">Capability Map</p>
-			<h2>What is live today across plans</h2>
+			<h2>What is available across plans</h2>
 		</header>
 		<div class="table-shell">
 			<table>
@@ -238,7 +293,7 @@
 	<section class="bottom-cta" data-reveal>
 		<div>
 			<h2>Ready to replace disconnected tools?</h2>
-			<p>Launch one workspace for schedules, prep, communication, and daily execution.</p>
+			<p>Launch one workspace for onboarding, schedules, prep, documents, communication, and daily execution.</p>
 		</div>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Create Workspace</a>

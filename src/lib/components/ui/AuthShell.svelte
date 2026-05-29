@@ -127,11 +127,13 @@
 
   .auth-panel {
     position: relative;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
-    box-shadow: var(--shadow-xs);
-    padding: clamp(1.05rem, 2.4vw, 1.65rem);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: clamp(1.05rem, 2.4vw, 1.65rem) 0;
     overflow: hidden;
   }
 
@@ -196,9 +198,10 @@
   .auth-panel :global(.password-row input) {
     width: 100%;
     min-height: 2.95rem;
-    border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.72rem 0.82rem;
     font: inherit;
@@ -209,7 +212,7 @@
   .auth-panel :global(.auth-input:focus),
   .auth-panel :global(.password-row input:focus) {
     border-color: color-mix(in srgb, var(--color-primary) 52%, var(--color-border));
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 16%, transparent);
+    box-shadow: none;
   }
 
   .auth-panel :global(.password-row) {
@@ -227,8 +230,9 @@
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
     color: var(--color-text);
     background: transparent;
     font: inherit;
@@ -239,15 +243,15 @@
   }
 
   .auth-panel :global(.auth-button) {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-primary-contrast);
+    background: transparent;
+    border-color: var(--color-text);
+    color: var(--color-text);
   }
 
   .auth-panel :global(.auth-button:hover),
   .auth-panel :global(.auth-secondary-button:hover),
   .auth-panel :global(.auth-link-button:hover) {
-    transform: translateY(-1px);
+    transform: none;
     border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
   }
 
@@ -266,9 +270,11 @@
 
   .auth-panel :global(.auth-alert) {
     margin: 0;
-    border-radius: var(--radius-sm);
-    border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-    background: var(--color-surface-alt);
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+    background: transparent;
     color: var(--color-text);
     padding: 0.72rem 0.82rem;
     line-height: 1.45;
@@ -314,7 +320,7 @@
     }
 
     .auth-panel {
-      border-radius: 22px;
+      border-radius: 0;
     }
 
     .auth-panel :global(.password-row) {

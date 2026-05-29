@@ -260,10 +260,11 @@
 
   .sheet-row {
     position: relative;
-    padding: 0.68rem 0.72rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-divider);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: 0.68rem 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    background: transparent;
     box-shadow: none;
     transition: background 140ms ease, border-color 140ms ease;
   }
@@ -274,7 +275,7 @@
 
   .sheet-row.done {
     border-color: color-mix(in srgb, var(--color-success) 34%, var(--color-border));
-    background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    background: transparent;
   }
 
   .sheet-row.done::before {
@@ -290,10 +291,11 @@
   .check-btn {
     width: 2.2rem;
     height: 2.2rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
-    color: var(--color-primary-contrast);
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 1rem;
     line-height: 1;
@@ -322,10 +324,11 @@
   .number-input {
     width: 100%;
     min-width: 0;
-    padding: 0.5rem 0.58rem;
-    border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
+    padding: 0.5rem 0;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
     color: var(--color-text);
   }
 
@@ -343,11 +346,12 @@
 
   .submit-btn {
     min-height: 2.45rem;
-    padding: 0.6rem 0.9rem;
-    border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, transparent);
-    color: var(--color-primary-contrast);
+    padding: 0.34rem 0.18rem;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 0.84rem;
     font-weight: var(--weight-semibold);
@@ -364,9 +368,10 @@
   .admin-par summary {
     cursor: pointer;
     width: fit-content;
-    padding: 0.34rem 0.65rem;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
+    padding: 0.34rem 0.18rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     color: var(--color-text-muted);
     font-size: 0.8rem;
     background: transparent;
@@ -389,11 +394,12 @@
   .mini-btn {
     width: fit-content;
     min-height: 2.35rem;
-    padding: 0.55rem 0.72rem;
-    border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface-alt) 64%, transparent);
-    color: var(--color-primary-contrast);
+    padding: 0.34rem 0.18rem;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 0.8rem;
   }
@@ -408,9 +414,10 @@
     gap: 0.35rem;
     font-size: 0.95rem;
     color: var(--color-text);
-    padding: 0.3rem 0.4rem;
-    border-radius: 10px;
-    border: 1px solid var(--color-divider);
+    padding: 0.3rem 0;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     background: transparent;
   }
 
@@ -421,9 +428,10 @@
     min-height: 2.3rem;
     font-size: 0.88rem;
     color: var(--color-text);
-    padding: 0.3rem 0.45rem;
-    border-radius: 10px;
-    border: 1px solid var(--color-divider);
+    padding: 0.3rem 0;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     background: transparent;
     overflow: hidden;
   }

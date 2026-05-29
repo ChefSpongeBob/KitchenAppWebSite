@@ -502,8 +502,8 @@ a:focus-visible {
   --color-bg: #ffffff;
   --color-bg-elevated: #fffdf8;
   --color-surface: #ffffff;
-  --color-surface-alt: #f8f4ec;
-  --color-surface-soft: #f1eadf;
+  --color-surface-alt: #fbf7ef;
+  --color-surface-soft: #f3ebdf;
 
   --color-text: #111214;
   --color-text-muted: rgba(17, 18, 20, 0.62);
@@ -516,14 +516,14 @@ a:focus-visible {
   --color-warning: #9a6a35;
   --color-error: #8e4036;
 
-  --radius-sm: 7px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
 
-  --shadow-xs: 0 1px 2px rgba(17, 18, 20, 0.035);
-  --shadow-sm: 0 5px 16px rgba(17, 18, 20, 0.055);
-  --shadow-md: 0 12px 30px rgba(17, 18, 20, 0.08);
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
   --shadow-glow: var(--shadow-sm);
   --surface-outline: 1px solid var(--color-border);
   --surface-wash: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
@@ -540,8 +540,8 @@ a:focus-visible {
 
   --color-bg: #171717;
   --color-bg-elevated: #1f1f1f;
-  --color-surface: #232323;
-  --color-surface-alt: #2a2a2a;
+  --color-surface: #222222;
+  --color-surface-alt: #282828;
   --color-surface-soft: #303030;
 
   --color-text: #f8f4ec;
@@ -555,9 +555,9 @@ a:focus-visible {
   --color-warning: #d6a362;
   --color-error: #d28a76;
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.18);
-  --shadow-sm: 0 5px 16px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.26);
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
 }
 
 body,
@@ -602,6 +602,20 @@ textarea {
   background: var(--color-surface);
 }
 
+input,
+select,
+textarea {
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: color-mix(in srgb, var(--color-text) 44%, var(--color-border));
+  box-shadow: none;
+}
+
 button {
   box-shadow: none;
 }
@@ -632,7 +646,7 @@ button.success,
 .app-panel,
 .ui-section,
 :where(.panel, .card, [class$='card'], [class*='-card'], [class$='tile'], [class*='-tile']) {
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 [data-theme='light'] .app-panel,

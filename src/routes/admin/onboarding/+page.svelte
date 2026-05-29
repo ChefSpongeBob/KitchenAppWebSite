@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -65,17 +66,27 @@
     revoked_at: number | null;
   };
 
+  type PacketRecommendation = {
+    title: string;
+    type: string;
+    needsUpload: boolean;
+  };
+
   export let data: {
     templateItems: OnboardingTemplateItem[];
     onboardingRows: OnboardingRow[];
     users: UserOption[];
     invites: InviteOption[];
     departments: string[];
+    recommendations: {
+      state: string;
+      items: PacketRecommendation[];
+    };
   };
 
   let feedbackMessage = '';
 
-  $: staffUsers = data.users.filter((user) => !['owner', 'admin', 'manager'].includes(user.role));
+  $: staffUsers = data.users.filter((user) => user.is_active === 1);
   $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
   $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
   $: needsReview = data.onboardingRows.filter((row) => row.package_status === 'submitted' || row.submitted_items > 0);
@@ -150,7 +161,7 @@
 
   function progressText(row: OnboardingRow) {
     if (!row.package_id) return 'No packet';
-    if (row.total_items === 0) return '0 requirements';
+    if (row.total_items === 0) return '0 forms';
     return `${row.approved_items}/${row.total_items} approved`;
   }
 </script>
@@ -182,149 +193,146 @@
       <p class="feedback-banner">{feedbackMessage}</p>
     {/if}
 
-    <section class="workspace-section invite-section" aria-label="Registration access">
-      <header class="section-head">
-        <div>
-          <span class="section-kicker">Invites</span>
-          <h2>Registration Access</h2>
-        </div>
-        <span>{activeInvites.length} active</span>
-      </header>
-
-      <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
-        <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
-        <details class="invite-context">
-          <summary>Employment</summary>
-          <div class="invite-context-grid">
-            <label>
-              <span>Access</span>
-              <select name="access_type">
-                {#each accessTypes as accessType}
-                  <option value={accessType.value}>{accessType.label}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              <span>Template</span>
-              <select name="permission_template">
-                {#each permissionTemplates as template}
-                  <option value={template.value}>{template.label}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              <span>Type</span>
-              <select name="employment_type">
-                <option value="employee">Employee</option>
-                <option value="contractor">Contractor</option>
-              </select>
-            </label>
-            <label>
-              <span>Job Title</span>
-              <input name="job_title" />
-            </label>
-            <label>
-              <span>Primary Department</span>
-              <select name="primary_schedule_department">
-                <option value="">Unassigned</option>
-                {#each data.departments as department}
-                  <option value={department}>{department}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              <span>Start Date</span>
-              <input name="start_date" type="date" />
-            </label>
-            <label>
-              <span>Pay Type</span>
-              <select name="pay_type">
-                <option value="">Unset</option>
-                <option value="hourly">Hourly</option>
-                <option value="salary">Salary</option>
-              </select>
-            </label>
-            <fieldset class="department-checks">
-              <legend>Schedule Departments</legend>
-              {#if data.departments.length === 0}
-                <p>No departments yet.</p>
-              {:else}
-                {#each data.departments as department}
-                  <label>
-                    <input type="checkbox" name="schedule_departments" value={department} />
-                    <span>{department}</span>
-                  </label>
-                {/each}
-              {/if}
-            </fieldset>
+    <div class="action-grid">
+      <section class="workspace-section invite-section" aria-label="Registration access">
+        <header class="section-head">
+          <div>
+            <span class="section-kicker">Invites</span>
+            <h2>Registration Access</h2>
           </div>
-        </details>
-        <button type="submit">Invite</button>
-      </form>
+          <span>{activeInvites.length} active</span>
+        </header>
 
-      <div class="invite-list">
-        {#if activeInvites.length === 0}
-          <p class="empty">No active invites.</p>
-        {:else}
-          {#each activeInvites as invite}
-            <div class="invite-row">
-              <div>
-                <strong>{invite.email}</strong>
-                <span>{[invite.job_title, labelFor(permissionTemplates, invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
-                <span>{inviteDepartmentSummary(invite)}</span>
-                <span>Expires {formatDate(invite.expires_at)}</span>
-              </div>
-              <code>{invite.invite_code}</code>
-              <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
-                <input type="hidden" name="invite_id" value={invite.id} />
-                <button type="submit" class="text-action warn-text">Revoke</button>
-              </form>
+        <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
+          <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
+          <details class="invite-context">
+            <summary>Employment</summary>
+            <div class="invite-context-grid">
+              <label>
+                <span>Access</span>
+                <select name="access_type">
+                  {#each accessTypes as accessType}
+                    <option value={accessType.value}>{accessType.label}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>Template</span>
+                <select name="permission_template">
+                  {#each permissionTemplates as template}
+                    <option value={template.value}>{template.label}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>Type</span>
+                <select name="employment_type">
+                  <option value="employee">Employee</option>
+                  <option value="contractor">Contractor</option>
+                </select>
+              </label>
+              <label>
+                <span>Job Title</span>
+                <input name="job_title" />
+              </label>
+              <label>
+                <span>Primary Department</span>
+                <select name="primary_schedule_department">
+                  <option value="">Unassigned</option>
+                  {#each data.departments as department}
+                    <option value={department}>{department}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>Start Date</span>
+                <input name="start_date" type="date" />
+              </label>
+              <label>
+                <span>Pay Type</span>
+                <select name="pay_type">
+                  <option value="">Unset</option>
+                  <option value="hourly">Hourly</option>
+                  <option value="salary">Salary</option>
+                </select>
+              </label>
+              <fieldset class="department-checks">
+                <legend>Schedule Departments</legend>
+                {#if data.departments.length === 0}
+                  <p>No departments yet.</p>
+                {:else}
+                  {#each data.departments as department}
+                    <label>
+                      <input type="checkbox" name="schedule_departments" value={department} />
+                      <span>{department}</span>
+                    </label>
+                  {/each}
+                {/if}
+              </fieldset>
             </div>
-          {/each}
-        {/if}
-      </div>
+          </details>
+          <button type="submit">Invite</button>
+        </form>
 
-      {#if usedInvites.length > 0}
-        <details class="used-invites">
-          <summary>Used invites ({usedInvites.length})</summary>
-          <div class="used-list">
-            {#each usedInvites as invite}
-              <div>
-                <strong>{invite.email}</strong>
-                <span>Used {formatDate(invite.used_at)}</span>
+        <div class="invite-list">
+          {#if activeInvites.length === 0}
+            <p class="empty">No active invites.</p>
+          {:else}
+            {#each activeInvites as invite}
+              <div class="invite-row">
+                <div>
+                  <strong>{invite.email}</strong>
+                  <span>{[invite.job_title, labelFor(permissionTemplates, invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
+                  <span>{inviteDepartmentSummary(invite)}</span>
+                  <span>Expires {formatDate(invite.expires_at)}</span>
+                </div>
+                <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
+                  <input type="hidden" name="invite_id" value={invite.id} />
+                  <button type="submit" class="text-action warn-text">Revoke</button>
+                </form>
               </div>
             {/each}
+          {/if}
+        </div>
+
+        {#if usedInvites.length > 0}
+          <details class="used-invites">
+            <summary>Used invites ({usedInvites.length})</summary>
+            <div class="used-list">
+              {#each usedInvites as invite}
+                <div>
+                  <strong>{invite.email}</strong>
+                  <span>Used {formatDate(invite.used_at)}</span>
+                </div>
+              {/each}
+            </div>
+          </details>
+        {/if}
+      </section>
+
+      <section class="workspace-section send-panel" aria-label="Send onboarding packet">
+        <header class="section-head">
+          <div>
+            <span class="section-kicker">Packet</span>
+            <h2>Send Onboarding</h2>
           </div>
-        </details>
-      {/if}
-    </section>
+        </header>
 
-    <section class="tool-row" aria-label="Onboarding tools">
-      <div class="tool-copy">
-        <span class="section-kicker">Send Packet</span>
-        <h2>Start employee onboarding</h2>
-      </div>
-
-      <form method="POST" action="?/send_package" use:enhance={withFeedback} class="send-form">
-        <label>
-          <span>Employee</span>
-          <select name="user_id" required>
-            <option value="">Choose employee</option>
-            {#each staffUsers as user}
-              <option value={user.id}>{user.display_name ?? user.email}</option>
-            {/each}
-          </select>
-        </label>
-        <label>
-          <span>Classification</span>
-          <select name="payroll_classification">
-            <option value="employee">Employee</option>
-            <option value="contractor">Contractor</option>
-          </select>
-        </label>
-        <button type="submit">Send Onboarding</button>
-      </form>
-    </section>
+        <form method="POST" action="?/send_package" use:enhance={withFeedback} class="send-form">
+          <label>
+            <span>Employee</span>
+            <select name="user_id" required>
+              <option value="">Choose employee</option>
+              {#each staffUsers as user}
+                <option value={user.id}>{user.display_name ?? user.email}</option>
+              {/each}
+            </select>
+          </label>
+          <input type="hidden" name="payroll_classification" value="employee" />
+          <button type="submit">Send Packet</button>
+        </form>
+      </section>
+    </div>
 
     <section class="workspace-section" aria-label="Employee onboarding packets">
       <header class="section-head">
@@ -363,74 +371,106 @@
       </div>
     </section>
 
-    <details class="workspace-section packet-setup" open>
+    <details class="workspace-section packet-setup">
       <summary>
         <span>
-          <span class="section-kicker">Packet Setup</span>
-          <strong>Required documents and acknowledgements</strong>
+          <span class="section-kicker">Setup</span>
+          <strong>Packet Forms</strong>
         </span>
         <em>{data.templateItems.length} item{data.templateItems.length === 1 ? '' : 's'}</em>
       </summary>
 
-      <form
-        method="POST"
-        action="?/create_item"
-        enctype="multipart/form-data"
-        use:enhance={withFeedback}
-        class="packet-form"
-      >
-        <label>
-          <span>Type</span>
-          <select name="item_type">
-            <option value="form">Employee Form</option>
-            <option value="document">Employee Document</option>
-            <option value="acknowledgement">Policy Acknowledgement</option>
-          </select>
-        </label>
+      <div class="standard-packet" aria-label="Base employee packet forms">
+        <div class="standard-packet-head">
+          <div>
+            <span class="section-kicker">Base Packet</span>
+            <strong>{data.recommendations.state ? `${data.recommendations.state} employee onboarding` : 'Employee onboarding'}</strong>
+          </div>
+          <form method="POST" action="?/install_standard_packet" use:enhance={withFeedback}>
+            <button type="submit">{data.templateItems.length ? 'Add Missing Forms' : 'Install Base Forms'}</button>
+          </form>
+        </div>
 
-        <label>
-          <span>Form</span>
-          <select name="form_key">
-            <option value="personal_information">Personal Information</option>
-            <option value="emergency_contact">Emergency Contact</option>
-            <option value="payroll_setup">Payroll Setup</option>
-          </select>
-        </label>
+        <div class="needed-list">
+          {#each data.recommendations.items as item}
+            <div>
+              <span>{item.title}</span>
+              <small>{item.type === 'form' ? 'Form' : item.type === 'document' ? 'Upload' : 'Signature'}</small>
+            </div>
+          {/each}
+        </div>
+      </div>
 
-        <label>
-          <span>Title</span>
-          <input name="title" placeholder="I-9 employment eligibility" required />
-        </label>
+      <details class="add-requirement">
+        <summary>Add Form</summary>
+        <form
+          method="POST"
+          action="?/create_item"
+          enctype="multipart/form-data"
+          use:enhance={withFeedback}
+          class="packet-form"
+        >
+          <label>
+            <span>Type</span>
+            <select name="item_type">
+              <option value="form">Employee Form</option>
+              <option value="document">Employee Document</option>
+              <option value="acknowledgement">Policy Acknowledgement</option>
+            </select>
+          </label>
 
-        <label>
-          <span>Order</span>
-          <input name="sort_order" type="number" step="1" value={data.templateItems.length} />
-        </label>
+          <label>
+            <span>Form</span>
+            <select name="form_key">
+              <option value="personal_information">Personal Information</option>
+              <option value="emergency_contact">Emergency Contact</option>
+              <option value="payroll_setup">Payroll Setup</option>
+              <option value="federal_i9">Federal I-9</option>
+              <option value="federal_w4">Federal W-4</option>
+              <option value="state_withholding">State Withholding</option>
+            </select>
+          </label>
 
-        <label class="wide">
-          <span>Employee Instructions</span>
-          <textarea name="description" rows="3" placeholder="What the employee must complete or acknowledge"></textarea>
-        </label>
+          <label>
+            <span>Title</span>
+            <input name="title" placeholder="I-9 employment eligibility" required />
+          </label>
 
-        <label>
-          <span>Source PDF/Image</span>
-          <input name="source_file" type="file" accept="application/pdf,image/*" />
-        </label>
+          <label>
+            <span>Order</span>
+            <input name="sort_order" type="number" step="1" value={data.templateItems.length} />
+          </label>
 
-        <label>
-          <span>Status</span>
-          <select name="is_active">
-            <option value="1" selected>Active</option>
-            <option value="0">Hidden</option>
-          </select>
-        </label>
+          <label class="wide">
+            <span>Instructions</span>
+            <textarea name="description" rows="3"></textarea>
+          </label>
 
-        <button type="submit">Add Requirement</button>
-      </form>
+          <label>
+            <span>Upload PDF/Image</span>
+            <input name="source_file" type="file" accept="application/pdf,image/*" />
+          </label>
 
-      <div class="requirement-list" aria-label="Onboarding packet requirements">
+          <label>
+            <span>Status</span>
+            <select name="is_active">
+              <option value="1" selected>Active</option>
+              <option value="0">Hidden</option>
+            </select>
+          </label>
+
+          <button type="submit">Add Form</button>
+        </form>
+      </details>
+
+      <div class="requirements-head">
+        <span class="section-kicker">Current Packet</span>
+        <strong>{data.templateItems.length ? 'Configured forms' : 'No custom forms yet'}</strong>
+      </div>
+
+      <div class="requirement-list" aria-label="Current onboarding packet forms">
         {#if data.templateItems.length === 0}
-          <p class="empty">No packet requirements yet. Defaults will be used until this packet is customized.</p>
+          <p class="empty">No packet forms yet. Defaults will be used until this packet is customized.</p>
         {:else}
           {#each data.templateItems as item}
             <details class="requirement-row">
@@ -468,6 +508,9 @@
                     <option value="personal_information" selected={item.form_key === 'personal_information'}>Personal Information</option>
                     <option value="emergency_contact" selected={item.form_key === 'emergency_contact'}>Emergency Contact</option>
                     <option value="payroll_setup" selected={item.form_key === 'payroll_setup'}>Payroll Setup</option>
+                    <option value="federal_i9" selected={item.form_key === 'federal_i9'}>Federal I-9</option>
+                    <option value="federal_w4" selected={item.form_key === 'federal_w4'}>Federal W-4</option>
+                    <option value="state_withholding" selected={item.form_key === 'state_withholding'}>State Withholding</option>
                   </select>
                 </label>
 
@@ -487,7 +530,7 @@
                 </label>
 
                 <label>
-                  <span>Replace Source</span>
+                  <span>Replace Upload</span>
                   <input name="source_file" type="file" accept="application/pdf,image/*" />
                 </label>
 
@@ -500,17 +543,22 @@
                 </label>
 
                 {#if item.source_file_url}
-                  <a href={item.source_file_url} target="_blank" rel="noreferrer" class="source-link">
-                    {item.source_file_name || 'View source document'}
-                  </a>
+                  <div class="wide">
+                    <OnboardingFormPreview
+                      src={item.source_file_url}
+                      title={item.title}
+                      fileName={item.source_file_name}
+                      label="Active form"
+                    />
+                  </div>
                 {/if}
 
-                <button type="submit">Save Requirement</button>
+                <button type="submit">Save Form</button>
               </form>
 
               <form method="POST" action="?/delete_item" use:enhance={withFeedback} class="delete-form">
                 <input type="hidden" name="id" value={item.id} />
-                <button type="submit" class="danger">Delete Requirement</button>
+                <button type="submit" class="danger">Delete Form</button>
               </form>
             </details>
           {/each}
@@ -523,17 +571,18 @@
 <style>
   .onboarding-console {
     display: grid;
-    gap: 0.8rem;
-    margin-top: 0.65rem;
+    gap: 1.1rem;
+    margin-top: 0.9rem;
   }
 
   .metric-strip,
-  .tool-row,
   .workspace-section {
-    border: 1px solid var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-sm);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .metric-strip {
@@ -543,7 +592,7 @@
   }
 
   .metric-strip div {
-    padding: 0.82rem 1rem;
+    padding: 0.78rem 1rem;
     border-right: 1px solid var(--color-divider);
   }
 
@@ -556,6 +605,7 @@
   label span,
   .employee-cell small,
   .requirement-row small,
+  .standard-packet small,
   .empty,
   .packet-setup summary em,
   .requirement-row summary em,
@@ -575,22 +625,25 @@
 
   .metric-strip strong {
     display: block;
-    margin-top: 0.24rem;
-    font-size: 1.65rem;
+    margin-top: 0.18rem;
+    font-size: clamp(1.25rem, 3vw, 1.7rem);
     line-height: 1;
+    letter-spacing: -0.04em;
   }
 
-  .tool-row {
+  .action-grid {
     display: grid;
-    grid-template-columns: minmax(12rem, 0.35fr) minmax(0, 1fr);
-    gap: 1rem;
-    align-items: end;
-    padding: 1rem;
+    grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+    gap: clamp(1rem, 3vw, 2rem);
+    align-items: start;
   }
 
-  .tool-copy h2,
   .section-head h2 {
     margin: 0.2rem 0 0;
+    color: var(--color-text);
+    font-size: clamp(1.05rem, 2vw, 1.35rem);
+    line-height: 1.1;
+    letter-spacing: -0.035em;
   }
 
   .send-form,
@@ -601,7 +654,8 @@
   }
 
   .send-form {
-    grid-template-columns: minmax(14rem, 1fr) minmax(12rem, 0.42fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-top: 0.85rem;
   }
 
   .invite-form {
@@ -616,7 +670,8 @@
   }
 
   .invite-context summary,
-  .used-invites summary {
+  .used-invites summary,
+  .add-requirement > summary {
     color: var(--color-text-muted);
     cursor: pointer;
     font-size: 0.85rem;
@@ -632,7 +687,7 @@
   .department-checks {
     grid-column: 1 / -1;
     border: 1px solid var(--color-divider);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem 0.65rem;
@@ -682,7 +737,9 @@
 
   .invite-row,
   .used-list div {
-    display: grid;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.48rem;
     padding: 0.72rem 0;
     border-top: 1px solid var(--color-divider);
@@ -711,15 +768,8 @@
     color: #fcd34d;
   }
 
-  code {
-    color: var(--color-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.78rem;
-    overflow-wrap: anywhere;
-  }
-
   .workspace-section {
-    padding: 1rem;
+    padding: clamp(0.95rem, 2vw, 1.25rem) 0;
   }
 
   .section-head,
@@ -735,9 +785,12 @@
     display: grid;
     gap: 0;
     margin-top: 0.8rem;
-    border: 1px solid var(--color-divider);
-    border-radius: 14px;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     overflow: hidden;
+    background: transparent;
   }
 
   .table-header,
@@ -750,12 +803,13 @@
   }
 
   .table-header {
-    background: color-mix(in srgb, var(--color-surface-alt) 38%, transparent);
+    background: transparent;
     border-bottom: 1px solid var(--color-divider);
   }
 
   .packet-line {
     border-bottom: 1px solid var(--color-divider);
+    background: transparent;
   }
 
   .packet-line:last-child {
@@ -778,7 +832,7 @@
     display: inline-flex;
     width: fit-content;
     border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border-radius: 0;
     padding: 0.3rem 0.55rem;
     color: var(--color-text-muted);
     font-size: 0.66rem;
@@ -789,31 +843,33 @@
 
   .status-pill-approved {
     border-color: color-mix(in srgb, var(--color-success) 38%, var(--color-border));
-    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: color-mix(in srgb, var(--color-success) 14%, transparent);
+    color: color-mix(in srgb, var(--color-success) 62%, var(--color-text));
+    background: color-mix(in srgb, var(--color-success) 9%, transparent);
   }
 
   .status-pill-submitted,
   .status-pill-in_progress {
-    border-color: color-mix(in srgb, #3b82f6 34%, var(--color-border));
-    color: #bfdbfe;
-    background: color-mix(in srgb, #3b82f6 14%, transparent);
+    border-color: color-mix(in srgb, #496476 42%, var(--color-border));
+    color: color-mix(in srgb, #496476 82%, var(--color-text));
+    background: color-mix(in srgb, #496476 10%, transparent);
   }
 
   .status-pill-sent,
   .status-pill-not_sent {
-    border-color: color-mix(in srgb, #f59e0b 38%, var(--color-border));
-    color: #fcd34d;
-    background: color-mix(in srgb, #f59e0b 14%, transparent);
+    border-color: color-mix(in srgb, #8a6b34 42%, var(--color-border));
+    color: color-mix(in srgb, #8a6b34 86%, var(--color-text));
+    background: color-mix(in srgb, #8a6b34 10%, transparent);
   }
 
   .inline-link,
   button,
   .source-link {
     border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
+    border-inline: 0;
+    border-top: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-soft);
     min-height: 2.35rem;
     padding: 0.5rem 0.72rem;
     cursor: pointer;
@@ -826,10 +882,87 @@
   }
 
   .packet-form {
-    grid-template-columns: minmax(150px, 0.8fr) minmax(190px, 1fr) minmax(90px, 0.35fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-top: 0.85rem;
     padding-top: 0.8rem;
     border-top: 1px solid var(--color-divider);
+  }
+
+  .standard-packet {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding: 0.85rem 0;
+    border-block: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .standard-packet-head,
+  .requirements-head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  .standard-packet strong {
+    display: block;
+    margin-top: 0.18rem;
+  }
+
+  .needed-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .needed-list div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 0.52rem 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .needed-list div:nth-child(odd) {
+    padding-right: 0.8rem;
+    border-right: 1px solid var(--color-divider);
+  }
+
+  .needed-list div:nth-child(even) {
+    padding-left: 0.8rem;
+  }
+
+  .needed-list span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .standard-packet small,
+  .needed-list small {
+    display: block;
+    font-size: 0.78rem;
+  }
+
+  .add-requirement {
+    margin-top: 0.8rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .add-requirement > summary {
+    width: fit-content;
+    list-style: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.2rem 0;
+  }
+
+  .add-requirement > summary::-webkit-details-marker {
+    display: none;
   }
 
   .packet-form.compact {
@@ -850,9 +983,9 @@
   textarea {
     width: 100%;
     border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.5rem 0.62rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border-radius: 0;
+    padding: 0.55rem 0.68rem;
+    background: color-mix(in srgb, var(--color-surface-alt) 82%, transparent);
     color: var(--color-text);
     font-size: 0.82rem;
   }
@@ -876,13 +1009,28 @@
 
   .requirement-list {
     display: grid;
-    gap: 0.5rem;
-    margin-top: 0.8rem;
+    gap: 0;
+    margin-top: 0.85rem;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    overflow: hidden;
+  }
+
+  .requirements-head {
+    margin-top: 1rem;
   }
 
   .requirement-row {
-    padding: 0.72rem 0;
-    border-top: 1px solid var(--color-divider);
+    padding: 0.72rem 0.82rem;
+    border-top: 0;
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
+  }
+
+  .requirement-row:last-child {
+    border-bottom: 0;
   }
 
   .delete-form {
@@ -899,11 +1047,10 @@
 
   .feedback-banner {
     margin: 0;
-    padding: 0.65rem 0.82rem;
-    border: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-success) 14%, transparent);
-    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
+    padding: 0.62rem 0;
+    border-block: 1px solid color-mix(in srgb, var(--color-success) 34%, var(--color-border));
+    background: transparent;
+    color: color-mix(in srgb, var(--color-success) 62%, var(--color-text));
     font-size: 0.8rem;
   }
 
@@ -913,12 +1060,24 @@
   }
 
   @media (max-width: 1050px) {
-    .tool-row,
+    .action-grid,
     .send-form,
     .invite-form,
     .packet-form,
-    .packet-form.compact {
+    .packet-form.compact,
+    .standard-packet {
       grid-template-columns: 1fr;
+    }
+
+    .needed-list {
+      grid-template-columns: 1fr;
+    }
+
+    .needed-list div:nth-child(odd),
+    .needed-list div:nth-child(even) {
+      padding-left: 0;
+      padding-right: 0;
+      border-right: 0;
     }
 
     .invite-context-grid {
@@ -970,6 +1129,8 @@
     }
 
     .section-head,
+    .standard-packet-head,
+    .requirements-head,
     .packet-setup > summary,
     .requirement-row > summary {
       align-items: stretch;

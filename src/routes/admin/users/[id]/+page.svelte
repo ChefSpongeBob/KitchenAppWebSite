@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -122,7 +123,30 @@
     direct_deposit_authorized: 'Direct deposit',
     bank_name: 'Bank name',
     routing_last_four: 'Routing last four',
-    account_last_four: 'Account last four'
+    account_last_four: 'Account last four',
+    legal_last_name: 'Legal last name',
+    legal_first_name: 'Legal first name',
+    other_last_names: 'Other last names',
+    date_of_birth: 'Date of birth',
+    ssn_last_four: 'SSN last four',
+    email: 'Email',
+    citizenship_status: 'Citizenship status',
+    document_choice: 'Document choice',
+    alien_registration_number: 'Alien registration number',
+    i94_number: 'I-94 number',
+    passport_number: 'Passport number',
+    passport_country: 'Passport country',
+    filing_status: 'Filing status',
+    multiple_jobs: 'Multiple jobs',
+    dependents_amount: 'Dependents amount',
+    other_income: 'Other income',
+    deductions: 'Deductions',
+    extra_withholding: 'Extra withholding',
+    exempt: 'Exempt',
+    allowances: 'Allowances',
+    additional_withholding: 'Additional withholding',
+    state_notes: 'State notes',
+    protected_record: 'Protected record'
   };
 
   function payloadEntries(item: EmployeeOnboardingItem) {
@@ -439,13 +463,7 @@
                   </div>
 
                   <div class="onboarding-evidence">
-                    {#if item.source_file_url}
-                      <a href={item.source_file_url} target="_blank" rel="noreferrer">
-                        {item.source_file_name || 'View packet document'}
-                      </a>
-                    {/if}
                     {#if item.file_url}
-                      <a href={item.file_url} target="_blank" rel="noreferrer">View upload</a>
                       <span>{item.file_name || 'Uploaded document'}</span>
                     {:else if item.item_type === 'form' && payloadEntries(item).length > 0}
                       <span>Form submitted</span>
@@ -459,6 +477,24 @@
                       <span>{formatDateTime(item.submitted_at)}</span>
                     {/if}
                   </div>
+
+                  {#if item.source_file_url}
+                    <OnboardingFormPreview
+                      src={item.source_file_url}
+                      title={item.title}
+                      fileName={item.source_file_name}
+                      label="Active form"
+                    />
+                  {/if}
+
+                  {#if item.file_url}
+                    <OnboardingFormPreview
+                      src={item.file_url}
+                      title={`${item.title} submission`}
+                      fileName={item.file_name}
+                      label="Submitted upload"
+                    />
+                  {/if}
 
                   {#if item.manager_note}
                     <p class="manager-note">{item.manager_note}</p>
@@ -899,11 +935,6 @@
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
-  }
-
-  .onboarding-evidence a {
-    color: var(--color-primary-contrast);
-    text-decoration: none;
   }
 
   .onboarding-form-review {

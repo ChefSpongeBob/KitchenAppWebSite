@@ -384,7 +384,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		if (
 			isPrivateRoute &&
-			event.locals.userRole !== 'admin' &&
 			!pathname.startsWith('/settings') &&
 			!pathname.startsWith('/api/') &&
 			!pathname.startsWith('/logout')

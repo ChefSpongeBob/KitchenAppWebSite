@@ -200,20 +200,19 @@
   .subnav a {
     text-decoration: none;
     color: var(--color-text-muted);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     padding: 0.32rem 0.7rem;
-    background: rgba(255,255,255,0.03);
+    background: transparent;
   }
 
   .week-banner {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-    padding: 0.95rem 1rem;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    padding: 0.95rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     display: flex;
     justify-content: space-between;
     gap: 1rem;
@@ -260,12 +259,10 @@
   .hours-banner {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
     margin-top: -0.25rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-      color-mix(in srgb, var(--color-surface) 94%, black 6%);
+    padding: 0.9rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     display: flex;
     justify-content: space-between;
     gap: 0.9rem;
@@ -294,18 +291,20 @@
   }
 
   .hours-chip {
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     padding: 0.18rem 0.55rem;
     font-size: 0.74rem;
     color: var(--color-text-muted);
-    background: rgba(255,255,255,0.03);
+    background: transparent;
   }
 
   .filter-chip {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 999px;
-    background: rgba(255,255,255,0.04);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text-muted);
     min-height: 2rem;
     padding: 0.35rem 0.8rem;
@@ -314,9 +313,9 @@
   }
 
   .filter-chip.filter-active {
-    border-color: rgba(132, 146, 166, 0.22);
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-primary-contrast);
+    border-color: var(--color-text);
+    background: transparent;
+    color: var(--color-text);
   }
 
   @media (max-width: 760px) {

@@ -3,9 +3,11 @@ import {
   createUserInvite,
   createEmployeeOnboardingTemplateItem,
   deleteEmployeeOnboardingTemplateItem,
+  installStandardEmployeeOnboardingTemplate,
   loadAdminInvites,
   loadAdminUsers,
   loadEmployeeOnboardingDashboard,
+  loadEmployeeOnboardingRecommendations,
   loadEmployeeOnboardingTemplate,
   revokeUserInvite,
   requireAdmin,
@@ -18,7 +20,16 @@ import { requireBusinessId } from '$lib/server/tenant';
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
-  if (!db) return { templateItems: [], onboardingRows: [], users: [], invites: [], departments: [] };
+  if (!db) {
+    return {
+      templateItems: [],
+      onboardingRows: [],
+      users: [],
+      invites: [],
+      departments: [],
+      recommendations: { state: '', items: [] }
+    };
+  }
   const businessId = requireBusinessId(locals);
 
   return {
@@ -26,7 +37,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     onboardingRows: await loadEmployeeOnboardingDashboard(db, businessId),
     users: await loadAdminUsers(db, businessId),
     invites: await loadAdminInvites(db, businessId),
-    departments: await loadScheduleDepartments(db, businessId)
+    departments: await loadScheduleDepartments(db, businessId),
+    recommendations: await loadEmployeeOnboardingRecommendations(db, businessId)
   };
 };
 
@@ -35,6 +47,7 @@ export const actions: Actions = {
     createUserInvite(request, locals, url.origin, platform?.env),
   revoke_user_invite: ({ request, locals }) => revokeUserInvite(request, locals),
   send_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
+  install_standard_packet: ({ request, locals }) => installStandardEmployeeOnboardingTemplate(request, locals),
   create_item: ({ request, locals }) => createEmployeeOnboardingTemplateItem(request, locals),
   update_item: ({ request, locals }) => updateEmployeeOnboardingTemplateItem(request, locals),
   delete_item: ({ request, locals }) => deleteEmployeeOnboardingTemplateItem(request, locals)

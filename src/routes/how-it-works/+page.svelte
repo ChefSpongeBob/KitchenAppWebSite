@@ -30,106 +30,90 @@
 		targets: TourTarget[];
 	};
 
-	const quickStats = ['1 workspace', 'Live view', 'Desktop + mobile'];
+	const quickStats = ['Business workspace', 'Employee onboarding', 'Daily operations'];
 
 	const tourScenes: TourScene[] = [
 		{
-			title: 'Homepage workspace',
-			src: '/marketing/app/homepage-main-block.png',
-			alt: 'Homepage with morning brief and shift block',
+			title: 'Workspace launch',
+			src: '/marketing/app/admin-dashboard.png',
+			alt: 'Admin dashboard with workspace controls',
 			targets: [
 				{
-					label: 'Main shift block',
-					description: 'The core daily brief, shift context, and announcement feed are centered here.',
-					focus: { x: 4, y: 29, w: 84, h: 40 }
-				},
-				{
-					label: 'Announcements area',
-					description: 'Live shift announcements are pinned in this lower section of the brief block.',
-					focus: { x: 6, y: 52, w: 80, h: 15 }
-				},
-				{
-					label: 'Daily Specials card',
-					description: 'Quick service updates stay visible in this left tile.',
-					focus: { x: 4, y: 73, w: 42, h: 18 }
-				},
-				{
-					label: 'Menus card',
-					description: 'Fast access to menu docs and references sits in this right tile.',
-					focus: { x: 48, y: 73, w: 40, h: 18 }
+					label: 'Owner workspace',
+					description: 'After signup, the owner lands in a business-scoped workspace where admin setup begins.',
+					focus: { x: 23, y: 42, w: 52, h: 12 }
 				}
 			]
 		},
 		{
-			title: 'Scheduling controls',
+			title: 'Admin controls',
+			src: '/marketing/app/admin-dashboard.png',
+			alt: 'Admin dashboard control center',
+			targets: [
+				{
+					label: 'Feature setup',
+					description: 'Admins enable the app areas the business will use, then configure departments, roles, documents, menus, and lists.',
+					focus: { x: 25, y: 42, w: 50, h: 7 }
+				}
+			]
+		},
+		{
+			title: 'Employee onboarding',
+			src: '/marketing/app/admin-dashboard.png',
+			alt: 'Admin dashboard representing employee onboarding controls',
+			targets: [
+				{
+					label: 'Invite + packet',
+					description: 'Employees join through branded invites and complete required onboarding packet items before full app use.',
+					focus: { x: 22, y: 55, w: 38, h: 34 }
+				}
+			]
+		},
+		{
+			title: 'Schedule builder',
 			src: '/marketing/app/scheduling-builder.png',
 			alt: 'Admin schedule builder page',
 			targets: [
 				{
-					label: 'Schedule selector',
-					description: 'Switch between schedule views from one unified control row.',
+					label: 'Weekly coverage',
+					description: 'Managers build coverage by department, publish schedules, and review shift changes through approval flow.',
 					focus: { x: 25, y: 42, w: 50, h: 7 }
-				},
-				{
-					label: 'Week and section filters',
-					description: 'Navigate weeks and section filters before publishing coverage.',
-					focus: { x: 25, y: 65, w: 30, h: 25 }
-				},
-				{
-					label: 'Approvals status',
-					description: 'Pending approvals are tracked so admin can resolve blockers quickly.',
-					focus: { x: 54, y: 64, w: 20, h: 24 }
 				}
 			]
 		},
 		{
-			title: 'Task execution',
+			title: 'Daily homepage',
+			src: '/marketing/app/homepage-main-block.png',
+			alt: 'Homepage with daily brief and shift block',
+			targets: [
+				{
+					label: 'Daily brief',
+					description: 'Staff sees the current shift, restaurant updates, specials, menus, tasks, and active operational context.',
+					focus: { x: 4, y: 29, w: 84, h: 40 }
+				}
+			]
+		},
+		{
+			title: 'Lists + tasks',
 			src: '/marketing/app/todo-assign.png',
 			alt: 'ToDo page with active and completed tabs',
 			targets: [
 				{
-					label: 'Active tasks tab',
-					description: 'Current open tasks are managed in the Active queue.',
-					focus: { x: 24, y: 47, w: 26, h: 8 }
-				},
-				{
-					label: 'Completed tasks tab',
-					description: 'Finished tasks move to Completed for review and accountability.',
-					focus: { x: 50, y: 47, w: 26, h: 8 }
+					label: 'Execution queue',
+					description: 'Tasks, prep work, checklists, inventory, and orders keep daily execution visible and accountable.',
+					focus: { x: 24, y: 47, w: 52, h: 8 }
 				}
 			]
 		},
 		{
-			title: 'Recipe access',
+			title: 'Recipes + docs',
 			src: '/marketing/app/recipe-categories.png',
 			alt: 'Recipe categories page with search and category entry',
 			targets: [
 				{
-					label: 'Recipe search',
-					description: 'Find the exact recipe quickly during prep or service.',
-					focus: { x: 4, y: 44, w: 37, h: 8 }
-				},
-				{
-					label: 'Category entry',
-					description: 'Open category groups to drill into documented recipe sets.',
-					focus: { x: 4, y: 54, w: 93, h: 16 }
-				}
-			]
-		},
-		{
-			title: 'Admin dashboard',
-			src: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard control center summary',
-			targets: [
-				{
-					label: 'Dashboard selector',
-					description: 'Module-level admin navigation starts from this top control row.',
-					focus: { x: 25, y: 45, w: 50, h: 7 }
-				},
-				{
-					label: 'Control center summary',
-					description: 'Staffing, whiteboard, todo, and node state are summarized in one panel.',
-					focus: { x: 24, y: 56, w: 32, h: 43 }
+					label: 'Knowledge access',
+					description: 'Recipes, SOPs, menus, and documents are organized so employees can find references during prep or service.',
+					focus: { x: 4, y: 44, w: 93, h: 26 }
 				}
 			]
 		}
@@ -138,27 +122,27 @@
 	const workflowSteps: WorkflowStep[] = [
 		{
 			step: '01',
-			title: 'Set Up Your Workspace',
-			summary: 'Create the structure that matches your real operation.',
-			items: ['Set departments and roles', 'Approve users and access levels', 'Set your business profile'],
+			title: 'Create The Business Workspace',
+			summary: 'Register the restaurant and create its isolated app environment.',
+			items: ['Enter owner and business information', 'Choose plan path', 'Create the first owner/admin account'],
 			image: '/marketing/app/admin-dashboard.png',
 			alt: 'Admin dashboard overview',
 			position: 'top center'
 		},
 		{
 			step: '02',
-			title: 'Build Your Week',
-			summary: 'Create schedules and assignments in one pass.',
-			items: ['Build and adjust shifts', 'Assign tasks and prep expectations', 'Publish updates to staff instantly'],
+			title: 'Configure The Operation',
+			summary: 'Turn on the app areas the business needs and set the operating structure.',
+			items: ['Set business profile, logo, and enabled features', 'Build departments, roles, lists, menus, recipes, and docs', 'Install or customize the onboarding packet'],
 			image: '/marketing/app/scheduling-builder.png',
 			alt: 'Schedule builder interface',
 			position: 'top center'
 		},
 		{
 			step: '03',
-			title: 'Run Service With Clarity',
-			summary: 'Everyone sees priorities, updates, and live status in one place.',
-			items: ['Check today schedule and tasks', 'Share announcements and shift context', 'Monitor active operational signals'],
+			title: 'Invite Staff + Go Live',
+			summary: 'Bring employees into the workspace and start running the restaurant through Crimini.',
+			items: ['Send employee invites', 'Review completed onboarding packets', 'Publish schedules and run daily execution from the homepage'],
 			image: '/marketing/app/employee-homepage.png',
 			alt: 'Employee homepage with shift info',
 			position: 'top center'
@@ -168,59 +152,76 @@
 	const firstWeekSteps: WeekStep[] = [
 		{
 			dayRange: 'Day 1',
-			title: 'Core setup',
-			items: ['Create departments', 'Set up access roles', 'Add your first team members']
+			title: 'Workspace setup',
+			items: ['Register business details', 'Set branding and feature visibility', 'Create departments and roles']
 		},
 		{
 			dayRange: 'Day 2-3',
-			title: 'Go live with schedules',
-			items: ['Build first weekly schedule', 'Review coverage and updates', 'Publish to employee view']
+			title: 'Employees + scheduling',
+			items: ['Install onboarding packet', 'Invite staff', 'Build and publish first weekly schedule']
 		},
 		{
 			dayRange: 'Day 4-7',
-			title: 'Move daily flow into app',
-			items: ['Use todo and prep lists daily', 'Share docs and updates in shift', 'Track service with live awareness']
+			title: 'Daily operation',
+			items: ['Move lists, docs, recipes, and menus into the app', 'Use tasks and updates daily', 'Connect monitoring when hardware is ready']
 		}
 	];
 
 	const appAreas = [
 		{
-			title: 'Scheduling + Coverage',
-			detail: 'Build, adjust, and publish shift coverage by team and role.'
+			title: 'Workspace Setup',
+			detail: 'Business profile, branding, feature visibility, departments, roles, and tenant-scoped records.'
+		},
+		{
+			title: 'Employee Launch',
+			detail: 'Invites, account setup, onboarding packet requirements, and admin review.'
+		},
+		{
+			title: 'Scheduling + Labor',
+			detail: 'Schedule builder, publishing, My Schedule, availability, time off, shift offers, swaps, and approval.'
 		},
 		{
 			title: 'Daily Execution',
-			detail: 'Run todo, prep, checklists, inventory, and order flow in one place.'
+			detail: 'Homepage, tasks, prep, checklists, inventory, orders, docs, recipes, menus, specials, and announcements.'
 		},
 		{
-			title: 'Knowledge + Updates',
-			detail: 'Keep recipes, docs, announcements, and context visible during service.'
-		},
-		{
-			title: 'Monitoring + Admin',
-			detail: 'Track operational signal and manage workspace controls with less friction.'
+			title: 'Monitoring + Reports',
+			detail: 'Temperature and camera readiness, vendors, history, exports, and operational review.'
 		}
 	];
 
 	const faqs = [
 		{
-			q: 'Can we start with one location and scale later?',
-			a: 'Yes. Teams usually start on Small or Medium, then move to Large as staffing and complexity increase.'
+			q: 'Does each restaurant get its own workspace?',
+			a: 'Yes. Each business workspace keeps its users, schedules, documents, uploads, and app settings separate.'
 		},
 		{
-			q: 'Do we need to migrate all workflows on day one?',
-			a: 'No. Most kitchens launch scheduling and prep first, then move docs and recipe workflows over in phases.'
+			q: 'Can owners control which features show up?',
+			a: 'Yes. Admins can enable or hide app areas so the workspace matches the business needs.'
 		},
 		{
-			q: 'Is onboarding help included?',
-			a: 'Yes. Every tier includes launch guidance for manager and admin setup.'
+			q: 'How do employees join?',
+			a: 'Admins send an invite. The employee creates their account, completes the assigned onboarding packet, and then uses the app once approved.'
+		},
+		{
+			q: 'What onboarding packet items are included?',
+			a: 'The base packet includes personal information, emergency contact, payroll setup, I-9, W-4, state withholding when available, handbook acknowledgement, and policy acknowledgement.'
+		},
+		{
+			q: 'Can we launch before sensors or cameras are connected?',
+			a: 'Yes. Scheduling, onboarding, lists, docs, menus, recipes, tasks, and communication can launch first.'
+		},
+		{
+			q: 'Can we start small and add more later?',
+			a: 'Yes. Workspaces can begin with core operations and expand with monitoring, cameras, and deeper workflows over time.'
 		}
 	];
 
 	const rolloutNotes = [
-		'Temperature monitoring is optional on Small and Medium, included on Large.',
-		'Camera monitoring is optional on Small and Medium, included on Large.',
-		'All tiers include guided rollout for managers and admins.'
+		'The owner account creates the business workspace first.',
+		'Employee onboarding is controlled from admin after workspace setup.',
+		'Temperature and camera systems can be connected after the core app is running.',
+		'Store billing and mobile store release remain part of the final production launch path.'
 	];
 
 	let activeSceneIndex = 0;
@@ -254,9 +255,9 @@
 <Layout>
 	<section class="head" data-reveal style="--reveal-delay: 40ms;">
 		<p class="eyebrow">How It Works</p>
-		<h1>One clear operations flow for your whole team.</h1>
+		<h1>From business signup to live restaurant operations.</h1>
 		<p>
-			Crimini keeps setup, scheduling, daily execution, and service visibility connected.
+			Crimini starts with the owner creating a business workspace, then moves through setup, onboarding, scheduling, and daily service.
 		</p>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Free Trial</a>
@@ -269,9 +270,9 @@
 			<img src="/marketing/FB_IMG_7461876514951404517.jpg" alt="Kitchen team coordinating service" loading="lazy" />
 		</figure>
 		<div class="intro-copy">
-			<h2>Built for quick understanding during real shifts</h2>
+			<h2>Built as a launch path, not just a dashboard</h2>
 			<p>
-				The app is organized so managers and staff can find what matters in seconds without jumping across tools.
+				The owner sets the business foundation, managers configure operations, employees join through onboarding, and the team runs service from one workspace.
 			</p>
 			<p class="pipe-line">
 				{#each quickStats as stat}
@@ -284,7 +285,7 @@
 	<section class="tour-preview-band" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">Guided Walkthrough</p>
-			<h2>Feature-by-feature preview of real app screens</h2>
+			<h2>Preview the path from setup to daily use</h2>
 		</header>
 		<div class="tour-preview-shell">
 			<div class="tour-stage" role="region" aria-label={`Guided preview for ${activeScene.title}`}>
@@ -338,7 +339,7 @@
 	<section class="workflow" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">Workflow</p>
-			<h2>Three practical phases</h2>
+			<h2>Three practical launch phases</h2>
 		</header>
 		<div class="workflow-stack">
 			{#each workflowSteps as step, index}
@@ -364,7 +365,7 @@
 	<section class="week-plan" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">First Week</p>
-			<h2>A clean rollout sequence</h2>
+			<h2>A clean first-week rollout</h2>
 		</header>
 		<div class="week-grid">
 			{#each firstWeekSteps as step}
@@ -384,7 +385,7 @@
 	<section class="areas-only" data-reveal>
 		<header class="section-head">
 			<p class="eyebrow">App Areas</p>
-			<h2>What teams use day to day</h2>
+			<h2>What the business controls and uses</h2>
 		</header>
 		<ul class="area-list">
 			{#each appAreas as area}
@@ -426,8 +427,8 @@
 
 	<section class="bottom-cta" data-reveal>
 		<div>
-			<h2>Ready to run operations from one workspace?</h2>
-			<p>Launch with your team and move daily execution into one clean flow.</p>
+			<h2>Ready to launch the workspace?</h2>
+			<p>Create the business, configure the app, onboard staff, and move daily execution into one clean flow.</p>
 		</div>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Create Workspace</a>
@@ -632,7 +633,7 @@
 
 	.scene-progress {
 		display: grid;
-		grid-template-columns: repeat(5, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(1.4rem, 1fr));
 		gap: 0.3rem;
 		width: min(100%, 32rem);
 	}

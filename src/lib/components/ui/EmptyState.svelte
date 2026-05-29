@@ -42,12 +42,14 @@
     gap: 0.45rem;
     min-height: 13rem;
     text-align: center;
-    padding: clamp(1rem, 4vw, 2rem);
-    border: var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: clamp(1rem, 4vw, 2rem) 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text-muted);
-    box-shadow: var(--shadow-xs);
+    box-shadow: none;
   }
 
   .compact {
@@ -55,8 +57,8 @@
     justify-items: start;
     align-content: start;
     text-align: left;
-    padding: 0.75rem 0.85rem;
-    border-radius: var(--radius-md);
+    padding: 0.75rem 0;
+    border-radius: 0;
   }
 
   .icon {
@@ -89,10 +91,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.6rem 1rem;
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
-    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface) 88%);
+    padding: 0.34rem 0.18rem;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     cursor: pointer;
     text-decoration: none;
@@ -101,14 +104,12 @@
   }
 
   .action-btn:hover {
-    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+    border-bottom-color: var(--color-text);
   }
 
   .error {
     border-color: color-mix(in srgb, var(--color-error) 36%, var(--color-border) 64%);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-error) 9%, transparent), transparent),
-      var(--color-surface);
+    background: transparent;
   }
 
   .success {

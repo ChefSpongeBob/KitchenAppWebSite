@@ -23,7 +23,14 @@ export type EncryptedSensitivePayload = {
   encryptionAlgorithm: string;
 };
 
-const sensitiveFormKeys = new Set(['personal_information', 'emergency_contact', 'payroll_setup']);
+const sensitiveFormKeys = new Set([
+  'personal_information',
+  'emergency_contact',
+  'payroll_setup',
+  'federal_i9',
+  'federal_w4',
+  'state_withholding'
+]);
 
 function normalizeBase64(value: string) {
   const normalized = value.trim().replace(/-/g, '+').replace(/_/g, '/');

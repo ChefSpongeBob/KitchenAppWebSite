@@ -188,10 +188,12 @@
 
   .people-hero,
   .people-workspace {
-    border: 1px solid var(--surface-outline);
-    border-radius: 24px;
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-sm);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .people-hero {
@@ -236,10 +238,11 @@
   .people-metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    border: 1px solid var(--color-divider);
-    border-radius: 18px;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     overflow: hidden;
-    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+    background: transparent;
   }
 
   .people-metrics div {
@@ -305,10 +308,11 @@
   input {
     width: 100%;
     min-height: 2.45rem;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    padding: 0.58rem 0.72rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    padding: 0.58rem 0;
+    background: transparent;
     color: var(--color-text);
     font: inherit;
     font-size: 0.84rem;
@@ -316,8 +320,9 @@
 
   .staff-table {
     display: grid;
-    border: 1px solid var(--color-divider);
-    border-radius: 18px;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -332,7 +337,7 @@
   }
 
   .table-header {
-    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
+    background: transparent;
   }
 
   .staff-row:last-child {
@@ -352,10 +357,10 @@
   .avatar {
     width: 2.35rem;
     height: 2.35rem;
-    border-radius: 14px;
+    border-radius: 0;
     display: grid;
     place-items: center;
-    background: color-mix(in srgb, var(--color-surface-alt) 74%, var(--color-text) 10%);
+    background: transparent;
     border: 1px solid var(--color-border);
     color: var(--color-text);
     font-weight: var(--weight-bold);
@@ -375,18 +380,19 @@
 
   .role-pill {
     width: fit-content;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
     padding: 0.25rem 0.58rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+    background: transparent;
     color: var(--color-text-muted);
     font-size: 0.74rem;
     font-weight: var(--weight-semibold);
   }
 
   .role-pill.role-admin {
-    border-color: color-mix(in srgb, #60a5fa 34%, var(--color-border));
-    color: #bfdbfe;
+    border-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-border));
+    color: var(--color-text-soft);
   }
 
   .row-actions,
@@ -399,10 +405,11 @@
   button,
   .inline-action {
     min-height: 2.25rem;
-    border: 1px solid var(--color-border);
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
     padding: 0.48rem 0.68rem;
     font: inherit;
     font-size: 0.78rem;
@@ -417,8 +424,8 @@
 
   .warn-action {
     border-color: color-mix(in srgb, #f59e0b 38%, var(--color-border));
-    color: #fcd34d;
-    background: color-mix(in srgb, #78350f 28%, var(--color-surface));
+    color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
+    background: transparent;
   }
 
   .side-section {
