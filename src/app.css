@@ -348,6 +348,24 @@ textarea {
   color: var(--color-text);
 }
 
+select option,
+select optgroup {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+[data-theme='light'] select option,
+[data-theme='light'] select optgroup {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+[data-theme='dark'] select option,
+[data-theme='dark'] select optgroup {
+  background-color: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
 button {
   transition:
     transform var(--duration-fast) var(--ease-out),

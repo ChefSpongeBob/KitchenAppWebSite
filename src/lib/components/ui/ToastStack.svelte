@@ -60,32 +60,23 @@
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.82rem 0.9rem;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(14px);
-    box-shadow: 0 18px 38px rgba(4, 5, 7, 0.26);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    box-shadow: none;
     color: var(--color-text);
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    background: var(--color-surface);
   }
 
   .toast-success {
-    border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-success) 22%, transparent), color-mix(in srgb, var(--color-success) 8%, transparent)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    border-color: color-mix(in srgb, var(--color-success) 62%, var(--color-border));
   }
 
   .toast-error {
-    border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-error) 42%, transparent), color-mix(in srgb, var(--color-error) 16%, transparent)),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    border-color: color-mix(in srgb, var(--color-error) 62%, var(--color-border));
   }
 
   .toast-info {
-    border-color: rgba(132, 146, 166, 0.24);
+    border-color: var(--color-border);
   }
 
   .toast span {
@@ -95,9 +86,9 @@
 
   .toast button {
     flex: 0 0 auto;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.22rem 0.5rem;
     cursor: pointer;

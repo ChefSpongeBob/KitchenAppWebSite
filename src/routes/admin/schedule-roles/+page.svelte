@@ -144,7 +144,7 @@
     justify-content: center;
     padding: 0.5rem 0.78rem;
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: 0;
     color: var(--color-text);
     text-decoration: none;
     font-size: 0.8rem;
@@ -227,9 +227,9 @@
   select {
     width: 100%;
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: 0;
     padding: 0.42rem 0.56rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 92%, black 8%);
+    background: var(--color-surface);
     color: var(--color-text);
     font-size: 0.82rem;
   }
@@ -237,10 +237,10 @@
   button {
     min-height: 2.35rem;
     padding: 0.55rem 0.85rem;
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-primary-contrast);
+    border: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 0.8rem;
     font-weight: var(--weight-medium);

@@ -190,28 +190,26 @@
 	.spotlight {
 		position: fixed;
 		pointer-events: none;
-		box-shadow: 0 0 0 9999px rgba(5, 8, 14, 0.66);
-		border: 2px solid rgba(226, 235, 248, 0.86);
-		outline: 1px solid rgba(132, 146, 166, 0.72);
+		box-shadow: 0 0 0 9999px rgba(17, 18, 20, 0.46);
+		border: 2px solid rgba(248, 244, 236, 0.92);
+		outline: 1px solid rgba(17, 18, 20, 0.62);
 		background: transparent;
 	}
 
 	.fallback-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(5, 8, 14, 0.7);
+		background: rgba(17, 18, 20, 0.5);
 	}
 
 	.tour-card {
 		position: fixed;
 		pointer-events: auto;
-		border: 1px solid rgba(228, 239, 255, 0.2);
-		border-radius: 14px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
 		padding: 0.78rem 0.82rem 0.8rem;
-		background:
-			linear-gradient(155deg, rgba(132, 146, 166, 0.32), rgba(132, 146, 166, 0.11) 58%, rgba(132, 146, 166, 0.04)),
-			#111722;
-		box-shadow: 0 24px 52px rgba(0, 0, 0, 0.46);
+		background: var(--color-surface);
+		box-shadow: none;
 		display: grid;
 		gap: 0.35rem;
 	}
@@ -221,32 +219,32 @@
 		font-size: 0.72rem;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: rgba(228, 239, 255, 0.8);
+		color: var(--color-text-muted);
 	}
 
 	.tour-step {
 		margin: 0;
 		font-size: 0.72rem;
-		color: rgba(228, 239, 255, 0.66);
+		color: var(--color-text-muted);
 	}
 
 	.tour-card h2 {
 		margin: 0.1rem 0 0.12rem;
 		font-size: 1rem;
-		color: #f4f8ff;
+		color: var(--color-text);
 	}
 
 	.tour-description {
 		margin: 0;
 		font-size: 0.8rem;
 		line-height: 1.42;
-		color: rgba(232, 241, 255, 0.9);
+		color: var(--color-text-soft);
 	}
 
 	.tour-note {
 		margin: 0.04rem 0 0;
 		font-size: 0.74rem;
-		color: #facc15;
+		color: var(--color-warning);
 	}
 
 	.tour-actions {
@@ -263,19 +261,19 @@
 	}
 
 	button {
-		border-radius: 9px;
+		border-radius: 0;
 		font-size: 0.75rem;
 		font-weight: 600;
 		padding: 0.42rem 0.62rem;
-		border: 1px solid rgba(226, 239, 255, 0.26);
-		background: rgba(226, 239, 255, 0.1);
-		color: #f4f8ff;
+		border: 1px solid var(--color-border);
+		background: transparent;
+		color: var(--color-text);
 		cursor: pointer;
 	}
 
 	button.quiet {
 		background: transparent;
-		color: rgba(232, 241, 255, 0.82);
+		color: var(--color-text-muted);
 	}
 
 	button:disabled {

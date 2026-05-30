@@ -50,7 +50,7 @@
 	.welcome-mark {
 		width: min(23rem, 76vw);
 		overflow: hidden;
-		border-radius: 28px;
+		border-radius: 0;
 	}
 
 	.welcome-mark img {
@@ -82,7 +82,7 @@
 		margin-top: 0.25rem;
 		padding: 0.72rem 1.18rem;
 		border: 1px solid rgba(17, 18, 20, 0.18);
-		border-radius: 999px;
+		border-radius: 0;
 		background: #111214;
 		color: #fbfaf7;
 		font-weight: 700;

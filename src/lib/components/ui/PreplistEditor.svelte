@@ -227,8 +227,9 @@
   .sheet {
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
+    gap: 0;
     padding: 0;
+    border-top: 1px solid var(--color-divider);
   }
 
   .sheet-header,
@@ -245,9 +246,9 @@
   }
 
   .sheet-header {
-    padding: 0.1rem 0.65rem;
+    padding: 0.75rem 0;
     font-size: 0.74rem;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--color-text-muted);
   }
@@ -255,15 +256,16 @@
   .batch-form {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0;
   }
 
   .sheet-row {
     position: relative;
-    padding: 0.68rem 0;
+    padding: 0.75rem 0;
     border-radius: 0;
     border: 0;
-    border-top: 1px solid var(--color-divider);
+    border-top: 0;
+    border-bottom: 1px solid var(--color-divider);
     background: transparent;
     box-shadow: none;
     transition: background 140ms ease, border-color 140ms ease;
@@ -274,7 +276,7 @@
   }
 
   .sheet-row.done {
-    border-color: color-mix(in srgb, var(--color-success) 34%, var(--color-border));
+    border-bottom-color: color-mix(in srgb, var(--color-success) 34%, var(--color-border));
     background: transparent;
   }
 
@@ -336,12 +338,12 @@
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
-    margin-top: 0.2rem;
+    margin-top: 0.75rem;
     flex-wrap: wrap;
   }
 
   .reset-row {
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
   }
 
   .submit-btn {
@@ -362,7 +364,9 @@
   }
 
   .admin-par {
-    margin-top: 0.55rem;
+    margin-top: 0.9rem;
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.7rem;
   }
 
   .admin-par summary {
@@ -378,7 +382,7 @@
   }
 
   .admin-par-form {
-    margin-top: 0.55rem;
+    margin-top: 0.7rem;
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
@@ -462,7 +466,7 @@
     .sheet-row {
       grid-template-columns: 50px 1fr;
       gap: 0.65rem;
-      padding: 0.8rem 0.75rem;
+      padding: 0.8rem 0;
     }
 
     .number-form,

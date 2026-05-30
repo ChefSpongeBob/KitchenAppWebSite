@@ -1505,6 +1505,7 @@ export function buildEmployeeOnboardingRecommendations(state = '') {
   return defaultEmployeeOnboardingItems(state).map((item) => ({
     title: item.title,
     type: item.item_type,
+    description: item.description,
     needsUpload: item.item_type === 'document'
   }));
 }

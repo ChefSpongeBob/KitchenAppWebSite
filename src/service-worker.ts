@@ -3,10 +3,23 @@ import { build, files, version } from '$service-worker';
 
 const CACHE = `cache-${version}`;
 const RUNTIME_CACHEABLE_PATHS = ['/menus/'];
+const PUBLIC_NAVIGATION_PATHS = new Set([
+	'/',
+	'/about',
+	'/features',
+	'/how-it-works',
+	'/pricing',
+	'/privacy',
+	'/account-deletion'
+]);
 const PRECACHE_EXCLUSIONS = [/^\/menus\//];
 const ASSETS = [...build, ...files].filter(
 	(path) => !PRECACHE_EXCLUSIONS.some((pattern) => pattern.test(path))
 );
+
+function isPublicNavigationPath(pathname: string) {
+	return PUBLIC_NAVIGATION_PATHS.has(pathname);
+}
 
 self.addEventListener('install', (event) => {
 	event.waitUntil(
@@ -23,6 +36,19 @@ self.addEventListener('activate', (event) => {
 			for (const key of keys) {
 				if (key !== CACHE) await caches.delete(key);
 			}
+
+			const cache = await caches.open(CACHE);
+			const requests = await cache.keys();
+			await Promise.all(
+				requests.map(async (request) => {
+					const url = new URL(request.url);
+					const keepCached =
+						ASSETS.includes(url.pathname) ||
+						RUNTIME_CACHEABLE_PATHS.some((prefix) => url.pathname.startsWith(prefix)) ||
+						isPublicNavigationPath(url.pathname);
+					if (!keepCached) await cache.delete(request);
+				})
+			);
 		})
 	);
 	event.waitUntil(self.clients.claim());
@@ -40,6 +66,7 @@ self.addEventListener('fetch', (event) => {
 	const isApi = url.pathname.startsWith('/api/');
 	const isStaticAsset = isSameOrigin && ASSETS.includes(url.pathname);
 	const isRuntimeCacheable = isSameOrigin && RUNTIME_CACHEABLE_PATHS.some((prefix) => url.pathname.startsWith(prefix));
+	const isPublicNavigation = event.request.mode === 'navigate' && isPublicNavigationPath(url.pathname);
 
 	if (!isSameOrigin) return;
 
@@ -66,16 +93,20 @@ self.addEventListener('fetch', (event) => {
 		event.respondWith(
 			fetch(event.request)
 				.then((response) => {
-					// Keep an offline fallback for shell navigations only.
-					if (event.request.mode === 'navigate' && !authPath) {
+					// Only public marketing pages get navigation cache. Private app/admin
+					// routes must always reflect the current server session.
+					if (isPublicNavigation) {
 						const copy = response.clone();
 						caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
 					}
 					return response;
 				})
 				.catch(async () => {
-					const cached = await caches.match(event.request);
-					return cached ?? (await caches.match('/')) ?? new Response('Offline', { status: 503, statusText: 'Offline' });
+					if (isPublicNavigation) {
+						const cached = await caches.match(event.request);
+						return cached ?? (await caches.match('/')) ?? new Response('Offline', { status: 503, statusText: 'Offline' });
+					}
+					return new Response('Offline', { status: 503, statusText: 'Offline' });
 				})
 		);
 		return;

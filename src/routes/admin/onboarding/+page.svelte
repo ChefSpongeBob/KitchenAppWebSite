@@ -70,6 +70,7 @@
   type PacketRecommendation = {
     title: string;
     type: string;
+    description: string;
     needsUpload: boolean;
   };
 
@@ -357,14 +358,18 @@
           <span class="section-kicker">Setup</span>
           <strong>Packet Forms</strong>
         </span>
-        <em>{data.templateItems.length} item{data.templateItems.length === 1 ? '' : 's'}</em>
+        <em>{data.templateItems.length ? `${data.templateItems.length} active` : 'Not installed'}</em>
       </summary>
 
       <div class="standard-packet" aria-label="Base employee packet forms">
         <div class="standard-packet-head">
           <div>
-            <span class="section-kicker">Base Packet</span>
+            <span class="section-kicker">Recommended Packet</span>
             <strong>{data.recommendations.state ? `${data.recommendations.state} employee onboarding` : 'Employee onboarding'}</strong>
+            <p>
+              Install these to create the packet employees receive from their onboarding link. Form items are filled out in Crimini;
+              uploaded files are for source PDFs/images such as handbooks, policies, or business-specific forms.
+            </p>
           </div>
           <form method="POST" action="?/install_standard_packet" use:enhance={withFeedback}>
             <button type="submit">{data.templateItems.length ? 'Add Missing Forms' : 'Install Base Forms'}</button>
@@ -374,8 +379,11 @@
         <div class="needed-list">
           {#each data.recommendations.items as item}
             <div>
-              <span>{item.title}</span>
-              <small>{item.type === 'form' ? 'Form' : item.type === 'document' ? 'Upload' : 'Signature'}</small>
+              <span>
+                <strong>{item.title}</strong>
+                <small>{item.description}</small>
+              </span>
+              <em>{item.type === 'form' ? 'Employee fills out' : item.type === 'document' ? 'Upload needed' : 'Signature'}</em>
             </div>
           {/each}
         </div>
@@ -446,6 +454,10 @@
       <div class="requirements-head">
         <span class="section-kicker">Current Packet</span>
         <strong>{data.templateItems.length ? 'Configured forms' : 'No custom forms yet'}</strong>
+        <p>
+          These are the active packet items used when you send onboarding. Open a form below to edit instructions, attach a source file,
+          hide it, or delete it.
+        </p>
       </div>
 
       <div class="requirement-list" aria-label="Current onboarding packet forms">
@@ -878,17 +890,30 @@
     background: transparent;
   }
 
-  .standard-packet-head,
-  .requirements-head {
+  .standard-packet-head {
     display: flex;
     align-items: end;
     justify-content: space-between;
     gap: 0.8rem;
   }
 
+  .requirements-head {
+    display: grid;
+    gap: 0.2rem;
+  }
+
   .standard-packet strong {
     display: block;
     margin-top: 0.18rem;
+  }
+
+  .standard-packet-head p,
+  .requirements-head p {
+    max-width: 52rem;
+    margin: 0.35rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
   }
 
   .needed-list {
@@ -900,7 +925,7 @@
 
   .needed-list div {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.75rem;
     min-width: 0;
@@ -922,10 +947,23 @@
     overflow-wrap: anywhere;
   }
 
+  .needed-list span strong {
+    margin: 0;
+  }
+
   .standard-packet small,
   .needed-list small {
     display: block;
     font-size: 0.78rem;
+  }
+
+  .needed-list em {
+    color: var(--color-text-muted);
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    font-style: normal;
+    padding-top: 0.08rem;
+    white-space: nowrap;
   }
 
   .add-requirement {

@@ -1720,6 +1720,18 @@
     box-shadow: none !important;
   }
 
+  .app-shell:not(.marketing-app) :global(select option),
+  .app-shell:not(.marketing-app) :global(select optgroup) {
+    background-color: var(--color-surface) !important;
+    color: var(--color-text) !important;
+  }
+
+  :global(html[data-theme='dark']) .app-shell:not(.marketing-app) :global(select option),
+  :global(html[data-theme='dark']) .app-shell:not(.marketing-app) :global(select optgroup) {
+    background-color: var(--color-surface-alt) !important;
+    color: var(--color-text) !important;
+  }
+
   .app-shell:not(.marketing-app) :global(table) {
     border-collapse: collapse;
   }

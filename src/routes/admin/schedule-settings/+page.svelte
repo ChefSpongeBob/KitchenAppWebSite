@@ -100,10 +100,10 @@
   button {
     min-height: 2.5rem;
     padding: 0.6rem 0.9rem;
-    border: 1px solid rgba(132, 146, 166, 0.22);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(132, 146, 166, 0.22), rgba(132, 146, 166, 0.08));
-    color: var(--color-primary-contrast);
+    border: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
     font-size: 0.8rem;
     font-weight: var(--weight-medium);
@@ -116,7 +116,7 @@
     min-height: 2.2rem;
     padding: 0.5rem 0.78rem;
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: 0;
     background: transparent;
     color: var(--color-text);
     text-decoration: none;
