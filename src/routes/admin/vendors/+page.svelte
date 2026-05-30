@@ -51,7 +51,10 @@
     {/if}
 
     <details class="vendor-panel" open>
-      <summary>Add Vendor</summary>
+      <summary>
+        <span class="material-icons" aria-hidden="true">add_business</span>
+        Add Vendor
+      </summary>
       <form
         method="POST"
         action="?/create_vendor"
@@ -79,19 +82,31 @@
         {#each data.vendors as vendor}
           <details class="vendor-row">
             <summary>
-              <span>{vendor.name}</span>
+              <span class="vendor-summary-copy">
+                <span class="material-icons" aria-hidden="true">local_shipping</span>
+                <strong>{vendor.name}</strong>
+              </span>
               <small>{vendor.isActive === 1 ? 'Active' : 'Hidden'}</small>
             </summary>
 
             <div class="vendor-view">
               {#if vendor.websiteUrl}
-                <a href={vendor.websiteUrl} target="_blank" rel="noreferrer">Website</a>
+                <a href={vendor.websiteUrl} target="_blank" rel="noreferrer">
+                  <span class="material-icons" aria-hidden="true">language</span>
+                  Website
+                </a>
               {/if}
               {#if vendor.phone}
-                <span>{vendor.phone}</span>
+                <span>
+                  <span class="material-icons" aria-hidden="true">call</span>
+                  {vendor.phone}
+                </span>
               {/if}
               {#if vendor.contactName}
-                <span>{vendor.contactName}</span>
+                <span>
+                  <span class="material-icons" aria-hidden="true">person</span>
+                  {vendor.contactName}
+                </span>
               {/if}
               {#if vendor.notes}
                 <p>{vendor.notes}</p>
@@ -137,11 +152,15 @@
 
   .vendor-panel,
   .vendor-row {
+    border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
-    padding-bottom: 0.85rem;
+    padding: 0.9rem 0;
   }
 
   summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     cursor: pointer;
     list-style: none;
     font-weight: var(--weight-semibold);
@@ -156,6 +175,20 @@
     justify-content: space-between;
     gap: 0.8rem;
     align-items: center;
+  }
+
+  .vendor-summary-copy,
+  .vendor-view span,
+  .vendor-view a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .material-icons {
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .vendor-row small,
@@ -179,10 +212,11 @@
   select,
   textarea {
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     padding: 0.52rem 0.62rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    background: transparent;
     color: var(--color-text);
     font: inherit;
     font-size: 0.84rem;
@@ -194,9 +228,10 @@
   }
 
   button {
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
     padding: 0.48rem 0.75rem;
     cursor: pointer;
@@ -214,7 +249,7 @@
   .vendor-view a {
     color: var(--color-text);
     text-decoration: none;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .vendor-view p {

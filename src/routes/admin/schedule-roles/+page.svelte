@@ -113,9 +113,11 @@
 <style>
   .roles-shell,
   .role-card {
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     overflow: hidden;
   }
 
@@ -143,7 +145,8 @@
     align-items: center;
     justify-content: center;
     padding: 0.5rem 0.78rem;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     border-radius: 0;
     color: var(--color-text);
     text-decoration: none;
@@ -226,10 +229,11 @@
   input,
   select {
     width: 100%;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     border-radius: 0;
     padding: 0.42rem 0.56rem;
-    background: var(--color-surface);
+    background: transparent;
     color: var(--color-text);
     font-size: 0.82rem;
   }
@@ -237,7 +241,8 @@
   button {
     min-height: 2.35rem;
     padding: 0.55rem 0.85rem;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     border-radius: 0;
     background: transparent;
     color: var(--color-text);
@@ -249,7 +254,7 @@
   .danger-btn {
     min-height: 2.1rem;
     padding-inline: 0.8rem;
-    border-color: color-mix(in srgb, var(--color-danger, #b42318) 48%, var(--color-border));
+    border-bottom-color: color-mix(in srgb, var(--color-danger, #b42318) 48%, var(--color-border));
     background: transparent;
     color: color-mix(in srgb, var(--color-danger, #b42318) 82%, var(--color-text));
   }

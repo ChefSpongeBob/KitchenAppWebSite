@@ -11,6 +11,7 @@
   };
 
   export let attachments: ItemAttachment[] = [];
+  export let expanded = true;
 
   function normalizeBreaks(text: string) {
     return (text ?? '').replace(/\\n/g, '\n');
@@ -42,7 +43,7 @@
 {#if attachments.length > 0}
   <div class="attachment-preview">
     {#each attachments as attachment}
-      <details class="attachment-panel">
+      <details class="attachment-panel" open={expanded}>
         <summary>
           <span>{attachment.title}</span>
           <small>{attachment.targetType === 'recipe' ? 'Recipe' : 'Doc'}</small>

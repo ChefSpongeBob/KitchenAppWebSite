@@ -186,7 +186,7 @@
   .schedule-shell {
     display: grid;
     gap: 1rem;
-    padding-bottom: clamp(2rem, 4vh, 3rem);
+    padding-bottom: calc(clamp(9rem, 16vh, 14rem) + var(--safe-bottom));
   }
 
   .subnav {

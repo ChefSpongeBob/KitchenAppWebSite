@@ -24,8 +24,14 @@
 
   <section class="doc-viewer">
     <header class="doc-head">
-      <a href="/docs">Back to documents</a>
-      <span>{data.doc.category}</span>
+      <a href="/docs">
+        <span class="material-icons" aria-hidden="true">arrow_back</span>
+        Documents
+      </a>
+      <span>
+        <span class="material-icons" aria-hidden="true">folder_open</span>
+        {data.doc.category}
+      </span>
     </header>
 
     {#if data.doc.content}
@@ -34,8 +40,14 @@
 
     {#if data.doc.file_url}
       <div class="doc-actions">
-        <a href={data.doc.file_url} target="_blank" rel="noreferrer">Open file</a>
-        <a href={data.doc.file_url} download>Download</a>
+        <a href={data.doc.file_url} target="_blank" rel="noreferrer">
+          <span class="material-icons" aria-hidden="true">open_in_new</span>
+          Open file
+        </a>
+        <a href={data.doc.file_url} download>
+          <span class="material-icons" aria-hidden="true">download</span>
+          Download
+        </a>
       </div>
 
       <div class="file-stage">
@@ -72,7 +84,11 @@
   }
 
   .doc-head a,
+  .doc-head span,
   .doc-actions a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     color: var(--color-text);
     text-decoration: none;
   }
@@ -82,7 +98,7 @@
     color: var(--color-primary);
   }
 
-  .doc-head span,
+  .doc-head > span,
   .doc-copy {
     color: var(--color-text-muted);
   }
@@ -94,11 +110,18 @@
   }
 
   .doc-actions a {
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 0.45rem 0.72rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.42rem 0;
     font-size: 0.82rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 44%, transparent);
+    background: transparent;
+  }
+
+  .doc-head .material-icons,
+  .doc-actions .material-icons {
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .file-stage {
@@ -111,7 +134,7 @@
     width: 100%;
     max-height: 78vh;
     object-fit: contain;
-    border-radius: 14px;
+    border-radius: 0;
     border: 1px solid var(--color-divider);
   }
 </style>

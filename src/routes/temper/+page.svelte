@@ -113,15 +113,18 @@
 
 <section class="status-strip" aria-label="Temperature status">
   <div>
-    <span>Configured</span>
+    <span class="material-icons" aria-hidden="true">settings_input_component</span>
+    <p>Configured</p>
     <strong>{Object.keys(nodeNames).length}</strong>
   </div>
   <div>
-    <span>Online</span>
+    <span class="material-icons" aria-hidden="true">online_prediction</span>
+    <p>Online</p>
     <strong>{onlineCount}/{nodeIds.length}</strong>
   </div>
   <div>
-    <span>Warnings</span>
+    <span class="material-icons" aria-hidden="true">report_problem</span>
+    <p>Warnings</p>
     <strong>{warningNodes.length}</strong>
   </div>
 </section>
@@ -130,10 +133,13 @@
   <section class="warning-row" aria-label="Temperature warnings">
     {#each warningNodes as node}
       <div class="warning-card">
-        <span class="warning-label">Temp Warning</span>
-        <strong>{node.name}</strong>
-        <div class="warning-reading">{node.temperature.toFixed(1)}F</div>
-        <small>Last update: {formatTime(node.ts)}</small>
+        <span class="material-icons" aria-hidden="true">thermostat</span>
+        <div>
+          <span class="warning-label">Temp Warning</span>
+          <strong>{node.name}</strong>
+          <div class="warning-reading">{node.temperature.toFixed(1)}F</div>
+          <small>Last update: {formatTime(node.ts)}</small>
+        </div>
       </div>
     {/each}
   </section>
@@ -149,7 +155,10 @@
     {#each nodeIds as node}
       <div class="tile {tempClass(latest[node])}">
         <div class="node-head">
-          <h2 title="Sensor ID: {node}">{nodeNames[node] ?? `Node ${node}`}</h2>
+          <div class="node-title">
+            <span class="material-icons" aria-hidden="true">device_thermostat</span>
+            <h2 title="Sensor ID: {node}">{nodeNames[node] ?? `Node ${node}`}</h2>
+          </div>
           <span class:offline={!isOnline(lastSeen[node])}>{isOnline(lastSeen[node]) ? 'Online' : 'Stale'}</span>
         </div>
 
@@ -170,25 +179,38 @@
   .status-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1px;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--color-border);
+    gap: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     box-shadow: none;
     margin-bottom: 1rem;
   }
 
   .status-strip > div {
     display: grid;
-    gap: 0.2rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.15rem 0.55rem;
     padding: 0.86rem 0.95rem;
-    background: var(--color-surface);
+    border-right: 1px solid var(--color-divider);
+    background: transparent;
   }
 
-  .status-strip span {
+  .status-strip > div:last-child {
+    border-right: 0;
+  }
+
+  .status-strip p {
+    margin: 0;
     color: var(--color-text-muted);
     font-size: 0.82rem;
+  }
+
+  .status-strip .material-icons {
+    grid-row: 1 / span 2;
+    align-self: center;
+    color: var(--color-text-muted);
+    font-size: 1.2rem;
   }
 
   .status-strip strong {
@@ -204,14 +226,23 @@
   }
 
   .warning-card {
-    border: 1px solid color-mix(in srgb, var(--color-error) 38%, var(--color-border) 62%);
-    background: var(--color-surface);
-    border-radius: var(--radius-md);
-    padding: 0.9rem 1rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-error) 38%, var(--color-divider) 62%);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-error) 38%, var(--color-divider) 62%);
+    background: transparent;
+    border-radius: 0;
+    padding: 0.9rem 0;
     display: grid;
-    gap: 0.22rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem;
     box-shadow: none;
     color: var(--color-text);
+  }
+
+  .warning-card .material-icons {
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text) 24%);
+    font-size: 1.4rem;
+    line-height: 1;
+    padding-top: 0.18rem;
   }
 
   .warning-label {
@@ -239,21 +270,29 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0;
     margin: 20px 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .tile {
     position: relative;
-    background: var(--color-surface);
+    background: transparent;
     padding: 1rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    border: 0;
+    border-right: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     box-shadow: none;
     color: var(--color-text);
     transition: border-color 0.2s ease, background 0.2s ease;
     overflow: hidden;
+  }
+
+  .tile:nth-child(4n) {
+    border-right: 0;
   }
 
   .node-head {
@@ -263,16 +302,30 @@
     gap: 0.75rem;
   }
 
+  .node-title {
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
+    min-width: 0;
+  }
+
+  .node-title .material-icons {
+    color: var(--color-text-muted);
+    font-size: 1.05rem;
+    line-height: 1;
+  }
+
   .node-head h2 {
     margin: 0;
     font-size: 1rem;
   }
 
   .node-head span {
-    border: 1px solid color-mix(in srgb, var(--color-success) 42%, var(--color-border) 58%);
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-success) 42%, var(--color-border) 58%);
     border-radius: 0;
     color: color-mix(in srgb, var(--color-success) 72%, var(--color-text) 28%);
-    padding: 0.14rem 0.48rem;
+    padding: 0.14rem 0;
     font-size: 0.7rem;
     font-weight: var(--weight-semibold);
   }
@@ -302,10 +355,11 @@
   .empty-state {
     display: grid;
     gap: 0.2rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--color-surface);
-    padding: 1rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    padding: 1rem 0;
     color: var(--color-text);
   }
 
@@ -315,17 +369,17 @@
 
   .hot {
     border-color: color-mix(in srgb, var(--color-error) 78%, var(--color-border) 22%);
-    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-error) 86%, transparent);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-error) 86%, transparent);
   }
 
   .cold {
     border-color: color-mix(in srgb, var(--color-warning) 64%, var(--color-border) 36%);
-    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-warning) 76%, transparent);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-warning) 76%, transparent);
   }
 
   .normal {
     border-color: color-mix(in srgb, var(--color-success) 68%, var(--color-border) 32%);
-    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-success) 78%, transparent);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-success) 78%, transparent);
   }
 
   @media (max-width: 760px) {
@@ -350,12 +404,16 @@
     .grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
+      border: 0;
       margin: 14px 0 0;
     }
 
     .tile {
       padding: 12px 10px;
-      border-radius: 12px;
+      border: 0;
+      border-top: 1px solid var(--color-divider);
+      border-bottom: 1px solid var(--color-divider);
+      border-radius: 0;
     }
 
     .temp {

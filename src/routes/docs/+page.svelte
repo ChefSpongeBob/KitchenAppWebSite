@@ -41,8 +41,11 @@
       {#each docsByCategory as [category, items]}
         <section class="category-row">
           <header class="category-head">
-            <h2>{category}</h2>
-            <span>{items.length} document{items.length === 1 ? '' : 's'}</span>
+            <span class="category-icon material-icons" aria-hidden="true">folder_open</span>
+            <span class="category-copy">
+              <h2>{category}</h2>
+              <small>{items.length} document{items.length === 1 ? '' : 's'}</small>
+            </span>
           </header>
 
           {#if items.length === 0}
@@ -51,8 +54,12 @@
             <div class="doc-list">
               {#each items as doc}
                 <a href={getDocHref(doc)} class="doc-link">
-                  <span class="doc-title">{doc.title}</span>
-                  <span class="doc-meta">{doc.file_url ? 'File attached' : 'Text only'}</span>
+                  <span class="material-icons doc-icon" aria-hidden="true">description</span>
+                  <span class="doc-copy">
+                    <span class="doc-title">{doc.title}</span>
+                    <span class="doc-meta">{doc.file_url ? 'File attached' : 'Text only'}</span>
+                  </span>
+                  <span class="material-icons doc-action" aria-hidden="true">arrow_forward</span>
                 </a>
               {/each}
             </div>
@@ -66,27 +73,22 @@
 <style>
   .library-shell {
     display: grid;
-    gap: 1.15rem;
+    gap: 1rem;
   }
 
   .category-row {
     display: grid;
-    gap: 0.55rem;
-    padding-block: 0.85rem;
+    gap: 0.8rem;
+    padding-block: 1rem;
     border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
   }
 
-  .category-row:first-child {
-    border-top: 0;
-    padding-top: 0;
-  }
-
-  .category-head,
-  .doc-link {
-    display: flex;
+  .category-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .category-head h2 {
@@ -94,44 +96,91 @@
     font-size: clamp(1rem, 2vw, 1.25rem);
   }
 
-  .category-head span,
-  .doc-meta {
-    color: var(--color-text-muted);
+  .category-copy {
+    display: grid;
+    gap: 0.12rem;
   }
 
-  .category-head span,
+  .category-copy small,
   .doc-meta {
+    color: var(--color-text-muted);
     font-size: 0.78rem;
+  }
+
+  .category-icon,
+  .doc-icon,
+  .doc-action {
+    color: var(--color-text-muted);
+    line-height: 1;
+  }
+
+  .category-icon {
+    font-size: 1.35rem;
   }
 
   .doc-list {
     display: grid;
-    border-top: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
+    grid-template-columns: repeat(2, minmax(14rem, 1fr));
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .doc-link {
-    min-height: 3.05rem;
-    padding: 0.72rem 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
-    color: inherit;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 4.4rem;
+    padding: 0.85rem 0.9rem;
+    border-right: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    color: var(--color-text);
     text-decoration: none;
+  }
+
+  .doc-link:nth-child(even) {
+    border-right: 0;
+  }
+
+  .doc-link:nth-last-child(-n + 2) {
+    border-bottom: 0;
   }
 
   .doc-link:hover .doc-title,
   .doc-link:focus-visible .doc-title {
-    color: var(--color-primary);
+    color: var(--color-text);
   }
 
   .doc-title {
     font-weight: var(--weight-semibold);
   }
 
+  .doc-copy {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .doc-action {
+    font-size: 1rem;
+    opacity: 0.72;
+  }
+
   @media (max-width: 700px) {
-    .category-head,
+    .doc-list {
+      grid-template-columns: 1fr;
+    }
+
     .doc-link {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 0.25rem;
+      border-right: 0;
+    }
+
+    .doc-link:nth-last-child(-n + 2) {
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .doc-link:last-child {
+      border-bottom: 0;
     }
   }
 </style>

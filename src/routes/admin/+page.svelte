@@ -727,6 +727,12 @@
     margin-bottom: 1rem;
     display: grid;
     gap: 1rem;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .command-head {
@@ -752,16 +758,17 @@
     text-decoration: none;
     font-size: 0.75rem;
     color: var(--color-text-muted);
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 0.32rem 0.62rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.32rem 0;
     background: transparent;
   }
 
   .window-switch a.active {
     color: var(--color-text);
-    border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
-    background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+    border-color: var(--color-text);
+    background: transparent;
   }
 
   .kpi-grid {
@@ -823,10 +830,12 @@
   }
 
   .chart-card {
-    padding: 0.85rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
+    padding: 0.85rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     display: grid;
     gap: 0.45rem;
   }
@@ -966,10 +975,12 @@
 
   .matrix-card,
   .feed-card {
-    padding: 0.85rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--color-surface) 84%, transparent);
+    padding: 0.85rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     display: grid;
     gap: 0.45rem;
   }
@@ -998,11 +1009,11 @@
 
   .matrix-row {
     padding: 0.26rem 0.18rem;
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .matrix-row:nth-child(even) {
-    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+    background: transparent;
   }
 
   .module-cell {
@@ -1053,12 +1064,13 @@
   .visibility-cell {
     display: inline-flex;
     justify-content: center;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     padding: 0.15rem 0.4rem;
     font-size: 0.66rem;
     color: var(--color-text-muted);
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent;
   }
 
   .visibility-cell.all {
@@ -1241,10 +1253,12 @@
 
   .control-overview,
   .reminders-panel {
-    border: var(--surface-outline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-xs);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     overflow: hidden;
   }
 
@@ -1274,8 +1288,8 @@
   .metric-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 1px;
-    background: var(--color-divider);
+    gap: 0;
+    background: transparent;
   }
 
   .metric-item {
@@ -1283,7 +1297,12 @@
     gap: 0.24rem;
     min-height: 92px;
     padding: 0.72rem 0.78rem;
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    border-right: 1px solid var(--color-divider);
+    background: transparent;
+  }
+
+  .metric-item:last-child {
+    border-right: 0;
   }
 
   .metric-label {
@@ -1327,8 +1346,9 @@
   .saved-reminder input {
     min-width: 0;
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     padding: 0.38rem 0.48rem;
     background: transparent;
     color: var(--color-text);
@@ -1338,7 +1358,9 @@
 
   .reminder-create button {
     flex: 0 0 auto;
-    border-radius: 999px;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     padding: 0.32rem 0.62rem;
     background: transparent;
     color: var(--color-text-soft);
@@ -1375,7 +1397,7 @@
   .saved-reminder button {
     min-width: 0;
     min-height: 0;
-    border-radius: 999px;
+    border-radius: 0;
     border-color: transparent;
     padding: 0.25rem 0.4rem;
     background: transparent;
@@ -1486,10 +1508,12 @@
 
   .panel {
     position: relative;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-sm);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .panel::before {

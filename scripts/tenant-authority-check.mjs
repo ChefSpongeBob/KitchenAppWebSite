@@ -16,7 +16,8 @@ function assertCheck(name, condition, detail) {
 const hooks = read('src/hooks.server.ts');
 const login = read('src/routes/login/+page.server.ts');
 const admin = read('src/lib/server/admin.ts');
-const permissions = read('src/lib/server/permissions.ts');
+const roles = read('src/lib/auth/roles.ts');
+const adminRoleBlock = roles.match(/const ADMIN_BUSINESS_ROLES[\s\S]*?\]\);/)?.[0] ?? '';
 
 assertCheck(
   'hooks derives app role from business role',
@@ -45,8 +46,19 @@ assertCheck(
 
 assertCheck(
   'permission helper defines admin business roles',
-  permissions.includes("normalized === 'owner' || normalized === 'admin' || normalized === 'manager'"),
-  'Owner/admin/manager should be the only business roles that map to app admin.'
+  roles.includes("'owner'") &&
+    roles.includes("'admin'") &&
+    roles.includes("'general_manager'") &&
+    roles.includes("'foh_manager'") &&
+    roles.includes("'boh_manager'") &&
+    roles.includes("'hourly_manager'") &&
+    roles.includes('const REPORT_ACCESS_ROLES') &&
+    roles.includes('const VENDOR_ACCESS_ROLES') &&
+    !adminRoleBlock.includes("'consultant'") &&
+    !adminRoleBlock.includes("'contractor'") &&
+    !adminRoleBlock.includes("'staff'") &&
+    !adminRoleBlock.includes("'shift_lead'"),
+  'Owner/admin/manager-family roles should map to app admin; consultant, contractor, staff, shift lead, and user should not.'
 );
 
 const failed = checks.filter((check) => !check.passed);

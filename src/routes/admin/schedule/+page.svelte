@@ -178,6 +178,7 @@
 
   let editorDraft: EditorDraft | null = null;
   let isShiftEditorOpen = false;
+  let shiftEditorDockHeight = 0;
   let hasUnsavedChanges = false;
   let gridRenderVersion = 0;
   let weekPayload = '';
@@ -1682,7 +1683,12 @@
     </form>
 
     {#if isShiftEditorOpen}
-      <div class="shift-editor-dock" role="region" aria-label="Shift builder">
+      <div
+        class="shift-editor-dock"
+        role="region"
+        aria-label="Shift builder"
+        bind:clientHeight={shiftEditorDockHeight}
+      >
         <div class="shift-editor-dialog">
           {#if editorDraft}
             {@const activeCellLabel =
@@ -1851,6 +1857,11 @@
           {/if}
         </div>
       </div>
+      <div
+        class="shift-editor-spacer"
+        aria-hidden="true"
+        style={`height:${Math.max(shiftEditorDockHeight, 420)}px`}
+      ></div>
     {/if}
   </div>
 </Layout>
@@ -1859,7 +1870,7 @@
   .schedule-shell {
     display: grid;
     gap: 1.1rem;
-    padding-bottom: clamp(2rem, 4vh, 3rem);
+    padding-bottom: calc(clamp(10rem, 18vh, 16rem) + var(--safe-bottom));
   }
 
   .week-actions,
@@ -1873,9 +1884,11 @@
   .control-shell,
   .planner-shell {
     margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     box-shadow: none;
   }
 
@@ -1981,9 +1994,10 @@
   .week-nav-btn {
     text-decoration: none;
     color: var(--color-text-muted);
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    padding: 0.28rem 0.52rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.28rem 0;
     background: transparent;
     font-size: 0.68rem;
     line-height: 1;
@@ -2034,7 +2048,7 @@
   .tool-select select {
     min-height: 1.9rem;
     padding: 0.3rem 0.48rem;
-    border-radius: 8px;
+    border-radius: 0;
     font-size: 0.7rem;
   }
 
@@ -2057,8 +2071,9 @@
 
   .menu-trigger {
     list-style: none;
-    border: 1px solid var(--color-border);
-    border-radius: 9px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     background: transparent;
     color: var(--color-text);
     min-height: 1.9rem;
@@ -2095,10 +2110,12 @@
     display: grid;
     gap: 0.1rem;
     padding: 0.3rem;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    background: var(--surface-wash), var(--color-surface);
-    box-shadow: var(--shadow-md);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: var(--color-surface);
+    box-shadow: none;
     z-index: 12;
   }
 
@@ -2115,7 +2132,7 @@
     width: 100%;
     min-height: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: 0;
     padding: 0.5rem 0.65rem;
     appearance: none;
     background: transparent;
@@ -2159,7 +2176,7 @@
   .planner-head {
     padding: 0.75rem 1rem 0.7rem;
     border-bottom: 1px solid var(--color-divider);
-    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+    background: transparent;
   }
 
   .planner-hours {
@@ -2195,15 +2212,17 @@
     min-height: 1.95rem;
     padding: 0.36rem 0.72rem;
     font-size: 0.75rem;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     background: transparent;
     color: var(--color-text);
-    border-radius: 9px;
+    border-radius: 0;
   }
 
   .planner-publish-btn {
-    border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
-    background: color-mix(in srgb, var(--color-surface-alt) 88%, var(--color-primary) 12%);
+    border: 0;
+    border-bottom: 1px solid var(--color-text);
+    background: transparent;
     color: var(--color-text);
   }
 
@@ -2214,10 +2233,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     background: transparent;
     color: var(--color-text);
-    border-radius: 9px;
+    border-radius: 0;
     font-size: 1rem;
     line-height: 1;
   }
@@ -2230,8 +2250,9 @@
   }
 
   .hours-chip {
-    border: 1px solid var(--color-divider);
-    border-radius: 999px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     padding: 0.18rem 0.55rem;
     font-size: 0.74rem;
     color: var(--color-text-muted);
@@ -2327,10 +2348,11 @@
   .target-list input {
     width: 100%;
     min-width: 0;
-    border: 1px solid var(--color-border);
-    background: var(--surface-wash), var(--color-surface-alt);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
     color: var(--color-text);
-    border-radius: 10px;
+    border-radius: 0;
     padding: 0.48rem 0.55rem;
   }
 
@@ -2522,17 +2544,19 @@
   input,
   select {
     width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     padding: 0.42rem 0.56rem;
-    background: var(--surface-wash), var(--color-surface-alt);
+    background: transparent;
     color: var(--color-text);
     font-size: 0.8rem;
   }
 
   button {
-    border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
-    border-radius: 10px;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
     background: transparent;
     color: var(--color-text);
     min-height: 2.3rem;
@@ -2582,14 +2606,22 @@
     width: min(54rem, calc(100vw - 1.2rem - var(--safe-left) - var(--safe-right)));
     max-height: min(78vh, 54rem);
     overflow: auto;
-    border: 1px solid var(--color-border);
-    border-radius: 14px;
-    background: var(--surface-wash), var(--color-surface);
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: var(--color-surface);
     box-shadow: var(--shadow-md);
     display: grid;
     gap: 0;
     margin-inline: auto;
     pointer-events: auto;
+  }
+
+  .shift-editor-spacer {
+    width: 100%;
+    min-height: calc(420px + var(--safe-bottom));
+    pointer-events: none;
   }
 
   .shift-editor-head {
@@ -2633,7 +2665,7 @@
   .time-launch-btn {
     width: 100%;
     justify-content: flex-start;
-    border-color: var(--color-border);
+    border-bottom-color: var(--color-divider);
     background: transparent;
     color: var(--color-text);
   }
@@ -2657,17 +2689,17 @@
   }
 
   .duplicate-day-btn {
-    border-color: var(--color-border);
+    border-bottom-color: var(--color-divider);
     background: transparent;
     color: var(--color-text);
     min-height: 1.95rem;
     padding: 0.35rem 0.58rem;
-    border-radius: 999px;
+    border-radius: 0;
   }
 
   .duplicate-day-btn-active {
-    border-color: color-mix(in srgb, var(--color-primary) 58%, var(--color-border));
-    background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface-alt));
+    border-bottom-color: var(--color-text);
+    background: transparent;
     color: var(--color-text);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent);
     font-weight: var(--weight-semibold);

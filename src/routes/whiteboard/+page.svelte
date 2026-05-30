@@ -183,7 +183,7 @@
     border-radius: var(--radius-md);
     border: var(--surface-outline);
     background: var(--color-surface);
-    color: var(--color-text);
+    color: #111214;
   }
 
   .input-row button {
@@ -191,7 +191,7 @@
     border-radius: var(--radius-md);
     border: 1px solid color-mix(in srgb, var(--color-primary) 42%, var(--color-border) 58%);
     background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
-    color: var(--color-text);
+    color: #111214;
     font-weight: var(--weight-semibold);
     cursor: pointer;
   }
@@ -286,7 +286,7 @@
     opacity: 0.78;
     font-size: var(--vote-font);
     margin-top: 0;
-    color: var(--color-text-muted);
+    color: rgba(17, 18, 20, 0.62);
   }
 
   @media (max-width: 760px) {

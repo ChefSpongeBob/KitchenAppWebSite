@@ -402,7 +402,7 @@
             <input name="par_count" type="number" min="0" step="0.1" placeholder="Par" value="0" required />
             <button type="submit">Add Item</button>
           </form>
-          <table class="sheet">
+          <table class="sheet list-editor-sheet">
             <thead>
               <tr>
                 <th>Item</th>
@@ -417,8 +417,8 @@
                     <div class="item-editor">
                       <form method="POST" action="?/update_list_item" use:enhance={withFeedback} class="inline-edit list-item-form">
                         <input type="hidden" name="id" value={item.id} />
-                        <input name="content" value={item.content} required />
-                        <input name="details" value={item.details} placeholder="Reference / pan size" />
+                        <input name="content" value={item.content} aria-label="Item name" required />
+                        <input name="details" value={item.details} placeholder="Reference / pan size" aria-label="Item details" />
                         <input name="par_count" type="number" min="0" step="0.1" value={item.par_count} required />
                         <button type="submit" class="text-action" aria-label="Save item">Save</button>
                       </form>
@@ -602,6 +602,21 @@
     background: color-mix(in srgb, var(--color-surface-alt) 28%, transparent);
   }
 
+  .list-editor-sheet th:first-child,
+  .list-editor-sheet td:first-child {
+    width: 78%;
+  }
+
+  .list-editor-sheet th:nth-child(2),
+  .list-editor-sheet td:nth-child(2) {
+    width: 9%;
+  }
+
+  .list-editor-sheet th:nth-child(3),
+  .list-editor-sheet td:nth-child(3) {
+    width: 13%;
+  }
+
   .add-row,
   .inline,
   .inline-edit {
@@ -637,7 +652,7 @@
 
   .list-item-form {
     display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(92px, 120px) auto;
+    grid-template-columns: minmax(12rem, 1.45fr) minmax(14rem, 1.6fr) minmax(4.5rem, 0.35fr) auto;
     gap: 0.45rem;
     align-items: center;
   }

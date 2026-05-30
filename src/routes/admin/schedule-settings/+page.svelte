@@ -55,10 +55,12 @@
   .settings-shell {
     display: grid;
     gap: 0.85rem;
-    padding: 1rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    padding: 1rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
   }
 
   .settings-head {
@@ -100,7 +102,8 @@
   button {
     min-height: 2.5rem;
     padding: 0.6rem 0.9rem;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     border-radius: 0;
     background: transparent;
     color: var(--color-text);
@@ -115,7 +118,8 @@
     justify-content: center;
     min-height: 2.2rem;
     padding: 0.5rem 0.78rem;
-    border: 1px solid var(--color-border);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
     border-radius: 0;
     background: transparent;
     color: var(--color-text);

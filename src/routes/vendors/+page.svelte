@@ -27,48 +27,67 @@
       {#each data.vendors as vendor}
         <article class="vendor-row">
           <div class="vendor-main">
-            <h2>{vendor.name}</h2>
-            {#if vendor.notes}
-              <p>{vendor.notes}</p>
-            {/if}
+            <span class="material-icons vendor-icon" aria-hidden="true">local_shipping</span>
+            <span class="vendor-copy">
+              <h2>{vendor.name}</h2>
+              <small>{vendor.isActive === 1 ? 'Active' : 'Hidden'}</small>
+            </span>
           </div>
 
           <div class="vendor-contact">
             {#if vendor.websiteUrl}
-              <a href={vendor.websiteUrl} target="_blank" rel="noreferrer">Website</a>
+              <a href={vendor.websiteUrl} target="_blank" rel="noreferrer">
+                <span class="material-icons" aria-hidden="true">language</span>
+                Website
+              </a>
             {/if}
             {#if vendor.phone}
-              <span>{vendor.phone}</span>
+              <span>
+                <span class="material-icons" aria-hidden="true">call</span>
+                {vendor.phone}
+              </span>
             {/if}
             {#if vendor.contactName}
-              <span>{vendor.contactName}</span>
+              <span>
+                <span class="material-icons" aria-hidden="true">person</span>
+                {vendor.contactName}
+              </span>
             {/if}
           </div>
+
+          {#if vendor.notes}
+            <p class="vendor-notes">{vendor.notes}</p>
+          {/if}
         </article>
       {/each}
     {/if}
 
-    <a class="manage-link" href="/admin/vendors">+ | - Manage vendors</a>
+    <a class="manage-link" href="/admin/vendors">
+      <span class="material-icons" aria-hidden="true">tune</span>
+      + | - Manage vendors
+    </a>
   </section>
 </Layout>
 
 <style>
   .vendor-list {
     display: grid;
-    gap: 0.8rem;
+    gap: 1rem;
   }
 
   .vendor-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.85rem;
+    gap: 0.85rem 1.2rem;
     align-items: start;
-    padding-bottom: 0.85rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
   }
 
   .vendor-main {
-    display: grid;
+    display: flex;
+    align-items: center;
     gap: 0.28rem;
     min-width: 0;
   }
@@ -78,9 +97,20 @@
     font-size: 0.98rem;
   }
 
-  .vendor-main p {
-    margin: 0;
+  .vendor-copy {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+  }
+
+  .vendor-copy small,
+  .vendor-notes {
     color: var(--color-text-muted);
+  }
+
+  .vendor-notes {
+    grid-column: 1 / -1;
+    margin: 0;
     font-size: 0.82rem;
     line-height: 1.45;
   }
@@ -95,15 +125,36 @@
     max-width: 22rem;
   }
 
+  .vendor-icon,
+  .vendor-contact .material-icons,
+  .manage-link .material-icons {
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .vendor-icon {
+    font-size: 1.25rem;
+  }
+
+  .vendor-contact span,
+  .vendor-contact a,
+  .manage-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
   .vendor-contact a,
   .manage-link {
     color: var(--color-text);
     text-decoration: none;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .manage-link {
     width: fit-content;
+    gap: 0.35rem;
     font-size: 0.8rem;
     color: var(--color-text-muted);
   }

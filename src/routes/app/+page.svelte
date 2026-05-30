@@ -1,14 +1,12 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import Layout from '$lib/components/ui/Layout.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
   import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
   import TempGraph from '$lib/components/ui/TempGraph.svelte';
   import GuidedSpotlightTour from '$lib/components/ui/GuidedSpotlightTour.svelte';
   import { startVisiblePolling } from '$lib/client/polling';
   import { formatScheduleTimeLabel } from '$lib/assets/schedule';
   import { buildFeatureAccess, defaultAppFeatureModes, type AppFeatureAccess } from '$lib/features/appFeatures';
-  import { fly, fade } from 'svelte/transition';
   import { onMount } from 'svelte';
 
   type HomeTask = {
@@ -90,8 +88,6 @@
   const featureAccess: AppFeatureAccess =
     data.featureAccess ?? buildFeatureAccess(defaultAppFeatureModes, isAdmin ? 'admin' : 'user');
   let lastIdeasRefresh = data.refreshedAt ?? Math.floor(Date.now() / 1000);
-  let px = 0;
-  let py = 0;
   const TEMP_WARNING_THRESHOLD = 42;
   const HOMEPAGE_TEMP_LIMIT = 240;
 
@@ -189,13 +185,6 @@
     time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const h = now.getHours();
     greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  }
-
-  function handleMove(e: MouseEvent | TouchEvent) {
-    const x = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    px = x / window.innerWidth - 0.5;
-    py = y / window.innerHeight - 0.5;
   }
 
   function secondsAgoLabel(unixTs: number) {
@@ -331,7 +320,7 @@
     />
   {/if}
 
-  <section class="page-header" data-guide="home-brief" in:fly={{ y: 20, duration: 500 }}>
+  <section class="page-header" data-guide="home-brief">
     <h1>{greeting}</h1>
     <p class="header-sub">{businessName}</p>
     <span class="brief-rule" aria-hidden="true"></span>
@@ -340,16 +329,11 @@
   <section
     class="mosaic"
     class:admin-mosaic={isAdmin}
-    on:mousemove={handleMove}
-    on:touchmove={handleMove}
     aria-label="Dashboard Tiles"
-    in:fade={{ duration: 500 }}
   >
     <div
       class="tile greeting"
       data-guide="shift-card"
-      style="transform: translate({px * -6}px, {py * -6}px);"
-      in:fly={{ y: 20, duration: 500 }}
     >
       <div class="greeting-main">
         <div class="greeting-copy">
@@ -408,8 +392,6 @@
       href="/specials"
       class="tile specials-card"
       data-guide="specials-focus"
-      style="transform: translate({px * 2}px, {py * 2}px);"
-      in:fly={{ y: 20, duration: 525 }}
     >
       <div class="tile-head">
         <span class="tile-label">Specials</span>
@@ -427,8 +409,6 @@
     <a
       href="/menu"
       class="tile menu-card"
-      style="transform: translate({px * 3}px, {py * 3}px);"
-      in:fly={{ y: 20, duration: 540 }}
     >
       <div class="tile-head">
         <span class="tile-label menu-label">Menus</span>
@@ -450,8 +430,6 @@
     <a
       href="/conversions"
       class="tile conversion-card"
-      style="transform: translate({px * 3.25}px, {py * 3.25}px);"
-      in:fly={{ y: 20, duration: 542 }}
     >
       <div class="tile-head">
         <span class="tile-label">Conversions</span>
@@ -464,8 +442,6 @@
     {#if featureAccess.employee_spotlight}
     <div
       class="tile employee-card"
-      style="transform: translate({px * 3.5}px, {py * 3.5}px);"
-      in:fly={{ y: 20, duration: 545 }}
     >
       <div class="tile-head employee-head">
         <div class="employee-title">
@@ -490,8 +466,6 @@
     <div
       class="tile temps"
       data-guide="temps-overview"
-      style="transform: translate({px * 4}px, {py * 4}px);"
-      in:fly={{ y: 20, duration: 550 }}
     >
       <div class="tile-head">
         <span class="tile-label">Kitchen Temps</span>
@@ -529,8 +503,6 @@
     <div
       class="tile ideas"
       data-guide="ideas-focus"
-      style="transform: translate({px * 8}px, {py * 8}px);"
-      in:fly={{ y: 20, duration: 600 }}
     >
       <div class="tile-head">
         <span class="tile-label">Top Ideas</span>
@@ -577,26 +549,32 @@
       <p class="section-label">Quick Access</p>
       <small class="section-muted">Core tools</small>
     </div>
-    {#if featureAccess.lists}
-      <a href="/lists" class="card-link" data-guide="quick-lists">
-        <DashboardCard title="Lists" />
-      </a>
-    {/if}
-    {#if featureAccess.todo}
-      <a href="/todo" class="card-link" data-guide="quick-todo">
-        <DashboardCard title="ToDos" />
-      </a>
-    {/if}
-    {#if featureAccess.whiteboard}
-      <a href="/whiteboard" class="card-link" data-guide="quick-whiteboard">
-        <DashboardCard title="Whiteboard" />
-      </a>
-    {/if}
-    {#if featureAccess.temps}
-      <a href="/temper" class="card-link" data-guide="quick-temps">
-        <DashboardCard title="Temps" />
-      </a>
-    {/if}
+    <div class="quick-link-grid">
+      {#if featureAccess.lists}
+        <a href="/lists" class="quick-link" data-guide="quick-lists">
+          <span class="material-icons" aria-hidden="true">checklist</span>
+          <strong>Lists</strong>
+        </a>
+      {/if}
+      {#if featureAccess.todo}
+        <a href="/todo" class="quick-link" data-guide="quick-todo">
+          <span class="material-icons" aria-hidden="true">task_alt</span>
+          <strong>ToDos</strong>
+        </a>
+      {/if}
+      {#if featureAccess.whiteboard}
+        <a href="/whiteboard" class="quick-link" data-guide="quick-whiteboard">
+          <span class="material-icons" aria-hidden="true">tips_and_updates</span>
+          <strong>Whiteboard</strong>
+        </a>
+      {/if}
+      {#if featureAccess.temps}
+        <a href="/temper" class="quick-link" data-guide="quick-temps">
+          <span class="material-icons" aria-hidden="true">device_thermostat</span>
+          <strong>Temps</strong>
+        </a>
+      {/if}
+    </div>
   </section>
 </Layout>
 
@@ -617,9 +595,37 @@
     );
   }
 
-  .mosaic { display: grid; grid-template-columns: 1.2fr 1fr; grid-auto-rows: 118px; gap: 10px; padding: 1rem; }
-  .tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 14px; display: flex; flex-direction: column; justify-content: center; box-shadow: none; transition: border-color .2s ease, background .2s ease; }
-  .tile:hover { border-color: var(--color-text); }
+  .mosaic {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    grid-auto-rows: minmax(118px, auto);
+    gap: 0;
+    padding: 1rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+  .tile {
+    background: transparent;
+    border: 0;
+    border-right: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: none;
+    transition:
+      border-color 160ms var(--ease-out),
+      background 160ms var(--ease-out);
+  }
+  .tile:nth-child(even) {
+    border-right: 0;
+  }
+  .tile:hover {
+    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
+    border-color: var(--color-divider);
+  }
   .greeting { grid-row: span 2; }
   .greeting-main {
     display: grid;
@@ -855,7 +861,16 @@
     color: var(--color-text-muted);
     font-size: 0.78rem;
   }
-  .today-area { margin: 1rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: none; }
+  .today-area {
+    margin: 1rem;
+    padding: 0.85rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
   .today-head { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; margin-bottom: 0.5rem; }
   .today-head h3 { margin: 0; font-size: var(--text-md); }
   .today-head small { color: var(--color-text-muted); font-size: 0.78rem; }
@@ -865,16 +880,76 @@
   .today-list small { color: var(--color-text-muted); margin-left: 0.4rem; }
   .today-empty { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
 
-  .dashboard { display: flex; flex-direction: column; gap: 1.1rem; padding-inline: 1rem; margin-top: 1.2rem; padding-bottom: 8rem; }
-  .dashboard :global(.card) {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    box-shadow: none;
+  .dashboard {
+    display: grid;
+    justify-items: center;
+    gap: 0.75rem;
+    padding-inline: 1rem;
+    margin-top: 1.2rem;
+    padding-bottom: 8rem;
   }
-  .section-row { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; }
+  .section-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.7rem;
+    width: min(100%, 540px);
+  }
   .section-label { font-size: var(--text-sm); color: var(--color-text-muted); letter-spacing: .08em; text-transform: uppercase; margin: 0; }
   .section-muted { color: var(--color-text-muted); font-size: 0.76rem; }
-  .card-link { text-decoration: none; display: block; }
+  .quick-link-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(14rem, 1fr));
+    justify-content: center;
+    gap: 0;
+    width: min(100%, 720px);
+    padding: 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+  .quick-link {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-content: start;
+    gap: 0.72rem;
+    min-height: 4.6rem;
+    padding: 0.95rem 1rem;
+    color: var(--color-text);
+    text-decoration: none;
+    border: 0;
+    border-right: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    transition:
+      border-color 160ms var(--ease-out),
+      background 160ms var(--ease-out),
+      transform 160ms var(--ease-out);
+  }
+  .quick-link:nth-child(even) {
+    border-right: 0;
+  }
+  .quick-link:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+  .quick-link:hover,
+  .quick-link:focus-visible {
+    background: color-mix(in srgb, var(--color-surface-alt) 42%, transparent);
+    color: var(--color-text);
+    transform: none;
+    outline: none;
+  }
+  .quick-link .material-icons {
+    color: var(--color-text-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .quick-link strong {
+    font-size: 0.95rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.01em;
+  }
 
   @media (max-width: 760px) {
     .page-header {
@@ -891,7 +966,7 @@
     .mosaic {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       grid-auto-rows: minmax(108px, auto);
-      gap: 10px;
+      gap: 0;
       padding: 0.85rem 0.9rem;
     }
     .greeting {
@@ -944,10 +1019,11 @@
       gap: 0.45rem;
     }
     .today-list li {
-      border: 1px solid var(--color-border);
-      border-radius: 10px;
-      padding: 0.45rem 0.55rem;
-      background: color-mix(in srgb, var(--color-surface-alt) 36%, transparent);
+      border: 0;
+      border-bottom: 1px solid var(--color-divider);
+      border-radius: 0;
+      padding: 0.45rem 0;
+      background: transparent;
       display: grid;
       gap: 0.16rem;
     }
@@ -968,6 +1044,14 @@
       flex-wrap: wrap;
       row-gap: 0.2rem;
     }
+    .quick-link-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: 100%;
+    }
+    .quick-link {
+      min-height: 4.3rem;
+      padding: 0.82rem 0.78rem;
+    }
   }
 
   @media (max-width: 430px) {
@@ -976,6 +1060,18 @@
     }
     .section-muted {
       display: none;
+    }
+    .quick-link-grid {
+      grid-template-columns: 1fr;
+    }
+    .quick-link {
+      border-right: 0;
+    }
+    .quick-link:nth-last-child(-n + 2) {
+      border-bottom: 1px solid var(--color-divider);
+    }
+    .quick-link:last-child {
+      border-bottom: 0;
     }
     .greeting-main {
       grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
@@ -986,10 +1082,9 @@
     }
   }
 
-  @media (hover: none) {
-    .tile,
-    .tile:hover {
-      transform: none !important;
+  @media (max-width: 430px) {
+    .tile {
+      border-right: 0;
     }
   }
 </style>
