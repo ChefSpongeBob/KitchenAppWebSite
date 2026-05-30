@@ -42,6 +42,7 @@ declare global {
 			businessSlug?: string;
 			businessPlan?: string;
 			businessRole?: string;
+			businessPermissionTemplate?: string;
 			businessOnboardingComplete?: boolean;
 		}
 	}

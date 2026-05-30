@@ -40,6 +40,11 @@ import {
   writeSensitiveRecordAudit
 } from '$lib/server/sensitive';
 import {
+  isBusinessAdminRole,
+  normalizeBusinessRole,
+  normalizePermissionTemplate
+} from '$lib/server/permissions';
+import {
   deleteAttachmentsForSourceItem,
   deleteAttachmentsForSourceItems,
   deleteAttachmentsForTarget,
@@ -158,6 +163,7 @@ export type AdminUser = {
   display_name: string | null;
   email: string;
   role: string;
+  permission_template: string;
   is_active: number;
   can_manage_specials: number;
   can_manage_announcements: number;
@@ -344,7 +350,7 @@ async function activeBusinessUserCount(db: D1, businessId: string, adminOnly = f
       FROM business_users
       WHERE business_id = ?
         AND COALESCE(is_active, 1) = 1
-        ${adminOnly ? "AND role IN ('owner', 'admin', 'manager')" : ''}
+        ${adminOnly ? "AND role IN ('owner', 'admin', 'manager', 'general_manager', 'foh_manager', 'boh_manager', 'hourly_manager')" : ''}
       `
     )
     .bind(businessId)
@@ -1166,6 +1172,7 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.display_name,
             u.email,
             COALESCE(bu.role, 'staff') AS role,
+            COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
             CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active,
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials,
             CASE WHEN ae.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_announcements
@@ -1187,6 +1194,7 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.display_name,
             u.email,
             COALESCE(bu.role, 'staff') AS role,
+            COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
             COALESCE(bu.is_active, 1) AS is_active,
             CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials,
             CASE WHEN ae.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_announcements
@@ -1262,30 +1270,8 @@ export async function loadAdminInvites(db: D1, businessId: string) {
 }
 
 function normalizeInviteAccessType(value: string) {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'owner') return 'owner';
-  if (normalized === 'admin' || normalized === 'manager') return 'admin';
-  return 'staff';
-}
-
-function normalizePermissionTemplate(value: string) {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  const allowed = new Set([
-    'owner',
-    'general_manager',
-    'boh_manager',
-    'foh_manager',
-    'hourly_manager',
-    'shift_lead',
-    'staff'
-  ]);
-  return allowed.has(normalized) ? normalized : 'staff';
-}
-
-function formatPermissionTemplate(value: string) {
-  return normalizePermissionTemplate(value)
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const normalized = normalizeBusinessRole(value);
+  return normalized === 'user' ? 'staff' : normalized;
 }
 
 function parseScheduleDepartmentsJson(value: string | null | undefined, fallback = '') {
@@ -2037,11 +2023,6 @@ async function upsertComplianceDocumentForOnboardingItem(
       now
     )
     .run();
-}
-
-function isAdminBusinessRole(role: string | null | undefined) {
-  const normalized = String(role ?? '').trim().toLowerCase();
-  return normalized === 'owner' || normalized === 'admin' || normalized === 'manager';
 }
 
 function normalizeOnboardingItemType(value: string): EmployeeOnboardingItem['item_type'] | null {
@@ -3093,7 +3074,7 @@ export async function ensureEmployeeOnboardingRequirement(
     return { required: true, approved: false, status: latest.status, packageId: latest.id };
   }
 
-  if (isAdminBusinessRole(membership.role) && !employmentType) {
+  if (isBusinessAdminRole(membership.role) && !employmentType) {
     return { required: false, approved: true, status: 'not_required' as const };
   }
 
@@ -3213,7 +3194,7 @@ export async function loadEmployeeOnboardingDashboard(
       if (employmentType === 'contractor') return false;
       if (latestPackageByUser.has(user.id)) return true;
       if (employmentType === 'employee') return true;
-      return !isAdminBusinessRole(user.role);
+      return !isBusinessAdminRole(user.role);
     })
     .map((user) => {
       const packet = latestPackageByUser.get(user.id) ?? null;
@@ -4665,7 +4646,7 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
     .prepare(
       `
       UPDATE business_users
-      SET role = 'admin', is_active = 1, updated_at = ?
+      SET role = 'admin', permission_template = 'general_manager', is_active = 1, updated_at = ?
       WHERE business_id = ? AND user_id = ?
       `
     )
@@ -4704,7 +4685,7 @@ export async function removeUserAdmin(request: Request, locals: App.Locals) {
 
   if (!businessUser) return fail(404, { error: 'User not found in this business.' });
   if (businessUser.role === 'owner') return fail(400, { error: 'Owner admin access cannot be restricted here.' });
-  if (!['admin', 'manager'].includes(businessUser.role)) return { success: true };
+  if (!isBusinessAdminRole(businessUser.role)) return { success: true };
   if ((await countAdmins(db, businessId)) <= 1) {
     return fail(400, { error: 'At least one admin must remain active.' });
   }
@@ -4713,7 +4694,7 @@ export async function removeUserAdmin(request: Request, locals: App.Locals) {
     .prepare(
       `
       UPDATE business_users
-      SET role = 'staff', updated_at = ?
+      SET role = 'staff', permission_template = 'staff', updated_at = ?
       WHERE business_id = ? AND user_id = ?
       `
     )
@@ -4729,6 +4710,60 @@ export async function removeUserAdmin(request: Request, locals: App.Locals) {
   });
 
   return { success: true };
+}
+
+export async function updateUserBusinessPermissions(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  const role = normalizeInviteAccessType(String(formData.get('business_role') ?? 'staff'));
+  const permissionTemplate = normalizePermissionTemplate(String(formData.get('permission_template') ?? role));
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (userId === locals.userId && role !== 'owner' && (await countAdmins(db, businessId)) <= 1) {
+    return fail(400, { error: 'At least one admin must remain active.' });
+  }
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'User not found in this business.' });
+  }
+
+  const current = await db
+    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+    .bind(businessId, userId)
+    .first<{ role: string }>();
+  if (!current) return fail(404, { error: 'User not found in this business.' });
+  if (current.role === 'owner' && role !== 'owner') {
+    return fail(400, { error: 'Owner access cannot be changed here.' });
+  }
+  if (isBusinessAdminRole(current.role) && !isBusinessAdminRole(role) && (await countAdmins(db, businessId)) <= 1) {
+    return fail(400, { error: 'At least one admin must remain active.' });
+  }
+
+  await ensureBusinessSchema(db);
+  await db
+    .prepare(
+      `
+      UPDATE business_users
+      SET role = ?, permission_template = ?, is_active = 1, updated_at = ?
+      WHERE business_id = ? AND user_id = ?
+      `
+    )
+    .bind(role, permissionTemplate, Math.floor(Date.now() / 1000), businessId, userId)
+    .run();
+
+  await writeAuditLog(db, {
+    action: 'business_permissions_updated',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId,
+    metadata: { role, permissionTemplate }
+  });
+
+  return { success: true, message: 'Permissions updated.' };
 }
 
 export async function approveUser(
@@ -4818,7 +4853,7 @@ async function countAdmins(db: D1, businessId: string) {
       FROM business_users
       WHERE business_id = ?
         AND COALESCE(is_active, 1) = 1
-        AND role IN ('owner', 'admin', 'manager')
+        AND role IN ('owner', 'admin', 'manager', 'general_manager', 'foh_manager', 'boh_manager', 'hourly_manager')
       `
     )
     .bind(businessId)
@@ -4875,7 +4910,7 @@ export async function denyUser(request: Request, locals: App.Locals) {
       .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
       .bind(businessId, userId)
       .first<{ role: string }>();
-    if (['owner', 'admin', 'manager'].includes(businessUser?.role ?? '')) {
+    if (isBusinessAdminRole(businessUser?.role)) {
       return fail(400, { error: 'At least one admin must remain active.' });
     }
   }
@@ -4928,7 +4963,7 @@ export async function deleteUser(request: Request, locals: App.Locals) {
       .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
       .bind(businessId, userId)
       .first<{ role: string }>();
-    if (['owner', 'admin', 'manager'].includes(businessUser?.role ?? '')) {
+    if (isBusinessAdminRole(businessUser?.role)) {
       return fail(400, { error: 'At least one admin must remain.' });
     }
   }

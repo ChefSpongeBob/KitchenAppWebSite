@@ -17,7 +17,8 @@ import {
   sendEmployeeOnboardingPackage,
   toggleAnnouncementAccess,
   toggleScheduleDepartmentApproval,
-  toggleSpecialsAccess
+  toggleSpecialsAccess,
+  updateUserBusinessPermissions
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
 import { listUserSessions } from '$lib/server/security';
@@ -85,6 +86,7 @@ export const actions: Actions = {
   delete_user: ({ request, locals }) => deleteUser(request, locals),
   make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
   remove_user_admin: ({ request, locals }) => removeUserAdmin(request, locals),
+  update_permissions: ({ request, locals }) => updateUserBusinessPermissions(request, locals),
   toggle_announcement_access: ({ request, locals }) => toggleAnnouncementAccess(request, locals),
   toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),

@@ -11,6 +11,7 @@
     type AppFeatureKey,
     type AppFeatureModes
   } from "$lib/features/appFeatures";
+  import { hasReportsAccess, hasVendorAccess, isBusinessAdminRole } from "$lib/auth/roles";
   import ToastStack from "$lib/components/ui/ToastStack.svelte";
 
   type FeatureAwareNavItem = NavItem & {
@@ -29,6 +30,7 @@
     businessSlug: string;
     businessPlan: string;
     businessRole: string;
+    businessPermissionTemplate: string;
     businessLogoUrl: string | null;
   };
 
@@ -41,8 +43,10 @@
           businessName?: string | null;
           businessLogoUrl?: string | null;
           businessRole?: string | null;
+          businessPermissionTemplate?: string | null;
           businessOnboardingComplete?: boolean;
           businesses?: BusinessMembership[];
+          preferredTheme?: "dark" | "light";
         }
       | null;
     featureModes?: AppFeatureModes;
@@ -52,6 +56,7 @@
   let sidebarOpen = false;
   let marketingMenuOpen = false;
   let themeMode: "dark" | "light" = "light";
+  let themePreferenceLoaded = false;
   let mobileView: "default" | "compact" = "default";
   let narrowViewportQuery: MediaQueryList | null = null;
   let coarsePointerQuery: MediaQueryList | null = null;
@@ -251,31 +256,33 @@
   $: showRouteSplash = Boolean($navigating) && Boolean(navTargetPath) && !navTargetPath.startsWith("/register");
   $: marketingNav = publicNav.filter((item) => item.route !== "/register" && item.route !== "/login");
   $: activeFeatureModes = data.featureModes ?? defaultAppFeatureModes;
+  $: normalizedUserRole = String(data.user?.role ?? "").trim().toLowerCase();
+  $: normalizedBusinessRole = String(data.user?.businessRole ?? "").trim().toLowerCase();
+  $: isAdminAccount = Boolean(
+    data.user && (normalizedUserRole === "admin" || isBusinessAdminRole(normalizedBusinessRole))
+  );
+  $: canUseProtectedNavItem = (item: NavItem) => {
+    if (!item.adminOnly) return true;
+    if (item.route === "/reports") return hasReportsAccess(normalizedBusinessRole);
+    if (item.route === "/vendors") return hasVendorAccess(normalizedBusinessRole);
+    return isAdminAccount;
+  };
   $: filteredPrimaryNav = primaryNav.filter(
     (item) =>
-      (!item.adminOnly || isAdminAccount) &&
-      (!item.featureKey || canRoleAccessFeature(activeFeatureModes[item.featureKey], data.user?.role))
+      canUseProtectedNavItem(item) &&
+      (!item.featureKey || canRoleAccessFeature(activeFeatureModes[item.featureKey], data.user?.businessRole ?? data.user?.role, item.featureKey))
   );
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (!item.featureKey) return true;
-        const role = data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
-        return canRoleAccessFeature(activeFeatureModes[item.featureKey], role);
+        const role = data.user?.businessRole ?? data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
+        return canRoleAccessFeature(activeFeatureModes[item.featureKey], role, item.featureKey);
       })
     }))
     .filter((group) => group.items.length > 0);
   $: userBusinesses = data.user?.businesses ?? [];
-  $: normalizedUserRole = String(data.user?.role ?? "").trim().toLowerCase();
-  $: normalizedBusinessRole = String(data.user?.businessRole ?? "").trim().toLowerCase();
-  $: isAdminAccount = Boolean(
-    data.user &&
-      (normalizedUserRole === "admin" ||
-        normalizedBusinessRole === "owner" ||
-        normalizedBusinessRole === "admin" ||
-        normalizedBusinessRole === "manager")
-  );
   $: isAdminRoute = currentPath.startsWith("/admin");
   $: navItems = isAdminAccount || isAdminRoute ? [...filteredPrimaryNav, adminNavItem] : filteredPrimaryNav;
   $: isAdminSidebar = isAdminRoute;
@@ -306,7 +313,10 @@
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
     if (savedTheme === "light" || savedTheme === "dark") {
       themeMode = savedTheme;
+    } else if (data.user?.preferredTheme === "light" || data.user?.preferredTheme === "dark") {
+      themeMode = data.user.preferredTheme;
     }
+    themePreferenceLoaded = true;
     applyTheme(effectiveThemeMode);
     syncMobileView();
 
@@ -328,7 +338,9 @@
   });
 
   $: if (browser) {
-    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    if (themePreferenceLoaded) {
+      localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    }
     applyTheme(effectiveThemeMode);
   }
 </script>
@@ -1010,17 +1022,17 @@
     display: none;
   }
 
-  @media (min-width: 761px) {
+  @media (hover: hover) and (pointer: fine) {
     .sidebar {
-      overflow-y: scroll;
+      overflow-y: scroll !important;
       scrollbar-gutter: stable;
-      scrollbar-width: thin;
+      scrollbar-width: thin !important;
       scrollbar-color: color-mix(in srgb, var(--color-text) 28%, transparent) transparent;
     }
 
     .sidebar::-webkit-scrollbar {
-      display: block;
-      width: 6px;
+      display: block !important;
+      width: 8px;
     }
 
     .sidebar::-webkit-scrollbar-track {
@@ -1029,11 +1041,21 @@
 
     .sidebar::-webkit-scrollbar-thumb {
       background: color-mix(in srgb, var(--color-text) 24%, transparent);
-      border-radius: 999px;
+      border-radius: 0;
     }
 
     .sidebar::-webkit-scrollbar-thumb:hover {
       background: color-mix(in srgb, var(--color-text) 38%, transparent);
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .sidebar {
+      scrollbar-width: none !important;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      display: none !important;
     }
   }
 
@@ -1808,8 +1830,3 @@
   }
 
 </style>
-
-
-
-
-

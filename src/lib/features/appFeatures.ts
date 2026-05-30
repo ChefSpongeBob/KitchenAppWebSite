@@ -1,3 +1,5 @@
+import { hasPrivilegedFeatureAccess, hasVendorAccess } from '$lib/auth/roles';
+
 export type AppFeatureMode = 'all' | 'admin' | 'off';
 
 export type AppFeatureKey =
@@ -136,10 +138,15 @@ export function isValidAppFeatureMode(value: string): value is AppFeatureMode {
   return value === 'all' || value === 'admin' || value === 'off';
 }
 
-export function canRoleAccessFeature(mode: AppFeatureMode, role: string | null | undefined) {
+export function canRoleAccessFeature(
+  mode: AppFeatureMode,
+  role: string | null | undefined,
+  featureKey?: AppFeatureKey | null
+) {
   if (mode === 'off') return false;
   if (mode === 'all') return true;
-  return role === 'admin';
+  if (featureKey === 'vendors') return hasVendorAccess(role);
+  return role === 'admin' || hasPrivilegedFeatureAccess(role);
 }
 
 export function normalizeAppFeatureModes(
@@ -158,7 +165,7 @@ export function normalizeAppFeatureModes(
 export function buildFeatureAccess(modes: AppFeatureModes, role: string | null | undefined): AppFeatureAccess {
   return appFeatureDefinitions.reduce(
     (acc, feature) => {
-      acc[feature.key] = canRoleAccessFeature(modes[feature.key], role);
+      acc[feature.key] = canRoleAccessFeature(modes[feature.key], role, feature.key);
       return acc;
     },
     {} as AppFeatureAccess

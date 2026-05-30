@@ -1,27 +1,21 @@
 import { redirect } from '@sveltejs/kit';
+import { isBusinessAdminRole } from '$lib/server/permissions';
 import type { PageServerLoad } from './$types';
 import type { WelcomeTourVariant } from '$lib/server/userPreferences';
 
 function resolveWelcomeVariant(locals: App.Locals): WelcomeTourVariant {
-	if (
-		locals.businessRole === 'owner' ||
-		locals.businessRole === 'admin' ||
-		locals.businessRole === 'manager'
-	) {
-		return 'admin';
-	}
-	return 'user';
+  return isBusinessAdminRole(locals.businessRole) ? 'admin' : 'user';
 }
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	if (!locals.userId || !locals.DB) {
-		throw redirect(303, '/login');
-	}
+  if (!locals.userId || !locals.DB) {
+    throw redirect(303, '/login');
+  }
 
-	const forcedVariant = String(url.searchParams.get('variant') ?? '').trim().toLowerCase();
-	const roleVariant = resolveWelcomeVariant(locals);
-	const variant: WelcomeTourVariant =
-		forcedVariant === 'admin' || forcedVariant === 'user' ? forcedVariant : roleVariant;
+  const forcedVariant = String(url.searchParams.get('variant') ?? '').trim().toLowerCase();
+  const roleVariant = resolveWelcomeVariant(locals);
+  const variant: WelcomeTourVariant =
+    forcedVariant === 'admin' || forcedVariant === 'user' ? forcedVariant : roleVariant;
 
-	throw redirect(303, `/welcome/${variant}`);
+  throw redirect(303, `/welcome/${variant}`);
 };

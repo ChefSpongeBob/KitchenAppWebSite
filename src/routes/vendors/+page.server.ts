@@ -1,10 +1,11 @@
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
+import { hasVendorAccess } from '$lib/server/permissions';
 import { requireBusinessId } from '$lib/server/tenant';
 import { loadVendors } from '$lib/server/vendors';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  requireAdmin(locals.userRole);
+  if (!hasVendorAccess(locals.businessRole)) throw redirect(303, '/app');
   const db = locals.DB;
   if (!db) return { vendors: [] };
 

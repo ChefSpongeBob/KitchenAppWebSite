@@ -11,6 +11,7 @@ export type BusinessContext = {
   businessSlug: string;
   businessPlan: string;
   businessRole: string;
+  businessPermissionTemplate: string;
   businessLogoUrl: string | null;
 };
 
@@ -128,6 +129,7 @@ export async function ensureBusinessSchema(db: D1) {
     .run();
 
   await ensureOptionalColumn(db, 'business_users', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
+  await ensureOptionalColumn(db, 'business_users', 'permission_template', "TEXT NOT NULL DEFAULT 'staff'");
 
   await db
     .prepare(
@@ -230,6 +232,7 @@ function mapBusinessContextRow(row: {
   business_plan: string;
   business_logo_url: string | null;
   business_role: string;
+  permission_template?: string | null;
 }) {
   return {
     businessId: row.business_id,
@@ -237,6 +240,7 @@ function mapBusinessContextRow(row: {
     businessSlug: row.business_slug,
     businessPlan: row.business_plan,
     businessRole: row.business_role,
+    businessPermissionTemplate: row.permission_template ?? row.business_role,
     businessLogoUrl: row.business_logo_url
   } satisfies BusinessContext;
 }
@@ -255,7 +259,8 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
           b.slug AS business_slug,
           b.plan_tier AS business_plan,
           b.sidebar_logo_url AS business_logo_url,
-          bu.role AS business_role
+          bu.role AS business_role,
+          COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template
         FROM business_users bu
         JOIN businesses b ON b.id = bu.business_id
         WHERE bu.user_id = ?
@@ -273,6 +278,7 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         business_plan: string;
         business_logo_url: string | null;
         business_role: string;
+        permission_template: string;
       }>();
 
     if (selectedMembership) return mapBusinessContextRow(selectedMembership);
@@ -287,7 +293,8 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         b.slug AS business_slug,
         b.plan_tier AS business_plan,
         b.sidebar_logo_url AS business_logo_url,
-        bu.role AS business_role
+        bu.role AS business_role,
+          COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template
       FROM business_users bu
       JOIN businesses b ON b.id = bu.business_id
       WHERE bu.user_id = ?
@@ -297,8 +304,12 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         CASE bu.role
           WHEN 'owner' THEN 0
           WHEN 'admin' THEN 1
+          WHEN 'general_manager' THEN 2
           WHEN 'manager' THEN 2
-          ELSE 3
+          WHEN 'foh_manager' THEN 3
+          WHEN 'boh_manager' THEN 3
+          WHEN 'hourly_manager' THEN 4
+          ELSE 5
         END ASC,
         b.created_at ASC
       LIMIT 1
@@ -312,7 +323,8 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
       business_plan: string;
       business_logo_url: string | null;
       business_role: string;
-    }>();
+        permission_template: string;
+      }>();
 
   if (!membership) return null;
 
@@ -331,7 +343,8 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
         b.slug AS business_slug,
         b.plan_tier AS business_plan,
         b.sidebar_logo_url AS business_logo_url,
-        bu.role AS business_role
+        bu.role AS business_role,
+          COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template
       FROM business_users bu
       JOIN businesses b ON b.id = bu.business_id
       WHERE bu.user_id = ?
@@ -341,8 +354,12 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
         CASE bu.role
           WHEN 'owner' THEN 0
           WHEN 'admin' THEN 1
+          WHEN 'general_manager' THEN 2
           WHEN 'manager' THEN 2
-          ELSE 3
+          WHEN 'foh_manager' THEN 3
+          WHEN 'boh_manager' THEN 3
+          WHEN 'hourly_manager' THEN 4
+          ELSE 5
         END ASC,
         b.created_at ASC
       `
@@ -355,7 +372,8 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
       business_plan: string;
       business_logo_url: string | null;
       business_role: string;
-    }>();
+        permission_template: string;
+      }>();
 
   return (rows.results ?? []).map(mapBusinessContextRow) satisfies BusinessMembershipSummary[];
 }
@@ -387,11 +405,11 @@ export async function bootstrapBusinessForUser(
   await db
     .prepare(
       `
-      INSERT INTO business_users (business_id, user_id, role, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(businessId, userId, businessRole, now, now)
+    .bind(businessId, userId, businessRole, businessRole, now, now)
     .run();
 
   return {
@@ -400,6 +418,7 @@ export async function bootstrapBusinessForUser(
     businessSlug: slug,
     businessPlan: 'starter',
     businessRole,
+    businessPermissionTemplate: businessRole,
     businessLogoUrl: null
   } satisfies BusinessContext;
 }

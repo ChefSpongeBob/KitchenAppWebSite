@@ -297,6 +297,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.businessSlug = businessContext.businessSlug;
 		event.locals.businessPlan = businessContext.businessPlan;
 		event.locals.businessRole = businessContext.businessRole;
+		event.locals.businessPermissionTemplate = businessContext.businessPermissionTemplate;
 		event.locals.businessOnboardingComplete = await isBusinessOnboardingComplete(
 			db,
 			businessContext.businessId
@@ -306,7 +307,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const gatedFeature = resolveFeatureKeyForPath(pathname);
 		if (isPrivateRoute && gatedFeature) {
 			const featureMode = event.locals.featureModes[gatedFeature];
-			if (!canRoleAccessFeature(featureMode, event.locals.userRole)) {
+			if (!canRoleAccessFeature(featureMode, event.locals.businessRole ?? event.locals.userRole, gatedFeature)) {
 				logOperationalEvent({
 					level: 'warn',
 					event: 'tenant_access_denied',

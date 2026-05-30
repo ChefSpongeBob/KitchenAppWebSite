@@ -4,6 +4,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { businessRoleLabel, isBusinessAdminRole, permissionTemplateLabel } from '$lib/auth/roles';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type UserOption = {
@@ -11,6 +12,7 @@
     display_name: string | null;
     email: string;
     role: string;
+    permission_template: string;
     is_active: number;
     can_manage_specials: number;
     can_manage_announcements: number;
@@ -25,7 +27,7 @@
 
   $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
-  $: adminUsers = activeUsers.filter((user) => ['owner', 'admin', 'manager'].includes(user.role));
+  $: adminUsers = activeUsers.filter((user) => isBusinessAdminRole(user.role));
   $: filteredStaff = activeUsers.filter((user) => {
     const query = staffSearch.trim().toLowerCase();
     if (!query) return true;
@@ -35,12 +37,7 @@
     return haystack.includes(query);
   });
 
-  const roleLabel = (role: string) => {
-    const normalized = role.toLowerCase();
-    if (normalized === 'owner') return 'Owner';
-    if (normalized === 'admin' || normalized === 'manager') return 'Admin';
-    return 'Employee';
-  };
+  const roleLabel = (role: string) => businessRoleLabel(role);
 
   const departmentSummary = (user: UserOption) =>
     user.approved_departments.length > 0 ? user.approved_departments.join(', ') : 'No schedule departments';
@@ -125,8 +122,11 @@
                     <small>{user.email}</small>
                   </span>
                 </a>
-                <span class="role-pill" class:role-admin={['owner', 'admin', 'manager'].includes(user.role)}>
+                <span class="role-pill" class:role-admin={isBusinessAdminRole(user.role)}>
                   {roleLabel(user.role)}
+                  {#if user.permission_template !== user.role}
+                    <small>{permissionTemplateLabel(user.permission_template)}</small>
+                  {/if}
                 </span>
                 <span class="department-copy">{departmentSummary(user)}</span>
                 <div class="row-actions">

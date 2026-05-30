@@ -1,3 +1,4 @@
+import { isBusinessAdminRole } from '$lib/server/permissions';
 import { dev } from '$app/environment';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
@@ -84,7 +85,7 @@ export async function userCanEditDailySpecials(
   businessId?: string | null
 ) {
   if (!userId) return false;
-  if (role === 'admin' || role === 'owner' || role === 'manager') return true;
+  if (role === 'admin' || isBusinessAdminRole(role)) return true;
   await ensureTenantSchema(db, true);
 
   const row = await db

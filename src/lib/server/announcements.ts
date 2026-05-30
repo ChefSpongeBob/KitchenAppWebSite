@@ -1,3 +1,4 @@
+import { isBusinessAdminRole } from '$lib/server/permissions';
 import { dev } from '$app/environment';
 
 export type HomepageAnnouncement = {
@@ -117,7 +118,7 @@ export async function userCanEditHomepageAnnouncement(
   role?: string | null,
   businessId?: string | null
 ) {
-  if (role === 'admin' || role === 'owner' || role === 'manager') return true;
+  if (role === 'admin' || isBusinessAdminRole(role)) return true;
   if (!userId || !businessId) return false;
 
   await ensureAnnouncementsSchema(db);

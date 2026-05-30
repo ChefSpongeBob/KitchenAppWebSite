@@ -20,6 +20,7 @@ import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { validateNewPassword } from '$lib/server/passwordReset';
 import { checkRateLimit, writeAuditLog } from '$lib/server/security';
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
+import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/server/permissions';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
@@ -497,15 +498,8 @@ export const actions: Actions = {
 			const passwordHash = await hashPassword(password);
 			let resolvedBusinessId: string | null = null;
 
-			const invitedBusinessRoleRaw = String(businessInvite?.role ?? '').toLowerCase();
-			const invitedBusinessRole = invitedBusinessRoleRaw === 'manager' ? 'admin' : invitedBusinessRoleRaw;
-			const roleValue = inviteCode
-				? invitedBusinessRole === 'owner' ||
-					invitedBusinessRole === 'admin' ||
-					invitedBusinessRole === 'manager'
-					? 'admin'
-					: 'user'
-				: 'admin';
+			const invitedBusinessRole = normalizeBusinessRole(businessInvite?.role ?? '');
+			const roleValue = inviteCode ? effectiveAppRoleFromBusinessRole(invitedBusinessRole) : 'admin';
 			if (hasNormalized) {
 				const sql = hasIsActive
 					? `
@@ -613,19 +607,15 @@ export const actions: Actions = {
 				await db
 					.prepare(
 						`
-				INSERT INTO business_users (business_id, user_id, role, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?)
+				INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?)
 			`
 					)
 					.bind(
 						businessInvite.business_id,
 						userId,
-						invitedBusinessRole &&
-							invitedBusinessRole !== 'owner' &&
-							invitedBusinessRole !== 'admin' &&
-							invitedBusinessRole !== 'manager'
-							? 'staff'
-							: invitedBusinessRole || 'staff',
+						invitedBusinessRole === 'user' ? 'staff' : invitedBusinessRole,
+						businessInvite.permission_template || invitedBusinessRole || 'staff',
 						now,
 						now
 					)
@@ -733,8 +723,12 @@ export const actions: Actions = {
 					  CASE bu.role
 					    WHEN 'owner' THEN 0
 					    WHEN 'admin' THEN 1
-					    WHEN 'manager' THEN 2
-					    ELSE 3
+					    WHEN 'general_manager' THEN 2
+              WHEN 'manager' THEN 2
+              WHEN 'foh_manager' THEN 3
+              WHEN 'boh_manager' THEN 3
+              WHEN 'hourly_manager' THEN 4
+              ELSE 5
 					  END ASC,
 					  b.created_at ASC
 					LIMIT 1
@@ -746,8 +740,8 @@ export const actions: Actions = {
 						await db
 							.prepare(
 								`
-						INSERT INTO business_users (business_id, user_id, role, created_at, updated_at)
-						VALUES (?, ?, 'staff', ?, ?)
+						INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
+            VALUES (?, ?, 'staff', 'staff', ?, ?)
 					`
 							)
 							.bind(inviterBusiness.business_id, userId, now, now)
@@ -811,8 +805,8 @@ export const actions: Actions = {
 				await db
 					.prepare(
 						`
-				INSERT INTO business_users (business_id, user_id, role, created_at, updated_at)
-				VALUES (?, ?, 'owner', ?, ?)
+				INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
+        VALUES (?, ?, 'owner', 'owner', ?, ?)
 			`
 					)
 					.bind(businessId, userId, now, now)

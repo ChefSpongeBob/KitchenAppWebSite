@@ -5,6 +5,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { businessAccessOptions, businessRoleLabel, isBusinessAdminRole, permissionTemplateLabel, permissionTemplateOptions } from '$lib/auth/roles';
   import type { ScheduleDepartment } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -13,6 +14,7 @@
     display_name: string | null;
     email: string;
     role: string;
+    permission_template: string;
     is_active: number;
     can_manage_specials: number;
     can_manage_announcements: number;
@@ -93,7 +95,7 @@
   const isDepartmentApproved = (employee: Employee, department: ScheduleDepartment) =>
     employee.approved_departments.includes(department);
 
-  const isAdminRole = (role: string) => ['owner', 'admin', 'manager'].includes(role);
+  const isAdminRole = (role: string) => isBusinessAdminRole(role);
 
   const formatBirthday = (value: string) =>
     value ? new Date(`${value}T00:00:00`).toLocaleDateString() : 'Not set';
@@ -211,7 +213,7 @@
         </div>
         <div>
           <span>Role</span>
-          <strong>{isAdminRole(data.employee.role) ? 'Admin' : 'Staff'}</strong>
+          <strong>{businessRoleLabel(data.employee.role)}</strong>
         </div>
         <div>
           <span>Departments</span>
@@ -262,6 +264,34 @@
                 <button type="submit">Allow Access</button>
               </form>
             {/if}
+
+            <form method="POST" action="?/update_permissions" use:enhance={withFeedback} class="permission-form">
+              <input type="hidden" name="user_id" value={data.employee.id} />
+              <label>
+                <span>Access</span>
+                <select name="business_role" disabled={data.employee.role === 'owner'}>
+                  {#each businessAccessOptions as option}
+                    <option value={option.value} selected={option.value === data.employee.role}>{option.label}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>Template</span>
+                <select name="permission_template">
+                  {#each permissionTemplateOptions as option}
+                    <option value={option.value} selected={option.value === data.employee.permission_template}>
+                      {option.label}
+                    </option>
+                  {/each}
+                </select>
+              </label>
+              <button type="submit" disabled={data.employee.role === 'owner'}>Save Permissions</button>
+              {#if data.employee.role === 'owner'}
+                <small>Owner access is locked.</small>
+              {:else}
+                <small>{permissionTemplateLabel(data.employee.permission_template)}</small>
+              {/if}
+            </form>
 
             {#if data.employee.role === 'owner'}
               <span class="access-state success-action">Admin Access</span>
@@ -684,6 +714,26 @@
   .action-stack {
     display: grid;
     gap: 0.55rem;
+  }
+
+  .permission-form {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.65rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .permission-form label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .permission-form span,
+  .permission-form small {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: var(--weight-semibold);
   }
 
   .department-chips {

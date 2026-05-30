@@ -5,6 +5,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { businessAccessOptions, businessRoleLabel, permissionTemplateLabel, permissionTemplateOptions } from '$lib/auth/roles';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type OnboardingTemplateItem = {
@@ -126,31 +127,10 @@
     return value ? new Date(value * 1000).toLocaleDateString() : 'Not started';
   }
 
-  const accessTypes = [
-    { value: 'staff', label: 'Employee' },
-    { value: 'admin', label: 'Admin' },
-    { value: 'owner', label: 'Owner' }
-  ];
-
-  const permissionTemplates = [
-    { value: 'staff', label: 'Staff' },
-    { value: 'shift_lead', label: 'Shift Lead' },
-    { value: 'hourly_manager', label: 'Hourly Manager' },
-    { value: 'foh_manager', label: 'FOH Manager' },
-    { value: 'boh_manager', label: 'BOH Manager' },
-    { value: 'general_manager', label: 'General Manager' },
-    { value: 'owner', label: 'Owner' }
-  ];
-
   const labelFor = (items: Array<{ value: string; label: string }>, value: string) =>
     items.find((item) => item.value === value)?.label ?? value;
 
-  const roleLabel = (role: string) => {
-    const normalized = role.toLowerCase();
-    if (normalized === 'owner') return 'Owner';
-    if (normalized === 'admin' || normalized === 'manager') return 'Admin';
-    return 'Employee';
-  };
+  const roleLabel = (role: string) => businessRoleLabel(role);
 
   const inviteDepartmentSummary = (invite: InviteOption) => {
     const departments = invite.schedule_departments.length
@@ -211,7 +191,7 @@
               <label>
                 <span>Access</span>
                 <select name="access_type">
-                  {#each accessTypes as accessType}
+                  {#each businessAccessOptions as accessType}
                     <option value={accessType.value}>{accessType.label}</option>
                   {/each}
                 </select>
@@ -219,7 +199,7 @@
               <label>
                 <span>Template</span>
                 <select name="permission_template">
-                  {#each permissionTemplates as template}
+                  {#each permissionTemplateOptions as template}
                     <option value={template.value}>{template.label}</option>
                   {/each}
                 </select>
@@ -282,7 +262,7 @@
               <div class="invite-row">
                 <div>
                   <strong>{invite.email}</strong>
-                  <span>{[invite.job_title, labelFor(permissionTemplates, invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
+                  <span>{[invite.job_title, permissionTemplateLabel(invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
                   <span>{inviteDepartmentSummary(invite)}</span>
                   <span>Expires {formatDate(invite.expires_at)}</span>
                 </div>

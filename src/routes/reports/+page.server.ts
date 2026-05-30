@@ -1,7 +1,8 @@
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
+import { hasReportsAccess } from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  requireAdmin(locals.userRole);
+  if (!hasReportsAccess(locals.businessRole)) throw redirect(303, '/app');
   return {};
 };
