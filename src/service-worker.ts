@@ -2,7 +2,6 @@
 import { build, files, version } from '$service-worker';
 
 const CACHE = `cache-${version}`;
-const RUNTIME_CACHEABLE_PATHS = ['/menus/'];
 const PUBLIC_NAVIGATION_PATHS = new Set([
 	'/',
 	'/about',
@@ -12,10 +11,7 @@ const PUBLIC_NAVIGATION_PATHS = new Set([
 	'/privacy',
 	'/account-deletion'
 ]);
-const PRECACHE_EXCLUSIONS = [/^\/menus\//];
-const ASSETS = [...build, ...files].filter(
-	(path) => !PRECACHE_EXCLUSIONS.some((pattern) => pattern.test(path))
-);
+const ASSETS = [...build, ...files];
 
 function isPublicNavigationPath(pathname: string) {
 	return PUBLIC_NAVIGATION_PATHS.has(pathname);
@@ -44,7 +40,6 @@ self.addEventListener('activate', (event) => {
 					const url = new URL(request.url);
 					const keepCached =
 						ASSETS.includes(url.pathname) ||
-						RUNTIME_CACHEABLE_PATHS.some((prefix) => url.pathname.startsWith(prefix)) ||
 						isPublicNavigationPath(url.pathname);
 					if (!keepCached) await cache.delete(request);
 				})
@@ -65,28 +60,9 @@ self.addEventListener('fetch', (event) => {
 	const isSvelteData = url.pathname.includes('/__data.json');
 	const isApi = url.pathname.startsWith('/api/');
 	const isStaticAsset = isSameOrigin && ASSETS.includes(url.pathname);
-	const isRuntimeCacheable = isSameOrigin && RUNTIME_CACHEABLE_PATHS.some((prefix) => url.pathname.startsWith(prefix));
 	const isPublicNavigation = event.request.mode === 'navigate' && isPublicNavigationPath(url.pathname);
 
 	if (!isSameOrigin) return;
-
-	if (isRuntimeCacheable) {
-		event.respondWith(
-			caches.match(event.request).then((response) => {
-				return (
-					response ||
-					fetch(event.request)
-						.then((networkResponse) => {
-							const copy = networkResponse.clone();
-							caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
-							return networkResponse;
-						})
-						.catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }))
-				);
-			})
-		);
-		return;
-	}
 
 	// Always fetch fresh HTML/routes first so deployed UI updates are visible immediately.
 	if (event.request.mode === 'navigate' || authPath || isSvelteData || isApi || !isStaticAsset) {

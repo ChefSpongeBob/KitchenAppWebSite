@@ -52,15 +52,27 @@ for (const file of [
 }
 
 assertIncludes(
-  'src/routes/admin/camera/+page.server.ts',
+  'src/routes/admin/camera/setup/+page.server.ts',
   'provisionIoTDevice',
-  'admins can provision device credentials'
+  'admins can provision camera device credentials'
 );
 
 assertIncludes(
-  'src/routes/admin/camera/+page.server.ts',
+  'src/routes/admin/camera/setup/+page.server.ts',
   'revokeIoTDevice',
-  'admins can revoke device credentials'
+  'admins can revoke camera device credentials'
+);
+
+assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  'provisionIoTDevice',
+  'admins can provision sensor and gateway device credentials'
+);
+
+assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  'revokeIoTDevice',
+  'admins can revoke sensor and gateway device credentials'
 );
 
 assertIncludes(
