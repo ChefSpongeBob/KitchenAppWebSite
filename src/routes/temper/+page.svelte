@@ -148,7 +148,7 @@
 {#if nodeIds.length === 0}
   <section class="empty-state">
     <strong>No sensor nodes yet.</strong>
-    <span>Add node names in Camera & Sensors.</span>
+    <span>Add node names in Temperature Sensors.</span>
   </section>
 {:else}
   <div class="grid">

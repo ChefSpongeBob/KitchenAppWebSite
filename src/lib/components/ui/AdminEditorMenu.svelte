@@ -37,7 +37,9 @@
     { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
     { href: '/admin/schedule-settings', label: 'Schedule Settings', matches: prefix('/admin/schedule-settings'), featureKey: 'scheduling' },
     { href: '/admin/schedule-roles', label: 'Schedule Roles', matches: prefix('/admin/schedule-roles'), featureKey: 'scheduling' },
-    { href: '/admin/camera', label: 'Camera & Sensors', matches: prefix('/admin/camera') }
+    { href: '/admin/camera', label: 'Camera Media', matches: exact('/admin/camera') },
+    { href: '/admin/camera/setup', label: 'Camera Setup', matches: prefix('/admin/camera/setup') },
+    { href: '/admin/sensors', label: 'Temperature Sensors', matches: prefix('/admin/sensors') }
   ];
 
   $: currentPath = $page.url.pathname;

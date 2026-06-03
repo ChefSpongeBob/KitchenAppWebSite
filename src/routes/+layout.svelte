@@ -86,7 +86,8 @@
         { label: "Documents", route: "/admin/documents", icon: "description", featureKey: "documents" },
         { label: "Lists", route: "/admin/lists", icon: "checklist", featureKey: "lists" },
         { label: "Menus", route: "/admin/menus", icon: "restaurant_menu", featureKey: "menus" },
-        { label: "Recipes", route: "/admin/recipes", icon: "menu_book", featureKey: "recipes" }
+        { label: "Recipes", route: "/admin/recipes", icon: "menu_book", featureKey: "recipes" },
+        { label: "Vendors", route: "/admin/vendors", icon: "local_shipping", featureKey: "vendors" }
       ]
     },
     {
@@ -110,8 +111,9 @@
       label: "Systems",
       icon: "videocam",
       items: [
-        { label: "Camera & Sensors", route: "/admin/camera", icon: "videocam" },
-        { label: "Vendors", route: "/admin/vendors", icon: "local_shipping", featureKey: "vendors" }
+        { label: "Camera Media", route: "/admin/camera", icon: "videocam" },
+        { label: "Camera Setup", route: "/admin/camera/setup", icon: "settings_input_antenna" },
+        { label: "Temperature Sensors", route: "/admin/sensors", icon: "device_thermostat" }
       ]
     }
   ];

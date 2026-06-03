@@ -6,7 +6,7 @@ let lastGuardCleanupAt = 0;
 let iotDeviceSchemaEnsured = false;
 let iotIngestGuardSchemaEnsured = false;
 
-export type IoTDeviceType = 'sensor' | 'camera';
+export type IoTDeviceType = 'sensor' | 'camera' | 'sensor_gateway';
 
 export type IoTDeviceRecord = {
   id: string;
@@ -72,7 +72,9 @@ function mapIoTDevice(row: IoTDeviceRow): IoTDeviceRecord {
 }
 
 function normalizeDeviceType(value: string): IoTDeviceType {
-  return value === 'camera' ? 'camera' : 'sensor';
+  if (value === 'camera') return 'camera';
+  if (value === 'sensor_gateway') return 'sensor_gateway';
+  return 'sensor';
 }
 
 function generateDeviceSecret() {
@@ -126,6 +128,15 @@ export async function ensureIoTDeviceSchema(db: D1) {
       `
       CREATE INDEX IF NOT EXISTS idx_iot_devices_external
       ON iot_devices(external_device_id, is_active)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_iot_devices_external_device_unique
+      ON iot_devices(external_device_id)
       `
     )
     .run();

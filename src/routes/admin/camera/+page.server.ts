@@ -1,17 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { addNodeName, deleteNodeName, loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
-import {
-  cleanupExpiredCameraMedia,
-  deleteCameraEventAssets,
-  ensureCameraSchema
-} from '$lib/server/camera';
-import {
-  loadIoTDevices,
-  provisionIoTDevice,
-  revokeIoTDevice,
-  type IoTDeviceType
-} from '$lib/server/iotIngest';
+import { requireAdmin } from '$lib/server/admin';
+import { cleanupExpiredCameraMedia, deleteCameraEventAssets, ensureCameraSchema } from '$lib/server/camera';
+import { loadIoTDevices } from '$lib/server/iotIngest';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 type CameraEvent = {
@@ -30,38 +21,17 @@ type CameraSource = {
   id: string;
   camera_id: string | null;
   name: string;
-  live_url: string | null;
-  preview_image_url: string | null;
   is_active: number;
   updated_at: number;
 };
 
 type IoTDevice = Awaited<ReturnType<typeof loadIoTDevices>>[number];
 
-type UrlValidation = { value: string | null; error?: never } | { value?: never; error: string };
-
-function normalizeOptionalCameraUrl(value: string, label: string): UrlValidation {
-  const normalized = value.trim();
-  if (!normalized) return { value: null };
-  if (normalized.startsWith('/api/camera/media/')) return { value: normalized };
-
-  try {
-    const parsed = new URL(normalized);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return { value: normalized };
-    }
-  } catch {
-    // Fall through to the shared validation message.
-  }
-
-  return { error: `${label} must be an http(s) URL or internal camera media path.` };
-}
-
 export const load: PageServerLoad = async ({ locals, platform }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) {
-    return { events: [], sources: [], nodeNames: [], iotDevices: [] as IoTDevice[] };
+    return { events: [], sources: [], iotDevices: [] as IoTDevice[] };
   }
   const businessId = requireBusinessId(locals);
 
@@ -69,7 +39,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
   await ensureTenantSchema(db, true);
   await cleanupExpiredCameraMedia(db, platform?.env?.CAMERA_MEDIA);
 
-  const [events, sources, nodeNames, iotDevices] = await Promise.all([
+  const [events, sources, iotDevices] = await Promise.all([
     db
       .prepare(
         `
@@ -94,7 +64,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
     db
       .prepare(
         `
-        SELECT id, camera_id, name, live_url, preview_image_url, is_active, updated_at
+        SELECT id, camera_id, name, is_active, updated_at
         FROM camera_sources
         WHERE business_id = ?
         ORDER BY is_active DESC, updated_at DESC, name ASC
@@ -102,7 +72,6 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
       )
       .bind(businessId)
       .all<CameraSource>(),
-    loadAdminNodeNames(db, businessId),
     loadIoTDevices(db, businessId)
   ]);
 
@@ -114,7 +83,6 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
   return {
     events: events.results ?? [],
     sources: sourceRows,
-    nodeNames,
     iotDevices
   };
 };
@@ -163,126 +131,6 @@ export const actions: Actions = {
     }
 
     await db.prepare(`DELETE FROM camera_events WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
-    return { success: true };
-  },
-
-  save_source: async ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    const db = locals.DB;
-    if (!db) return fail(503, { error: 'Database not configured.' });
-    const businessId = requireBusinessId(locals);
-
-    await ensureCameraSchema(db);
-    await ensureTenantSchema(db, true);
-    const formData = await request.formData();
-    const id = String(formData.get('id') ?? '').trim() || crypto.randomUUID();
-    const cameraId = String(formData.get('camera_id') ?? '').trim();
-    const scopedCameraId = cameraId ? `${businessId}:${cameraId}` : null;
-    const name = String(formData.get('name') ?? '').trim();
-    const liveUrl = normalizeOptionalCameraUrl(String(formData.get('live_url') ?? ''), 'Live URL');
-    const previewImageUrl = normalizeOptionalCameraUrl(
-      String(formData.get('preview_image_url') ?? ''),
-      'Preview URL'
-    );
-    const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
-
-    if (!name) return fail(400, { error: 'Camera name is required.' });
-    if (liveUrl.error) return fail(400, { error: liveUrl.error });
-    if (previewImageUrl.error) return fail(400, { error: previewImageUrl.error });
-
-    await db
-      .prepare(
-        `
-        INSERT INTO camera_sources (id, camera_id, name, live_url, preview_image_url, is_active, updated_at, business_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          camera_id = excluded.camera_id,
-          name = excluded.name,
-          live_url = excluded.live_url,
-          preview_image_url = excluded.preview_image_url,
-          is_active = excluded.is_active,
-          updated_at = excluded.updated_at,
-          business_id = excluded.business_id
-        `
-      )
-      .bind(
-        id,
-        scopedCameraId,
-        name,
-        liveUrl.value,
-        previewImageUrl.value,
-        isActive,
-        Math.floor(Date.now() / 1000),
-        businessId
-      )
-      .run();
-
-    return { success: true };
-  },
-
-  delete_source: async ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    const db = locals.DB;
-    if (!db) return fail(503, { error: 'Database not configured.' });
-    const businessId = requireBusinessId(locals);
-
-    await ensureCameraSchema(db);
-    await ensureTenantSchema(db, true);
-    const formData = await request.formData();
-    const id = String(formData.get('id') ?? '').trim();
-    if (!id) return fail(400, { error: 'Missing source id.' });
-
-    await db.prepare(`DELETE FROM camera_sources WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
-    return { success: true };
-  },
-
-  add_node_name: ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    return addNodeName(request, locals);
-  },
-
-  delete_node_name: ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    return deleteNodeName(request, locals);
-  },
-
-  provision_iot_device: async ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    const db = locals.DB;
-    if (!db) return fail(503, { error: 'Database not configured.' });
-    const businessId = requireBusinessId(locals);
-
-    const formData = await request.formData();
-    const rawType = String(formData.get('device_type') ?? 'sensor').trim();
-    const deviceType: IoTDeviceType = rawType === 'camera' ? 'camera' : 'sensor';
-    const externalDeviceId = String(formData.get('external_device_id') ?? '').trim();
-    const displayName = String(formData.get('display_name') ?? '').trim();
-
-    if (!externalDeviceId) return fail(400, { error: 'Device ID is required.' });
-    if (!displayName) return fail(400, { error: 'Name is required.' });
-
-    const result = await provisionIoTDevice(db, {
-      businessId,
-      deviceType,
-      externalDeviceId,
-      displayName,
-      createdBy: locals.userId ?? null
-    });
-
-    return { success: true, deviceKey: result.deviceKey, keyPrefix: result.keyPrefix };
-  },
-
-  revoke_iot_device: async ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    const db = locals.DB;
-    if (!db) return fail(503, { error: 'Database not configured.' });
-    const businessId = requireBusinessId(locals);
-
-    const formData = await request.formData();
-    const id = String(formData.get('id') ?? '').trim();
-    if (!id) return fail(400, { error: 'Missing device id.' });
-
-    await revokeIoTDevice(db, businessId, id);
     return { success: true };
   }
 };
