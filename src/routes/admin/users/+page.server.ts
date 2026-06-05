@@ -1,8 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
 import {
-  approveUser,
   deleteUser,
-  denyUser,
   loadAdminUsers,
   requireAdmin,
   toggleScheduleDepartmentApproval,
@@ -29,9 +27,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-  approve_user: ({ request, locals, url, platform }) =>
-    approveUser(request, locals, url.origin, platform?.env),
-  deny_user: ({ request, locals }) => denyUser(request, locals),
   delete_user: ({ request, locals }) => deleteUser(request, locals),
   toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals)

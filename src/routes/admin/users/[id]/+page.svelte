@@ -213,12 +213,12 @@
 
       <div class="employee-metrics">
         <div>
-          <span>Status</span>
-          <strong>{data.employee.is_active === 1 ? 'Active' : 'Restricted'}</strong>
-        </div>
-        <div>
           <span>Role</span>
           <strong>{businessRoleLabel(data.employee.role)}</strong>
+        </div>
+        <div>
+          <span>Template</span>
+          <strong>{permissionTemplateLabel(data.employee.permission_template)}</strong>
         </div>
         <div>
           <span>Departments</span>
@@ -258,18 +258,6 @@
         <section class="side-section">
           <span class="kicker">Permissions</span>
           <div class="action-stack">
-            {#if data.employee.is_active === 1}
-              <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
-                <input type="hidden" name="user_id" value={data.employee.id} />
-                <button type="submit" class="warn-action">Restrict Access</button>
-              </form>
-            {:else}
-              <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
-                <input type="hidden" name="user_id" value={data.employee.id} />
-                <button type="submit">Allow Access</button>
-              </form>
-            {/if}
-
             <form method="POST" action="?/update_permissions" use:enhance={withFeedback} class="permission-form">
               <input type="hidden" name="user_id" value={data.employee.id} />
               <label>

@@ -2,9 +2,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import {
   approveEmployeeOnboardingItem,
-  approveUser,
   deleteUser,
-  denyUser,
   loadEmployeeOnboarding,
   loadAdminEmployeeProfile,
   loadAdminUsers,
@@ -101,9 +99,6 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
 };
 
 export const actions: Actions = {
-  approve_user: ({ request, locals, url, platform }) =>
-    approveUser(request, locals, url.origin, platform?.env),
-  deny_user: ({ request, locals }) => denyUser(request, locals),
   delete_user: ({ request, locals }) => deleteUser(request, locals),
   update_permissions: ({ request, locals }) => updateUserBusinessPermissions(request, locals),
   update_capabilities: ({ request, locals }) => updateUserCapabilityOverrides(request, locals),

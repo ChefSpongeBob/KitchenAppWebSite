@@ -25,10 +25,9 @@
 
   let staffSearch = '';
 
-  $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
-  $: activeUsers = data.users.filter((user) => user.is_active === 1);
-  $: managerUsers = activeUsers.filter((user) => isBusinessAdminRole(user.role));
-  $: filteredStaff = activeUsers.filter((user) => {
+  $: staffUsers = data.users;
+  $: managerUsers = staffUsers.filter((user) => isBusinessAdminRole(user.role));
+  $: filteredStaff = staffUsers.filter((user) => {
     const query = staffSearch.trim().toLowerCase();
     if (!query) return true;
     const haystack = [
@@ -77,21 +76,21 @@
       <div>
         <span class="kicker">People Operations</span>
         <h2>Staff access and employee records</h2>
-        <p>Manage active staff, restricted accounts, and employee profiles from one cleaner roster.</p>
+        <p>Manage staff profiles, schedule areas, and permissions from one cleaner roster.</p>
       </div>
 
       <div class="people-metrics">
         <div>
-          <span>Active</span>
-          <strong>{activeUsers.length}</strong>
+          <span>Employees</span>
+          <strong>{staffUsers.length}</strong>
         </div>
         <div>
           <span>Managers</span>
           <strong>{managerUsers.length}</strong>
         </div>
         <div>
-          <span>Restricted</span>
-          <strong>{restrictedUsers.length}</strong>
+          <span>Departments</span>
+          <strong>{new Set(staffUsers.flatMap((user) => user.approved_departments)).size}</strong>
         </div>
       </div>
     </section>
@@ -118,7 +117,7 @@
           </div>
 
           {#if filteredStaff.length === 0}
-            <p class="empty table-empty">{activeUsers.length === 0 ? 'No staff yet.' : 'No staff match that search.'}</p>
+            <p class="empty table-empty">{staffUsers.length === 0 ? 'No staff yet.' : 'No staff match that search.'}</p>
           {:else}
             {#each filteredStaff as user}
               <div class="staff-row">
@@ -138,50 +137,12 @@
                 <span class="department-copy">{departmentSummary(user)}</span>
                 <div class="row-actions">
                   <a href={`/admin/users/${user.id}`} class="inline-action">Permissions</a>
-                  <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <button type="submit" class="warn-action">Restrict</button>
-                  </form>
                 </div>
               </div>
             {/each}
           {/if}
         </div>
       </div>
-
-      <aside class="people-side" aria-label="Access review tools">
-        <section class="side-section attention-section">
-          <header class="side-head">
-            <div>
-              <span class="kicker">Access Review</span>
-              <h2>Restricted Accounts</h2>
-            </div>
-            <span>{restrictedUsers.length}</span>
-          </header>
-
-          {#if restrictedUsers.length === 0}
-            <p class="empty">No accounts need review.</p>
-          {:else}
-            <div class="restricted-list">
-              {#each restrictedUsers as user}
-                <div class="restricted-row">
-                  <div>
-                    <strong>{displayName(user)}</strong>
-                    <span>{user.email}</span>
-                  </div>
-                  <div class="restricted-actions">
-                    <a href={`/admin/users/${user.id}`} class="inline-action">Open</a>
-                    <form method="POST" action="?/approve_user" use:enhance={withFeedback}>
-                      <input type="hidden" name="user_id" value={user.id} />
-                      <button type="submit">Allow</button>
-                    </form>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </section>
-      </aside>
     </section>
   </section>
 </Layout>
@@ -212,8 +173,7 @@
   }
 
   .people-hero h2,
-  .section-toolbar h2,
-  .side-head h2 {
+  .section-toolbar h2 {
     margin: 0.18rem 0 0;
     color: var(--color-text);
     line-height: 1.1;
@@ -269,28 +229,16 @@
   }
 
   .people-workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
-    gap: 0;
+    display: block;
     overflow: hidden;
   }
 
-  .roster-region,
-  .people-side {
+  .roster-region {
     min-width: 0;
     padding: clamp(0.9rem, 1.8vw, 1.15rem);
   }
 
-  .people-side {
-    border-left: 1px solid var(--color-divider);
-    display: grid;
-    align-content: start;
-    gap: 1rem;
-    background: color-mix(in srgb, var(--color-surface-alt) 18%, transparent);
-  }
-
-  .section-toolbar,
-  .side-head {
+  .section-toolbar {
     display: flex;
     align-items: end;
     justify-content: space-between;
@@ -298,8 +246,6 @@
     margin-bottom: 0.9rem;
   }
 
-  .side-head > span,
-  .restricted-row span,
   .identity-copy small,
   .department-copy,
   .empty {
@@ -415,14 +361,12 @@
     color: var(--color-text-soft);
   }
 
-  .row-actions,
-  .restricted-actions {
+  .row-actions {
     display: flex;
     align-items: center;
     gap: 0.45rem;
   }
 
-  button,
   .inline-action {
     min-height: 2.25rem;
     border: 0;
@@ -442,38 +386,6 @@
     white-space: nowrap;
   }
 
-  .warn-action {
-    border-color: color-mix(in srgb, #f59e0b 38%, var(--color-border));
-    color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
-    background: transparent;
-  }
-
-  .side-section {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .restricted-list {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .restricted-row {
-    display: grid;
-    gap: 0.48rem;
-    padding: 0.72rem 0;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  .restricted-row div:first-child {
-    min-width: 0;
-  }
-
-  .restricted-row strong {
-    display: block;
-    overflow-wrap: anywhere;
-  }
-
   .empty {
     margin: 0;
     padding: 0.35rem 0;
@@ -485,31 +397,19 @@
   }
 
   @media (max-width: 1080px) {
-    .people-hero,
-    .people-workspace {
+    .people-hero {
       grid-template-columns: 1fr;
-    }
-
-    .people-side {
-      border-left: 0;
-      border-top: 1px solid var(--color-divider);
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
   @media (max-width: 820px) {
-    .section-toolbar,
-    .side-head {
+    .section-toolbar {
       align-items: stretch;
       flex-direction: column;
     }
 
     .search-box {
       width: 100%;
-    }
-
-    .people-side {
-      grid-template-columns: 1fr;
     }
 
     .people-metrics {
@@ -533,16 +433,11 @@
       align-items: start;
     }
 
-    .row-actions,
-    .restricted-actions {
+    .row-actions {
       width: 100%;
       align-items: stretch;
     }
 
-    .row-actions form,
-    .restricted-actions form,
-    .row-actions button,
-    .restricted-actions button,
     .inline-action {
       width: 100%;
     }
@@ -562,8 +457,7 @@
       border-bottom: 0;
     }
 
-    .row-actions,
-    .restricted-actions {
+    .row-actions {
       flex-direction: column;
     }
   }

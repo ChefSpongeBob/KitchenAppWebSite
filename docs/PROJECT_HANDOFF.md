@@ -126,7 +126,7 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Final Multi-Tenant Test Notes
 
-- Employee permissions pass: in `/admin/users`, search by name, email, department, role, and permission template; open an employee through `Permissions`; change account type, permission template, capability checkboxes, department access, restrict/allow state, and delete only in test tenants. Repeat as owner, manager, staff, consultant, and contractor. Confirm staff cannot directly open admin, reports, vendor, HR-sensitive, billing, device setup, or permission routes.
+- Employee permissions pass: in `/admin/users`, search by name, email, department, role, and permission template; open an employee through `Permissions`; change account type, permission template, capability checkboxes, department access, and delete only in test tenants. Repeat as owner, manager, staff, consultant, and contractor. Confirm staff cannot directly open admin, reports, vendor, HR-sensitive, billing, device setup, or permission routes.
 - Session cleanup note: employee login sessions are security plumbing, not normal staff-management UI. Revoke-session behavior should be tested later through account/security lifecycle tests, not the visible staff manager page.
 - Phase 5 temp pass: register gateway/sensor serials, ingest valid readings, trigger high/low/stale/offline/recovery states, acknowledge alerts, verify wrong-business/wrong-serial/revoked-device rejection, and confirm dashboard/temp pages stay tenant scoped.
 
