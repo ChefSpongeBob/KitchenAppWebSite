@@ -31,7 +31,14 @@
   $: filteredStaff = activeUsers.filter((user) => {
     const query = staffSearch.trim().toLowerCase();
     if (!query) return true;
-    const haystack = [user.display_name ?? '', user.email, user.role, ...user.approved_departments]
+    const haystack = [
+      user.display_name ?? '',
+      user.email,
+      user.role,
+      user.permission_template,
+      permissionTemplateLabel(user.permission_template),
+      ...user.approved_departments
+    ]
       .join(' ')
       .toLowerCase();
     return haystack.includes(query);
@@ -105,7 +112,7 @@
         <div class="staff-table" aria-label="Staff roster">
           <div class="table-header" aria-hidden="true">
             <span>Employee</span>
-            <span>Role</span>
+            <span>Permissions</span>
             <span>Departments</span>
             <span>Actions</span>
           </div>
@@ -122,15 +129,15 @@
                     <small>{user.email}</small>
                   </span>
                 </a>
-                <span class="role-pill" class:role-admin={isBusinessAdminRole(user.role)}>
-                  {roleLabel(user.role)}
-                  {#if user.permission_template !== user.role}
-                    <small>{permissionTemplateLabel(user.permission_template)}</small>
-                  {/if}
+                <span class="access-summary">
+                  <span class="role-pill" class:role-admin={isBusinessAdminRole(user.role)}>
+                    {roleLabel(user.role)}
+                  </span>
+                  <small>{permissionTemplateLabel(user.permission_template)}</small>
                 </span>
                 <span class="department-copy">{departmentSummary(user)}</span>
                 <div class="row-actions">
-                  <a href={`/admin/users/${user.id}`} class="inline-action">Open</a>
+                  <a href={`/admin/users/${user.id}`} class="inline-action">Permissions</a>
                   <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
                     <input type="hidden" name="user_id" value={user.id} />
                     <button type="submit" class="warn-action">Restrict</button>
@@ -376,6 +383,19 @@
   .identity-copy small,
   .department-copy {
     overflow-wrap: anywhere;
+  }
+
+  .access-summary {
+    display: grid;
+    gap: 0.18rem;
+    align-content: center;
+    width: fit-content;
+  }
+
+  .access-summary small {
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    font-weight: var(--weight-semibold);
   }
 
   .role-pill {

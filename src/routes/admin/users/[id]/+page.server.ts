@@ -10,7 +10,6 @@ import {
   loadAdminUsers,
   requestEmployeeOnboardingChanges,
   requireAdmin,
-  revokeEmployeeSessions,
   saveEmployeeProfile,
   sendEmployeeOnboardingPackage,
   toggleScheduleDepartmentApproval,
@@ -18,7 +17,6 @@ import {
   updateUserCapabilityOverrides
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
-import { listUserSessions } from '$lib/server/security';
 import { canAccessEmployeeSensitiveData } from '$lib/server/sensitive';
 import {
   ALL_BUSINESS_CAPABILITIES,
@@ -91,7 +89,6 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
       actorCapabilities: locals.businessCapabilities,
       auditSensitiveRead: true
     }),
-    sessions: await listUserSessions(db, employee.id),
     departments: await loadScheduleDepartments(db, locals.businessId),
     canEditPermissions,
     canManageManagerAccess: actorIsOwner,
@@ -114,6 +111,5 @@ export const actions: Actions = {
   save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals),
   send_onboarding_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
   approve_onboarding_item: ({ request, locals }) => approveEmployeeOnboardingItem(request, locals),
-  request_onboarding_changes: ({ request, locals }) => requestEmployeeOnboardingChanges(request, locals),
-  revoke_employee_sessions: ({ request, locals }) => revokeEmployeeSessions(request, locals)
+  request_onboarding_changes: ({ request, locals }) => requestEmployeeOnboardingChanges(request, locals)
 };

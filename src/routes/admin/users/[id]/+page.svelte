@@ -72,14 +72,6 @@
     submitted_at: number | null;
   };
 
-  type SessionSummary = {
-    id: string;
-    lastSeenAt: number;
-    expiresAt: number;
-    revokedAt: number | null;
-    current: boolean;
-  };
-
   export let data: {
     employee: Employee;
     profile: EmployeeProfile;
@@ -87,7 +79,6 @@
       package: EmployeeOnboardingPackage | null;
       items: EmployeeOnboardingItem[];
     };
-    sessions: SessionSummary[];
     departments: ScheduleDepartment[];
     canEditPermissions: boolean;
     canManageManagerAccess: boolean;
@@ -204,7 +195,6 @@
   $: needsOnboardingReview = data.onboarding.items.filter(
     (item) => item.status === 'submitted' || item.status === 'needs_changes'
   ).length;
-  $: activeSessionCount = data.sessions.filter((session) => !session.revokedAt).length;
 </script>
 
 <Layout>
@@ -266,7 +256,7 @@
         </section>
 
         <section class="side-section">
-          <span class="kicker">Access Controls</span>
+          <span class="kicker">Permissions</span>
           <div class="action-stack">
             {#if data.employee.is_active === 1}
               <form method="POST" action="?/deny_user" use:enhance={withFeedback}>
@@ -335,11 +325,6 @@
                 {/each}
               </div>
               <button type="submit" disabled={!data.canEditPermissions}>Save Access</button>
-            </form>
-
-            <form method="POST" action="?/revoke_employee_sessions" use:enhance={withFeedback}>
-              <input type="hidden" name="user_id" value={data.employee.id} />
-              <button type="submit" class="warn-action">Revoke Sessions ({activeSessionCount})</button>
             </form>
 
             <form method="POST" action="?/delete_user" use:enhance={withFeedback}>

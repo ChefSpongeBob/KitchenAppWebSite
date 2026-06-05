@@ -117,12 +117,18 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `5. Temperature monitoring completion`
+- Active phase: `6. Scheduling workflow completion`
 - Status: In progress
-- Current pass: Added Phase 5 temperature monitoring foundation with per-sensor alert rules, high/low alert evaluation on ingest, recovered state handling, active alert acknowledgements, a protected stale/offline processor, schema readiness, admin sensor controls, and a Phase 5 validation gate.
-- Return point after branch work: Continue Phase 5 by testing with real sensor data, tuning default thresholds/cooldowns, wiring scheduled Cloudflare calls for stale/offline processing, adding temp history/export depth, and validating live polling under production Cloudflare.
-- Last verified: 2026-06-05 full static validation passed, including build, mobile readiness, authorization, operational events, email system, native push foundation, temperature monitoring, tenant isolation, IoT auth, media access, production schema, scale, auth abuse, billing, store, Cloudflare, security headers, and observability. Local migrations are current through `0078_temperature_monitoring.sql`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
-- Completed phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`
+- Current pass: Start Phase 6 scheduling workflow completion. Phase 5 temperature monitoring is locally complete to the current hardware-free point; live sensor ingest, scheduled stale/offline processing, and production polling validation remain in deferred live testing.
+- Return point after branch work: Continue Phase 6 by validating schedule builder, autosave, publish, schedule roles, department scope, open shifts, offers, requests, approvals, My Schedule visibility, and schedule notifications.
+- Last verified: 2026-06-05 `npm.cmd run check` passed after employee permission UX cleanup. Earlier full static validation passed, including build, mobile readiness, authorization, operational events, email system, native push foundation, temperature monitoring, tenant isolation, IoT auth, media access, production schema, scale, auth abuse, billing, store, Cloudflare, security headers, and observability. Local migrations are current through `0078_temperature_monitoring.sql`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`
+
+## Final Multi-Tenant Test Notes
+
+- Employee permissions pass: in `/admin/users`, search by name, email, department, role, and permission template; open an employee through `Permissions`; change account type, permission template, capability checkboxes, department access, restrict/allow state, and delete only in test tenants. Repeat as owner, manager, staff, consultant, and contractor. Confirm staff cannot directly open admin, reports, vendor, HR-sensitive, billing, device setup, or permission routes.
+- Session cleanup note: employee login sessions are security plumbing, not normal staff-management UI. Revoke-session behavior should be tested later through account/security lifecycle tests, not the visible staff manager page.
+- Phase 5 temp pass: register gateway/sensor serials, ingest valid readings, trigger high/low/stale/offline/recovery states, acknowledge alerts, verify wrong-business/wrong-serial/revoked-device rejection, and confirm dashboard/temp pages stay tenant scoped.
 
 ## Launch Completion List
 
