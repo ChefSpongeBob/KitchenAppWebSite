@@ -20,7 +20,14 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   const specials = await loadDailySpecials(db, locals.businessId);
-  const canEdit = await userCanEditDailySpecials(db, locals.userId, locals.userRole, locals.businessId);
+  const canEdit = await userCanEditDailySpecials(
+    db,
+    locals.userId,
+    locals.businessRole ?? locals.userRole,
+    locals.businessId,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
+  );
 
   return { specials, canEdit };
 };
@@ -39,7 +46,14 @@ export const actions: Actions = {
     await ensureDailySpecialsSchema(db);
     await ensureTenantSchema(db, true);
 
-    const canEdit = await userCanEditDailySpecials(db, locals.userId, locals.userRole, locals.businessId);
+    const canEdit = await userCanEditDailySpecials(
+      db,
+      locals.userId,
+      locals.businessRole ?? locals.userRole,
+      locals.businessId,
+      locals.businessPermissionTemplate,
+      locals.businessCapabilities
+    );
     if (!canEdit) {
       return fail(403, { error: 'You do not have permission to edit daily specials.' });
     }

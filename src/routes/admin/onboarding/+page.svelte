@@ -5,7 +5,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
-  import { businessAccessOptions, businessRoleLabel, permissionTemplateLabel, permissionTemplateOptions } from '$lib/auth/roles';
+  import { businessRoleLabel, inviteAccessOptions, permissionTemplateLabel, permissionTemplateOptions } from '$lib/auth/roles';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type OnboardingTemplateItem = {
@@ -192,7 +192,7 @@
               <label>
                 <span>Access</span>
                 <select name="access_type">
-                  {#each businessAccessOptions as accessType}
+                  {#each inviteAccessOptions as accessType}
                     <option value={accessType.value}>{accessType.label}</option>
                   {/each}
                 </select>

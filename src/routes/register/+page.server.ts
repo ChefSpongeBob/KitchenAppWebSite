@@ -499,7 +499,9 @@ export const actions: Actions = {
 			let resolvedBusinessId: string | null = null;
 
 			const invitedBusinessRole = normalizeBusinessRole(businessInvite?.role ?? '');
-			const roleValue = inviteCode ? effectiveAppRoleFromBusinessRole(invitedBusinessRole) : 'admin';
+			const roleValue = inviteCode
+				? effectiveAppRoleFromBusinessRole(invitedBusinessRole, businessInvite?.permission_template)
+				: 'admin';
 			if (hasNormalized) {
 				const sql = hasIsActive
 					? `

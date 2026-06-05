@@ -41,6 +41,53 @@ function extractErrorMessage(body: string) {
   }
 }
 
+function renderCriminiEmail({
+  eyebrow = 'Crimini',
+  title,
+  body,
+  actionLabel,
+  actionUrl,
+  footer = 'Crimini by NNS, LLC'
+}: {
+  eyebrow?: string;
+  title: string;
+  body: string;
+  actionLabel?: string;
+  actionUrl?: string;
+  footer?: string;
+}) {
+  const safeEyebrow = escapeHtml(eyebrow);
+  const safeTitle = escapeHtml(title);
+  const safeBody = escapeHtml(body);
+  const safeFooter = escapeHtml(footer);
+  const safeActionUrl = actionUrl ? escapeHtml(actionUrl) : '';
+  const safeActionLabel = actionLabel ? escapeHtml(actionLabel) : '';
+
+  return `
+    <div style="margin:0;padding:0;background:#f7f2e8;color:#181716;font-family:Georgia,'Times New Roman',serif;">
+      <div style="max-width:620px;margin:0 auto;padding:30px 18px;">
+        <div style="background:#fffdf8;border:1px solid #ded2bf;border-radius:24px;padding:28px;">
+          <p style="margin:0 0 12px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#7a6f61;">${safeEyebrow}</p>
+          <h1 style="margin:0 0 16px;font-size:28px;line-height:1.1;font-weight:400;color:#181716;">${safeTitle}</h1>
+          <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#292520;">${safeBody}</p>
+          ${
+            safeActionUrl && safeActionLabel
+              ? `<a href="${safeActionUrl}" style="display:inline-block;background:#181716;color:#fffdf8;text-decoration:none;border-radius:999px;padding:13px 22px;font-size:15px;letter-spacing:.03em;">${safeActionLabel}</a>`
+              : ''
+          }
+          ${
+            safeActionUrl
+              ? `<p style="margin:22px 0 0;font-size:12px;line-height:1.5;color:#746b60;word-break:break-all;">${safeActionUrl}</p>`
+              : ''
+          }
+          <div style="height:1px;width:100%;margin:26px 0 16px;background:linear-gradient(90deg,transparent,#b7aa98,transparent);"></div>
+          <p style="margin:0;color:#746b60;font-size:12px;line-height:1.5;">${safeFooter}</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export function isEmailConfigured(env?: EmailEnv | null) {
   return Boolean(env?.RESEND_API_KEY && env?.RESEND_FROM_EMAIL);
 }
@@ -206,24 +253,19 @@ export async function sendApprovalEmail({
 }) {
   const baseUrl = getAppBaseUrl(origin, env);
   const loginUrl = `${baseUrl}/login`;
-  const safeName = escapeHtml(displayName?.trim() || 'there');
-  const safeLoginUrl = escapeHtml(loginUrl);
+  const name = displayName?.trim() || 'there';
 
   return sendTransactionalEmail({
     env,
     to: userEmail,
     subject: 'Your Crimini access has been approved',
-    html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
-        <h2 style="margin-bottom: 0.5rem;">Your access has been approved</h2>
-        <p>Hi ${safeName},</p>
-        <p>Your Crimini account is now approved and ready to use.</p>
-        <p>
-          Sign in here:
-          <a href="${safeLoginUrl}">${safeLoginUrl}</a>
-        </p>
-      </div>
-    `,
+    html: renderCriminiEmail({
+      eyebrow: 'Access Approved',
+      title: 'Your Crimini access is ready',
+      body: `Hi ${name}, your account is approved and ready to use.`,
+      actionLabel: 'Sign in',
+      actionUrl: loginUrl
+    }),
     text: [
       `Hi ${displayName?.trim() || 'there'},`,
       '',
@@ -249,24 +291,19 @@ export async function sendPasswordResetEmail({
 }) {
   const baseUrl = getAppBaseUrl(origin, env);
   const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
-  const safeName = escapeHtml(displayName?.trim() || 'there');
-  const safeResetUrl = escapeHtml(resetUrl);
+  const name = displayName?.trim() || 'there';
 
   return sendTransactionalEmail({
     env,
     to: userEmail,
     subject: 'Reset your Crimini password',
-    html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
-        <h2 style="margin-bottom: 0.5rem;">Reset your password</h2>
-        <p>Hi ${safeName},</p>
-        <p>Use the link below to set a new password for your Crimini account.</p>
-        <p>
-          <a href="${safeResetUrl}">${safeResetUrl}</a>
-        </p>
-        <p>This link expires in 2 hours.</p>
-      </div>
-    `,
+    html: renderCriminiEmail({
+      eyebrow: 'Password Reset',
+      title: 'Reset your password',
+      body: `Hi ${name}, use this link to set a new password. It expires in 2 hours.`,
+      actionLabel: 'Reset password',
+      actionUrl: resetUrl
+    }),
     text: [
       `Hi ${displayName?.trim() || 'there'},`,
       '',

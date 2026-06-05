@@ -104,7 +104,7 @@
   <section class="creator-panel">
     <header class="creator-header">
       <div>
-        <span class="eyebrow">Admin Creator</span>
+        <span class="eyebrow">Manager Creator</span>
         <h2>Category Creator</h2>
       </div>
       <div class="header-controls">

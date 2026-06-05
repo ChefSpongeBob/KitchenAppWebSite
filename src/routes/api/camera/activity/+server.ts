@@ -6,6 +6,7 @@ import {
 } from '$lib/server/camera';
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 
 function truncate(value: string | null, maxLength: number) {
   if (!value) return null;
@@ -114,6 +115,27 @@ export async function POST({ request, platform }) {
       businessId
     )
     .run();
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: 'camera.activity.received',
+      category: 'camera',
+      actorUserId: null,
+      subjectType: 'iot_device',
+      subjectId: device.externalDeviceId,
+      title: 'Camera activity received',
+      dedupeKey: `camera-activity:${businessId}:${guardCameraKey}:${eventType}:${normalizedCreatedAt}`,
+      payload: {
+        cameraId,
+        cameraName,
+        eventType,
+        hasImage: Boolean(imageUrl),
+        hasClip: Boolean(clipUrl)
+      }
+    },
+    request
+  );
 
   return json({
     success: true,

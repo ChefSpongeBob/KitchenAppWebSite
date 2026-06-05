@@ -5,6 +5,7 @@ import {
   getWeekStart,
   loadScheduleDepartmentApprovalsByUser,
   loadScheduleDepartments,
+  loadScheduleManagerDepartments,
   loadScheduleWeek
 } from '$lib/server/schedules';
 
@@ -32,16 +33,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     };
   }
 
-  const [schedule, approvalsByUser, departments] = await Promise.all([
+  const [schedule, approvalsByUser, departments, managerDepartments] = await Promise.all([
     loadScheduleWeek(db, weekStart, { publishedOnly: true, businessId: locals.businessId }),
     loadScheduleDepartmentApprovalsByUser(db, [locals.userId], locals.businessId),
-    loadScheduleDepartments(db, locals.businessId)
+    loadScheduleDepartments(db, locals.businessId),
+    canManageSchedule(locals.userRole)
+      ? loadScheduleManagerDepartments(db, locals, locals.businessId ?? '')
+      : Promise.resolve([])
   ]);
 
   const approvedDepartments = approvalsByUser.get(locals.userId) ?? [];
   const defaultDepartments =
     canManageSchedule(locals.userRole)
-      ? [...departments]
+      ? managerDepartments
       : approvedDepartments.filter((department) => departments.includes(department));
 
   return {

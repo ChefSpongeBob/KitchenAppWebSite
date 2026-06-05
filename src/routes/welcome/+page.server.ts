@@ -1,10 +1,12 @@
 import { redirect } from '@sveltejs/kit';
-import { isBusinessAdminRole } from '$lib/server/permissions';
+import { hasAdminAccess } from '$lib/server/permissions';
 import type { PageServerLoad } from './$types';
 import type { WelcomeTourVariant } from '$lib/server/userPreferences';
 
 function resolveWelcomeVariant(locals: App.Locals): WelcomeTourVariant {
-  return isBusinessAdminRole(locals.businessRole) ? 'admin' : 'user';
+  return hasAdminAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)
+    ? 'admin'
+    : 'user';
 }
 
 export const load: PageServerLoad = async ({ locals, url }) => {

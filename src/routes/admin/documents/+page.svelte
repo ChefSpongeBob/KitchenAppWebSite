@@ -72,7 +72,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="Admin Documents" />
+  <PageHeader title="Manager Documents" />
 
   <section class="workspace">
     <header class="workspace-head">

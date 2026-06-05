@@ -50,6 +50,11 @@
 		"smoke:local": "node ./scripts/local-smoke-check.mjs",
 		"smoke:prod": "node ./scripts/prod-smoke-check.mjs",
 		"test:tenant-authority": "node ./scripts/tenant-authority-check.mjs",
+		"test:authorization-capabilities": "node ./scripts/authorization-capability-check.mjs",
+		"test:operational-events": "node ./scripts/operational-events-check.mjs",
+		"test:email-system": "node ./scripts/email-system-check.mjs",
+		"test:native-push": "node ./scripts/native-push-check.mjs",
+		"test:temperature-monitoring": "node ./scripts/temperature-monitoring-check.mjs",
 		"test:tenant-isolation": "node ./scripts/tenant-isolation-check.mjs",
 		"test:iot-device-auth": "node ./scripts/iot-device-auth-check.mjs",
 		"test:media-access": "node ./scripts/media-access-check.mjs",
@@ -61,7 +66,7 @@
 		"test:cloudflare-readiness": "node ./scripts/cloudflare-readiness-check.mjs",
 		"test:security-headers": "node ./scripts/security-headers-check.mjs",
 		"test:observability": "node ./scripts/observability-check.mjs",
-		"test:static": "npm run check && npm run build && npm run mobile:check && npm run test:tenant-authority && npm run test:tenant-isolation && npm run test:iot-device-auth && npm run test:media-access && npm run test:production-schema && npm run test:scale-performance && npm run test:auth-abuse && npm run test:billing-lifecycle && npm run test:store-release && npm run test:cloudflare-readiness && npm run test:security-headers && npm run test:observability",
+		"test:static": "npm run check && npm run build && npm run mobile:check && npm run test:tenant-authority && npm run test:authorization-capabilities && npm run test:operational-events && npm run test:email-system && npm run test:native-push && npm run test:temperature-monitoring && npm run test:tenant-isolation && npm run test:iot-device-auth && npm run test:media-access && npm run test:production-schema && npm run test:scale-performance && npm run test:auth-abuse && npm run test:billing-lifecycle && npm run test:store-release && npm run test:cloudflare-readiness && npm run test:security-headers && npm run test:observability",
 		"db:migrations:normalize:local": "node ./scripts/normalize-d1-migrations.mjs --local",
 		"db:migrations:normalize:remote": "node ./scripts/normalize-d1-migrations.mjs --remote",
 		"db:migrations:apply:local": "npx wrangler d1 migrations apply DB --local",
@@ -89,6 +94,7 @@
 		"@capacitor/cli": "^8.2.0",
 		"@capacitor/core": "^8.2.0",
 		"@capacitor/ios": "^8.2.0",
+		"@capacitor/push-notifications": "^8.0.0",
 		"pdfjs-dist": "^5.5.207",
 		"tesseract.js": "^6.0.1"
 	}

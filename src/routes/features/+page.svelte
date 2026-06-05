@@ -36,7 +36,7 @@
 				'Tenant-scoped users, records, schedules, docs, and uploads'
 			],
 			image: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard showing workspace control area',
+			alt: 'Manager dashboard showing workspace control area',
 			position: 'top center'
 		},
 		{
@@ -48,7 +48,7 @@
 				'Employee account setup from invite',
 				'Base packet for profile, emergency contact, payroll setup, I-9, W-4, and acknowledgements',
 				'State withholding slot when business state is registered',
-				'Admin review and employee file history'
+				'Manager review and employee file history'
 			],
 			image: '/marketing/app/employee-homepage.png',
 			alt: 'Employee workspace homepage',
@@ -98,7 +98,7 @@
 				'History exports for schedules, prep, inventory, and orders'
 			],
 			image: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard with operations visibility',
+			alt: 'Manager dashboard with operations visibility',
 			position: 'top center'
 		}
 	];

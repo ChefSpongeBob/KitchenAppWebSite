@@ -60,7 +60,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     : false;
   const guided = guidedQuery || guidedAuto;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
-  const featureAccess = buildFeatureAccess(featureModes, locals.userRole);
+  const featureAccess = buildFeatureAccess(
+    featureModes,
+    locals.businessRole ?? locals.userRole,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
+  );
   const HOMEPAGE_TEMP_LIMIT = 480;
   if (!db) {
     return {
@@ -94,7 +99,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     : Promise.resolve({ content: '', updatedAt: 0 });
   const announcementEditorPromise =
     featureAccess.announcements && locals.userId
-      ? userCanEditHomepageAnnouncement(db, locals.userId, locals.userRole, businessId)
+      ? userCanEditHomepageAnnouncement(
+          db,
+          locals.userId,
+          locals.businessRole ?? locals.userRole,
+          businessId,
+          locals.businessPermissionTemplate,
+          locals.businessCapabilities
+        )
       : Promise.resolve(false);
   const employeeSpotlightPromise = featureAccess.employee_spotlight
     ? loadEmployeeSpotlight(db, businessId)

@@ -130,7 +130,7 @@
 			},
 			shot: {
 				src: '/marketing/app/admin-dashboard.png',
-				alt: 'Admin dashboard preview',
+				alt: 'Manager dashboard preview',
 				fit: 'contain',
 				align: 'left',
 				frame: 'landscape'
@@ -140,8 +140,8 @@
 			id: 'roles',
 			kind: 'info',
 			title: 'Role-based launch paths',
-			description: 'Admins and staff enter separate first-open tours.',
-			bullets: ['Admin control path', 'Team execution path', 'Guided first actions'],
+			description: 'Managers and staff enter separate first-open tours.',
+			bullets: ['Manager control path', 'Team execution path', 'Guided first actions'],
 			background: {
 				kind: 'image',
 				src: '/marketing/FB_IMG_2922002948285858149.jpg',
@@ -150,7 +150,7 @@
 			},
 			shot: {
 				src: '/marketing/app/recipe-categories.png',
-				alt: 'Admin panel',
+				alt: 'Manager panel',
 				fit: 'contain',
 				align: 'right',
 				frame: 'landscape'

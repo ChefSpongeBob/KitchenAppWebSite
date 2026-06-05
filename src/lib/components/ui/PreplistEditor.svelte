@@ -33,7 +33,7 @@
   export let valueLabel = 'Prep';
   export let submitLabel = 'Submit Prep Counts';
   export let resetLabel = 'New Prep List (Reset to 0)';
-  export let adminSummaryLabel = '+ Admin Par Levels';
+  export let adminSummaryLabel = '+ Manager Par Levels';
   export let valueType: 'number' | 'text' = 'number';
 
   const isDone = (item: PreplistItem) => Number(item.is_checked) === 1;

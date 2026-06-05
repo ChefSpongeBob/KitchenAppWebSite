@@ -1,6 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { requireAdmin } from '$lib/server/admin';
 import {
+  loadScheduleManagerDepartments,
   loadScheduleSettings,
   saveScheduleAutofillPreference
 } from '$lib/server/schedules';
@@ -22,8 +23,19 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   }
 
+  const [settings, allowedDepartments] = await Promise.all([
+    loadScheduleSettings(db, locals.businessId),
+    loadScheduleManagerDepartments(db, locals, locals.businessId ?? '')
+  ]);
+  const allowedSet = new Set(allowedDepartments);
   return {
-    settings: await loadScheduleSettings(db, locals.businessId)
+    settings: {
+      ...settings,
+      departments: settings.departments.filter((department) => allowedSet.has(department)),
+      roleOptionsByDepartment: Object.fromEntries(
+        Object.entries(settings.roleOptionsByDepartment).filter(([department]) => allowedSet.has(department))
+      )
+    }
   };
 };
 

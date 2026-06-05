@@ -4,6 +4,8 @@ import { cleanupExpiredTemps } from '$lib/server/retention';
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
 import { normalizeDeviceSerial, sensorNodeIdFromSerial } from '$lib/server/temperatureSensors';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { evaluateTemperatureReadings, type TemperatureReading } from '$lib/server/temperatureMonitoring';
 
 type TempRow = {
   sensor_id: number;
@@ -177,7 +179,7 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
     .map((entry) => normalizeReading((entry ?? {}) as Record<string, unknown>))
     .filter((entry): entry is RawTempRow => entry !== null);
   const resolved = await Promise.all(rawReadings.map((entry) => resolveReadingSensor(db, businessId, entry)));
-  const items = resolved.filter((entry): entry is TempRow => entry !== null);
+  const items = resolved.filter((entry): entry is TemperatureReading => entry !== null);
 
   if (items.length === 0) {
     return json({ error: 'No valid readings supplied' }, { status: 400 });
@@ -216,6 +218,30 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   );
 
   await db.batch(statements);
+  await evaluateTemperatureReadings(db, {
+    businessId,
+    deviceId: device.externalDeviceId,
+    readings: items,
+    request
+  });
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: 'temperature.reading_batch.received',
+      category: 'temperature',
+      actorUserId: null,
+      subjectType: 'iot_device',
+      subjectId: device.externalDeviceId,
+      title: 'Temperature readings received',
+      dedupeKey: guardKey,
+      payload: {
+        inserted: items.length,
+        sensors: items.map((item) => item.sensor_id)
+      }
+    },
+    request
+  );
   await cleanupExpiredTemps(db);
   return json({ inserted: items.length }, { status: 201 });
 };

@@ -6,6 +6,8 @@
     defaultAppFeatureModes,
     type AppFeatureKey
   } from '$lib/features/appFeatures';
+  import { hasBusinessCapability } from '$lib/auth/roles';
+  import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
 
   type AdminRoute = {
     href: string;
@@ -45,9 +47,30 @@
   $: currentPath = $page.url.pathname;
   $: currentHash = $page.url.hash;
   $: featureModes = $page.data?.featureModes ?? defaultAppFeatureModes;
-  $: visibleMenuItems = menuItems.filter((item) =>
-    item.featureKey ? canRoleAccessFeature(featureModes[item.featureKey], 'admin') : true
-  );
+  $: activeUser = $page.data?.user;
+  $: visibleMenuItems = menuItems.filter((item) => {
+    const requiredCapability = resolveBusinessCapabilityForPath(item.href.split('#')[0]);
+    if (
+      requiredCapability &&
+      !hasBusinessCapability(
+        activeUser?.businessRole ?? activeUser?.role,
+        activeUser?.businessPermissionTemplate,
+        requiredCapability,
+        activeUser?.businessCapabilities
+      )
+    ) {
+      return false;
+    }
+    return item.featureKey
+      ? canRoleAccessFeature(
+          featureModes[item.featureKey],
+          activeUser?.businessRole ?? activeUser?.role,
+          item.featureKey,
+          activeUser?.businessPermissionTemplate,
+          activeUser?.businessCapabilities
+        )
+      : true;
+  });
   $: selectedHref =
     currentPath === '/admin/app-editor' && currentHash === '#business-registry'
       ? '/admin/app-editor#business-registry'
@@ -61,12 +84,12 @@
   }
 </script>
 
-<section class="admin-editor-menu" aria-label="Admin editor navigation">
+<section class="admin-editor-menu" aria-label="Manager editor navigation">
   <div class="editor-select-wrap">
     <span class="material-icons" aria-hidden="true">tune</span>
     <select
       id="admin-editor-select"
-      aria-label="Admin editor navigation"
+      aria-label="Manager editor navigation"
       value={selectedHref}
       on:change={openAdminEditor}
     >

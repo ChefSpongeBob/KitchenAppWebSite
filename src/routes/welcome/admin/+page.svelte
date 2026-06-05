@@ -39,7 +39,7 @@
 			id: 'admin-start',
 			nav: 'Start',
 			title: `Welcome, ${data.businessName}`,
-			subtitle: 'Admin Flow',
+			subtitle: 'Manager Flow',
 			description: 'You control launch settings from here.',
 			bullets: ['Review dashboard', 'Open app editor', 'Confirm team setup'],
 			background: {
@@ -50,7 +50,7 @@
 			},
 			shot: {
 				src: '/marketing/app/admin-dashboard.png',
-				alt: 'Admin dashboard',
+				alt: 'Manager dashboard',
 				fit: 'contain',
 				align: 'right',
 				frame: 'landscape'
@@ -71,7 +71,7 @@
 			},
 			shot: {
 				src: '/marketing/app/scheduling-builder.png',
-				alt: 'Admin editor area',
+				alt: 'Manager editor area',
 				fit: 'contain',
 				align: 'left',
 				frame: 'landscape'
@@ -80,7 +80,7 @@
 		{
 			id: 'admin-finish',
 			nav: 'Launch',
-			title: 'Enter Admin',
+			title: 'Enter Manager',
 			subtitle: 'Guided mode will open',
 			description: 'Finish to open your admin workspace.',
 			bullets: ['Dashboard guide', 'Editor guide', 'Quick start'],
@@ -152,7 +152,7 @@
 	on:touchend={handleTouchEnd}
 />
 
-<section class="tour-shell" aria-label="Admin welcome slideshow">
+<section class="tour-shell" aria-label="Manager welcome slideshow">
 	<div class="tour-bg" aria-hidden="true">
 		{#if activeSlide.background.kind === 'video'}
 			<video autoplay muted loop playsinline>

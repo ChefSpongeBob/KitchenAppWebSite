@@ -5,7 +5,9 @@ import { loadScheduleHistoryReport } from '$lib/server/history';
 import { requireBusinessId } from '$lib/server/tenant';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  if (!hasReportsAccess(locals.businessRole)) throw redirect(303, '/app');
+  if (!hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
+    throw redirect(303, '/app');
+  }
   const db = locals.DB;
   const start = url.searchParams.get('start');
   const end = url.searchParams.get('end');

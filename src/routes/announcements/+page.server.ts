@@ -21,8 +21,10 @@ export const load: PageServerLoad = async ({ locals }) => {
   const canEdit = await userCanEditHomepageAnnouncement(
     db,
     locals.userId,
-    locals.userRole,
-    locals.businessId
+    locals.businessRole ?? locals.userRole,
+    locals.businessId,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
   );
 
   return { announcement, canEdit };
@@ -46,8 +48,10 @@ export const actions: Actions = {
     const canEdit = await userCanEditHomepageAnnouncement(
       db,
       locals.userId,
-      locals.userRole,
-      locals.businessId
+      locals.businessRole ?? locals.userRole,
+      locals.businessId,
+      locals.businessPermissionTemplate,
+      locals.businessCapabilities
     );
     if (!canEdit) {
       return fail(403, { error: 'You do not have permission to edit announcements.' });

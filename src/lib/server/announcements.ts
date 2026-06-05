@@ -1,4 +1,4 @@
-import { isBusinessAdminRole } from '$lib/server/permissions';
+import { hasBusinessCapability, isBusinessAdminRole, type BusinessCapability } from '$lib/server/permissions';
 import { dev } from '$app/environment';
 
 export type HomepageAnnouncement = {
@@ -116,9 +116,17 @@ export async function userCanEditHomepageAnnouncement(
   db: App.Platform['env']['DB'],
   userId?: string | null,
   role?: string | null,
-  businessId?: string | null
+  businessId?: string | null,
+  permissionTemplate?: string | null,
+  capabilities?: readonly BusinessCapability[] | null
 ) {
-  if (role === 'admin' || isBusinessAdminRole(role)) return true;
+  if (
+    (capabilities
+      ? hasBusinessCapability(role, permissionTemplate, 'manage_announcements', capabilities)
+      : role === 'admin' || isBusinessAdminRole(role))
+  ) {
+    return true;
+  }
   if (!userId || !businessId) return false;
 
   await ensureAnnouncementsSchema(db);

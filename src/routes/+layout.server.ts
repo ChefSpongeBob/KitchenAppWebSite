@@ -22,14 +22,14 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		? await locals.DB
 				.prepare(
 					`
-					SELECT dark_mode
+					SELECT dark_mode, push_updates
 					FROM user_preferences
 					WHERE user_id = ?
 					LIMIT 1
 					`
 				)
 				.bind(locals.userId)
-				.first<{ dark_mode: number }>()
+				.first<{ dark_mode: number; push_updates: number }>()
 				.catch(() => null)
 		: null;
 
@@ -42,11 +42,18 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			businessLogoUrl: locals.businessLogoUrl ?? null,
 			businessRole: locals.businessRole ?? null,
 			businessPermissionTemplate: locals.businessPermissionTemplate ?? null,
+			businessCapabilities: locals.businessCapabilities ?? [],
 			businessOnboardingComplete: locals.businessOnboardingComplete ?? false,
 			businesses,
-			preferredTheme: preferences?.dark_mode === 1 ? 'dark' : 'light'
+			preferredTheme: preferences?.dark_mode === 1 ? 'dark' : 'light',
+			pushNotificationsEnabled: preferences?.push_updates === 1
 		},
 		featureModes,
-		featureAccess: buildFeatureAccess(featureModes, locals.businessRole ?? locals.userRole)
+		featureAccess: buildFeatureAccess(
+			featureModes,
+			locals.businessRole ?? locals.userRole,
+			locals.businessPermissionTemplate,
+			locals.businessCapabilities
+		)
 	};
 };

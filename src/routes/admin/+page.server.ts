@@ -37,6 +37,7 @@ import {
 } from '$lib/features/appFeatures';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
 import { requireBusinessId } from '$lib/server/tenant';
+import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
 
 function isoDate(date = new Date()) {
   const y = date.getFullYear();
@@ -78,7 +79,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     : false;
   const guided = guidedQuery || guidedAuto;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
-  const featureAccess = buildFeatureAccess(featureModes, 'admin');
+  const featureAccess = buildFeatureAccess(
+    featureModes,
+    locals.businessRole ?? locals.userRole,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
+  );
   const windowDays = parseWindow(url.searchParams.get('window'));
   const todayDate = startOfDay();
   const startDate = addDays(todayDate, -(windowDays - 1));
@@ -415,7 +421,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       : { title: 'Temps Module', detail: 'Temps is hidden in App Editor.', tone: 'muted' as const },
     {
       title: 'Feature Controls',
-      detail: `${hiddenFeatures} hidden, ${adminOnlyFeatures} admin-only.`,
+      detail: `${hiddenFeatures} hidden, ${adminOnlyFeatures} manager-only.`,
       tone: hiddenFeatures > 0 ? ('warn' as const) : ('ok' as const)
     }
   ];
@@ -464,7 +470,24 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 function adminFeatureEnabled(locals: App.Locals, featureKey: AppFeatureKey) {
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
-  return canRoleAccessFeature(featureModes[featureKey] as AppFeatureMode, 'admin');
+  return canRoleAccessFeature(
+    featureModes[featureKey] as AppFeatureMode,
+    locals.businessRole ?? locals.userRole,
+    featureKey,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
+  );
+}
+
+function actionCapabilityFailure(locals: App.Locals, capability: BusinessCapability) {
+  return hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    capability,
+    locals.businessCapabilities
+  )
+    ? null
+    : fail(403, { error: 'Permission access required.' });
 }
 
 function blockedFeatureError(featureName: string) {
@@ -480,35 +503,50 @@ export const actions: Actions = {
     return { ok: true };
   },
   create_todo: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'todo') ? createTodo(request, locals) : blockedFeatureError('ToDo'),
+    actionCapabilityFailure(locals, 'manage_content') ??
+    (adminFeatureEnabled(locals, 'todo') ? createTodo(request, locals) : blockedFeatureError('ToDo')),
   delete_todo: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'todo') ? deleteTodo(request, locals) : blockedFeatureError('ToDo'),
-  create_reminder: ({ request, locals }) => createAdminReminder(request, locals),
-  update_reminder: ({ request, locals }) => updateAdminReminder(request, locals),
-  delete_reminder: ({ request, locals }) => deleteAdminReminder(request, locals),
+    actionCapabilityFailure(locals, 'manage_content') ??
+    (adminFeatureEnabled(locals, 'todo') ? deleteTodo(request, locals) : blockedFeatureError('ToDo')),
+  create_reminder: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_workspace') ?? createAdminReminder(request, locals),
+  update_reminder: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_workspace') ?? updateAdminReminder(request, locals),
+  delete_reminder: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_workspace') ?? deleteAdminReminder(request, locals),
   approve_whiteboard: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'whiteboard')
+    actionCapabilityFailure(locals, 'manage_content') ??
+    (adminFeatureEnabled(locals, 'whiteboard')
       ? approveWhiteboard(request, locals)
-      : blockedFeatureError('Whiteboard'),
+      : blockedFeatureError('Whiteboard')),
   reject_whiteboard: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'whiteboard')
+    actionCapabilityFailure(locals, 'manage_content') ??
+    (adminFeatureEnabled(locals, 'whiteboard')
       ? import('$lib/server/admin').then(({ rejectWhiteboard }) => rejectWhiteboard(request, locals))
-      : blockedFeatureError('Whiteboard'),
+      : blockedFeatureError('Whiteboard')),
   delete_whiteboard: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'whiteboard')
+    actionCapabilityFailure(locals, 'manage_content') ??
+    (adminFeatureEnabled(locals, 'whiteboard')
       ? deleteWhiteboard(request, locals)
-      : blockedFeatureError('Whiteboard'),
+      : blockedFeatureError('Whiteboard')),
   save_announcement: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'announcements')
+    actionCapabilityFailure(locals, 'manage_announcements') ??
+    (adminFeatureEnabled(locals, 'announcements')
       ? saveAnnouncement(request, locals)
-      : blockedFeatureError('Announcements'),
+      : blockedFeatureError('Announcements')),
   save_employee_spotlight: ({ request, locals }) =>
-    adminFeatureEnabled(locals, 'employee_spotlight')
+    actionCapabilityFailure(locals, 'manage_people') ??
+    (adminFeatureEnabled(locals, 'employee_spotlight')
       ? saveEmployeeSpotlight(request, locals)
-      : blockedFeatureError('Employee Spotlight'),
-  make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
-  approve_user: ({ request, locals }) => approveUser(request, locals),
-  deny_user: ({ request, locals }) => denyUser(request, locals),
-  delete_user: ({ request, locals }) => deleteUser(request, locals),
-  toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals)
+      : blockedFeatureError('Employee Spotlight')),
+  make_user_admin: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_permissions') ?? makeUserAdmin(request, locals),
+  approve_user: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_people') ?? approveUser(request, locals),
+  deny_user: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_people') ?? denyUser(request, locals),
+  delete_user: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_people') ?? deleteUser(request, locals),
+  toggle_specials_access: ({ request, locals }) =>
+    actionCapabilityFailure(locals, 'manage_permissions') ?? toggleSpecialsAccess(request, locals)
 };

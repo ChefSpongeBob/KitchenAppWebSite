@@ -5,7 +5,7 @@ import {
   createScheduleRoleDefinition,
   deleteScheduleDepartment,
   deleteScheduleRoleDefinition,
-  loadScheduleDepartments,
+  loadScheduleManagerDepartments,
   loadScheduleRoleDefinitions
 } from '$lib/server/schedules';
 
@@ -20,9 +20,14 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   }
 
+  const [departments, roles] = await Promise.all([
+    loadScheduleManagerDepartments(db, locals, locals.businessId ?? ''),
+    loadScheduleRoleDefinitions(db, locals.businessId)
+  ]);
+  const allowedSet = new Set(departments);
   return {
-    departments: await loadScheduleDepartments(db, locals.businessId),
-    roles: await loadScheduleRoleDefinitions(db, locals.businessId)
+    departments,
+    roles: roles.filter((role) => allowedSet.has(role.department))
   };
 };
 

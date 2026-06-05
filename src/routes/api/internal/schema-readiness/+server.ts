@@ -29,7 +29,12 @@ const REQUIRED_CORE_TABLES = [
 	'employee_certifications',
 	'employee_sensitive_record_vault',
 	'employee_sensitive_record_audit',
-	'employee_verification_checks'
+	'employee_verification_checks',
+	'operational_events',
+	'operational_event_delivery_attempts',
+	'push_notification_devices',
+	'temperature_sensor_settings',
+	'temperature_alert_events'
 ];
 
 const REQUIRED_CORE_INDEXES = [
@@ -57,7 +62,16 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_employee_sensitive_record_vault_business_scope',
 	'idx_employee_sensitive_record_audit_business_created',
 	'idx_employee_verification_checks_business_user',
-	'idx_employee_compliance_documents_onboarding_item'
+	'idx_employee_compliance_documents_onboarding_item',
+	'idx_operational_events_business_status_next',
+	'idx_operational_events_business_type_created',
+	'idx_operational_event_attempts_business_status',
+	'idx_push_devices_business_user_token',
+	'idx_push_devices_business_active_user',
+	'idx_push_devices_user_active',
+	'idx_temp_alert_events_business_status',
+	'idx_temp_alert_events_business_sensor_status',
+	'idx_temp_settings_business_sensor'
 ];
 
 function missingRequiredSecrets(env: App.Platform['env'] | undefined) {

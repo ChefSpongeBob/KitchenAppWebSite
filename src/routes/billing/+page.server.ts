@@ -18,6 +18,8 @@ import {
 	getSessionCookieName
 } from '$lib/server/authCookies';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
+import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 import type { PageServerLoad } from './$types';
 
 const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
@@ -40,8 +42,12 @@ function clearSessionCookies(
 	cookies.delete('session_id_pwa', { path: '/' });
 }
 
-function canManageBilling(role: string | undefined) {
-	return role === 'owner' || role === 'admin';
+function canManageBilling(
+	role: string | undefined,
+	permissionTemplate: string | undefined,
+	capabilities?: readonly BusinessCapability[]
+) {
+	return hasBusinessCapability(role, permissionTemplate, 'manage_billing', capabilities);
 }
 
 export const load: PageServerLoad = async ({ locals, platform, url }) => {
@@ -108,7 +114,11 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 			addOnCameraMonitoring: business.addon_camera_monitoring === 1
 		},
 		trial,
-		canManageBilling: canManageBilling(locals.businessRole),
+		canManageBilling: canManageBilling(
+			locals.businessRole,
+			locals.businessPermissionTemplate,
+			locals.businessCapabilities
+		),
 		localMode: dev,
 		storeProducts: storeProducts.map((product) => ({
 			store: product.store,
@@ -153,7 +163,7 @@ export const actions: Actions = {
 			if (!locals.userId || !locals.DB || !locals.businessId) {
 				throw redirect(303, '/login');
 			}
-			if (!canManageBilling(locals.businessRole)) {
+			if (!canManageBilling(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
 				logOperationalEvent({
 					level: 'warn',
 					event: 'billing_access_denied',
@@ -163,7 +173,7 @@ export const actions: Actions = {
 					status: 403,
 					metadata: { action: 'convert', reason: 'role' }
 				});
-				return fail(403, { error: 'Only owner/admin can manage billing.' });
+				return fail(403, { error: 'Only owner or manager can manage billing.' });
 			}
 
 			const form = await request.formData();
@@ -194,6 +204,20 @@ export const actions: Actions = {
 					addOnCameraMonitoring,
 					status: 'queued'
 				});
+				await recordOperationalEventBestEffort(
+					locals.DB,
+					{
+						businessId: locals.businessId,
+						eventType: 'billing.conversion.queued',
+						category: 'billing',
+						actorUserId: locals.userId,
+						subjectType: 'business',
+						subjectId: locals.businessId,
+						title: 'Billing conversion queued',
+						payload: { planTier, addOnTempMonitoring, addOnCameraMonitoring, storeBillingPreference }
+					},
+					request
+				);
 				throw redirect(303, '/billing?store=queued');
 			}
 
@@ -213,6 +237,20 @@ export const actions: Actions = {
 				status: 200,
 				metadata: { action: 'convert', source: 'local_dev' }
 			});
+			await recordOperationalEventBestEffort(
+				locals.DB,
+				{
+					businessId: locals.businessId,
+					eventType: 'billing.conversion.completed',
+					category: 'billing',
+					actorUserId: locals.userId,
+					subjectType: 'business',
+					subjectId: locals.businessId,
+					title: 'Billing conversion completed',
+					payload: { planTier, addOnTempMonitoring, addOnCameraMonitoring }
+				},
+				request
+			);
 			throw redirect(303, '/app?billing=active&mode=local');
 		} catch (error) {
 			if (isRedirect(error)) throw error;
@@ -234,7 +272,7 @@ export const actions: Actions = {
 			if (!locals.userId || !locals.DB || !locals.businessId) {
 				throw redirect(303, '/login');
 			}
-			if (!canManageBilling(locals.businessRole)) {
+			if (!canManageBilling(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
 				logOperationalEvent({
 					level: 'warn',
 					event: 'billing_access_denied',
@@ -244,7 +282,7 @@ export const actions: Actions = {
 					status: 403,
 					metadata: { action: 'cancel', reason: 'role' }
 				});
-				return fail(403, { error: 'Only owner/admin can cancel this workspace.' });
+				return fail(403, { error: 'Only owner or manager can cancel this workspace.' });
 			}
 
 			const now = Math.floor(Date.now() / 1000);
@@ -271,6 +309,20 @@ export const actions: Actions = {
 				.bind(locals.businessId)
 				.first<{ name: string }>();
 
+			await recordOperationalEventBestEffort(
+				locals.DB,
+				{
+					businessId: locals.businessId,
+					eventType: 'billing.workspace.canceled',
+					category: 'billing',
+					severity: 'warning',
+					actorUserId: locals.userId,
+					subjectType: 'business',
+					subjectId: locals.businessId,
+					title: 'Workspace canceled'
+				},
+				request
+			);
 			await cancelTrialAndPurgeBusiness(locals.DB, {
 				businessId: locals.businessId,
 				source: 'canceled',

@@ -1,4 +1,8 @@
-import { hasPrivilegedFeatureAccess, hasVendorAccess } from '$lib/auth/roles';
+import {
+  hasPrivilegedFeatureAccess,
+  hasVendorAccess,
+  type BusinessCapability
+} from '$lib/auth/roles';
 
 export type AppFeatureMode = 'all' | 'admin' | 'off';
 
@@ -141,12 +145,14 @@ export function isValidAppFeatureMode(value: string): value is AppFeatureMode {
 export function canRoleAccessFeature(
   mode: AppFeatureMode,
   role: string | null | undefined,
-  featureKey?: AppFeatureKey | null
+  featureKey?: AppFeatureKey | null,
+  permissionTemplate?: string | null,
+  effectiveCapabilities?: readonly BusinessCapability[] | null
 ) {
   if (mode === 'off') return false;
   if (mode === 'all') return true;
-  if (featureKey === 'vendors') return hasVendorAccess(role);
-  return role === 'admin' || hasPrivilegedFeatureAccess(role);
+  if (featureKey === 'vendors') return hasVendorAccess(role, permissionTemplate, effectiveCapabilities);
+  return role === 'admin' || hasPrivilegedFeatureAccess(role, permissionTemplate, effectiveCapabilities);
 }
 
 export function normalizeAppFeatureModes(
@@ -162,10 +168,21 @@ export function normalizeAppFeatureModes(
   return normalized;
 }
 
-export function buildFeatureAccess(modes: AppFeatureModes, role: string | null | undefined): AppFeatureAccess {
+export function buildFeatureAccess(
+  modes: AppFeatureModes,
+  role: string | null | undefined,
+  permissionTemplate?: string | null,
+  effectiveCapabilities?: readonly BusinessCapability[] | null
+): AppFeatureAccess {
   return appFeatureDefinitions.reduce(
     (acc, feature) => {
-      acc[feature.key] = canRoleAccessFeature(modes[feature.key], role, feature.key);
+      acc[feature.key] = canRoleAccessFeature(
+        modes[feature.key],
+        role,
+        feature.key,
+        permissionTemplate,
+        effectiveCapabilities
+      );
       return acc;
     },
     {} as AppFeatureAccess

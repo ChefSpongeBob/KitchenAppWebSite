@@ -82,14 +82,16 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
     loadEmployeeOnboarding(db, locals.userId, businessId, {
       env: platform?.env,
       actorUserId: locals.userId,
-      actorBusinessRole: locals.businessRole
+      actorBusinessRole: locals.businessRole,
+      actorPermissionTemplate: locals.businessPermissionTemplate,
+      actorCapabilities: locals.businessCapabilities
     }),
     loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
     loadUserScheduleAvailability(db, locals.userId, businessId),
     db
       .prepare(
         `
-        SELECT email_updates, sms_updates, dark_mode, language
+        SELECT email_updates, sms_updates, push_updates, dark_mode, language
         FROM user_preferences
         WHERE user_id = ?
         LIMIT 1
@@ -99,6 +101,7 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
       .first<{
         email_updates: number;
         sms_updates: number;
+        push_updates: number;
         dark_mode: number;
         language: string;
       }>(),
@@ -122,6 +125,7 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
     preferences: {
       emailUpdates: (preferences?.email_updates ?? 1) === 1,
       smsUpdates: (preferences?.sms_updates ?? 0) === 1,
+      pushUpdates: (preferences?.push_updates ?? 0) === 1,
       darkMode: (preferences?.dark_mode ?? 0) === 1,
       language: preferences?.language ?? 'en'
     },
@@ -404,6 +408,7 @@ export const actions: Actions = {
     const formData = await request.formData();
     const emailUpdates = String(formData.get('email_updates') ?? '0') === '1';
     const smsUpdates = String(formData.get('sms_updates') ?? '0') === '1';
+    const pushUpdates = String(formData.get('push_updates') ?? '0') === '1';
     const darkMode = String(formData.get('dark_mode') ?? '0') === '1';
     const language = String(formData.get('language') ?? 'en').trim() || 'en';
     const now = Math.floor(Date.now() / 1000);
@@ -411,11 +416,12 @@ export const actions: Actions = {
     await db
       .prepare(
         `
-        INSERT INTO user_preferences (user_id, email_updates, sms_updates, dark_mode, language, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO user_preferences (user_id, email_updates, sms_updates, push_updates, dark_mode, language, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
           email_updates = excluded.email_updates,
           sms_updates = excluded.sms_updates,
+          push_updates = excluded.push_updates,
           dark_mode = excluded.dark_mode,
           language = excluded.language,
           updated_at = excluded.updated_at
@@ -425,6 +431,7 @@ export const actions: Actions = {
         locals.userId,
         emailUpdates ? 1 : 0,
         smsUpdates ? 1 : 0,
+        pushUpdates ? 1 : 0,
         darkMode ? 1 : 0,
         language,
         now

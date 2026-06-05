@@ -11,7 +11,13 @@
     type AppFeatureKey,
     type AppFeatureModes
   } from "$lib/features/appFeatures";
-  import { hasReportsAccess, hasVendorAccess, isBusinessAdminRole } from "$lib/auth/roles";
+  import {
+    hasBusinessCapability,
+    hasManagementAccess,
+    hasReportsAccess,
+    hasVendorAccess
+  } from "$lib/auth/roles";
+  import { resolveBusinessCapabilityForPath } from "$lib/auth/routeCapabilities";
   import ToastStack from "$lib/components/ui/ToastStack.svelte";
 
   type FeatureAwareNavItem = NavItem & {
@@ -31,6 +37,7 @@
     businessPlan: string;
     businessRole: string;
     businessPermissionTemplate: string;
+    businessCapabilities: import('$lib/auth/roles').BusinessCapability[];
     businessLogoUrl: string | null;
   };
 
@@ -44,9 +51,11 @@
           businessLogoUrl?: string | null;
           businessRole?: string | null;
           businessPermissionTemplate?: string | null;
+          businessCapabilities?: import('$lib/auth/roles').BusinessCapability[];
           businessOnboardingComplete?: boolean;
           businesses?: BusinessMembership[];
           preferredTheme?: "dark" | "light";
+          pushNotificationsEnabled?: boolean;
         }
       | null;
     featureModes?: AppFeatureModes;
@@ -63,7 +72,7 @@
   let revealObserver: IntersectionObserver | null = null;
   const THEME_STORAGE_KEY = "crimini_theme_mode";
   const adminNavItem: NavItem = {
-    label: "Admin",
+    label: "Manager",
     route: "/admin",
     icon: "admin_panel_settings"
   };
@@ -73,7 +82,7 @@
       icon: "space_dashboard",
       items: [
         { label: "Home", route: "/app", icon: "home" },
-        { label: "Admin Dashboard", route: "/admin", icon: "space_dashboard" }
+        { label: "Manager Dashboard", route: "/admin", icon: "space_dashboard" }
       ]
     },
     {
@@ -154,6 +163,11 @@
 
   function toggleTheme() {
     themeMode = themeMode === "dark" ? "light" : "dark";
+  }
+
+  async function startNativePushRegistration() {
+    const module = await import("$lib/client/pushNotifications");
+    await module.registerNativePushNotifications();
   }
 
   function isActive(route: string, path: string) {
@@ -251,6 +265,11 @@
       currentPath.startsWith("/app")
   );
   $: effectiveThemeMode = isAppChromeRoute ? themeMode : "light";
+  $: if (browser && isAppChromeRoute && data.user?.pushNotificationsEnabled) {
+    startNativePushRegistration().catch((error) => {
+      console.error("Push registration failed:", error);
+    });
+  }
   $: routeSplashTargetPath = navTargetPath || currentPath;
   $: isRouteSplashMarketing =
     marketingExactRoutes.has(routeSplashTargetPath) ||
@@ -260,27 +279,59 @@
   $: activeFeatureModes = data.featureModes ?? defaultAppFeatureModes;
   $: normalizedUserRole = String(data.user?.role ?? "").trim().toLowerCase();
   $: normalizedBusinessRole = String(data.user?.businessRole ?? "").trim().toLowerCase();
+  $: normalizedPermissionTemplate = String(data.user?.businessPermissionTemplate ?? "").trim().toLowerCase();
   $: isAdminAccount = Boolean(
-    data.user && (normalizedUserRole === "admin" || isBusinessAdminRole(normalizedBusinessRole))
+    data.user &&
+      (normalizedUserRole === "admin" ||
+        hasManagementAccess(normalizedBusinessRole, normalizedPermissionTemplate, data.user?.businessCapabilities))
   );
   $: canUseProtectedNavItem = (item: NavItem) => {
     if (!item.adminOnly) return true;
-    if (item.route === "/reports") return hasReportsAccess(normalizedBusinessRole);
-    if (item.route === "/vendors") return hasVendorAccess(normalizedBusinessRole);
+    if (item.route === "/reports") {
+      return hasReportsAccess(normalizedBusinessRole, normalizedPermissionTemplate, data.user?.businessCapabilities);
+    }
+    if (item.route === "/vendors") {
+      return hasVendorAccess(normalizedBusinessRole, normalizedPermissionTemplate, data.user?.businessCapabilities);
+    }
     return isAdminAccount;
   };
   $: filteredPrimaryNav = primaryNav.filter(
     (item) =>
       canUseProtectedNavItem(item) &&
-      (!item.featureKey || canRoleAccessFeature(activeFeatureModes[item.featureKey], data.user?.businessRole ?? data.user?.role, item.featureKey))
+      (!item.featureKey ||
+        canRoleAccessFeature(
+          activeFeatureModes[item.featureKey],
+          data.user?.businessRole ?? data.user?.role,
+          item.featureKey,
+          data.user?.businessPermissionTemplate,
+          data.user?.businessCapabilities
+        ))
   );
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
+        const requiredCapability = resolveBusinessCapabilityForPath(item.route);
+        if (
+          requiredCapability &&
+          !hasBusinessCapability(
+            data.user?.businessRole ?? data.user?.role,
+            data.user?.businessPermissionTemplate,
+            requiredCapability,
+            data.user?.businessCapabilities
+          )
+        ) {
+          return false;
+        }
         if (!item.featureKey) return true;
         const role = data.user?.businessRole ?? data.user?.role ?? (currentPath?.startsWith("/admin") ? "admin" : null);
-        return canRoleAccessFeature(activeFeatureModes[item.featureKey], role, item.featureKey);
+        return canRoleAccessFeature(
+          activeFeatureModes[item.featureKey],
+          role,
+          item.featureKey,
+          data.user?.businessPermissionTemplate,
+          data.user?.businessCapabilities
+        );
       })
     }))
     .filter((group) => group.items.length > 0);
@@ -459,7 +510,7 @@
         {/if}
       </div>
       {#if isAdminSidebar}
-        <div class="side-section-label">Admin Controls</div>
+        <div class="side-section-label">Manager Controls</div>
         {#each visibleAdminControlGroups as group}
           <details class="side-group" open={isAdminGroupActive(group)}>
             <summary class="side-group-summary tap" class:active={isAdminGroupActive(group)}>

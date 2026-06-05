@@ -25,9 +25,31 @@
     updatedAt: number;
   };
 
+  type SensorSetting = {
+    sensor_id: number;
+    high_threshold: number;
+    low_threshold: number;
+    stale_after_minutes: number;
+    offline_after_minutes: number;
+    alert_cooldown_minutes: number;
+    is_alerting_enabled: number;
+  };
+
+  type ActiveAlert = {
+    id: string;
+    sensor_id: number;
+    event_type: 'high' | 'low' | 'stale' | 'offline' | 'recovered';
+    status: 'active' | 'acknowledged' | 'recovered';
+    temperature: number | null;
+    threshold: number | null;
+    last_seen_at: number;
+  };
+
   export let data: {
     nodeNames: NodeName[];
     iotDevices: IoTDevice[];
+    sensorSettings: SensorSetting[];
+    activeAlerts: ActiveAlert[];
   };
 
   let feedbackMessage = '';
@@ -37,10 +59,54 @@
   $: activeSensorCount = sensorDevices.filter((device) => device.isActive === 1).length;
   $: activeGatewayCount = gatewayDevices.filter((device) => device.isActive === 1).length;
   $: latestSensorSeen = Math.max(0, ...sensorDevices.map((device) => device.lastSeenAt ?? 0));
+  $: settingsBySensor = new Map(data.sensorSettings.map((setting) => [setting.sensor_id, setting]));
+  $: sensorIds = Array.from(
+    new Set([
+      ...data.nodeNames.map((node) => node.sensor_id),
+      ...sensorDevices.map((device) => sensorNodeIdFromSerial(device.externalDeviceId))
+    ])
+  ).sort((a, b) => a - b);
+  $: activeAlertCount = data.activeAlerts.filter((alert) => alert.status === 'active').length;
 
   function formatShortTime(value: number | null) {
     if (!value) return 'None';
     return new Date(value * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function sensorNodeIdFromSerial(serial: string) {
+    let hash = 2166136261;
+    const normalized = serial.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/^-+|-+$/g, '');
+    for (let index = 0; index < normalized.length; index += 1) {
+      hash ^= normalized.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) % 2147480000 || 1;
+  }
+
+  function sensorName(sensorId: number) {
+    return data.nodeNames.find((node) => node.sensor_id === sensorId)?.name ?? `Sensor ${sensorId}`;
+  }
+
+  function settingFor(sensorId: number): SensorSetting {
+    return (
+      settingsBySensor.get(sensorId) ?? {
+        sensor_id: sensorId,
+        high_threshold: 42,
+        low_threshold: 32,
+        stale_after_minutes: 15,
+        offline_after_minutes: 45,
+        alert_cooldown_minutes: 60,
+        is_alerting_enabled: 1
+      }
+    );
+  }
+
+  function alertLabel(value: ActiveAlert['event_type']) {
+    if (value === 'high') return 'High';
+    if (value === 'low') return 'Low';
+    if (value === 'stale') return 'Stale';
+    if (value === 'offline') return 'Offline';
+    return 'Recovered';
   }
 
   const withFeedback: SubmitFunction = () => {
@@ -86,6 +152,10 @@
     <div>
       <span>Latest Check-In</span>
       <strong>{formatShortTime(latestSensorSeen)}</strong>
+    </div>
+    <div>
+      <span>Active Alerts</span>
+      <strong>{activeAlertCount}</strong>
     </div>
   </section>
 
@@ -252,6 +322,102 @@
         {/if}
       </div>
     </details>
+
+    <details class="labels-panel">
+      <summary class="section-heading">
+        <span class="material-icons" aria-hidden="true">notifications_active</span>
+        <div>
+          <h2>Alert Rules</h2>
+          <p>{sensorIds.length} sensors</p>
+        </div>
+      </summary>
+
+      <div class="rules-list">
+        {#if sensorIds.length === 0}
+          <p class="empty-line">No sensors registered yet.</p>
+        {:else}
+          {#each sensorIds as sensorId}
+            {@const setting = settingFor(sensorId)}
+            <form method="POST" action="?/save_sensor_settings" use:enhance={withFeedback} class="rule-row">
+              <input type="hidden" name="sensor_id" value={sensorId} />
+              <div class="rule-name">
+                <strong>{sensorName(sensorId)}</strong>
+                <small>#{sensorId}</small>
+              </div>
+              <label>
+                <span>High</span>
+                <input name="high_threshold" type="number" step="0.1" value={setting.high_threshold} />
+              </label>
+              <label>
+                <span>Low</span>
+                <input name="low_threshold" type="number" step="0.1" value={setting.low_threshold} />
+              </label>
+              <label>
+                <span>Stale Min</span>
+                <input name="stale_after_minutes" type="number" min="2" value={setting.stale_after_minutes} />
+              </label>
+              <label>
+                <span>Offline Min</span>
+                <input name="offline_after_minutes" type="number" min="2" value={setting.offline_after_minutes} />
+              </label>
+              <label>
+                <span>Cooldown</span>
+                <input name="alert_cooldown_minutes" type="number" min="5" value={setting.alert_cooldown_minutes} />
+              </label>
+              <label class="inline-toggle">
+                <input
+                  name="is_alerting_enabled"
+                  type="checkbox"
+                  value="1"
+                  checked={setting.is_alerting_enabled === 1}
+                />
+                <span>On</span>
+              </label>
+              <button type="submit">Save</button>
+            </form>
+          {/each}
+        {/if}
+      </div>
+    </details>
+
+    <details class="labels-panel">
+      <summary class="section-heading">
+        <span class="material-icons" aria-hidden="true">warning</span>
+        <div>
+          <h2>Active Alerts</h2>
+          <p>{data.activeAlerts.length} open</p>
+        </div>
+      </summary>
+
+      <div class="alert-list">
+        {#if data.activeAlerts.length === 0}
+          <p class="empty-line">No active alerts.</p>
+        {:else}
+          {#each data.activeAlerts as alert}
+            <article class="alert-row" data-alert-type={alert.event_type}>
+              <div>
+                <strong>{sensorName(alert.sensor_id)}</strong>
+                <small>
+                  {alertLabel(alert.event_type)}
+                  {#if alert.temperature !== null}
+                    | {alert.temperature.toFixed(1)}F
+                  {/if}
+                  | {formatShortTime(alert.last_seen_at)}
+                </small>
+              </div>
+              {#if alert.status === 'active'}
+                <form method="POST" action="?/acknowledge_alert" use:enhance={withFeedback}>
+                  <input type="hidden" name="alert_id" value={alert.id} />
+                  <button type="submit">Acknowledge</button>
+                </form>
+              {:else}
+                <span class="status-text">Acknowledged</span>
+              {/if}
+            </article>
+          {/each}
+        {/if}
+      </div>
+    </details>
   </section>
 </Layout>
 
@@ -269,7 +435,7 @@
 
   .status-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
   }
@@ -401,13 +567,16 @@
   }
 
   .unit-list,
-  .node-list {
+  .node-list,
+  .rules-list,
+  .alert-list {
     display: grid;
     gap: 0.65rem;
   }
 
   .unit-row,
-  .node-row {
+  .node-row,
+  .alert-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -417,7 +586,8 @@
   }
 
   .unit-row:first-child,
-  .node-row:first-child {
+  .node-row:first-child,
+  .alert-row:first-child {
     border-top: 0;
     padding-top: 0;
   }
@@ -447,11 +617,62 @@
     justify-self: start;
   }
 
+  .rule-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1.15fr) repeat(5, minmax(86px, 0.7fr)) auto auto;
+    gap: 0.62rem;
+    align-items: end;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .rule-row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .rule-name {
+    display: grid;
+    gap: 0.12rem;
+    align-self: center;
+  }
+
+  .rule-name small,
+  .alert-row small {
+    color: var(--color-text-muted);
+  }
+
+  .inline-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2.35rem;
+  }
+
+  .inline-toggle input {
+    width: auto;
+  }
+
+  .alert-row {
+    padding-bottom: 0.2rem;
+  }
+
+  .alert-row[data-alert-type='high'],
+  .alert-row[data-alert-type='offline'] {
+    border-top-color: color-mix(in srgb, var(--color-error) 40%, var(--color-divider));
+  }
+
+  .alert-row[data-alert-type='low'],
+  .alert-row[data-alert-type='stale'] {
+    border-top-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-divider));
+  }
+
   @media (max-width: 900px) {
     .sensor-workbench,
     .field-grid,
     .node-form,
-    .status-strip {
+    .status-strip,
+    .rule-row {
       grid-template-columns: minmax(0, 1fr);
     }
 

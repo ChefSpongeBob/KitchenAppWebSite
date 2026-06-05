@@ -155,13 +155,13 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Admin changes saved.', 'success');
+        pushToast('Manager changes saved.', 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That action could not be completed.', 'error');
       }
       adminMessage =
         result.type === 'success'
-          ? 'Admin changes saved.'
+          ? 'Manager changes saved.'
           : result.type === 'failure'
             ? result.data?.error ?? 'That action could not be completed.'
             : '';
@@ -175,13 +175,13 @@
       if (result.type === 'success') {
         formElement.reset();
         await invalidateAll();
-        pushToast('Admin changes saved.', 'success');
+        pushToast('Manager changes saved.', 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That action could not be completed.', 'error');
       }
       adminMessage =
         result.type === 'success'
-          ? 'Admin changes saved.'
+          ? 'Manager changes saved.'
           : result.type === 'failure'
             ? result.data?.error ?? 'That action could not be completed.'
             : '';
@@ -238,7 +238,7 @@
 
   function modeVisibility(mode: AppFeatureMode) {
     if (mode === 'off') return 'Hidden';
-    if (mode === 'admin') return 'Admin Only';
+    if (mode === 'admin') return 'Manager Only';
     return 'Everyone';
   }
 
@@ -310,12 +310,12 @@
 
 <Layout>
   <PageHeader
-    title="Admin Dashboard"
+    title="Manager Dashboard"
   />
 
   {#if showGuidedTour}
     <GuidedSpotlightTour
-      title="Admin First-Open Guide"
+      title="Manager First-Open Guide"
       steps={guidedSteps}
       on:finish={handleGuidedTourClose}
       on:dismiss={handleGuidedTourClose}
@@ -477,7 +477,7 @@
     </div>
   </section>
 
-  <section class="control-center" aria-label="Admin control center">
+  <section class="control-center" aria-label="Manager control center">
     <article class="control-overview">
       <div class="metric-grid">
         <article class="metric-item">
@@ -536,7 +536,7 @@
     </aside>
   </section>
 
-  <section class="admin-quick-tiles" aria-label="Admin quick tools">
+  <section class="admin-quick-tiles" aria-label="Manager quick tools">
     <article class="panel quick-link-tile">
       <a href="/" class="quick-link">
         <span class="panel-kicker">Navigation</span>

@@ -11,9 +11,14 @@ import {
 import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { verifyStorePurchase } from '$lib/server/storeVerification';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
+import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
 
-function canManageBilling(role: string | undefined) {
-	return role === 'owner' || role === 'admin';
+function canManageBilling(
+	role: string | undefined,
+	permissionTemplate: string | undefined,
+	capabilities?: readonly BusinessCapability[]
+) {
+	return hasBusinessCapability(role, permissionTemplate, 'manage_billing', capabilities);
 }
 
 function textValue(value: unknown) {
@@ -24,8 +29,8 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	if (!locals.DB || !locals.userId || !locals.businessId) {
 		return json({ ok: false, error: 'Sign in required.' }, { status: 401 });
 	}
-	if (!canManageBilling(locals.businessRole)) {
-		return json({ ok: false, error: 'Only owner/admin can manage billing.' }, { status: 403 });
+	if (!canManageBilling(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
+		return json({ ok: false, error: 'Billing access required.' }, { status: 403 });
 	}
 
 	let body: Record<string, unknown>;

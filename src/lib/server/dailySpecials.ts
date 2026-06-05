@@ -1,4 +1,4 @@
-import { isBusinessAdminRole } from '$lib/server/permissions';
+import { hasBusinessCapability, isBusinessAdminRole, type BusinessCapability } from '$lib/server/permissions';
 import { dev } from '$app/environment';
 import { ensureTenantSchema } from '$lib/server/tenant';
 
@@ -82,10 +82,18 @@ export async function userCanEditDailySpecials(
   db: App.Platform['env']['DB'],
   userId: string | null | undefined,
   role: string | null | undefined,
-  businessId?: string | null
+  businessId?: string | null,
+  permissionTemplate?: string | null,
+  capabilities?: readonly BusinessCapability[] | null
 ) {
   if (!userId) return false;
-  if (role === 'admin' || isBusinessAdminRole(role)) return true;
+  if (
+    (capabilities
+      ? hasBusinessCapability(role, permissionTemplate, 'manage_specials', capabilities)
+      : role === 'admin' || isBusinessAdminRole(role))
+  ) {
+    return true;
+  }
   await ensureTenantSchema(db, true);
 
   const row = await db

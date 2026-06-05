@@ -3,6 +3,7 @@ import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
 import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
 import { recordListItemActivity, recordListSubmission } from '$lib/server/history';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 
 type ItemRow = {
   id: string;
@@ -232,6 +233,20 @@ export function createListPage(
       if (updatedCount === 0) return fail(400, { error: `No ${options.valueLabel.toLowerCase()} values were submitted.` });
 
       await recordListSubmission(db, businessId, domain, section.id, locals.userId, valuesByItemId);
+      await recordOperationalEventBestEffort(db, {
+        businessId,
+        eventType: `list.${domain}.submitted`,
+        category: 'lists',
+        actorUserId: locals.userId,
+        subjectType: 'list_section',
+        subjectId: section.id,
+        title: 'List submitted',
+        payload: {
+          domain,
+          sectionTitle: pageTitle,
+          updatedCount
+        }
+      });
       return { success: true };
     },
     new_prep_list: async ({ locals }: { locals: PreplistLocals }) => {
@@ -301,6 +316,20 @@ export function createListPage(
         locals.userId,
         String(isChecked)
       );
+      await recordOperationalEventBestEffort(db, {
+        businessId,
+        eventType: isChecked === 1 ? `list.${domain}.item_completed` : `list.${domain}.item_reopened`,
+        category: 'lists',
+        actorUserId: locals.userId,
+        subjectType: 'list_item',
+        subjectId: id,
+        title: isChecked === 1 ? 'List item completed' : 'List item reopened',
+        payload: {
+          domain,
+          sectionId: section.id,
+          checked: isChecked === 1
+        }
+      });
 
       return { success: true };
     },
@@ -342,7 +371,7 @@ export function createListPage(
 
 export function createPreplistPage(sectionSlug: string, pageTitle: string) {
   return createListPage('preplists', sectionSlug, pageTitle, {
-    subtitle: 'Submit prep counts together. Admins can adjust par levels in admin tools.',
+    subtitle: 'Submit prep counts together. Managers can adjust par levels in manager tools.',
     valueLabel: 'Prep',
     submitLabel: 'Submit Prep Counts',
     resetLabel: 'New Prep List (Reset to 0)',

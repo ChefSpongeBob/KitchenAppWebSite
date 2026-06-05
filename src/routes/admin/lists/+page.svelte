@@ -217,7 +217,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="Admin List Editor" />
+  <PageHeader title="Manager List Editor" />
 
   <section class="panel">
     <header class="panel-header">

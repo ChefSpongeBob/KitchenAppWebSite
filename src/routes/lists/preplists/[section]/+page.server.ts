@@ -11,7 +11,7 @@ function toTitle(value: string) {
 
 function handlersFor(section: string) {
   return createListPage('preplists', section, `${toTitle(section)} Prep`, {
-    subtitle: 'Submit prep counts together. Admins can adjust par levels in admin tools.',
+    subtitle: 'Submit prep counts together. Managers can adjust par levels in manager tools.',
     valueLabel: 'Prep',
     submitLabel: 'Submit Prep Counts',
     resetLabel: 'New Prep List (Reset to 0)',

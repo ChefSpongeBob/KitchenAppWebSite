@@ -38,6 +38,7 @@ export async function ensureUserPreferencesSchema(db: D1) {
         user_id TEXT PRIMARY KEY,
         email_updates INTEGER NOT NULL DEFAULT 1,
         sms_updates INTEGER NOT NULL DEFAULT 0,
+        push_updates INTEGER NOT NULL DEFAULT 0,
         dark_mode INTEGER NOT NULL DEFAULT 0,
         language TEXT NOT NULL DEFAULT 'en',
         welcome_tour_completed_at INTEGER,
@@ -52,6 +53,7 @@ export async function ensureUserPreferencesSchema(db: D1) {
     .run();
 
   await ensureOptionalColumn(db, 'user_preferences', 'sms_updates', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureOptionalColumn(db, 'user_preferences', 'push_updates', 'INTEGER NOT NULL DEFAULT 0');
   await ensureOptionalColumn(db, 'user_preferences', 'dark_mode', 'INTEGER NOT NULL DEFAULT 0');
   await ensureOptionalColumn(db, 'user_preferences', 'language', "TEXT NOT NULL DEFAULT 'en'");
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_completed_at', 'INTEGER');

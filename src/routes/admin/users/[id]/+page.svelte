@@ -5,7 +5,16 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
-  import { businessAccessOptions, businessRoleLabel, isBusinessAdminRole, permissionTemplateLabel, permissionTemplateOptions } from '$lib/auth/roles';
+  import {
+    businessAccessOptions,
+    businessCapabilityOptions,
+    businessRoleLabel,
+    normalizeBusinessRole,
+    permissionTemplateLabel,
+    permissionTemplateOptions,
+    type BusinessCapability,
+    type BusinessCapabilityOverrides
+  } from '$lib/auth/roles';
   import type { ScheduleDepartment } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -19,6 +28,8 @@
     can_manage_specials: number;
     can_manage_announcements: number;
     approved_departments: ScheduleDepartment[];
+    capability_overrides: BusinessCapabilityOverrides;
+    effective_capabilities: BusinessCapability[];
   };
 
   type EmployeeProfile = {
@@ -78,6 +89,9 @@
     };
     sessions: SessionSummary[];
     departments: ScheduleDepartment[];
+    canEditPermissions: boolean;
+    canManageManagerAccess: boolean;
+    editableCapabilities: BusinessCapability[];
   };
 
   const displayName = (employee: Employee) => employee.display_name?.trim() || 'Unnamed Employee';
@@ -95,7 +109,8 @@
   const isDepartmentApproved = (employee: Employee, department: ScheduleDepartment) =>
     employee.approved_departments.includes(department);
 
-  const isAdminRole = (role: string) => isBusinessAdminRole(role);
+  const hasCapability = (capability: BusinessCapability) =>
+    data.employee.effective_capabilities.includes(capability);
 
   const formatBirthday = (value: string) =>
     value ? new Date(`${value}T00:00:00`).toLocaleDateString() : 'Not set';
@@ -268,71 +283,59 @@
             <form method="POST" action="?/update_permissions" use:enhance={withFeedback} class="permission-form">
               <input type="hidden" name="user_id" value={data.employee.id} />
               <label>
-                <span>Access</span>
-                <select name="business_role" disabled={data.employee.role === 'owner'}>
+                <span>Account Type</span>
+                <select name="business_role" disabled={!data.canEditPermissions}>
                   {#each businessAccessOptions as option}
-                    <option value={option.value} selected={option.value === data.employee.role}>{option.label}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Template</span>
-                <select name="permission_template">
-                  {#each permissionTemplateOptions as option}
-                    <option value={option.value} selected={option.value === data.employee.permission_template}>
+                    <option
+                      value={option.value}
+                      selected={option.value === normalizeBusinessRole(data.employee.role)}
+                      disabled={!data.canManageManagerAccess && (option.value === 'manager' || option.value === 'owner')}
+                    >
                       {option.label}
                     </option>
                   {/each}
                 </select>
               </label>
-              <button type="submit" disabled={data.employee.role === 'owner'}>Save Permissions</button>
-              {#if data.employee.role === 'owner'}
+              <label>
+                <span>Permission Template</span>
+                <select name="permission_template" disabled={!data.canEditPermissions}>
+                  {#each permissionTemplateOptions as option}
+                    <option
+                      value={option.value}
+                      selected={option.value === data.employee.permission_template}
+                      disabled={!data.canManageManagerAccess && option.value.includes('manager')}
+                    >
+                      {option.label}
+                    </option>
+                  {/each}
+                </select>
+              </label>
+              <button type="submit" disabled={!data.canEditPermissions}>Save Type</button>
+              {#if normalizeBusinessRole(data.employee.role) === 'owner'}
                 <small>Owner access is locked.</small>
               {:else}
                 <small>{permissionTemplateLabel(data.employee.permission_template)}</small>
               {/if}
             </form>
 
-            {#if data.employee.role === 'owner'}
-              <span class="access-state success-action">Admin Access</span>
-            {:else if isAdminRole(data.employee.role)}
-              <form method="POST" action="?/remove_user_admin" use:enhance={withFeedback}>
-                <input type="hidden" name="user_id" value={data.employee.id} />
-                <button type="submit" class="warn-action">Restrict Admin</button>
-              </form>
-            {:else}
-              <form method="POST" action="?/make_user_admin" use:enhance={withFeedback}>
-                <input type="hidden" name="user_id" value={data.employee.id} />
-                <button type="submit">Grant Admin</button>
-              </form>
-            {/if}
-
-            {#if isAdminRole(data.employee.role)}
-              <span class="access-state success-action">Specials Access</span>
-              <span class="access-state success-action">Announcements Access</span>
-            {:else}
-              <form method="POST" action="?/toggle_specials_access" use:enhance={withFeedback}>
-                <input type="hidden" name="user_id" value={data.employee.id} />
-                <button
-                  type="submit"
-                  class:warn-action={data.employee.can_manage_specials === 1}
-                >
-                  {data.employee.can_manage_specials === 1 ? 'Restrict Specials' : 'Grant Specials'}
-                </button>
-              </form>
-
-              <form method="POST" action="?/toggle_announcement_access" use:enhance={withFeedback}>
-                <input type="hidden" name="user_id" value={data.employee.id} />
-                <button
-                  type="submit"
-                  class:warn-action={data.employee.can_manage_announcements === 1}
-                >
-                  {data.employee.can_manage_announcements === 1
-                    ? 'Restrict Announcements'
-                    : 'Grant Announcements'}
-                </button>
-              </form>
-            {/if}
+            <form method="POST" action="?/update_capabilities" use:enhance={withFeedback} class="capability-form">
+              <input type="hidden" name="user_id" value={data.employee.id} />
+              <div class="capability-list">
+                {#each businessCapabilityOptions as capability}
+                  <label class="capability-row">
+                    <input
+                      type="checkbox"
+                      name="capabilities"
+                      value={capability.value}
+                      checked={hasCapability(capability.value)}
+                      disabled={!data.canEditPermissions || !data.editableCapabilities.includes(capability.value)}
+                    />
+                    <span>{capability.label}</span>
+                  </label>
+                {/each}
+              </div>
+              <button type="submit" disabled={!data.canEditPermissions}>Save Access</button>
+            </form>
 
             <form method="POST" action="?/revoke_employee_sessions" use:enhance={withFeedback}>
               <input type="hidden" name="user_id" value={data.employee.id} />
@@ -734,6 +737,35 @@
     color: var(--color-text-muted);
     font-size: 0.72rem;
     font-weight: var(--weight-semibold);
+  }
+
+  .capability-form {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .capability-list {
+    display: grid;
+    gap: 0.15rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    padding: 0.35rem 0;
+  }
+
+  .capability-row {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2rem;
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
+  }
+
+  .capability-row input {
+    width: 0.95rem;
+    min-height: 0.95rem;
+    accent-color: var(--color-accent);
   }
 
   .department-chips {

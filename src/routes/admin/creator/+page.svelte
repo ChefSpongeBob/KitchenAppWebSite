@@ -332,7 +332,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="Admin Creator" />
+  <PageHeader title="Manager Creator" />
 
   <section class="creator-panel">
     <header class="creator-header">

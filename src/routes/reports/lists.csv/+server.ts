@@ -11,7 +11,9 @@ function parseDomain(value: string | null): ListDomain {
 }
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-  if (!hasReportsAccess(locals.businessRole)) throw redirect(303, '/app');
+  if (!hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
+    throw redirect(303, '/app');
+  }
   const db = locals.DB;
   if (!db) return new Response('Database unavailable', { status: 503 });
 

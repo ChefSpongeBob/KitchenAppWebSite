@@ -26,6 +26,8 @@ import {
 	getSessionCookieOptions
 } from '$lib/server/authCookies';
 import { effectiveAppRoleFromBusinessRole } from '$lib/server/permissions';
+import { hasBusinessCapability } from '$lib/server/permissions';
+import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
 import { wrapProductionSchemaGuard } from '$lib/server/schemaGuard';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
 
@@ -290,7 +292,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 
 		event.locals.userId = session.found_user_id;
-		event.locals.userRole = effectiveAppRoleFromBusinessRole(businessContext.businessRole);
+		event.locals.userRole = effectiveAppRoleFromBusinessRole(
+			businessContext.businessRole,
+			businessContext.businessPermissionTemplate,
+			businessContext.businessCapabilities
+		);
 		event.locals.businessId = businessContext.businessId;
 		event.locals.businessName = businessContext.businessName;
 		event.locals.businessLogoUrl = businessContext.businessLogoUrl;
@@ -298,16 +304,51 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.businessPlan = businessContext.businessPlan;
 		event.locals.businessRole = businessContext.businessRole;
 		event.locals.businessPermissionTemplate = businessContext.businessPermissionTemplate;
+		event.locals.businessCapabilityOverrides = businessContext.businessCapabilityOverrides;
+		event.locals.businessCapabilities = businessContext.businessCapabilities;
 		event.locals.businessOnboardingComplete = await isBusinessOnboardingComplete(
 			db,
 			businessContext.businessId
 		);
 		event.locals.featureModes = await loadAppFeatureModes(db, businessContext.businessId);
 
+		const requiredCapability = resolveBusinessCapabilityForPath(pathname);
+		if (
+			isPrivateRoute &&
+			requiredCapability &&
+			!hasBusinessCapability(
+				event.locals.businessRole,
+				event.locals.businessPermissionTemplate,
+				requiredCapability,
+				event.locals.businessCapabilities
+			)
+		) {
+			logOperationalEvent({
+				level: 'warn',
+				event: 'tenant_access_denied',
+				request: event.request,
+				businessId: businessContext.businessId,
+				userId: session.found_user_id,
+				sessionId: session.id,
+				route: pathname,
+				status: 403,
+				metadata: { capability: requiredCapability, reason: 'permission' }
+			});
+			throw redirect(303, '/app');
+		}
+
 		const gatedFeature = resolveFeatureKeyForPath(pathname);
 		if (isPrivateRoute && gatedFeature) {
 			const featureMode = event.locals.featureModes[gatedFeature];
-			if (!canRoleAccessFeature(featureMode, event.locals.businessRole ?? event.locals.userRole, gatedFeature)) {
+			if (
+				!canRoleAccessFeature(
+					featureMode,
+					event.locals.businessRole ?? event.locals.userRole,
+					gatedFeature,
+					event.locals.businessPermissionTemplate,
+					event.locals.businessCapabilities
+				)
+			) {
 				logOperationalEvent({
 					level: 'warn',
 					event: 'tenant_access_denied',

@@ -126,7 +126,7 @@
 
   function statusLabel(mode: AppFeatureMode) {
     if (mode === 'off') return 'Hidden';
-    if (mode === 'admin') return 'Live (Admin Only)';
+    if (mode === 'admin') return 'Live (Manager Only)';
     return 'Live';
   }
 </script>
@@ -298,7 +298,7 @@
               <span class="status-text" class:off={feature.mode === 'off'}>{statusLabel(feature.mode)}</span>
               <select name={`feature_${feature.key}`} bind:value={feature.mode}>
                 <option value="all">On</option>
-                <option value="admin">Admin Only</option>
+                <option value="admin">Manager Only</option>
                 <option value="off">Hidden</option>
               </select>
             </label>

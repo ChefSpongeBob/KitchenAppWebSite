@@ -1,4 +1,10 @@
 import { dev } from '$app/environment';
+import {
+  ALL_BUSINESS_CAPABILITIES,
+  resolveBusinessCapabilities,
+  type BusinessCapability,
+  type BusinessCapabilityOverrides
+} from '$lib/server/permissions';
 
 type D1 = App.Platform['env']['DB'];
 
@@ -12,10 +18,15 @@ export type BusinessContext = {
   businessPlan: string;
   businessRole: string;
   businessPermissionTemplate: string;
+  businessCapabilityOverrides: BusinessCapabilityOverrides;
+  businessCapabilities: BusinessCapability[];
   businessLogoUrl: string | null;
 };
 
-export type BusinessMembershipSummary = BusinessContext;
+export type BusinessMembershipSummary = Omit<
+  BusinessContext,
+  'businessCapabilityOverrides' | 'businessCapabilities'
+>;
 
 async function ensureOptionalColumn(db: D1, tableName: string, columnName: string, definition: string) {
   try {
@@ -242,7 +253,51 @@ function mapBusinessContextRow(row: {
     businessRole: row.business_role,
     businessPermissionTemplate: row.permission_template ?? row.business_role,
     businessLogoUrl: row.business_logo_url
-  } satisfies BusinessContext;
+  } satisfies BusinessMembershipSummary;
+}
+
+export async function loadBusinessCapabilityOverrides(
+  db: D1,
+  businessId: string,
+  userId: string
+): Promise<BusinessCapabilityOverrides> {
+  const rows = await db
+    .prepare(
+      `
+      SELECT permission_key, is_enabled
+      FROM employee_role_permissions
+      WHERE business_id = ?
+        AND user_id = ?
+      `
+    )
+    .bind(businessId, userId)
+    .all<{ permission_key: string; is_enabled: number }>()
+    .catch(() => ({ results: [] as Array<{ permission_key: string; is_enabled: number }> }));
+
+  const validCapabilities = new Set<string>(ALL_BUSINESS_CAPABILITIES);
+  const overrides: BusinessCapabilityOverrides = {};
+  for (const row of rows.results ?? []) {
+    if (!validCapabilities.has(row.permission_key)) continue;
+    overrides[row.permission_key as BusinessCapability] = row.is_enabled === 1;
+  }
+  return overrides;
+}
+
+async function attachBusinessCapabilities(
+  db: D1,
+  userId: string,
+  context: BusinessMembershipSummary
+): Promise<BusinessContext> {
+  const businessCapabilityOverrides = await loadBusinessCapabilityOverrides(db, context.businessId, userId);
+  return {
+    ...context,
+    businessCapabilityOverrides,
+    businessCapabilities: resolveBusinessCapabilities(
+      context.businessRole,
+      context.businessPermissionTemplate,
+      businessCapabilityOverrides
+    )
+  };
 }
 
 export async function getUserBusinessContext(db: D1, userId: string, preferredBusinessId?: string | null) {
@@ -281,7 +336,9 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         permission_template: string;
       }>();
 
-    if (selectedMembership) return mapBusinessContextRow(selectedMembership);
+    if (selectedMembership) {
+      return attachBusinessCapabilities(db, userId, mapBusinessContextRow(selectedMembership));
+    }
   }
 
   const membership = await db
@@ -328,7 +385,7 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
 
   if (!membership) return null;
 
-  return mapBusinessContextRow(membership);
+  return attachBusinessCapabilities(db, userId, mapBusinessContextRow(membership));
 }
 
 export async function loadUserBusinessMemberships(db: D1, userId: string) {
@@ -419,6 +476,8 @@ export async function bootstrapBusinessForUser(
     businessPlan: 'starter',
     businessRole,
     businessPermissionTemplate: businessRole,
+    businessCapabilityOverrides: {},
+    businessCapabilities: resolveBusinessCapabilities(businessRole, businessRole),
     businessLogoUrl: null
   } satisfies BusinessContext;
 }

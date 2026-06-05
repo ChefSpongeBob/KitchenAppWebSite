@@ -8,21 +8,23 @@ import {
   loadEmployeeOnboarding,
   loadAdminEmployeeProfile,
   loadAdminUsers,
-  makeUserAdmin,
-  removeUserAdmin,
   requestEmployeeOnboardingChanges,
   requireAdmin,
   revokeEmployeeSessions,
   saveEmployeeProfile,
   sendEmployeeOnboardingPackage,
-  toggleAnnouncementAccess,
   toggleScheduleDepartmentApproval,
-  toggleSpecialsAccess,
-  updateUserBusinessPermissions
+  updateUserBusinessPermissions,
+  updateUserCapabilityOverrides
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
 import { listUserSessions } from '$lib/server/security';
 import { canAccessEmployeeSensitiveData } from '$lib/server/sensitive';
+import {
+  ALL_BUSINESS_CAPABILITIES,
+  hasBusinessCapability,
+  normalizeBusinessRole
+} from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ locals, params, platform }) => {
   requireAdmin(locals.userRole);
@@ -48,9 +50,22 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
     locals.businessId,
     locals.userId,
     locals.businessRole,
-    employee.id
+    employee.id,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
   );
   const profile = await loadAdminEmployeeProfile(db, employee.id, locals.businessId);
+  const actorIsOwner = normalizeBusinessRole(locals.businessRole) === 'owner';
+  const targetRole = normalizeBusinessRole(employee.role);
+  const canEditPermissions =
+    hasBusinessCapability(
+      locals.businessRole,
+      locals.businessPermissionTemplate,
+      'manage_permissions',
+      locals.businessCapabilities
+    ) &&
+    targetRole !== 'owner' &&
+    (actorIsOwner || (targetRole !== 'manager' && employee.id !== locals.userId));
 
   return {
     employee,
@@ -72,10 +87,19 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
       env: platform?.env,
       actorUserId: locals.userId,
       actorBusinessRole: locals.businessRole,
+      actorPermissionTemplate: locals.businessPermissionTemplate,
+      actorCapabilities: locals.businessCapabilities,
       auditSensitiveRead: true
     }),
     sessions: await listUserSessions(db, employee.id),
-    departments: await loadScheduleDepartments(db, locals.businessId)
+    departments: await loadScheduleDepartments(db, locals.businessId),
+    canEditPermissions,
+    canManageManagerAccess: actorIsOwner,
+    editableCapabilities: actorIsOwner
+      ? ALL_BUSINESS_CAPABILITIES
+      : (locals.businessCapabilities ?? []).filter(
+          (capability) => capability !== 'admin_access' && capability !== 'manage_permissions'
+        )
   };
 };
 
@@ -84,11 +108,8 @@ export const actions: Actions = {
     approveUser(request, locals, url.origin, platform?.env),
   deny_user: ({ request, locals }) => denyUser(request, locals),
   delete_user: ({ request, locals }) => deleteUser(request, locals),
-  make_user_admin: ({ request, locals }) => makeUserAdmin(request, locals),
-  remove_user_admin: ({ request, locals }) => removeUserAdmin(request, locals),
   update_permissions: ({ request, locals }) => updateUserBusinessPermissions(request, locals),
-  toggle_announcement_access: ({ request, locals }) => toggleAnnouncementAccess(request, locals),
-  toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
+  update_capabilities: ({ request, locals }) => updateUserCapabilityOverrides(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),
   save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals),
   send_onboarding_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),

@@ -36,7 +36,7 @@
 		{
 			title: 'Workspace launch',
 			src: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard with workspace controls',
+			alt: 'Manager dashboard with workspace controls',
 			targets: [
 				{
 					label: 'Owner workspace',
@@ -46,13 +46,13 @@
 			]
 		},
 		{
-			title: 'Admin controls',
+			title: 'Manager controls',
 			src: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard control center',
+			alt: 'Manager dashboard control center',
 			targets: [
 				{
 					label: 'Feature setup',
-					description: 'Admins enable the app areas the business will use, then configure departments, roles, documents, menus, and lists.',
+					description: 'Managers enable the app areas the business will use, then configure departments, roles, documents, menus, and lists.',
 					focus: { x: 25, y: 42, w: 50, h: 7 }
 				}
 			]
@@ -60,7 +60,7 @@
 		{
 			title: 'Employee onboarding',
 			src: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard representing employee onboarding controls',
+			alt: 'Manager dashboard representing employee onboarding controls',
 			targets: [
 				{
 					label: 'Invite + packet',
@@ -72,7 +72,7 @@
 		{
 			title: 'Schedule builder',
 			src: '/marketing/app/scheduling-builder.png',
-			alt: 'Admin schedule builder page',
+			alt: 'Manager schedule builder page',
 			targets: [
 				{
 					label: 'Weekly coverage',
@@ -126,7 +126,7 @@
 			summary: 'Register the restaurant and create its isolated app environment.',
 			items: ['Enter owner and business information', 'Choose plan path', 'Create the first owner/admin account'],
 			image: '/marketing/app/admin-dashboard.png',
-			alt: 'Admin dashboard overview',
+			alt: 'Manager dashboard overview',
 			position: 'top center'
 		},
 		{
@@ -197,11 +197,11 @@
 		},
 		{
 			q: 'Can owners control which features show up?',
-			a: 'Yes. Admins can enable or hide app areas so the workspace matches the business needs.'
+			a: 'Yes. Managers can enable or hide app areas so the workspace matches the business needs.'
 		},
 		{
 			q: 'How do employees join?',
-			a: 'Admins send an invite. The employee creates their account, completes the assigned onboarding packet, and then uses the app once approved.'
+			a: 'Managers send an invite. The employee creates their account, completes the assigned onboarding packet, and then uses the app once approved.'
 		},
 		{
 			q: 'What onboarding packet items are included?',

@@ -1,5 +1,5 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
-import { isBusinessAdminRole } from '$lib/server/permissions';
+import { hasAdminAccess } from '$lib/server/permissions';
 import type { PageServerLoad } from './$types';
 import { ensureUserPreferencesSchema, markWelcomeTourComplete } from '$lib/server/userPreferences';
 
@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     throw redirect(303, '/login');
   }
 
-  if (isBusinessAdminRole(locals.businessRole)) {
+  if (hasAdminAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
     throw redirect(303, '/welcome/admin');
   }
 

@@ -64,7 +64,9 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
         locals.businessId,
         locals.userId,
         locals.businessRole,
-        record.user_id
+        record.user_id,
+        locals.businessPermissionTemplate,
+        locals.businessCapabilities
       ));
 
     if (record && !canReadEmployeeOnboardingMedia) {

@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { hashedAuditValue } from '$lib/server/security';
 
-import { isBusinessAdminRole } from '$lib/server/permissions';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 type D1 = App.Platform['env']['DB'];
 
@@ -176,12 +176,23 @@ export async function canAccessEmployeeSensitiveData(
   businessId: string,
   actorUserId: string | null | undefined,
   actorBusinessRole: string | null | undefined,
-  targetUserId?: string | null
+  targetUserId?: string | null,
+  actorPermissionTemplate?: string | null,
+  actorCapabilities?: readonly import('$lib/server/permissions').BusinessCapability[] | null
 ) {
   if (!actorUserId || !businessId) return false;
   if (targetUserId && actorUserId === targetUserId) return true;
 
-  if (isBusinessAdminRole(actorBusinessRole)) return true;
+  if (
+    hasBusinessCapability(
+      actorBusinessRole,
+      actorPermissionTemplate,
+      'view_sensitive_employee_data',
+      actorCapabilities
+    )
+  ) {
+    return true;
+  }
 
   const permission = await db
     .prepare(

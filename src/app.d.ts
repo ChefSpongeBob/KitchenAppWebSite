@@ -1,5 +1,6 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { AppFeatureModes } from './lib/features/appFeatures';
+import type { BusinessCapability, BusinessCapabilityOverrides } from './lib/auth/roles';
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
@@ -43,6 +44,8 @@ declare global {
 			businessPlan?: string;
 			businessRole?: string;
 			businessPermissionTemplate?: string;
+			businessCapabilityOverrides?: BusinessCapabilityOverrides;
+			businessCapabilities?: BusinessCapability[];
 			businessOnboardingComplete?: boolean;
 		}
 	}

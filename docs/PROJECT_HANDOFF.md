@@ -15,9 +15,12 @@ Use this as the single source of truth for continuing Crimini without guessing o
 
 - Keep UI copy short. No obvious helper text or verbose subtitles.
 - Do not rewrite large UI sections without a plan first.
+- Every new or edited component must use the current Crimini UI system: cream, white, charcoal, mushroom branding, restrained surfaces, faded divider lines, compact controls, purposeful icons, and the established light/dark app themes.
+- Do not introduce old rounded floating-card styling, glow-heavy panels, oversized buttons, nested cards, or unrelated visual patterns.
+- Preserve responsive behavior for desktop and mobile whenever a component or page is changed.
 - Do not run remote DB commands unless explicitly approved.
 - Preserve business/tenant scoping on every page, action, upload, and endpoint.
-- Admin authority comes from business membership role, not global user role.
+- Manager authority comes from business membership role, not global user role.
 - Every feature must be real: no fake routes, hardcoded data, or UI-only plumbing.
 
 ## Core Wiring
@@ -54,6 +57,8 @@ npm.cmd run check
 npm.cmd run build
 npm.cmd run mobile:check
 npm.cmd run test:tenant-authority
+npm.cmd run test:authorization-capabilities
+npm.cmd run test:operational-events
 npm.cmd run test:tenant-isolation
 npm.cmd run test:iot-device-auth
 npm.cmd run test:media-access
@@ -110,150 +115,242 @@ Before production migrations, Create/confirm backup before migrations.
 - Alert watchlist uses the same events above during deploy and smoke testing.
 - Backup And Restore: export D1 before migrations or destructive tenant lifecycle changes; prefer forward-fix SQL plus R2 object recovery from latest known-good state.
 
+## Current Progress
+
+- Active phase: `5. Temperature monitoring completion`
+- Status: In progress
+- Current pass: Added Phase 5 temperature monitoring foundation with per-sensor alert rules, high/low alert evaluation on ingest, recovered state handling, active alert acknowledgements, a protected stale/offline processor, schema readiness, admin sensor controls, and a Phase 5 validation gate.
+- Return point after branch work: Continue Phase 5 by testing with real sensor data, tuning default thresholds/cooldowns, wiring scheduled Cloudflare calls for stale/offline processing, adding temp history/export depth, and validating live polling under production Cloudflare.
+- Last verified: 2026-06-05 full static validation passed, including build, mobile readiness, authorization, operational events, email system, native push foundation, temperature monitoring, tenant isolation, IoT auth, media access, production schema, scale, auth abuse, billing, store, Cloudflare, security headers, and observability. Local migrations are current through `0078_temperature_monitoring.sql`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
+- Completed phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`
+
 ## Launch Completion List
 
-Next Phase List: this section is the active launch checklist.
+This is the only active completion checklist. Work it in order and do not create additional scattered task lists.
+Next Phase List refers to this launch completion list.
 
-Work this list in order. Do not branch into unrelated polish unless a blocker appears.
+Current audit status:
 
-1. Phase 14: full local manual test
-- Test every major route locally with fresh admin and employee accounts.
-- Confirm login, register, invite, onboarding, logout, reset password, continue signed-in, and tenant switching.
-- Confirm admin-only routes stay blocked from regular users.
-- Confirm feature hiding removes sidebar and app access correctly.
-- Confirm no visible hardcoded or test data remains.
+- Core app routes, tenant scoping, authenticated local smoke, static validation, IoT authentication, private media, security headers, observability, and local migrations pass.
+- The system is not feature-complete until granular permissions, operational notifications, native push, temperature alert rules, billing webhook processing, report depth, live integrations, and store testing are complete.
 
-2. Production database readiness
-- Confirm all D1 migrations are applied locally and remotely.
-- Run schema readiness against production Cloudflare bindings.
-- Confirm every tenant-owned table is business scoped.
-- Confirm sensitive HR, tax, identity, and bank fields use encrypted storage.
-- Confirm delete/cancel flows preserve only required trial-abuse records.
+1. Authorization and permission model
+- Define exact capabilities for owner, manager, general manager, FOH manager, BOH manager, hourly manager, shift lead, consultant, contractor, staff, and user.
+- Enforce business membership role and permission template on every privileged page, action, endpoint, and export.
+- Enforce manager department scope in schedule builder, schedule approvals, templates, labor targets, and employee scheduling.
+- Keep consultants and contractors read-only where intended, including reports and vendors.
+- Confirm regular users cannot access admin, HR-sensitive, vendor, report, device setup, or billing administration actions.
+- Add automated role and department access tests.
 
-3. Cloudflare production binding pass
-- Confirm Pages project has correct D1, R2 document bucket, R2 camera bucket, env vars, and secrets.
-- Confirm preview and production bindings are separated correctly.
-- Confirm `criminiops.com` deployment points to the intended Pages project.
-- Confirm no old copied-app bindings remain.
+2. Operational event and notification foundation
+- Create a business-scoped event or outbox system for operational changes.
+- Record events for schedule publish, shift offers, shift requests, approvals, declines, time off, list completion, onboarding, temperature alerts, device state, and billing changes.
+- Add deduplication, retry status, failure status, timestamps, and audit metadata.
+- Keep delivery event-driven instead of adding more page polling.
+- Add retention rules for delivered and failed events.
 
-4. Email system
+3. Email system completion
 - Confirm Resend domain and sender are verified.
 - Confirm `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and reply-to are set in Cloudflare.
-- Test invite emails, password reset emails, employee onboarding emails, and failure handling.
-- Remove any user-facing technical config warnings.
+- Test invite, approval, password reset, and employee onboarding emails.
+- Add operational emails for schedule publishing, shift activity, time-off decisions, onboarding status, and configured alerts.
+- Respect each user's `email_updates` preference.
+- Add delivery failure logging and retry handling.
+- Remove any user-facing technical configuration warnings.
 
-5. Invite and employee onboarding
-- Test owner/admin invites.
-- Test employee invite flow from email link to onboarding to login.
-- Confirm employee onboarding skips business pricing.
-- Confirm employee packet fields, document uploads, profile attachment, and admin review work.
-- Confirm manager/admin role behavior is clean and not duplicated.
+4. Native push notification system
+- Add Capacitor push notification support for iOS and Android.
+- Store device tokens per user, business, platform, and device.
+- Add opt-in, opt-out, token refresh, logout cleanup, and revoked-device handling.
+- Deliver temperature, schedule, shift, approval, and other configured operational alerts.
+- Respect user notification preferences.
+- Test APNs and FCM delivery on real devices.
+- Phase 4 remaining needs: configure APNs/FCM credentials, wire push delivery into the operational event processor, verify token refresh on real iOS/Android devices, revoke only the current device on logout, and test live event-triggered notifications after native builds exist.
 
-6. Billing and store payment foundation
-- Finalize Apple and Google product IDs.
-- Create subscription tiers in App Store Connect and Google Play Console.
-- Match in-app product IDs to Crimini billing config.
-- Test native purchase, restore purchase, billing status, entitlement activation, trial conversion, and cancellation.
-- Confirm webhook endpoints require `BILLING_WEBHOOK_TOKEN`.
-
-7. Apple App Store readiness
-- Set final bundle ID, app name, screenshots, privacy policy, support URL, and account deletion URL.
-- Add in-app subscriptions in App Store Connect.
-- Confirm paid digital service access uses Apple In-App Purchase where required.
-- Confirm subscription screen clearly shows price, term, included features, and restore option.
-- Submit IAP products with the app build.
-
-8. Google Play Store readiness
-- Set final package name, app listing, screenshots, privacy policy, data safety, and account deletion URL.
-- Add Play Billing subscription products.
-- Confirm purchase and restore logic works in Android build.
-- Confirm production and sandbox product IDs are not mixed.
-- Prepare internal testing track before public release.
-
-9. Capacitor/native app build
-- Generate Android and iOS builds.
-- Confirm app icons, launch/loading behavior, permissions, camera/media usage, and webview behavior.
-- Confirm login/session persistence works inside native shells.
-- Confirm store billing bridge works on device.
-- Confirm external links, PDFs, uploaded menus/docs, and account deletion open correctly.
-
-10. Temp sensor system
-- Confirm device provisioning creates per-business device credentials.
-- Confirm device auth rejects wrong business/device keys.
+5. Temperature monitoring completion
+- Add per-business and per-sensor high and low thresholds instead of hardcoded display thresholds.
+- Add stale, offline, recovery, high-temperature, and low-temperature events.
+- Add alert cooldown, deduplication, acknowledgement, and recovery behavior.
+- Add temperature history and export.
+- Confirm device provisioning creates unique serials and per-business device credentials.
+- Confirm device auth rejects wrong business, wrong serial, revoked device, and invalid credentials.
 - Confirm temp ingest stores under the correct business.
-- Confirm dashboard cards, temp page, alerts, node names, and history update correctly.
-- Test live polling under production Cloudflare.
+- Confirm dashboard cards, temp page, node names, history, and alerts update correctly.
+- Test live polling and sustained ingest under production Cloudflare.
+- Phase 5 remaining needs: connect scheduled Cloudflare processing for stale/offline checks, test real sensor ingest against provisioned serials, tune thresholds by sensor type, add richer temperature history/export views, and verify live polling behavior on the deployed site.
 
-11. Camera system
-- Confirm camera device provisioning and revoke flow.
-- Confirm camera upload endpoint accepts only valid image/video uploads.
-- Confirm R2 media is private and business scoped.
+6. Scheduling workflow completion
+- Test employee departments, roles, availability, time off, templates, drafts, autosave, publish, labor warnings, open shifts, shift offers, approvals, and My Schedule.
+- Confirm managers can only schedule and approve within allowed departments and permissions.
+- Confirm publish can run without requiring a separate draft save first.
+- Add schedule publish, shift offer, shift request, approval, decline, and time-off notifications.
+- Decide whether Crimini needs true reciprocal shift swaps in addition to shift transfer and claim.
+- Confirm employee schedule visibility and every schedule mutation are tenant scoped.
+- Confirm schedule publish history remains available for the required retention period.
+
+7. Lists, completion history, and alerts
+- Confirm checklist, prep, inventory, and order lists can be created, edited, deleted, submitted, and restored where intended.
+- Detect full list completion and record who completed each item.
+- Add configured completion alerts for prep lists, checklists, inventory, and orders.
+- Confirm item attachments open the linked recipe or SOP directly.
+- Add checklist history reporting.
+- Confirm two-week prep history includes submitter and task executor detail.
+- Confirm history and alert writes are business scoped and efficient.
+
+8. Reports and exports completion
+- Add executor detail to list history.
+- Add checklist, time-off, shift-request, temperature, onboarding, and other useful operational exports.
+- Confirm consultant and contractor report access is read-only and tenant scoped.
+- Add pagination, chunking, or asynchronous exports so large reports do not silently stop at fixed row limits.
+- Confirm schedule history supports the required retention period.
+- Test CSV files with real data and external spreadsheet tools.
+
+9. Billing and store subscription lifecycle
+- Finalize Apple and Google product IDs.
+- Create subscription tiers and add-ons in App Store Connect and Google Play Console.
+- Match store product IDs to Crimini billing configuration.
+- Keep native purchase submissions pending until Apple or Google verification succeeds.
+- Process Apple and Google webhook events into entitlement renewals, cancellations, refunds, grace periods, billing failures, and expirations.
+- Add webhook retry, failure monitoring, deduplication, and processed status updates.
+- Confirm webhook endpoints require `BILLING_WEBHOOK_TOKEN`.
+- Test native purchase, restore, billing status, entitlement activation, trial conversion, cancellation, and data retention.
+- Remove or rename remaining billing placeholder language before launch.
+
+10. Invite, employee onboarding, and HR completion
+- Test owner, manager, employee, consultant, and contractor invites.
+- Test employee invite flow from email link to onboarding to login.
+- Confirm employee onboarding skips business pricing and keeps valid entered data after validation errors.
+- Confirm employee packet fields, in-app forms, source document uploads, profile attachment, admin review, changes requested, approval, and document access work.
+- Confirm contractors do not receive employee tax onboarding packets.
+- Confirm sensitive HR, tax, identity, and bank fields use encrypted storage and audited reads.
+- Confirm HR-sensitive permissions are enforced.
+- Review I-9, W-4, state forms, signatures, retention, and employer procedures with qualified legal or payroll guidance.
+- Confirm legacy admin aliases resolve cleanly to Manager behavior without duplicated user-facing roles.
+
+11. Creator, editor, and legacy route consolidation
+- Confirm `/admin/creator` is the intended source of truth for list, recipe, document, menu, category, and attachment creation.
+- Retire or redirect duplicate legacy editor routes without losing valid functions.
+- Confirm feature hiding applies to shared creator routes and not only sidebar links.
+- Remove dead compatibility code, old copied-app bindings, unused assets, visible hardcoded data, and test data.
+- Review remaining internal legacy naming and rename only where it is safe and useful.
+
+12. Core feature action test
+- Lists: create, edit, delete checklist, prep, inventory, and order lists.
+- Docs: upload PDFs, create categories, view docs, delete files, and replace files.
+- Menus: upload separately from docs and confirm homepage menu card reflects active menus.
+- Recipes: create categories, add recipes, edit, delete, view by category, and attach to list items.
+- ToDo: create, assign, complete, reopen, delete, and verify feature hiding.
+- Whiteboard: submit, vote, review, approve, reject, and cleanup.
+- Specials: create and confirm the homepage special area stays clean.
+- Announcements and spotlight: edit permissions and homepage display.
+- Vendors, reminders, conversions, and business registry: confirm save, edit, delete, access, and tenant behavior.
+
+13. Camera system completion
+- Confirm camera device provisioning, unique serial registration, naming, and revoke flow.
+- Confirm camera upload endpoint accepts only valid authenticated image and video uploads.
+- Confirm R2 media is private, business scoped, and no-store.
 - Confirm camera dashboard, preview, events, delete, and retention cleanup work.
+- Confirm wrong business, wrong serial, revoked device, and invalid credentials are rejected.
 - Test real device or simulator uploads against production.
 
-12. Core feature test
-- Lists: create, edit, delete checklist, prep, inventory, and order lists.
-- Docs: upload PDFs, create categories, view docs, delete/replace files.
-- Menus: upload menus separately from docs and confirm homepage menu card reflects them.
-- Recipes: create categories, add recipes, edit/delete, view by category.
-- ToDo: create, assign, complete, reopen, delete, verify sidebar hiding.
-- Whiteboard: submit, vote, review/approve if needed.
-- Specials: create one or multiple specials and confirm homepage card stays clean.
-- Announcements and spotlight: edit permissions and homepage display.
-
-13. Scheduling final test
-- Test employee departments, roles, availability, time off, templates, drafts, publish, labor warnings, shift swaps, shift offers, manager approvals, and My Schedule.
-- Confirm managers/admins only schedule within allowed permissions.
-- Confirm publish can run without requiring draft save first.
-- Confirm employee schedule visibility is tenant scoped.
-
-14. Security, abuse, and access hardening
-- Run auth abuse checks.
-- Test wrong password, wrong email, too many attempts, expired reset token, invalid invite, reused invite, and session logout.
+14. Authentication, session, abuse, and account lifecycle test
+- Test every major route locally with fresh admin and employee accounts.
+- Confirm login, register, invite, onboarding, logout, reset password, continue signed-in, tenant switching, and account deletion.
+- Test wrong password, wrong email, too many attempts, expired reset token, invalid invite, reused invite, inactive user, revoked session, and revoked device.
+- Confirm feature hiding removes sidebar visibility and direct route access.
+- Confirm delete and trial-cancel flows preserve only required trial-abuse records.
 - Confirm no admin endpoint accepts regular user access.
-- Confirm public API endpoints require correct auth, device key, or webhook token.
-- Confirm account deletion and data retention behavior.
+- Confirm every public API endpoint requires the correct user auth, device credential, internal token, or webhook token.
 
-15. Performance and scale pass
-- Run Cloudflare readiness, scale performance, tenant isolation, production schema, media access, and build checks.
-- Inspect heavy routes for payload size.
-- Confirm polling is limited and visibility aware.
-- Confirm pages do not load full document/media content when only listings are needed.
-- Confirm R2 media streams instead of buffering large files.
+15. Production database and Cloudflare readiness
+- Confirm all D1 migrations are applied locally and remotely.
+- Create or confirm a backup before production migrations.
+- Run schema readiness against production Cloudflare bindings.
+- Confirm every tenant-owned table is business scoped.
+- Confirm Pages has the correct D1, document R2 bucket, camera R2 bucket, environment variables, and secrets.
+- Confirm preview and production bindings are separated correctly.
+- Confirm `criminiops.com` points to the intended Pages project when the hold is lifted.
+- Confirm no old copied-app Cloudflare resources remain.
 
-16. UI production polish
-- Sweep app pages for Crimini theme consistency.
-- Fix light-mode contrast everywhere.
-- Confirm mobile layouts for app, admin, schedule, onboarding, docs, menus, billing, and login.
-- Replace outdated screenshots when better app screenshots are ready.
-- Confirm no over-worded helper copy or technical messages remain.
+16. Performance, scale, and reliability
+- Run Cloudflare readiness, scale performance, tenant isolation, production schema, media access, build, auth abuse, billing, security header, and observability checks.
+- Inspect heavy routes for payload size and query count.
+- Confirm polling is limited, visibility aware, and not used for event delivery.
+- Confirm pages do not load full document or media content when only listings are needed.
+- Confirm R2 media streams where practical instead of buffering large files.
+- Load test schedules, reports, list submissions, temp ingest, camera activity, and concurrent tenant use.
+- Confirm cleanup and retention jobs are bounded and do not create excessive D1 writes.
 
-17. Legal, store, and public pages
-- Finalize privacy policy, terms, billing terms, subscription cancellation info, account deletion page, support contact, and company footer.
-- Confirm Apple/Google data safety answers match actual collection.
-- Confirm trial, payment, cancellation, and liability language is visible where needed.
-- Keep public site offline until trademark/LLC timing is safe.
+17. Observability, backup, and incident readiness
+- Configure alerts for schema failures, tenant denials, billing failures, repeated 500s, media denials, device auth failures, temperature alerts, and notification delivery failures.
+- Confirm structured logs provide enough business, route, event, and failure context without exposing sensitive data.
+- Confirm D1 backup, migration rollback, forward-fix, and R2 recovery procedures.
+- Confirm a failed deployment can be rolled back safely.
 
-18. Production smoke test
-- Deploy to Cloudflare.
-- Create test business tenant.
-- Invite admin and employee.
-- Upload docs/menu.
-- Create schedule, list, ToDo, special, announcement, temp/camera test event.
-- Purchase/restore test subscription in sandbox.
-- Confirm tenant data isolation with a second test business.
+18. Crimini UI, accessibility, and responsive polish
+- Use the current Crimini UI system for every component changed during this completion plan.
+- Sweep all app, admin, auth, onboarding, billing, schedule, report, device, docs, menu, and marketing pages for theme consistency.
+- Remove old rounded floating-card styling, glow-heavy panels, oversized buttons, nested cards, and mismatched visual patterns.
+- Fix light-mode and dark-mode contrast everywhere.
+- Confirm desktop and mobile layouts, including complex schedule and admin pages.
+- Standardize empty, loading, error, disabled, success, and permission-denied states.
+- Keep UI copy short and remove technical or over-explained user-facing text.
+- Check keyboard navigation, focus states, labels, contrast, and screen-reader behavior.
+- Replace outdated marketing screenshots when final app screenshots are ready.
 
-19. Store internal testing
-- Upload Android internal testing build.
-- Upload iOS TestFlight build.
+19. Native app release preparation
+- Configure a working JDK and Android build environment.
+- Configure Android signing keystore values and secure release signing.
+- Enable Android release minification if practical.
+- Generate Android and iOS release builds.
+- Confirm final app icons, launch/loading behavior, permissions, camera/media usage, and WebView behavior.
+- Confirm login and session persistence inside native shells.
+- Confirm store billing bridge, push notifications, external links, PDFs, uploaded menus/docs, and account deletion work on real devices.
+
+20. Apple App Store readiness
+- Set final bundle ID, app name, listing, screenshots, privacy policy, support URL, and account deletion URL.
+- Add in-app subscriptions and add-ons in App Store Connect.
+- Confirm paid digital service access uses Apple In-App Purchase where required.
+- Confirm subscription screen clearly shows price, term, included features, cancellation, and restore.
+- Complete Apple privacy disclosures and submit IAP products with the app build.
+
+21. Google Play Store readiness
+- Set final package name, app listing, screenshots, privacy policy, data safety, and account deletion URL.
+- Add Play Billing subscription products and add-ons.
+- Confirm production and sandbox product IDs are not mixed.
+- Confirm purchase, restore, notification, and entitlement behavior in Android builds.
+- Prepare the internal testing track before public release.
+
+22. Legal, public site, and business readiness
+- Finalize privacy policy, terms, billing terms, subscription cancellation information, account deletion page, support contact, and company footer.
+- Confirm Apple and Google data safety answers match actual collection and retention.
+- Confirm trial, payment, cancellation, liability, employee data, and device monitoring language is accurate.
+- Keep the public site offline until trademark and LLC timing is safe.
+
+23. Production smoke and multi-tenant validation
+- Deploy to Cloudflare after the domain hold is lifted.
+- Run `npm.cmd run schema:readiness:prod` and `npm.cmd run smoke:prod`.
+- Run deferred Phase 3 real email flow tests for invite, approval, password reset, employee onboarding, schedule, shift, time-off, list, billing, temperature, and camera emails.
+- Run deferred Phase 4 real-device push tests for native opt-in, token refresh, logout/device revocation, APNs delivery, FCM delivery, and event-triggered operational alerts.
+- Create at least two test business tenants with different roles and employees.
+- Invite admin, manager, employee, consultant, and contractor accounts.
+- Upload docs and menus.
+- Create schedules, lists, ToDos, specials, announcements, temp events, and camera events.
+- Purchase and restore test subscriptions in sandbox.
+- Confirm tenant data isolation and access denial across every major system.
+
+24. Store internal testing
+- Upload an Android internal testing build.
+- Upload an iOS TestFlight build.
 - Test real purchase sandbox flows on both platforms.
-- Test onboarding, invite links, deep links, logout, reset password, and media uploads.
+- Test onboarding, invite links, deep links, logout, reset password, media uploads, push notifications, and account deletion.
 - Fix store-specific issues before public review.
 
-20. Launch candidate
+25. Launch candidate
 - Freeze feature changes.
-- Run full validation suite.
-- Push final GitHub commit.
-- Deploy final Cloudflare build.
+- Run the full validation suite.
+- Complete the final manual test matrix.
+- Push the final GitHub commit.
+- Deploy the final Cloudflare build.
 - Submit Apple and Google builds.
-- Keep rollback plan ready.
+- Keep backup, incident, and rollback plans ready.

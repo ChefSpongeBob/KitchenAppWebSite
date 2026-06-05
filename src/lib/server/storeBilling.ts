@@ -1,4 +1,5 @@
 import { dev } from '$app/environment';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 
 type D1 = App.Platform['env']['DB'];
 
@@ -326,6 +327,25 @@ export async function recordStorePurchaseEvent(
 			now
 		)
 		.run();
+	await recordOperationalEventBestEffort(db, {
+		businessId: args.businessId,
+		eventType: `billing.store_purchase.${args.eventType}`,
+		category: 'billing',
+		actorUserId: args.userId,
+		targetUserId: args.userId,
+		subjectType: 'store_purchase',
+		subjectId: id,
+		title: 'Store purchase event',
+		dedupeKey: args.transactionId
+			? `store_purchase:${args.store}:${args.transactionId}:${args.eventType}`
+			: null,
+		payload: {
+			store: args.store,
+			productId: args.productId,
+			eventType: args.eventType,
+			verificationStatus: args.verificationStatus
+		}
+	});
 	return id;
 }
 

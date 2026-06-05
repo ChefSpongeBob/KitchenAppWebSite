@@ -27,7 +27,7 @@
 
   $: restrictedUsers = data.users.filter((user) => user.is_active !== 1);
   $: activeUsers = data.users.filter((user) => user.is_active === 1);
-  $: adminUsers = activeUsers.filter((user) => isBusinessAdminRole(user.role));
+  $: managerUsers = activeUsers.filter((user) => isBusinessAdminRole(user.role));
   $: filteredStaff = activeUsers.filter((user) => {
     const query = staffSearch.trim().toLowerCase();
     if (!query) return true;
@@ -79,8 +79,8 @@
           <strong>{activeUsers.length}</strong>
         </div>
         <div>
-          <span>Admins</span>
-          <strong>{adminUsers.length}</strong>
+          <span>Managers</span>
+          <strong>{managerUsers.length}</strong>
         </div>
         <div>
           <span>Restricted</span>

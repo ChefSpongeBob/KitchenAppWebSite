@@ -3,6 +3,7 @@ import { requireAdmin } from '$lib/server/admin';
 import {
   addDays,
   applyScheduleTemplateToWeek,
+  buildWeekDays,
   approveScheduleShiftOffer,
   approveScheduleOpenShiftRequest,
   approveScheduleTimeOffRequest,
@@ -16,6 +17,7 @@ import {
   loadScheduleAvailabilityByUser,
   loadScheduleAssignableUsers,
   loadScheduleLaborTargets,
+  loadScheduleManagerDepartments,
   loadScheduleOpenShiftRequestsForWeek,
   loadScheduleOpenShiftsForWeek,
   loadScheduleSettings,
@@ -73,10 +75,27 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     loadScheduleTemplates(db, locals.businessId),
     loadScheduleLaborTargets(db, weekStart, locals.businessId)
   ]);
+  const allowedDepartments = await loadScheduleManagerDepartments(db, locals, locals.businessId ?? '');
+  const allowedDepartmentSet = new Set(allowedDepartments);
+  const hasAllDepartmentAccess = settings.departments.every((department) => allowedDepartmentSet.has(department));
+  const visibleUsers = users.filter((user) =>
+    user.approvedDepartments.some((department) => allowedDepartmentSet.has(department))
+  );
+  const visibleShifts = schedule.shifts.filter((shift) => allowedDepartmentSet.has(shift.department));
+  const visibleUserIds = new Set(visibleUsers.map((user) => user.id));
+  const visibleSettings = {
+    ...settings,
+    departments: settings.departments.filter((department) => allowedDepartmentSet.has(department)),
+    roleOptionsByDepartment: Object.fromEntries(
+      Object.entries(settings.roleOptionsByDepartment).filter(([department]) =>
+        allowedDepartmentSet.has(department)
+      )
+    )
+  };
 
   const availabilityByUser = await loadScheduleAvailabilityByUser(
     db,
-    users.map((user) => user.id),
+    visibleUsers.map((user) => user.id),
     locals.businessId
   );
 
@@ -84,15 +103,15 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     weekStart,
     prevWeekStart: addDays(weekStart, -7),
     nextWeekStart: addDays(weekStart, 7),
-    users,
+    users: visibleUsers,
     week: schedule.week
       ? {
           status: schedule.week.status
         }
       : null,
-    days: schedule.days,
-    rosterUserIds: schedule.rosterUserIds,
-    offers: offers.map((offer) => ({
+    days: buildWeekDays(weekStart, visibleShifts),
+    rosterUserIds: schedule.rosterUserIds.filter((userId) => visibleUserIds.has(userId)),
+    offers: offers.filter((offer) => allowedDepartmentSet.has(offer.department)).map((offer) => ({
       shiftId: offer.shiftId,
       shiftDate: offer.shiftDate,
       department: offer.department,
@@ -109,7 +128,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       requestedByUserName: offer.requestedByUserName,
       requestedByUserEmail: offer.requestedByUserEmail
     })),
-    openShifts: openShifts.map((shift) => ({
+    openShifts: openShifts.filter((shift) => allowedDepartmentSet.has(shift.department)).map((shift) => ({
       id: shift.id,
       shiftDate: shift.shiftDate,
       department: shift.department,
@@ -117,7 +136,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       startTime: shift.startTime,
       endLabel: shift.endLabel
     })),
-    openShiftRequests: openShiftRequests.map((request) => ({
+    openShiftRequests: openShiftRequests.filter((request) => allowedDepartmentSet.has(request.department)).map((request) => ({
       requestId: request.requestId,
       requestedByUserName: request.requestedByUserName,
       requestedByUserEmail: request.requestedByUserEmail,
@@ -129,7 +148,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       startTime: request.startTime,
       endLabel: request.endLabel
     })),
-    timeOffRequests: timeOffRequests.map((request) => ({
+    timeOffRequests: timeOffRequests.filter((request) => visibleUserIds.has(request.userId)).map((request) => ({
       id: request.id,
       userId: request.userId,
       userName: request.userName,
@@ -139,7 +158,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       note: request.note,
       status: request.status
     })),
-    templates: templates.map((template) => ({
+    templates: templates.filter((template) =>
+      allowedDepartmentSet.has(template.department) || (hasAllDepartmentAccess && !template.department)
+    ).map((template) => ({
       id: template.id,
       name: template.name,
       shiftCount: template.shiftCount
@@ -150,7 +171,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       targetLaborPercent: target.targetLaborPercent,
       averageHourlyRate: target.averageHourlyRate
     })),
-    settings,
+    settings: visibleSettings,
     availabilityByUser: Object.fromEntries(availabilityByUser)
   };
 };

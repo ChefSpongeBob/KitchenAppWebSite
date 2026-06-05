@@ -78,6 +78,7 @@
     preferences: {
       emailUpdates: boolean;
       smsUpdates: boolean;
+      pushUpdates: boolean;
       darkMode: boolean;
       language: string;
     };
@@ -745,6 +746,13 @@
             <input type="checkbox" name="sms_updates" value="1" checked={data.preferences.smsUpdates} />
             <div>
               <strong>SMS Notifications</strong>
+            </div>
+          </label>
+
+          <label class="toggle-card">
+            <input type="checkbox" name="push_updates" value="1" checked={data.preferences.pushUpdates} />
+            <div>
+              <strong>Push Notifications</strong>
             </div>
           </label>
 

@@ -5,7 +5,9 @@ import { requireBusinessId } from '$lib/server/tenant';
 import { loadVendors } from '$lib/server/vendors';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (!hasVendorAccess(locals.businessRole)) throw redirect(303, '/app');
+  if (!hasVendorAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
+    throw redirect(303, '/app');
+  }
   const db = locals.DB;
   if (!db) return { vendors: [] };
 

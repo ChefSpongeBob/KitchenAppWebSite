@@ -17,12 +17,13 @@ const hooks = read('src/hooks.server.ts');
 const login = read('src/routes/login/+page.server.ts');
 const admin = read('src/lib/server/admin.ts');
 const roles = read('src/lib/auth/roles.ts');
-const adminRoleBlock = roles.match(/const ADMIN_BUSINESS_ROLES[\s\S]*?\]\);/)?.[0] ?? '';
 
 assertCheck(
-  'hooks derives app role from business role',
-  hooks.includes('event.locals.userRole = effectiveAppRoleFromBusinessRole(businessContext.businessRole);'),
-  'hooks.server.ts must set locals.userRole from the active business membership role.'
+  'hooks derives app role from business role and permission template',
+  hooks.includes('event.locals.userRole = effectiveAppRoleFromBusinessRole(') &&
+    hooks.includes('businessContext.businessRole,') &&
+    hooks.includes('businessContext.businessPermissionTemplate'),
+  'hooks.server.ts must set locals.userRole from the active business membership role and permission template.'
 );
 
 assertCheck(
@@ -33,9 +34,10 @@ assertCheck(
 );
 
 assertCheck(
-  'login active session display uses business role',
-  login.includes('const effectiveRole = effectiveAppRoleFromBusinessRole(businessRole);'),
-  'Login continue-session role display should match business-scoped authority.'
+  'login active session display uses business role and permission template',
+  login.includes('const effectiveRole = effectiveAppRoleFromBusinessRole(') &&
+    login.includes('locals.businessPermissionTemplate'),
+  'Login continue-session role display should match business-scoped authority and permission template.'
 );
 
 assertCheck(
@@ -45,20 +47,15 @@ assertCheck(
 );
 
 assertCheck(
-  'permission helper defines admin business roles',
-  roles.includes("'owner'") &&
-    roles.includes("'admin'") &&
-    roles.includes("'general_manager'") &&
-    roles.includes("'foh_manager'") &&
-    roles.includes("'boh_manager'") &&
-    roles.includes("'hourly_manager'") &&
-    roles.includes('const REPORT_ACCESS_ROLES') &&
-    roles.includes('const VENDOR_ACCESS_ROLES') &&
-    !adminRoleBlock.includes("'consultant'") &&
-    !adminRoleBlock.includes("'contractor'") &&
-    !adminRoleBlock.includes("'staff'") &&
-    !adminRoleBlock.includes("'shift_lead'"),
-  'Owner/admin/manager-family roles should map to app admin; consultant, contractor, staff, shift lead, and user should not.'
+  'permission helper normalizes legacy managers into manager authority',
+  roles.includes("normalized === 'admin'") &&
+    roles.includes("normalized === 'general_manager'") &&
+    roles.includes("normalized === 'foh_manager'") &&
+    roles.includes("normalized === 'boh_manager'") &&
+    roles.includes("normalized === 'hourly_manager'") &&
+    roles.includes("return 'manager'") &&
+    roles.includes('resolveBusinessCapabilities'),
+  'Legacy management memberships must remain compatible while effective capabilities determine authority.'
 );
 
 const failed = checks.filter((check) => !check.passed);

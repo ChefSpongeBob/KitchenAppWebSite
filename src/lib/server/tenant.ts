@@ -27,6 +27,8 @@ const TENANT_TABLES = [
   'daily_specials_editors',
   'sensor_nodes',
   'temps',
+  'temperature_sensor_settings',
+  'temperature_alert_events',
   'camera_events',
   'camera_sources',
   'schedule_weeks',
@@ -56,6 +58,9 @@ const TENANT_TABLES = [
   'store_billing_placeholders',
   'business_store_entitlements',
   'store_purchase_events',
+  'operational_events',
+  'operational_event_delivery_attempts',
+  'push_notification_devices',
   'legal_agreements',
   'app_feature_flags_business',
   'iot_devices'

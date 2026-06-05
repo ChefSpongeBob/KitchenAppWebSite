@@ -5,6 +5,13 @@ import { ensureCameraSchema } from '$lib/server/camera';
 import { loadIoTDevices, provisionIoTDevice, revokeIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 import { normalizeDeviceSerial, sensorNodeIdFromSerial } from '$lib/server/temperatureSensors';
+import {
+  acknowledgeTemperatureAlert,
+  defaultTemperatureSetting,
+  loadActiveTemperatureAlerts,
+  loadTemperatureSensorSettings,
+  saveTemperatureSensorSetting
+} from '$lib/server/temperatureMonitoring';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
@@ -15,12 +22,14 @@ export const load: PageServerLoad = async ({ locals }) => {
   await ensureCameraSchema(db);
   await ensureTenantSchema(db, true);
 
-  const [nodeNames, iotDevices] = await Promise.all([
+  const [nodeNames, iotDevices, sensorSettings, activeAlerts] = await Promise.all([
     loadAdminNodeNames(db, businessId),
-    loadIoTDevices(db, businessId)
+    loadIoTDevices(db, businessId),
+    loadTemperatureSensorSettings(db, businessId),
+    loadActiveTemperatureAlerts(db, businessId)
   ]);
 
-  return { nodeNames, iotDevices };
+  return { nodeNames, iotDevices, sensorSettings, activeAlerts };
 };
 
 export const actions: Actions = {
@@ -90,6 +99,52 @@ export const actions: Actions = {
       success: true,
       deviceName: displayName
     };
+  },
+
+  save_sensor_settings: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = requireBusinessId(locals);
+
+    const formData = await request.formData();
+    const sensorId = Number(formData.get('sensor_id'));
+    const defaults = defaultTemperatureSetting(sensorId);
+    try {
+      await saveTemperatureSensorSetting(db, {
+        businessId,
+        sensorId,
+        highThreshold: Number(formData.get('high_threshold') ?? defaults.high_threshold),
+        lowThreshold: Number(formData.get('low_threshold') ?? defaults.low_threshold),
+        staleAfterMinutes: Number(formData.get('stale_after_minutes') ?? defaults.stale_after_minutes),
+        offlineAfterMinutes: Number(formData.get('offline_after_minutes') ?? defaults.offline_after_minutes),
+        alertCooldownMinutes: Number(formData.get('alert_cooldown_minutes') ?? defaults.alert_cooldown_minutes),
+        isAlertingEnabled: String(formData.get('is_alerting_enabled') ?? '0') === '1',
+        updatedBy: locals.userId ?? null
+      });
+    } catch (error) {
+      return fail(400, { error: error instanceof Error ? error.message : 'Alert rules could not be saved.' });
+    }
+
+    return { success: true };
+  },
+
+  acknowledge_alert: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = requireBusinessId(locals);
+
+    const formData = await request.formData();
+    const alertId = String(formData.get('alert_id') ?? '').trim();
+    if (!alertId) return fail(400, { error: 'Missing alert.' });
+
+    await acknowledgeTemperatureAlert(db, {
+      businessId,
+      alertId,
+      acknowledgedBy: locals.userId ?? null
+    });
+    return { success: true };
   },
 
   add_node_name: ({ request, locals }) => {

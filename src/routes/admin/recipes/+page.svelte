@@ -65,7 +65,7 @@
 </script>
 
 <Layout>
-  <PageHeader title="Admin Recipes" />
+  <PageHeader title="Manager Recipes" />
 
   <section class="workspace">
     <header class="workspace-head">

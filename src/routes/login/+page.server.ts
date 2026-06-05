@@ -108,7 +108,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.first<{ email: string | null; display_name: string | null }>();
 
 		const businessRole = locals.businessRole ?? null;
-		const effectiveRole = effectiveAppRoleFromBusinessRole(businessRole);
+		const effectiveRole = effectiveAppRoleFromBusinessRole(
+			businessRole,
+			locals.businessPermissionTemplate,
+			locals.businessCapabilities
+		);
 
 		return {
 			activeSession: {
