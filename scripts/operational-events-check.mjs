@@ -63,11 +63,23 @@ expect('src/lib/server/schedules.ts', 'schedule workflow records operational eve
     'schedule.shift.offered',
     'schedule.shift.requested',
     'schedule.shift_request.approved',
+    'schedule.shift_request.declined',
     'schedule.open_shift.requested',
     'schedule.open_shift_request.approved',
+    'schedule.open_shift_request.declined',
     'schedule.time_off.requested',
-    'schedule.time_off.approved'
+    'schedule.time_off.approved',
+    'schedule.time_off.declined'
   ].every((eventType) => source.includes(eventType))
+);
+
+expect('src/lib/server/operationalEvents.ts', 'schedule event email routing targets managers and affected employees', (source) =>
+  source.includes('loadRecipientsForScheduleDepartment') &&
+  source.includes('user_schedule_departments') &&
+  source.includes("event.event_type === 'schedule.shift.offered' && !event.target_user_id") &&
+  source.includes("event.event_type === 'schedule.shift.requested' && event.target_user_id") &&
+  source.includes("loadRecipientsWithCapability(db, event, 'manage_schedule')") &&
+  source.includes('uniqueRecipients(')
 );
 
 expect('src/lib/server/preplist.ts', 'list workflow records submission and completion events', (source) =>
@@ -105,8 +117,8 @@ expect('src/lib/server/storeBilling.ts', 'store purchase events feed operational
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks operational event phase', (source) =>
-  source.includes('Completed phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
-  source.includes('Active phase: `5. Temperature monitoring completion`')
+  source.includes('Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
+  source.includes('Active phase: `6. Scheduling workflow completion`')
 );
 
 const failed = checks.filter((check) => !check.ok);

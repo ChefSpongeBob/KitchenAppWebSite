@@ -11,7 +11,7 @@ import {
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 import { recordSchedulePublishSnapshot } from '$lib/server/history';
 import { ensureBusinessSchema } from '$lib/server/business';
-import { normalizeBusinessRole } from '$lib/server/permissions';
+import { hasBusinessCapability, normalizeBusinessRole } from '$lib/server/permissions';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 
 type DB = App.Platform['env']['DB'];
@@ -218,12 +218,16 @@ function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
   );
 }
 
-function canManageSchedule(role: string | null | undefined) {
-  return role === 'owner' || role === 'admin' || role === 'manager';
-}
-
 function requireScheduleManager(locals: App.Locals) {
-  return Boolean(locals.userId && canManageSchedule(locals.userRole));
+  return Boolean(
+    locals.userId &&
+      hasBusinessCapability(
+        locals.businessRole,
+        locals.businessPermissionTemplate,
+        'manage_schedule',
+        locals.businessCapabilities
+      )
+  );
 }
 
 export async function loadScheduleManagerDepartments(
@@ -2921,7 +2925,7 @@ export async function declineScheduleShiftOffer(request: Request, locals: App.Lo
   const existing = await db
     .prepare(
       `
-      SELECT o.id, s.department
+      SELECT o.id, o.requested_by_user_id, s.department
       FROM schedule_shift_offers o
       JOIN schedule_shifts s ON s.id = o.shift_id AND s.business_id = o.business_id
       WHERE o.shift_id = ? AND o.business_id = ? AND o.requested_by_user_id IS NOT NULL
@@ -2929,7 +2933,7 @@ export async function declineScheduleShiftOffer(request: Request, locals: App.Lo
       `
     )
     .bind(shiftId, businessId)
-    .first<{ id: string; department: string }>();
+    .first<{ id: string; requested_by_user_id: string; department: string }>();
   if (!existing) return fail(404, { error: 'That pending request could not be found.' });
   const departmentAccessFailure = await scheduleDepartmentAccessFailure(
     db,
@@ -2950,6 +2954,7 @@ export async function declineScheduleShiftOffer(request: Request, locals: App.Lo
       eventType: 'schedule.shift_request.declined',
       category: 'schedule',
       actorUserId: locals.userId,
+      targetUserId: existing.requested_by_user_id,
       subjectType: 'shift',
       subjectId: shiftId,
       title: 'Shift request declined',
@@ -3109,7 +3114,7 @@ export async function declineScheduleOpenShiftRequest(request: Request, locals: 
   const existing = await db
     .prepare(
       `
-      SELECT o.department
+      SELECT r.requested_by_user_id, o.department
       FROM schedule_open_shift_requests r
       JOIN schedule_open_shifts o ON o.id = r.open_shift_id AND o.business_id = r.business_id
       WHERE r.id = ? AND r.business_id = ?
@@ -3117,7 +3122,7 @@ export async function declineScheduleOpenShiftRequest(request: Request, locals: 
       `
     )
     .bind(requestId, businessId)
-    .first<{ department: string }>();
+    .first<{ requested_by_user_id: string; department: string }>();
   if (!existing) return fail(404, { error: 'That open shift request could not be found.' });
   const departmentAccessFailure = await scheduleDepartmentAccessFailure(
     db,
@@ -3144,6 +3149,7 @@ export async function declineScheduleOpenShiftRequest(request: Request, locals: 
       eventType: 'schedule.open_shift_request.declined',
       category: 'schedule',
       actorUserId: locals.userId,
+      targetUserId: existing.requested_by_user_id,
       subjectType: 'open_shift_request',
       subjectId: requestId,
       title: 'Open shift request declined',

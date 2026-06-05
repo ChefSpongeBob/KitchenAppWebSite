@@ -625,6 +625,55 @@ async function loadRecipientsWithCapability(db: DB, event: OperationalEventRow, 
     .map(({ id, email, display_name }) => ({ id, email, display_name }));
 }
 
+function uniqueRecipients(...groups: EmailRecipient[][]) {
+  const byId = new Map<string, EmailRecipient>();
+  for (const group of groups) {
+    for (const recipient of group) {
+      if (!recipient.id || byId.has(recipient.id)) continue;
+      byId.set(recipient.id, recipient);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+async function loadRecipientsForScheduleDepartment(db: DB, event: OperationalEventRow) {
+  const payload = safeParseJsonObject(event.payload_json);
+  const department = textValue(payload.department);
+  if (!department) return [];
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        u.id,
+        u.email,
+        u.display_name
+      FROM users u
+      JOIN business_users bu
+        ON bu.user_id = u.id
+        AND bu.business_id = ?
+        AND bu.is_active = 1
+      JOIN user_schedule_departments usd
+        ON usd.user_id = u.id
+        AND usd.business_id = bu.business_id
+        AND usd.department = ?
+      LEFT JOIN user_preferences up
+        ON up.user_id = u.id
+      WHERE COALESCE(u.is_active, 1) = 1
+        AND COALESCE(up.email_updates, 1) = 1
+        AND u.email IS NOT NULL
+        AND trim(u.email) <> ''
+        AND (? IS NULL OR u.id <> ?)
+      GROUP BY u.id, u.email, u.display_name
+      ORDER BY COALESCE(u.display_name, u.email) ASC
+      `
+    )
+    .bind(event.business_id, department, event.actor_user_id, event.actor_user_id)
+    .all<EmailRecipient>();
+
+  return rows.results ?? [];
+}
+
 async function loadAllBusinessRecipients(db: DB, event: OperationalEventRow) {
   const candidates = await loadRecipientCandidates(db, event.business_id);
   return candidates.map(({ id, email, display_name }) => ({ id, email, display_name }));
@@ -667,12 +716,21 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
   if (
     [
       'schedule.time_off.requested',
-      'schedule.open_shift.requested',
-      'schedule.shift_request.declined',
-      'schedule.open_shift_request.declined'
+      'schedule.open_shift.requested'
     ].includes(event.event_type)
   ) {
     return loadRecipientsWithCapability(db, event, 'manage_schedule');
+  }
+
+  if (event.event_type === 'schedule.shift.offered' && !event.target_user_id) {
+    return loadRecipientsForScheduleDepartment(db, event);
+  }
+
+  if (event.event_type === 'schedule.shift.requested' && event.target_user_id) {
+    return uniqueRecipients(
+      await loadTargetRecipient(db, event),
+      await loadRecipientsWithCapability(db, event, 'manage_schedule')
+    );
   }
 
   if (event.event_type === 'onboarding.item.submitted') {

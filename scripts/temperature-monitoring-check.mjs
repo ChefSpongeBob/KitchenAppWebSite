@@ -82,7 +82,7 @@ expect('package.json', 'static suite includes temperature monitoring check', (so
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 5 temperature pass', (source) =>
   source.includes('Temperature monitoring foundation') &&
   source.includes('Phase 5 remaining needs') &&
-  source.includes('live sensor ingest')
+  source.includes('sensor ingest')
 );
 
 const failed = checks.filter((check) => !check.ok);

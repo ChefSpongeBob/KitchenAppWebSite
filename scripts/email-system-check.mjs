@@ -77,8 +77,8 @@ expect('src/routes/api/internal/operational-events/process/+server.ts', 'email d
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 3 email status', (source) =>
-  source.includes('Completed phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
-  source.includes('Active phase: `5. Temperature monitoring completion`') &&
+  source.includes('Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
+  source.includes('Active phase: `6. Scheduling workflow completion`') &&
   source.includes('Resend API send confirmed')
 );
 

@@ -92,10 +92,10 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
   source.includes("'idx_push_devices_business_active_user'")
 );
 
-expect('docs/PROJECT_HANDOFF.md', 'handoff tracks active native push phase', (source) =>
-  source.includes('Active phase: `5. Temperature monitoring completion`') &&
+expect('docs/PROJECT_HANDOFF.md', 'handoff tracks native push foundation status', (source) =>
+  source.includes('Active phase: `6. Scheduling workflow completion`') &&
   source.includes('Phase 4 remaining needs') &&
-  source.includes('Completed phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`')
+  source.includes('Native push notification foundation')
 );
 
 const failed = checks.filter((check) => !check.ok);

@@ -24,6 +24,7 @@ const billingPurchase = read('src/routes/api/billing/native-purchase/+server.ts'
 const sensitive = read('src/lib/server/sensitive.ts');
 const schedules = read('src/lib/server/schedules.ts');
 const scheduleBuilder = read('src/routes/admin/schedule/+page.server.ts');
+const scheduleView = read('src/routes/schedule/+page.server.ts');
 
 expect(
   'central capability vocabulary exists',
@@ -136,6 +137,7 @@ expect(
   schedules.includes('loadScheduleManagerDepartments') &&
     schedules.includes('scheduleDepartmentAccessFailure') &&
     schedules.includes('deleteScheduleShiftsForScope') &&
+    schedules.includes("'manage_schedule'") &&
     schedules.includes('departmentScope.allowedSet.has(department)'),
   'Schedule mutations must reject departments outside the active manager scope.'
 );
@@ -146,6 +148,14 @@ expect(
     scheduleBuilder.includes('allowedDepartmentSet.has(shift.department)') &&
     scheduleBuilder.includes('settings.departments.filter'),
   'Schedule builder payloads must be filtered to the active manager department scope.'
+);
+
+expect(
+  'schedule view uses effective schedule capability',
+  scheduleView.includes('hasBusinessCapability(') &&
+    scheduleView.includes("'manage_schedule'") &&
+    scheduleView.includes('loadScheduleManagerDepartments(db, locals'),
+  'Shared schedule view must use effective business schedule capability, not legacy user role strings.'
 );
 
 const failed = checks.filter((check) => !check.passed);
