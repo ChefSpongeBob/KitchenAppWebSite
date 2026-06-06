@@ -91,11 +91,6 @@
       items: [
         { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
         { label: "Creator Studio", route: "/admin/creator", icon: "build_circle" },
-        { label: "Category Creator", route: "/admin/category-creator", icon: "category" },
-        { label: "Documents", route: "/admin/documents", icon: "description", featureKey: "documents" },
-        { label: "Lists", route: "/admin/lists", icon: "checklist", featureKey: "lists" },
-        { label: "Menus", route: "/admin/menus", icon: "restaurant_menu", featureKey: "menus" },
-        { label: "Recipes", route: "/admin/recipes", icon: "menu_book", featureKey: "recipes" },
         { label: "Vendors", route: "/admin/vendors", icon: "local_shipping", featureKey: "vendors" }
       ]
     },

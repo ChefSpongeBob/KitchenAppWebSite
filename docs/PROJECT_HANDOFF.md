@@ -66,6 +66,7 @@ npm.cmd run test:production-schema
 npm.cmd run test:scale-performance
 npm.cmd run test:auth-abuse
 npm.cmd run test:hr-onboarding
+npm.cmd run test:admin-consolidation
 npm.cmd run test:billing-lifecycle
 npm.cmd run test:store-release
 npm.cmd run test:cloudflare-readiness
@@ -120,9 +121,9 @@ Before production migrations, Create/confirm backup before migrations.
 
 - Active phase: `11. Creator, editor, and legacy route consolidation`
 - Status: In progress
-- Current pass: Begin Phase 11 by inventorying creator/editor routes, duplicate admin surfaces, legacy compatibility paths, unused copied-app assets, and feature-gated editor entry points before removing or redirecting anything.
-- Return point after branch work: Start Phase 11 route/editor consolidation with a read-only inventory pass, then make surgical redirects/removals one group at a time.
-- Last verified: 2026-06-06 focused Phase 10 validation passed: `npm.cmd run test:hr-onboarding`, `npm.cmd run test:authorization-capabilities`, `npm.cmd run test:media-access`, `npm.cmd run test:production-schema`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely; Wrangler reported no pending migrations after applying local `0079-0081` and remote `0076-0081`. Public-route local smoke and authenticated smoke were not rerun in this pass.
+- Current pass: Phase 11A consolidated content-editor navigation. `/admin/creator` now owns category, list, recipe, document, menu, and item-attachment editing; `/admin/category-creator`, `/admin/lists`, `/admin/menus`, `/admin/documents`, and `/admin/recipes` remain as redirect routes into Creator Studio.
+- Return point after branch work: Continue Phase 11 with read-only inventory of old Svelte-only admin pages, unused copied-app assets, and remaining legacy editor files before deleting anything.
+- Last verified: 2026-06-06 focused Phase 11A validation passed: `npm.cmd run test:admin-consolidation`, `npm.cmd run test:authorization-capabilities`, `npm.cmd run test:hr-onboarding`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely. Public-route local smoke and authenticated smoke were not rerun in this pass.
 - Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`, `10. Invite/onboarding/HR guardrails`
 
 ## Final Multi-Tenant Test Notes

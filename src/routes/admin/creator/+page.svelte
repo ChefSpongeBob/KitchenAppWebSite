@@ -1,9 +1,8 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { browser } from '$app/environment';
   import { applyAction, enhance } from '$app/forms';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -16,6 +15,8 @@
   };
 
   type ListDomain = 'preplists' | 'checklists' | 'inventory' | 'orders';
+  type CategoryListDomain = Exclude<ListDomain, 'checklists'>;
+  type CategoryEditorType = 'list' | 'recipe' | 'document';
   type EditorType = 'category' | 'list' | 'recipe' | 'document' | 'menu';
 
   type ItemAttachment = {
@@ -104,6 +105,8 @@
 
   let editorType: EditorType = data.initialEditorType;
   let listDomain: ListDomain = data.initialListDomain;
+  let categoryEditorType: CategoryEditorType = 'list';
+  let categoryListDomain: CategoryListDomain = 'preplists';
   let feedbackMessage = '';
   let lastAppliedRouteSelection = '';
   let attachmentDrafts: Record<string, { targetType: 'recipe' | 'document'; category: string; targetId: string }> = {};
@@ -278,17 +281,13 @@
       sections: sections.sort((a, b) => a.title.localeCompare(b.title))
     })) satisfies ChecklistCategory[];
   $: documentCategories = data.creatorCatalog.documents.filter((category) => normalizeKey(category) !== 'menu');
+  $: menuDocuments = data.documents.filter(isMenuDocument);
+  $: filteredCategoryListSections = data.sections[categoryListDomain];
   $: routeSelectionToken = `${data.initialEditorType}:${data.initialListDomain}`;
   $: if (routeSelectionToken !== lastAppliedRouteSelection) {
     editorType = data.initialEditorType;
     listDomain = data.initialListDomain;
     lastAppliedRouteSelection = routeSelectionToken;
-  }
-  $: if (browser && editorType === 'category') {
-    goto('/admin/category-creator');
-  }
-  $: if (browser && editorType === 'menu') {
-    goto('/admin/menus');
   }
 
   const withFeedback: SubmitFunction = () => {
@@ -338,7 +337,7 @@
     <header class="creator-header">
       <div>
         <span class="eyebrow">Creator Studio</span>
-        <h2>Category Workbench</h2>
+        <h2>Creator Workbench</h2>
       </div>
       <div class="header-controls">
         <label>
@@ -361,6 +360,25 @@
               <option value="orders">Orders</option>
             </select>
           </label>
+        {:else if editorType === 'category'}
+          <label>
+            <span>Category Type</span>
+            <select bind:value={categoryEditorType}>
+              <option value="list">List</option>
+              <option value="recipe">Recipe</option>
+              <option value="document">Document</option>
+            </select>
+          </label>
+        {/if}
+        {#if editorType === 'category' && categoryEditorType === 'list'}
+          <label>
+            <span>List Type</span>
+            <select bind:value={categoryListDomain}>
+              <option value="preplists">Prep Lists</option>
+              <option value="inventory">Inventory</option>
+              <option value="orders">Orders</option>
+            </select>
+          </label>
         {/if}
       </div>
     </header>
@@ -370,9 +388,74 @@
     {/if}
 
     <section class="panel-block">
-      <h3>Category List</h3>
+      <h3>{editorType === 'category' ? 'Categories' : editorType === 'menu' ? 'Menus' : editorType === 'document' ? 'Documents' : editorType === 'recipe' ? 'Recipes' : 'List Items'}</h3>
 
-      {#if editorType === 'list'}
+      {#if editorType === 'category'}
+        {#if categoryEditorType === 'list'}
+          <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="create-form category-create-form">
+            <input type="hidden" name="domain" value={categoryListDomain} />
+            <input name="title" placeholder={`${listDomainLabel(categoryListDomain)} category`} required />
+            <input name="description" placeholder="Description" />
+            <button type="submit">Create</button>
+          </form>
+
+          {#if filteredCategoryListSections.length === 0}
+            <p class="empty">No {listDomainLabel(categoryListDomain)} categories yet.</p>
+          {:else}
+            <div class="stack">
+              {#each filteredCategoryListSections as section}
+                <div class="entity-item category-row">
+                  <form method="POST" action="?/update_list_section" use:enhance={withFeedback} class="inline-form">
+                    <input type="hidden" name="section_id" value={section.id} />
+                    <input name="title" value={section.title} required />
+                    <input name="description" value={section.description} placeholder="Description" />
+                    <button type="submit">Save</button>
+                  </form>
+                  <form method="POST" action="?/delete_list_section" use:enhance={withFeedback}>
+                    <input type="hidden" name="section_id" value={section.id} />
+                    <button type="submit" class="danger">Delete</button>
+                  </form>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <form method="POST" action="?/create_creator_category" use:enhance={withResetFeedback} class="create-form category-create-form">
+            <input type="hidden" name="editor_type" value={categoryEditorType} />
+            <input name="category" placeholder={categoryEditorType === 'recipe' ? 'Recipe category' : 'Document category'} required />
+            <button type="submit">Create</button>
+          </form>
+
+          {@const categories = categoryEditorType === 'recipe' ? data.creatorCatalog.recipes : documentCategories}
+          {#if categories.length === 0}
+            <p class="empty">No {categoryEditorType} categories yet.</p>
+          {:else}
+            <div class="stack">
+              {#each categories as category}
+                <div class="entity-item category-row">
+                  <form method="POST" action="?/update_creator_category" use:enhance={withFeedback} class="inline-form">
+                    <input type="hidden" name="editor_type" value={categoryEditorType} />
+                    <input type="hidden" name="previous_category" value={category} />
+                    <input name="next_category" value={category} required />
+                    <button type="submit">Save</button>
+                  </form>
+                  <form method="POST" action="?/delete_creator_category" use:enhance={withFeedback}>
+                    <input type="hidden" name="editor_type" value={categoryEditorType} />
+                    <input type="hidden" name="category" value={category} />
+                    <button type="submit" class="danger">Delete</button>
+                  </form>
+                  <form method="POST" action="?/delete_creator_category" use:enhance={withFeedback}>
+                    <input type="hidden" name="editor_type" value={categoryEditorType} />
+                    <input type="hidden" name="category" value={category} />
+                    <input type="hidden" name="delete_with_content" value="1" />
+                    <button type="submit" class="danger">Delete + Content</button>
+                  </form>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/if}
+      {:else if editorType === 'list'}
         {#if listDomain === 'checklists'}
           <form method="POST" action="?/create_checklist_category" use:enhance={withResetFeedback} class="create-form">
             <input name="title" placeholder="New checklist category" required />
@@ -719,7 +802,7 @@
               {/each}
             </div>
           {/if}
-        {:else}
+        {:else if editorType === 'document'}
           {#if documentCategories.length === 0}
             <p class="empty">No document categories yet.</p>
           {:else}
@@ -810,6 +893,69 @@
                         {/each}
                       {/if}
                     </div>
+                  </div>
+                </details>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <form
+            method="POST"
+            action="?/create_document"
+            enctype="multipart/form-data"
+            use:enhance={withResetFeedback}
+            class="create-form menu-form"
+          >
+            <input type="hidden" name="section" value="Menu" />
+            <input type="hidden" name="category" value="Menu" />
+            <input type="hidden" name="file_url" value="" />
+            <input type="hidden" name="content" value="" />
+            <input name="title" placeholder="Menu title" required />
+            <input name="file" type="file" accept="application/pdf,image/*" required />
+            <select name="is_active">
+              <option value="1" selected>Active</option>
+              <option value="0">Hidden</option>
+            </select>
+            <button type="submit">Add Menu</button>
+          </form>
+
+          {#if menuDocuments.length === 0}
+            <p class="empty">No menus yet.</p>
+          {:else}
+            <div class="stack">
+              {#each menuDocuments as menu}
+                <details class="entity">
+                  <summary>
+                    <strong>{menu.title}</strong>
+                    <small>{menu.is_active === 1 ? 'Active' : 'Hidden'}</small>
+                  </summary>
+                  <div class="entity-body">
+                    <form
+                      method="POST"
+                      action="?/update_document"
+                      enctype="multipart/form-data"
+                      use:enhance={withFeedback}
+                      class="inline-form"
+                    >
+                      <input type="hidden" name="id" value={menu.id} />
+                      <input type="hidden" name="existing_file_url" value={menu.file_url ?? ''} />
+                      <input type="hidden" name="slug" value={menu.slug} />
+                      <input type="hidden" name="section" value="Menu" />
+                      <input type="hidden" name="category" value="Menu" />
+                      <input type="hidden" name="file_url" value={menu.file_url ?? ''} />
+                      <input type="hidden" name="content" value="" />
+                      <input name="title" value={menu.title} required />
+                      <input name="file" type="file" accept="application/pdf,image/*" />
+                      <select name="is_active">
+                        <option value="1" selected={menu.is_active === 1}>Active</option>
+                        <option value="0" selected={menu.is_active === 0}>Hidden</option>
+                      </select>
+                      <button type="submit">Save Menu</button>
+                    </form>
+                    <form method="POST" action="?/delete_document" use:enhance={withFeedback}>
+                      <input type="hidden" name="id" value={menu.id} />
+                      <button type="submit" class="danger">Delete</button>
+                    </form>
                   </div>
                 </details>
               {/each}
