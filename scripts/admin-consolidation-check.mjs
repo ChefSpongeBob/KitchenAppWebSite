@@ -39,18 +39,32 @@ expect('src/routes/admin/creator/+page.svelte', 'Creator Studio renders all cont
 );
 
 const redirectRoutes = [
-  ['src/routes/admin/category-creator/+page.server.ts', '/admin/creator?editor=category'],
-  ['src/routes/admin/lists/+page.server.ts', '/admin/creator?editor=list'],
-  ['src/routes/admin/menus/+page.server.ts', '/admin/creator?editor=menu'],
-  ['src/routes/admin/documents/+page.server.ts', '/admin/creator?editor=document'],
-  ['src/routes/admin/recipes/+page.server.ts', '/admin/creator?editor=recipe']
+  ['src/routes/admin/category-creator/+page.server.ts', 'src/routes/admin/category-creator/+page.svelte', '/admin/creator?editor=category'],
+  ['src/routes/admin/lists/+page.server.ts', 'src/routes/admin/lists/+page.svelte', '/admin/creator?editor=list'],
+  ['src/routes/admin/menus/+page.server.ts', 'src/routes/admin/menus/+page.svelte', '/admin/creator?editor=menu'],
+  ['src/routes/admin/documents/+page.server.ts', 'src/routes/admin/documents/+page.svelte', '/admin/creator?editor=document'],
+  ['src/routes/admin/recipes/+page.server.ts', 'src/routes/admin/recipes/+page.svelte', '/admin/creator?editor=recipe']
 ];
 
-for (const [path, target] of redirectRoutes) {
+for (const [path, _pagePath, target] of redirectRoutes) {
   expect(path, `${path} redirects to Creator Studio`, (source) =>
     source.includes('throw redirect(303') &&
     source.includes(target) &&
     !source.includes('export const actions')
+  );
+}
+
+for (const [_serverPath, pagePath] of redirectRoutes) {
+  expect(pagePath, `${pagePath} has no legacy editor UI`, (source) =>
+    source.includes('Opening Creator Studio.') &&
+    !source.includes('<form') &&
+    !source.includes('method="POST"') &&
+    !source.includes('name="action"') &&
+    !source.includes('DashboardCard') &&
+    !source.includes('Create Category') &&
+    !source.includes('Create Recipe') &&
+    !source.includes('Upload Menu') &&
+    !source.includes('Upload Document')
   );
 }
 
