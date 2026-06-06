@@ -1,7 +1,7 @@
 import { dev } from '$app/environment';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { hashSessionToken } from '$lib/server/auth';
-import { canRoleAccessFeature, resolveFeatureKeyForPath } from '$lib/features/appFeatures';
+import { canRoleAccessFeature, resolveFeatureKeyForUrl } from '$lib/features/appFeatures';
 import { loadAppFeatureModes } from '$lib/server/appFeatures';
 import { ensureTenantSchema } from '$lib/server/tenant';
 import {
@@ -337,7 +337,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(303, '/app');
 		}
 
-		const gatedFeature = resolveFeatureKeyForPath(pathname);
+		const gatedFeature = resolveFeatureKeyForUrl(event.url);
 		if (isPrivateRoute && gatedFeature) {
 			const featureMode = event.locals.featureModes[gatedFeature];
 			if (

@@ -35,7 +35,23 @@ expect('src/routes/admin/creator/+page.svelte', 'Creator Studio renders all cont
   source.includes("editorType === 'menu'") &&
   source.includes('menuDocuments') &&
   !source.includes("goto('/admin/category-creator')") &&
-  !source.includes("goto('/admin/menus')")
+    !source.includes("goto('/admin/menus')")
+);
+
+expect('src/lib/features/appFeatures.ts', 'Creator Studio editor modes map to feature flags', (source) =>
+  source.includes('creatorEditorFeatureMap') &&
+  source.includes("list: 'lists'") &&
+  source.includes("recipe: 'recipes'") &&
+  source.includes("document: 'documents'") &&
+  source.includes("menu: 'menus'") &&
+  source.includes('resolveFeatureKeyForUrl') &&
+  source.includes("url.pathname === '/admin/creator'")
+);
+
+expect('src/hooks.server.ts', 'feature gating uses URL-aware creator editor resolution', (source) =>
+  source.includes('resolveFeatureKeyForUrl') &&
+  source.includes('const gatedFeature = resolveFeatureKeyForUrl(event.url);') &&
+  !source.includes('const gatedFeature = resolveFeatureKeyForPath(pathname);')
 );
 
 const redirectRoutes = [

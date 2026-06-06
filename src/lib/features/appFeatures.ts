@@ -29,6 +29,13 @@ export type AppFeatureDefinition = {
   adminRoutePrefixes: string[];
 };
 
+const creatorEditorFeatureMap: Partial<Record<string, AppFeatureKey>> = {
+  list: 'lists',
+  recipe: 'recipes',
+  document: 'documents',
+  menu: 'menus'
+};
+
 export type AppFeatureModes = Record<AppFeatureKey, AppFeatureMode>;
 export type AppFeatureAccess = Record<AppFeatureKey, boolean>;
 
@@ -187,6 +194,14 @@ export function buildFeatureAccess(
     },
     {} as AppFeatureAccess
   );
+}
+
+export function resolveFeatureKeyForUrl(url: URL): AppFeatureKey | null {
+  if (url.pathname === '/admin/creator') {
+    return creatorEditorFeatureMap[url.searchParams.get('editor') ?? ''] ?? null;
+  }
+
+  return resolveFeatureKeyForPath(url.pathname);
 }
 
 export function resolveFeatureKeyForPath(pathname: string): AppFeatureKey | null {

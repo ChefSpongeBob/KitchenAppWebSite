@@ -119,12 +119,12 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `11. Creator, editor, and legacy route consolidation`
+- Active phase: `12. Core feature action test`
 - Status: In progress
-- Current pass: Phase 11C removed verified unused static assets after reference inventory. `/admin/creator` owns category, list, recipe, document, menu, and item-attachment editing; `/admin/category-creator`, `/admin/lists`, `/admin/menus`, `/admin/documents`, and `/admin/recipes` remain as admin-gated redirect routes with tiny fallback shells only.
-- Return point after branch work: Continue Phase 11 with read-only inventory of remaining legacy route files, duplicated admin-only utilities, and old internal naming before deleting anything else.
-- Last verified: 2026-06-06 focused Phase 11C validation passed: removed-asset reference scan, `npm.cmd run test:admin-consolidation`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely. Public-route local smoke and authenticated smoke were not rerun in this pass.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`, `10. Invite/onboarding/HR guardrails`
+- Current pass: Phase 12A starting static verification of core feature action wiring after Phase 11 consolidation.
+- Return point after branch work: Continue Phase 12 by validating lists, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, and business registry routes/actions.
+- Last verified: 2026-06-06 focused Phase 11D validation passed: `npm.cmd run test:admin-consolidation`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely. Public-route local smoke and authenticated smoke were not rerun in this pass.
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`, `10. Invite/onboarding/HR guardrails`, `11. Creator, editor, and legacy route consolidation`
 
 ## Final Multi-Tenant Test Notes
 
@@ -143,6 +143,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
 - Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, enterprise, temperature add-on, and camera add-on from native builds; restore purchases; confirm entitlements activate the correct business only; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state.
 - Phase 10 invite/onboarding pass: from `/admin/onboarding`, create owner-blocked, manager, employee, consultant, and contractor invites; open the email link into `/register?invite=...`; confirm employee registration skips business/pricing controls and lands at `/login`; log in and complete packet items from `/settings`; review, request changes, approve, and view source forms from `/admin/users/[id]` and `/admin/onboarding`; confirm contractor invites do not create employee tax packets; confirm staff cannot open HR-sensitive media or admin review routes; confirm owner/manager HR-sensitive access is audited and business scoped.
+- Phase 11 creator consolidation pass: open `/admin/creator` and each editor mode for category, list, recipe, document, menu, and item attachments; confirm old admin editor links redirect to the matching Creator Studio mode; toggle lists, recipes, documents, and menus off in App Editor and confirm the matching `/admin/creator?editor=...` mode is blocked or hidden while unrelated creator modes still work.
 
 ## Launch Completion List
 
