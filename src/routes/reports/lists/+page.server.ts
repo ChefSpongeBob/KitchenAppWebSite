@@ -4,10 +4,12 @@ import { hasReportsAccess } from '$lib/server/permissions';
 import { requireBusinessId } from '$lib/server/tenant';
 import { loadListHistoryReport } from '$lib/server/history';
 
-type ListDomain = 'preplists' | 'inventory' | 'orders';
+type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
 
 function parseDomain(value: string | null): ListDomain {
-  return value === 'inventory' || value === 'orders' || value === 'preplists' ? value : 'preplists';
+  return value === 'inventory' || value === 'orders' || value === 'checklists' || value === 'preplists'
+    ? value
+    : 'preplists';
 }
 
 export const load: PageServerLoad = async ({ locals, url }) => {

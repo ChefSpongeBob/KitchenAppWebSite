@@ -541,6 +541,9 @@ function eventBodyFromPayload(event: OperationalEventRow) {
       if (event.event_type.startsWith('list.') && event.event_type.endsWith('.item_reopened')) {
         return 'A list item was reopened.';
       }
+      if (event.event_type.startsWith('list.') && event.event_type.endsWith('.completed')) {
+        return `${sectionTitle} is complete.`;
+      }
       if (event.event_type.startsWith('billing.store_purchase.')) {
         return `${planLabel(payload.store)} purchase event recorded for ${textValue(payload.productId, 'a product')}.`;
       }
@@ -737,7 +740,13 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
     return loadRecipientsWithCapability(db, event, 'manage_onboarding');
   }
 
-  if (event.event_type.startsWith('list.') && event.event_type.endsWith('.submitted')) {
+  if (
+    event.event_type.startsWith('list.') &&
+    (event.event_type.endsWith('.submitted') ||
+      event.event_type.endsWith('.item_completed') ||
+      event.event_type.endsWith('.item_reopened') ||
+      event.event_type.endsWith('.completed'))
+  ) {
     return loadRecipientsWithCapability(db, event, 'manage_content');
   }
 

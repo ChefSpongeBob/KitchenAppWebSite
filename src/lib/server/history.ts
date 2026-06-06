@@ -109,6 +109,7 @@ async function ensureHistorySchema(db: DB) {
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_list_submission_batches_business_day ON list_submission_batches(business_id, domain, business_day, submitted_at)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_list_submission_items_batch ON list_submission_items(batch_id, business_id)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_list_item_activity_business_time ON list_item_activity_events(business_id, domain, occurred_at)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_list_item_activity_lookup ON list_item_activity_events(business_id, domain, item_id, occurred_at)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_schedule_publish_history_week ON schedule_publish_history(business_id, week_start, version_number)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_schedule_shift_history_publish ON schedule_shift_history(publish_history_id, business_id, shift_date)`).run();
 
@@ -366,11 +367,65 @@ function clampRange(start: string | null, end: string | null, fallbackDays: numb
 export async function loadListHistoryReport(
   db: DB,
   businessId: string,
-  domain: ListDomain,
+  domain: ActivityDomain,
   params: { start?: string | null; end?: string | null; sectionId?: string | null } = {}
 ) {
   await ensureHistorySchema(db);
   const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 14);
+  if (domain === 'checklists') {
+    const sectionClause = params.sectionId ? `AND a.section_id = ?` : '';
+    const binds = params.sectionId
+      ? [businessId, startDate, endDate, params.sectionId]
+      : [businessId, startDate, endDate];
+
+    const rows = await db
+      .prepare(
+        `
+        SELECT
+          date(a.occurred_at, 'unixepoch') AS business_day,
+          a.occurred_at AS submitted_at,
+          COALESCE(s.title, 'Checklist') AS section_title_snapshot,
+          COALESCE(u.display_name, u.email, 'Unknown') AS submitted_by_name,
+          a.item_name_snapshot,
+          '' AS details_snapshot,
+          CASE WHEN a.event_type = 'completed' THEN 'Complete' ELSE 'Reopened' END AS submitted_value,
+          0 AS par_count_snapshot,
+          CASE WHEN a.event_type = 'completed' THEN 1 ELSE 0 END AS is_checked_snapshot,
+          CASE WHEN a.event_type = 'completed' THEN COALESCE(u.display_name, u.email, 'Unknown') ELSE NULL END AS completed_by_name,
+          CASE WHEN a.event_type = 'completed' THEN a.occurred_at ELSE NULL END AS completed_at,
+          a.event_type
+        FROM list_item_activity_events a
+        LEFT JOIN checklist_sections s
+          ON s.id = a.section_id
+          AND s.business_id = a.business_id
+        LEFT JOIN users u ON u.id = a.actor_user_id
+        WHERE a.business_id = ?
+          AND a.domain = 'checklists'
+          AND date(a.occurred_at, 'unixepoch') BETWEEN ? AND ?
+          ${sectionClause}
+        ORDER BY a.occurred_at DESC, section_title_snapshot ASC, a.item_name_snapshot ASC
+        LIMIT 1000
+        `
+      )
+      .bind(...binds)
+      .all<{
+        business_day: string;
+        submitted_at: number;
+        section_title_snapshot: string;
+        submitted_by_name: string;
+        item_name_snapshot: string;
+        details_snapshot: string | null;
+        submitted_value: string;
+        par_count_snapshot: number;
+        is_checked_snapshot: number;
+        completed_by_name: string | null;
+        completed_at: number | null;
+        event_type: string;
+      }>();
+
+    return { startDate, endDate, rows: rows.results ?? [] };
+  }
+
   const sectionClause = params.sectionId ? `AND b.section_id = ?` : '';
   const binds = params.sectionId
     ? [businessId, domain, startDate, endDate, params.sectionId]
@@ -388,7 +443,33 @@ export async function loadListHistoryReport(
         i.details_snapshot,
         i.submitted_value,
         i.par_count_snapshot,
-        i.is_checked_snapshot
+        i.is_checked_snapshot,
+        (
+          SELECT COALESCE(au.display_name, au.email, 'Unknown')
+          FROM list_item_activity_events a
+          LEFT JOIN users au ON au.id = a.actor_user_id
+          WHERE a.business_id = b.business_id
+            AND a.domain = b.domain
+            AND a.section_id = b.section_id
+            AND a.item_id = i.item_id
+            AND a.event_type = 'completed'
+            AND a.occurred_at <= b.submitted_at
+          ORDER BY a.occurred_at DESC
+          LIMIT 1
+        ) AS completed_by_name,
+        (
+          SELECT a.occurred_at
+          FROM list_item_activity_events a
+          WHERE a.business_id = b.business_id
+            AND a.domain = b.domain
+            AND a.section_id = b.section_id
+            AND a.item_id = i.item_id
+            AND a.event_type = 'completed'
+            AND a.occurred_at <= b.submitted_at
+          ORDER BY a.occurred_at DESC
+          LIMIT 1
+        ) AS completed_at,
+        'submitted' AS event_type
       FROM list_submission_items i
       JOIN list_submission_batches b ON b.id = i.batch_id AND b.business_id = i.business_id
       LEFT JOIN users u ON u.id = b.submitted_by
@@ -411,6 +492,9 @@ export async function loadListHistoryReport(
       submitted_value: string;
       par_count_snapshot: number;
       is_checked_snapshot: number;
+      completed_by_name: string | null;
+      completed_at: number | null;
+      event_type: string;
     }>();
 
   return { startDate, endDate, rows: rows.results ?? [] };

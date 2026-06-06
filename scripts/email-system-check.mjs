@@ -67,6 +67,7 @@ expect('src/lib/server/operationalEvents.ts', 'operational email bodies are even
   source.includes("case 'temperature.reading_batch.received'") &&
   source.includes("case 'camera.activity.received'") &&
   source.includes("event.event_type.startsWith('list.')") &&
+  source.includes("event.event_type.endsWith('.completed')") &&
   source.includes("event.event_type.startsWith('billing.store_purchase.')")
 );
 
@@ -78,7 +79,7 @@ expect('src/routes/api/internal/operational-events/process/+server.ts', 'email d
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 3 email status', (source) =>
   source.includes('Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
-  source.includes('Active phase: `6. Scheduling workflow completion`') &&
+  source.includes('Active phase: `7. Lists, completion history, and alerts`') &&
   source.includes('Resend API send confirmed')
 );
 

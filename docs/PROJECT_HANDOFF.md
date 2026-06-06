@@ -117,19 +117,24 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `6. Scheduling workflow completion`
+- Active phase: `7. Lists, completion history, and alerts`
 - Status: In progress
-- Current pass: Phase 6 scheduling workflow completion. Schedule management now uses the effective `manage_schedule` capability for shared schedule visibility and schedule mutations. Schedule decline events target the affected employee, schedule requests route to managers, and untargeted shift offers can notify eligible employees by schedule department.
-- Return point after branch work: Continue Phase 6 by validating schedule builder, autosave, publish, schedule roles, department scope, open shifts, offers, requests, approvals, My Schedule visibility, and schedule notifications.
-- Last verified: 2026-06-05 `npm.cmd run test:static` passed after Phase 6 schedule permission and notification-routing alignment. The suite included build, mobile readiness, tenant authority, authorization, operational events, email system, native push foundation, temperature monitoring, tenant isolation, IoT auth, media access, production schema, scale, auth abuse, billing, store, Cloudflare, security headers, and observability. Local migrations are current through `0078_temperature_monitoring.sql`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`
+- Current pass: Phase 7 list completion/history/alert wiring. List submissions now expose submitter and executor history, checklist activity is available in list reports/CSV, item/full-list events route through the operational outbox, and local migration `0079_list_activity_lookup_index.sql` was applied.
+- Return point after branch work: Continue Phase 7 by manually validating checklist, prep, inventory, and order list creation/edit/delete/submit flows, attachments opening linked recipes/SOPs, completion alerts, CSV exports, and two-business tenant isolation.
+- Last verified: 2026-06-05 focused Phase 7 validation passed: `npm.cmd run test:operational-events`, `npm.cmd run test:email-system`, `npm.cmd run test:scale-performance`, `npm.cmd run check`, and elevated `npm.cmd run build`. Local migrations are current through `0079_list_activity_lookup_index.sql`. Prior full `npm.cmd run test:static` passed after Phase 6 schedule permission and notification-routing alignment. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`
 
 ## Final Multi-Tenant Test Notes
 
 - Employee permissions pass: in `/admin/users`, search by name, email, department, role, and permission template; open an employee through `Permissions`; change account type, permission template, capability checkboxes, department access, and delete only in test tenants. Repeat as owner, manager, staff, consultant, and contractor. Confirm staff cannot directly open admin, reports, vendor, HR-sensitive, billing, device setup, or permission routes.
 - Session cleanup note: employee login sessions are security plumbing, not normal staff-management UI. Revoke-session behavior should be tested later through account/security lifecycle tests, not the visible staff manager page.
 - Phase 5 temp pass: register gateway/sensor serials, ingest valid readings, trigger high/low/stale/offline/recovery states, acknowledge alerts, verify wrong-business/wrong-serial/revoked-device rejection, and confirm dashboard/temp pages stay tenant scoped.
-- Phase 6 schedule pass: test schedule manager permissions by role/template/individual override, verify department-scoped managers only see/edit their departments, publish a schedule with unsaved changes, confirm `My Schedule` only shows published shifts for the signed-in employee, and verify schedule publish/shift/time-off/open-shift emails route to the correct managers or affected employees.
+- Phase 6 schedule pass: create two businesses with separate employees; set owner, general manager, FOH manager, BOH manager, hourly manager, shift lead, consultant, contractor, and staff permissions; confirm each role/template/individual override sees only the correct schedule tools. Test department-scoped managers against FOH-only and BOH-only employees, including schedule builder visibility, shift creation, publish, approvals, templates, labor targets, and open shifts.
+- Phase 6 schedule save/publish pass: add shifts, edit shifts, delete shifts, duplicate a day, navigate away and back to confirm autosaved draft data remains, publish with unsaved changes, confirm publish creates the final schedule, and verify schedule publish history/report exports still show the published week.
+- Phase 6 employee schedule pass: log in as staff and verify `/schedule` and `/my-schedule` only show published shifts for that business/user; create availability, time-off requests, open-shift requests, shift offers, targeted shift offers, approvals, declines, withdrawals, and manager decisions. Confirm every action is tenant scoped and unavailable to unrelated businesses.
+- Phase 6 notification pass: process operational events after schedule publish, shift offer, shift request, open-shift request, approval, decline, and time-off decisions; confirm emails route to opted-in users, managers, affected employees, and eligible department employees only.
+- Phase 7 list pass: create checklist, prep, inventory, and order lists; add/edit/delete items; attach recipes and SOPs; submit counts/completions; reopen completed items; verify new items appear immediately; confirm saved inputs clear after save; confirm deleted lists/items disappear everywhere they should.
+- Phase 7 history/alert pass: submit prep and checklist data as multiple employees; verify submitter and executor fields; confirm two-week prep history, checklist history, CSV/export behavior, completion alerts, item-completed events, and tenant isolation across two businesses.
 
 ## Launch Completion List
 
@@ -194,6 +199,7 @@ Current audit status:
 - Decide whether Crimini needs true reciprocal shift swaps in addition to shift transfer and claim.
 - Confirm employee schedule visibility and every schedule mutation are tenant scoped.
 - Confirm schedule publish history remains available for the required retention period.
+- Phase 6 manual validation needs: run the schedule pass from Final Multi-Tenant Test Notes before launch, including autosave, publish-with-unsaved-changes, department-scoped managers, templates, labor targets, open shifts, shift offers, approvals, time off, My Schedule, event processing, and tenant isolation.
 
 7. Lists, completion history, and alerts
 - Confirm checklist, prep, inventory, and order lists can be created, edited, deleted, submitted, and restored where intended.

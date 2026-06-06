@@ -7,10 +7,12 @@
   const titles = {
     preplists: 'Prep History',
     inventory: 'Inventory History',
-    orders: 'Order History'
+    orders: 'Order History',
+    checklists: 'Checklist History'
   };
 
   $: csvHref = `/reports/lists.csv?domain=${data.domain}&start=${data.startDate}&end=${data.endDate}`;
+  $: valueLabel = data.domain === 'checklists' ? 'Action' : 'Value';
 </script>
 
 <Layout>
@@ -21,6 +23,7 @@
     <a href="/reports/lists?domain=preplists"><span class="material-icons" aria-hidden="true">restaurant</span>Prep</a>
     <a href="/reports/lists?domain=inventory"><span class="material-icons" aria-hidden="true">inventory_2</span>Inventory</a>
     <a href="/reports/lists?domain=orders"><span class="material-icons" aria-hidden="true">receipt_long</span>Orders</a>
+    <a href="/reports/lists?domain=checklists"><span class="material-icons" aria-hidden="true">fact_check</span>Checklists</a>
     <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>CSV</a>
   </div>
 
@@ -32,9 +35,10 @@
             <th>Date</th>
             <th>List</th>
             <th>Item</th>
-            <th>Value</th>
+            <th>{valueLabel}</th>
             <th>Par</th>
             <th>Done</th>
+            <th>Completed By</th>
             <th>By</th>
           </tr>
         </thead>
@@ -52,6 +56,7 @@
               <td>{row.submitted_value || '-'}</td>
               <td>{row.par_count_snapshot || '-'}</td>
               <td>{row.is_checked_snapshot ? 'Yes' : 'No'}</td>
+              <td>{row.is_checked_snapshot ? row.completed_by_name || '-' : '-'}</td>
               <td>{row.submitted_by_name}</td>
             </tr>
           {/each}

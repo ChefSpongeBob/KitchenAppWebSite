@@ -2,6 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
 import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
 import { recordListItemActivity } from '$lib/server/history';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 
 type DB = App.Platform['env']['DB'];
 type ChecklistLocals = {
@@ -213,6 +214,54 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         locals.userId,
         String(isChecked)
       );
+
+      await recordOperationalEventBestEffort(db, {
+        businessId,
+        eventType: isChecked === 1 ? 'list.checklists.item_completed' : 'list.checklists.item_reopened',
+        category: 'lists',
+        actorUserId: locals.userId,
+        subjectType: 'checklist_item',
+        subjectId: id,
+        title: isChecked === 1 ? 'Checklist item completed' : 'Checklist item reopened',
+        payload: {
+          domain: 'checklists',
+          sectionTitle: pageTitle,
+          sectionId: section.id,
+          checked: isChecked === 1
+        }
+      });
+
+      if (isChecked === 1) {
+        const completion = await db
+          .prepare(
+            `
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN COALESCE(is_checked, 0) = 0 THEN 1 ELSE 0 END) AS remaining
+            FROM checklist_items
+            WHERE section_id = ? AND business_id = ?
+            `
+          )
+          .bind(section.id, businessId)
+          .first<{ total: number; remaining: number | null }>();
+
+        if ((completion?.total ?? 0) > 0 && (completion?.remaining ?? 0) === 0) {
+          await recordOperationalEventBestEffort(db, {
+            businessId,
+            eventType: 'list.checklists.completed',
+            category: 'lists',
+            actorUserId: locals.userId,
+            subjectType: 'checklist_section',
+            subjectId: section.id,
+            title: 'Checklist completed',
+            payload: {
+              domain: 'checklists',
+              sectionTitle: pageTitle,
+              itemCount: completion?.total ?? 0
+            }
+          });
+        }
+      }
 
       return { success: true };
     },

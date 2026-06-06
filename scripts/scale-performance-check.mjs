@@ -51,6 +51,18 @@ expect('migrations/0061_employee_hr_compliance_foundation.sql', 'employee HR com
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0079_list_activity_lookup_index.sql', 'list activity lookup index supports executor history reports', (source) =>
+  source.includes('idx_list_item_activity_lookup') &&
+  source.includes('list_item_activity_events(business_id, domain, item_id, occurred_at)')
+);
+
+expect('src/lib/server/history.ts', 'list history reports include checklist activity and item executors', (source) =>
+  source.includes("domain === 'checklists'") &&
+  source.includes('list_item_activity_events a') &&
+  source.includes('completed_by_name') &&
+  source.includes('idx_list_item_activity_lookup')
+);
+
 expect('migrations/0062_employee_invite_sensitive_vault.sql', 'employee sensitive vault migration covers business-first indexes', (source) =>
   [
     'idx_business_invites_business_context',

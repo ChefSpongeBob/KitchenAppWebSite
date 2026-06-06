@@ -331,6 +331,38 @@ export function createListPage(
         }
       });
 
+      if (isChecked === 1) {
+        const completion = await db
+          .prepare(
+            `
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN COALESCE(is_checked, 0) = 0 THEN 1 ELSE 0 END) AS remaining
+            FROM list_items
+            WHERE section_id = ? AND business_id = ?
+            `
+          )
+          .bind(section.id, businessId)
+          .first<{ total: number; remaining: number | null }>();
+
+        if ((completion?.total ?? 0) > 0 && (completion?.remaining ?? 0) === 0) {
+          await recordOperationalEventBestEffort(db, {
+            businessId,
+            eventType: `list.${domain}.completed`,
+            category: 'lists',
+            actorUserId: locals.userId,
+            subjectType: 'list_section',
+            subjectId: section.id,
+            title: 'List completed',
+            payload: {
+              domain,
+              sectionTitle: pageTitle,
+              itemCount: completion?.total ?? 0
+            }
+          });
+        }
+      }
+
       return { success: true };
     },
     save_par_levels: async ({ request, locals }: { request: Request; locals: PreplistLocals }) => {

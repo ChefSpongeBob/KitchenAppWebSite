@@ -4,10 +4,12 @@ import { hasReportsAccess } from '$lib/server/permissions';
 import { csvEscape, loadListHistoryReport } from '$lib/server/history';
 import { requireBusinessId } from '$lib/server/tenant';
 
-type ListDomain = 'preplists' | 'inventory' | 'orders';
+type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
 
 function parseDomain(value: string | null): ListDomain {
-  return value === 'inventory' || value === 'orders' || value === 'preplists' ? value : 'preplists';
+  return value === 'inventory' || value === 'orders' || value === 'checklists' || value === 'preplists'
+    ? value
+    : 'preplists';
 }
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -22,7 +24,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     start: url.searchParams.get('start'),
     end: url.searchParams.get('end')
   });
-  const header = ['date', 'list', 'item', 'details', 'value', 'par', 'done', 'submitted_by'];
+  const valueHeader = domain === 'checklists' ? 'action' : 'value';
+  const header = ['date', 'list', 'item', 'details', valueHeader, 'par', 'done', 'completed_by', 'submitted_by'];
   const lines = [
     header.join(','),
     ...report.rows.map((row) =>
@@ -34,6 +37,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         row.submitted_value,
         row.par_count_snapshot,
         row.is_checked_snapshot ? 'yes' : 'no',
+        row.is_checked_snapshot ? row.completed_by_name || '' : '',
         row.submitted_by_name
       ]
         .map(csvEscape)

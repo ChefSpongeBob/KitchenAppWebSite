@@ -85,7 +85,23 @@ expect('src/lib/server/operationalEvents.ts', 'schedule event email routing targ
 expect('src/lib/server/preplist.ts', 'list workflow records submission and completion events', (source) =>
   source.includes('list.${domain}.submitted') &&
   source.includes('list.${domain}.item_completed') &&
+  source.includes('list.${domain}.completed') &&
   source.includes('recordOperationalEventBestEffort')
+);
+
+expect('src/lib/server/checklists.ts', 'checklist workflow records item and full-list events', (source) =>
+  source.includes('list.checklists.item_completed') &&
+  source.includes('list.checklists.item_reopened') &&
+  source.includes('list.checklists.completed') &&
+  source.includes('recordOperationalEventBestEffort')
+);
+
+expect('src/lib/server/operationalEvents.ts', 'list event email routing covers submitted, item activity, and completion', (source) =>
+  source.includes("event.event_type.endsWith('.submitted')") &&
+  source.includes("event.event_type.endsWith('.item_completed')") &&
+  source.includes("event.event_type.endsWith('.item_reopened')") &&
+  source.includes("event.event_type.endsWith('.completed')") &&
+  source.includes("loadRecipientsWithCapability(db, event, 'manage_content')")
 );
 
 expect('src/lib/server/admin.ts', 'employee onboarding records operational events', (source) =>
@@ -118,7 +134,7 @@ expect('src/lib/server/storeBilling.ts', 'store purchase events feed operational
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks operational event phase', (source) =>
   source.includes('Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
-  source.includes('Active phase: `6. Scheduling workflow completion`')
+  source.includes('Active phase: `7. Lists, completion history, and alerts`')
 );
 
 const failed = checks.filter((check) => !check.ok);
