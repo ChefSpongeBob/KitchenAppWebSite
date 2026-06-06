@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { logOperationalEvent } from '$lib/server/observability';
+import { hasBusinessCapability } from '$lib/server/permissions';
 import { canAccessEmployeeSensitiveData, writeSensitiveRecordAudit } from '$lib/server/sensitive';
 
 export const GET: RequestHandler = async ({ params, platform, locals, request }) => {
@@ -108,7 +109,14 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
         .bind(fileUrl, locals.businessId)
         .first<{ id: string }>();
 
-      if (!templateRecord || locals.userRole !== 'admin') {
+      const canReadOnboardingTemplateMedia = hasBusinessCapability(
+        locals.businessRole,
+        locals.businessPermissionTemplate,
+        'view_sensitive_employee_data',
+        locals.businessCapabilities
+      );
+
+      if (!templateRecord || !canReadOnboardingTemplateMedia) {
         logOperationalEvent({
           level: 'warn',
           event: 'document_media_not_found',

@@ -65,6 +65,7 @@ npm.cmd run test:media-access
 npm.cmd run test:production-schema
 npm.cmd run test:scale-performance
 npm.cmd run test:auth-abuse
+npm.cmd run test:hr-onboarding
 npm.cmd run test:billing-lifecycle
 npm.cmd run test:store-release
 npm.cmd run test:cloudflare-readiness
@@ -119,9 +120,9 @@ Before production migrations, Create/confirm backup before migrations.
 
 - Active phase: `10. Invite, employee onboarding, and HR completion`
 - Status: In progress
-- Current pass: Phase 9 billing and store subscription lifecycle foundation is code-complete to the static-validation point. Real Apple/Google product creation and sandbox purchase tests remain blocked until store console setup and native builds are available.
-- Return point after branch work: Begin Phase 10 invite, employee onboarding, and HR completion. Keep deferred Phase 9 store-console and real-device sandbox billing tests in the final manual run.
-- Last verified: 2026-06-06 focused Phase 9 validation passed: `npm.cmd run test:billing-lifecycle`, `npm.cmd run test:store-release`, `npm.cmd run test:scale-performance`, and `npm.cmd run check`. Local and remote D1 migration `0081_billing_webhook_lifecycle_indexes.sql` applied on `crimini-production`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
+- Current pass: Phase 10 invite, employee onboarding, and HR-sensitive access guardrails are code-complete to the static-validation point. Manual invite, packet, source-form upload, employee completion, manager review, contractor exemption, and legal/payroll procedure tests remain.
+- Return point after branch work: Continue Phase 10 manual-flow readiness, then move into Phase 11 creator/editor/legacy route consolidation when invite/onboarding behavior is confirmed.
+- Last verified: 2026-06-06 focused Phase 10 validation passed: `npm.cmd run test:hr-onboarding`, `npm.cmd run test:authorization-capabilities`, `npm.cmd run test:media-access`, `npm.cmd run test:production-schema`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. Public-route local smoke and authenticated smoke were not rerun in this pass.
 - Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`
 
 ## Final Multi-Tenant Test Notes
