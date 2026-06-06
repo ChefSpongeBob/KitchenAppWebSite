@@ -66,6 +66,14 @@ expect('migrations/0080_report_export_indexes.sql', 'report export migration cov
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0081_billing_webhook_lifecycle_indexes.sql', 'billing webhook lifecycle migration covers lookup indexes', (source) =>
+  [
+    'idx_business_store_entitlements_original_transaction',
+    'idx_business_store_entitlements_latest_transaction',
+    'idx_store_webhook_events_processed_created'
+  ].every((indexName) => source.includes(indexName))
+);
+
 expect('src/lib/server/history.ts', 'list history reports include checklist activity and item executors', (source) =>
   source.includes("domain === 'checklists'") &&
   source.includes('list_item_activity_events a') &&

@@ -466,9 +466,179 @@ export async function activateVerifiedStoreEntitlement(
 		.run();
 }
 
+export async function findStoreEntitlementForLifecycle(
+	db: D1,
+	args: {
+		store: BillingStore;
+		productId: string;
+		purchaseTokenHash?: string | null;
+		originalTransactionId?: string | null;
+		transactionId?: string | null;
+	}
+) {
+	return db
+		.prepare(
+			`
+      SELECT
+        id,
+        business_id,
+        owner_user_id,
+        store,
+        product_id,
+        entitlement_key,
+        plan_tier,
+        addon_temp_monitoring,
+        addon_camera_monitoring,
+        status,
+        current_period_start,
+        current_period_end,
+        auto_renewing,
+        expires_at
+      FROM business_store_entitlements
+      WHERE store = ?
+        AND product_id = ?
+        AND (
+          (? IS NOT NULL AND purchase_token_hash = ?)
+          OR (? IS NOT NULL AND original_transaction_id = ?)
+          OR (? IS NOT NULL AND latest_transaction_id = ?)
+        )
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `
+		)
+		.bind(
+			args.store,
+			args.productId,
+			args.purchaseTokenHash ?? null,
+			args.purchaseTokenHash ?? null,
+			args.originalTransactionId ?? null,
+			args.originalTransactionId ?? null,
+			args.transactionId ?? null,
+			args.transactionId ?? null
+		)
+		.first<{
+			id: string;
+			business_id: string;
+			owner_user_id: string;
+			store: BillingStore;
+			product_id: string;
+			entitlement_key: string;
+			plan_tier: 'starter' | 'growth' | 'enterprise' | null;
+			addon_temp_monitoring: number;
+			addon_camera_monitoring: number;
+			status: StoreEntitlementStatus;
+			current_period_start: number | null;
+			current_period_end: number | null;
+			auto_renewing: number;
+			expires_at: number | null;
+		}>();
+}
+
+export async function updateStoreEntitlementLifecycle(
+	db: D1,
+	args: {
+		entitlementId: string;
+		status: StoreEntitlementStatus;
+		currentPeriodStart?: number | null;
+		currentPeriodEnd?: number | null;
+		expiresAt?: number | null;
+		autoRenewing?: boolean | null;
+		originalTransactionId?: string | null;
+		transactionId?: string | null;
+		rawPayload?: unknown;
+		now?: number;
+	}
+) {
+	const now = args.now ?? Math.floor(Date.now() / 1000);
+	const rawPayload = args.rawPayload ? safeJson(args.rawPayload) : null;
+	const verifiedAt = args.status === 'active' || args.status === 'grace_period' ? now : null;
+
+	await db
+		.prepare(
+			`
+      UPDATE business_store_entitlements
+      SET status = ?,
+          current_period_start = COALESCE(?, current_period_start),
+          current_period_end = COALESCE(?, current_period_end),
+          expires_at = COALESCE(?, expires_at),
+          auto_renewing = COALESCE(?, auto_renewing),
+          verified_at = COALESCE(verified_at, ?),
+          original_transaction_id = COALESCE(?, original_transaction_id),
+          latest_transaction_id = COALESCE(?, latest_transaction_id),
+          raw_payload_json = COALESCE(?, raw_payload_json),
+          updated_at = ?
+      WHERE id = ?
+    `
+		)
+		.bind(
+			args.status,
+			args.currentPeriodStart ?? null,
+			args.currentPeriodEnd ?? null,
+			args.expiresAt ?? args.currentPeriodEnd ?? null,
+			args.autoRenewing === undefined || args.autoRenewing === null ? null : args.autoRenewing ? 1 : 0,
+			verifiedAt,
+			args.originalTransactionId ?? null,
+			args.transactionId ?? null,
+			rawPayload,
+			now,
+			args.entitlementId
+		)
+		.run();
+}
+
+export async function refreshBusinessBillingState(db: D1, businessId: string) {
+	const now = Math.floor(Date.now() / 1000);
+	const entitlements = await readBusinessEntitlements(db, businessId);
+	const accessEntitlements = entitlements.filter(
+		(entitlement) =>
+			(entitlement.status === 'active' || entitlement.status === 'grace_period') &&
+			(!entitlement.expires_at || entitlement.expires_at > now)
+	);
+
+	if (accessEntitlements.some((entitlement) => entitlement.plan_tier)) {
+		return applyVerifiedEntitlementsToBusiness(db, businessId);
+	}
+
+	if (!entitlements.length) return { applied: false };
+
+	await db
+		.prepare(
+			`
+      UPDATE businesses
+      SET status = 'past_due',
+          updated_at = ?
+      WHERE id = ?
+        AND COALESCE(status, 'active') IN ('active', 'trialing', 'pending_payment', 'past_due')
+    `
+		)
+		.bind(now, businessId)
+		.run();
+
+	await db
+		.prepare(
+			`
+      UPDATE business_trials
+      SET status = 'past_due',
+          denial_reason = COALESCE(denial_reason, 'billing_entitlement_inactive'),
+          updated_at = ?
+      WHERE business_id = ?
+        AND status IN ('active', 'paid', 'trialing', 'pending_payment', 'past_due')
+    `
+		)
+		.bind(now, businessId)
+		.run();
+
+	return { applied: false, status: 'past_due' };
+}
+
 export async function applyVerifiedEntitlementsToBusiness(db: D1, businessId: string) {
 	const entitlements = await readBusinessEntitlements(db, businessId);
-	const active = entitlements.filter((entitlement) => entitlement.status === 'active');
+	const now = Math.floor(Date.now() / 1000);
+	const active = entitlements.filter(
+		(entitlement) =>
+			(entitlement.status === 'active' || entitlement.status === 'grace_period') &&
+			(!entitlement.expires_at || entitlement.expires_at > now)
+	);
 	const planPriority: Record<string, number> = { starter: 1, growth: 2, enterprise: 3 };
 	const activePlan = active
 		.filter((entitlement) => entitlement.plan_tier)
@@ -482,7 +652,6 @@ export async function applyVerifiedEntitlementsToBusiness(db: D1, businessId: st
 	const addOnCameraMonitoring =
 		activePlan.addon_camera_monitoring === 1 ||
 		active.some((entitlement) => entitlement.addon_camera_monitoring === 1);
-	const now = Math.floor(Date.now() / 1000);
 
 	await db
 		.prepare(

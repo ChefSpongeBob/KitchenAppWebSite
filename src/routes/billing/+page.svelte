@@ -116,6 +116,14 @@
 		}).format(product.priceCents / 100);
 	}
 
+	function billingStatusLabel(status: string) {
+		if (status === 'pending_setup') return 'Activation pending';
+		if (status === 'queued') return 'Activation queued';
+		if (status === 'active') return 'Active';
+		if (status === 'disabled') return 'Disabled';
+		return status.replaceAll('_', ' ');
+	}
+
 	async function postNativePurchase(payload: Record<string, unknown>) {
 		const response = await fetch('/api/billing/native-purchase', {
 			method: 'POST',
@@ -203,12 +211,12 @@
 			<p class="muted">Trial end: {trialEndsText}</p>
 			<p class="notice">Billing provider: app stores.</p>
 			{#if data.storeStatus === 'queued'}
-				<p class="notice">Store billing placeholder has been queued for activation.</p>
+				<p class="notice">Store activation queued.</p>
 			{/if}
 			{#if data.storeBillingPlaceholder}
 				<p class="muted">
 					Billing: {data.storeBillingPlaceholder.preferredStore.replace('_', ' ')} /
-					{data.storeBillingPlaceholder.status}
+					{billingStatusLabel(data.storeBillingPlaceholder.status)}
 				</p>
 			{/if}
 			{#if data.storeEntitlements.length}
@@ -221,7 +229,7 @@
 
 		{#if !data.canManageBilling}
 			<article class="panel">
-				<p>Only workspace owner/admin can manage conversion or cancellation.</p>
+				<p>Only workspace owners or managers can manage billing.</p>
 			</article>
 		{:else}
 			<article class="panel">

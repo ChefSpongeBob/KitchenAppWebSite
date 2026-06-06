@@ -117,12 +117,12 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `9. Billing and store subscription lifecycle`
+- Active phase: `10. Invite, employee onboarding, and HR completion`
 - Status: In progress
-- Current pass: Begin Phase 9 billing and store subscription lifecycle. Phase 8 reports/export foundation is locally complete to the code-validation point; detailed role, CSV, and multi-tenant report testing remains in the final manual run.
-- Return point after branch work: Continue Phase 9 by auditing Apple/Google product IDs, native purchase verification, webhook lifecycle handling, entitlement status, billing recovery/cancellation, and store sandbox testing needs.
-- Last verified: 2026-06-06 focused Phase 8 validation passed: `npm.cmd run test:report-exports`, `npm.cmd run test:scale-performance`, `npm.cmd run check`, and elevated `npm.cmd run build`. Local migrations are current through `0080_report_export_indexes.sql`; remote D1 migrations `0078`, `0079`, and `0080` are applied on `crimini-production`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`
+- Current pass: Phase 9 billing and store subscription lifecycle foundation is code-complete to the static-validation point. Real Apple/Google product creation and sandbox purchase tests remain blocked until store console setup and native builds are available.
+- Return point after branch work: Begin Phase 10 invite, employee onboarding, and HR completion. Keep deferred Phase 9 store-console and real-device sandbox billing tests in the final manual run.
+- Last verified: 2026-06-06 focused Phase 9 validation passed: `npm.cmd run test:billing-lifecycle`, `npm.cmd run test:store-release`, `npm.cmd run test:scale-performance`, and `npm.cmd run check`. Local and remote D1 migration `0081_billing_webhook_lifecycle_indexes.sql` applied on `crimini-production`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`
 
 ## Final Multi-Tenant Test Notes
 
@@ -139,6 +139,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 7 event delivery pass: after list submission, item completion, item reopen, and full-list completion, run the operational event processor; confirm opted-in manager/content-access users receive the correct alerts and unrelated business users receive nothing.
 - Phase 8 reports pass: open `/reports`, `/reports/schedule`, `/reports/requests`, `/reports/temperature`, `/reports/onboarding`, and all list report domains as owner, manager, consultant, contractor, and staff. Confirm permitted roles are read-only, staff is blocked, each route stays inside the active business, and CSV exports match the visible rows.
 - Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
+- Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, enterprise, temperature add-on, and camera add-on from native builds; restore purchases; confirm entitlements activate the correct business only; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state.
 
 ## Launch Completion List
 
@@ -235,6 +236,8 @@ Current audit status:
 - Confirm webhook endpoints require `BILLING_WEBHOOK_TOKEN`.
 - Test native purchase, restore, billing status, entitlement activation, trial conversion, cancellation, and data retention.
 - Remove or rename remaining billing placeholder language before launch.
+- Phase 9 current foundation: native purchase verification, restore submission, billing status, webhook token auth, webhook dedupe, entitlement lifecycle updates, business billing reconciliation, and lifecycle lookup indexes exist.
+- Phase 9 manual validation needs: run the billing pass from Final Multi-Tenant Test Notes after App Store Connect, Google Play Console, native builds, and sandbox tester accounts are ready.
 
 10. Invite, employee onboarding, and HR completion
 - Test owner, manager, employee, consultant, and contractor invites.

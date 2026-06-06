@@ -82,6 +82,13 @@ expect('src/lib/server/storeBilling.ts', 'verified entitlements are the paid act
   source.includes("status = 'active'")
 );
 
+expect('src/lib/server/storeBilling.ts', 'billing lifecycle can update and reconcile entitlements', (source) =>
+  source.includes('findStoreEntitlementForLifecycle') &&
+  source.includes('updateStoreEntitlementLifecycle') &&
+  source.includes('refreshBusinessBillingState') &&
+  source.includes("status = 'past_due'")
+);
+
 expect('src/lib/server/storeVerification.ts', 'store verification calls Apple and Google APIs', (source) =>
   source.includes('api.storekit.itunes.apple.com') &&
   source.includes('androidpublisher.googleapis.com') &&
@@ -92,8 +99,29 @@ expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store n
   source.includes('store_webhook_events') && source.includes("'app_store'")
 );
 
+expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store notification endpoint processes entitlement lifecycle', (source) =>
+  source.includes('mapAppleStatus') &&
+  source.includes('verifyStorePurchase') &&
+  source.includes('updateStoreEntitlementLifecycle') &&
+  source.includes('refreshBusinessBillingState') &&
+  source.includes("processed_status = ?")
+);
+
 expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play notification endpoint stores events', (source) =>
   source.includes('store_webhook_events') && source.includes("'google_play'")
+);
+
+expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play notification endpoint processes entitlement lifecycle', (source) =>
+  source.includes('fallbackGoogleStatus') &&
+  source.includes('verifyStorePurchase') &&
+  source.includes('updateStoreEntitlementLifecycle') &&
+  source.includes('refreshBusinessBillingState')
+);
+
+expect('migrations/0081_billing_webhook_lifecycle_indexes.sql', 'billing webhook lifecycle migration adds lookup indexes', (source) =>
+  source.includes('idx_business_store_entitlements_original_transaction') &&
+  source.includes('idx_business_store_entitlements_latest_transaction') &&
+  source.includes('idx_store_webhook_events_processed_created')
 );
 
 expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires exact configured token', (source) =>

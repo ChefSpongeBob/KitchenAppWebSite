@@ -1,0 +1,8 @@
+CREATE INDEX IF NOT EXISTS idx_business_store_entitlements_original_transaction
+ON business_store_entitlements(store, original_transaction_id);
+
+CREATE INDEX IF NOT EXISTS idx_business_store_entitlements_latest_transaction
+ON business_store_entitlements(store, latest_transaction_id);
+
+CREATE INDEX IF NOT EXISTS idx_store_webhook_events_processed_created
+ON store_webhook_events(processed_status, created_at);

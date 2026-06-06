@@ -37,7 +37,7 @@
 		if (form?.error) return { tone: 'error', text: form.error };
 		if (params.get('error') === 'session') return { tone: 'error', text: 'Your session ended. Sign in again to continue.' };
 		if (params.get('registered') === 'success' && params.get('purchase') === 'pending') {
-			return { tone: 'notice', text: 'Account created. Paid activation is pending app-store billing setup.' };
+			return { tone: 'notice', text: 'Account created. Paid activation is pending.' };
 		}
 		if (params.get('registered') === 'success') return { tone: 'notice', text: 'Account created. You can sign in now.' };
 		if (params.get('reset') === 'success') return { tone: 'notice', text: 'Password reset. Sign in with your new password.' };

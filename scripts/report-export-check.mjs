@@ -64,7 +64,7 @@ expect('src/routes/reports/+page.svelte', 'reports landing links to Phase 8 expo
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 8 reports/export phase', (source) =>
   source.includes('`8. Reports/export foundation`') &&
-  source.includes('Active phase: `9. Billing and store subscription lifecycle`')
+  source.includes('Active phase: `10. Invite, employee onboarding, and HR completion`')
 );
 
 const failed = checks.filter((check) => !check.ok);

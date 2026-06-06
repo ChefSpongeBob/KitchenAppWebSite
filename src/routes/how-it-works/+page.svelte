@@ -124,7 +124,7 @@
 			step: '01',
 			title: 'Create The Business Workspace',
 			summary: 'Register the restaurant and create its isolated app environment.',
-			items: ['Enter owner and business information', 'Choose plan path', 'Create the first owner/admin account'],
+			items: ['Enter owner and business information', 'Choose plan path', 'Create the first owner or manager account'],
 			image: '/marketing/app/admin-dashboard.png',
 			alt: 'Manager dashboard overview',
 			position: 'top center'
