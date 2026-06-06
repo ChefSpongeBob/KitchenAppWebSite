@@ -26,6 +26,24 @@
       title: 'Schedule History',
       description: 'Published schedule records and CSV export.',
       icon: 'calendar_month'
+    },
+    {
+      href: '/reports/requests',
+      title: 'Schedule Requests',
+      description: 'Time off, open shifts, and shift offers.',
+      icon: 'swap_horiz'
+    },
+    {
+      href: '/reports/temperature',
+      title: 'Temperature Report',
+      description: 'Sensor readings and alert activity.',
+      icon: 'device_thermostat'
+    },
+    {
+      href: '/reports/onboarding',
+      title: 'Onboarding Report',
+      description: 'Employee packet status and review counts.',
+      icon: 'assignment_ind'
     }
   ];
 </script>

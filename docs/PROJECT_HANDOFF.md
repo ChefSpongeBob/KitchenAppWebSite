@@ -117,12 +117,12 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `8. Reports and exports completion`
+- Active phase: `9. Billing and store subscription lifecycle`
 - Status: In progress
-- Current pass: Begin Phase 8 reports and exports completion. Phase 7 list completion/history/alert foundation is locally complete to the code-validation point; detailed multi-user and multi-tenant list testing remains in the final manual run.
-- Return point after branch work: Continue Phase 8 by auditing all report/export routes for tenant scoping, read-only role access, useful coverage, row limits, CSV behavior, and production-safe payload sizes.
-- Last verified: 2026-06-05 focused Phase 7 validation passed: `npm.cmd run test:operational-events`, `npm.cmd run test:email-system`, `npm.cmd run test:scale-performance`, `npm.cmd run check`, and elevated `npm.cmd run build`. Local migrations are current through `0079_list_activity_lookup_index.sql`. Prior full `npm.cmd run test:static` passed after Phase 6 schedule permission and notification-routing alignment. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`
+- Current pass: Begin Phase 9 billing and store subscription lifecycle. Phase 8 reports/export foundation is locally complete to the code-validation point; detailed role, CSV, and multi-tenant report testing remains in the final manual run.
+- Return point after branch work: Continue Phase 9 by auditing Apple/Google product IDs, native purchase verification, webhook lifecycle handling, entitlement status, billing recovery/cancellation, and store sandbox testing needs.
+- Last verified: 2026-06-06 focused Phase 8 validation passed: `npm.cmd run test:report-exports`, `npm.cmd run test:scale-performance`, `npm.cmd run check`, and elevated `npm.cmd run build`. Local migrations are current through `0080_report_export_indexes.sql`; remote D1 migrations `0078`, `0079`, and `0080` are applied on `crimini-production`. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`
 
 ## Final Multi-Tenant Test Notes
 
@@ -137,6 +137,8 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 7 history/alert pass: submit prep and checklist data as multiple employees; verify submitter and executor fields; confirm two-week prep history, checklist history, CSV/export behavior, completion alerts, item-completed events, and tenant isolation across two businesses.
 - Phase 7 report URL pass: verify `/reports/lists?domain=preplists`, `/reports/lists?domain=inventory`, `/reports/lists?domain=orders`, and `/reports/lists?domain=checklists`; download each matching CSV and confirm date, list, item, action/value, completed-by, and submitted-by fields.
 - Phase 7 event delivery pass: after list submission, item completion, item reopen, and full-list completion, run the operational event processor; confirm opted-in manager/content-access users receive the correct alerts and unrelated business users receive nothing.
+- Phase 8 reports pass: open `/reports`, `/reports/schedule`, `/reports/requests`, `/reports/temperature`, `/reports/onboarding`, and all list report domains as owner, manager, consultant, contractor, and staff. Confirm permitted roles are read-only, staff is blocked, each route stays inside the active business, and CSV exports match the visible rows.
+- Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
 
 ## Launch Completion List
 
@@ -220,6 +222,8 @@ Current audit status:
 - Add pagination, chunking, or asynchronous exports so large reports do not silently stop at fixed row limits.
 - Confirm schedule history supports the required retention period.
 - Test CSV files with real data and external spreadsheet tools.
+- Phase 8 current foundation: schedule requests, temperature monitoring, and onboarding status reports/CSVs exist; report queries are bounded and business scoped; `test:report-exports` guards report access, CSV endpoints, sensitive onboarding exclusions, and report links.
+- Phase 8 manual validation needs: run the reports and CSV passes from Final Multi-Tenant Test Notes before launch, including owner/manager/consultant/contractor/staff access, read-only behavior, spreadsheet opening, row-limit behavior, sensitive onboarding exclusion, and two-business isolation.
 
 9. Billing and store subscription lifecycle
 - Finalize Apple and Google product IDs.

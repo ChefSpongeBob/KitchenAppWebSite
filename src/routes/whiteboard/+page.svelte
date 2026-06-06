@@ -280,6 +280,11 @@
     text-align: center;
   }
 
+  :global(html[data-theme='dark']) .idea-text {
+    color: #f8f1e5;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
+  }
+
   small {
     position: relative;
     z-index: 1;
@@ -287,6 +292,11 @@
     font-size: var(--vote-font);
     margin-top: 0;
     color: rgba(17, 18, 20, 0.62);
+  }
+
+  :global(html[data-theme='dark']) small {
+    color: rgba(248, 241, 229, 0.78);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
   }
 
   @media (max-width: 760px) {

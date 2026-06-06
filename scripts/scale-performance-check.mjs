@@ -56,6 +56,16 @@ expect('migrations/0079_list_activity_lookup_index.sql', 'list activity lookup i
   source.includes('list_item_activity_events(business_id, domain, item_id, occurred_at)')
 );
 
+expect('migrations/0080_report_export_indexes.sql', 'report export migration covers business-first export indexes', (source) =>
+  [
+    'idx_schedule_shift_offers_business_updated',
+    'idx_schedule_open_shift_requests_business_updated',
+    'idx_user_schedule_time_off_requests_business_updated',
+    'idx_temperature_alert_events_business_seen',
+    'idx_employee_onboarding_packages_business_updated'
+  ].every((indexName) => source.includes(indexName))
+);
+
 expect('src/lib/server/history.ts', 'list history reports include checklist activity and item executors', (source) =>
   source.includes("domain === 'checklists'") &&
   source.includes('list_item_activity_events a') &&
