@@ -121,7 +121,7 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'Phase 10 manual testing notes are tracked', (source) =>
-  source.includes('Active phase: `10. Invite, employee onboarding, and HR completion`') &&
+  source.includes('Phase 10 invite/onboarding pass') &&
   source.includes('employee invite flow from email link to onboarding to login') &&
   source.includes('contractors do not receive employee tax onboarding packets')
 );

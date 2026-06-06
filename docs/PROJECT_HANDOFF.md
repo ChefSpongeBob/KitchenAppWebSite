@@ -118,12 +118,12 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `10. Invite, employee onboarding, and HR completion`
+- Active phase: `11. Creator, editor, and legacy route consolidation`
 - Status: In progress
-- Current pass: Phase 10 invite, employee onboarding, and HR-sensitive access guardrails are code-complete to the static-validation point. Manual invite, packet, source-form upload, employee completion, manager review, contractor exemption, and legal/payroll procedure tests remain.
-- Return point after branch work: Continue Phase 10 manual-flow readiness, then move into Phase 11 creator/editor/legacy route consolidation when invite/onboarding behavior is confirmed.
-- Last verified: 2026-06-06 focused Phase 10 validation passed: `npm.cmd run test:hr-onboarding`, `npm.cmd run test:authorization-capabilities`, `npm.cmd run test:media-access`, `npm.cmd run test:production-schema`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. Public-route local smoke and authenticated smoke were not rerun in this pass.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`
+- Current pass: Begin Phase 11 by inventorying creator/editor routes, duplicate admin surfaces, legacy compatibility paths, unused copied-app assets, and feature-gated editor entry points before removing or redirecting anything.
+- Return point after branch work: Start Phase 11 route/editor consolidation with a read-only inventory pass, then make surgical redirects/removals one group at a time.
+- Last verified: 2026-06-06 focused Phase 10 validation passed: `npm.cmd run test:hr-onboarding`, `npm.cmd run test:authorization-capabilities`, `npm.cmd run test:media-access`, `npm.cmd run test:production-schema`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely; Wrangler reported no pending migrations after applying local `0079-0081` and remote `0076-0081`. Public-route local smoke and authenticated smoke were not rerun in this pass.
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`, `10. Invite/onboarding/HR guardrails`
 
 ## Final Multi-Tenant Test Notes
 
@@ -141,6 +141,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 8 reports pass: open `/reports`, `/reports/schedule`, `/reports/requests`, `/reports/temperature`, `/reports/onboarding`, and all list report domains as owner, manager, consultant, contractor, and staff. Confirm permitted roles are read-only, staff is blocked, each route stays inside the active business, and CSV exports match the visible rows.
 - Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
 - Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, enterprise, temperature add-on, and camera add-on from native builds; restore purchases; confirm entitlements activate the correct business only; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state.
+- Phase 10 invite/onboarding pass: from `/admin/onboarding`, create owner-blocked, manager, employee, consultant, and contractor invites; open the email link into `/register?invite=...`; confirm employee registration skips business/pricing controls and lands at `/login`; log in and complete packet items from `/settings`; review, request changes, approve, and view source forms from `/admin/users/[id]` and `/admin/onboarding`; confirm contractor invites do not create employee tax packets; confirm staff cannot open HR-sensitive media or admin review routes; confirm owner/manager HR-sensitive access is audited and business scoped.
 
 ## Launch Completion List
 
