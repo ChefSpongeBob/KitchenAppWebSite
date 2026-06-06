@@ -117,12 +117,12 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `7. Lists, completion history, and alerts`
+- Active phase: `8. Reports and exports completion`
 - Status: In progress
-- Current pass: Phase 7 list completion/history/alert wiring. List submissions now expose submitter and executor history, checklist activity is available in list reports/CSV, item/full-list events route through the operational outbox, and local migration `0079_list_activity_lookup_index.sql` was applied.
-- Return point after branch work: Continue Phase 7 by manually validating checklist, prep, inventory, and order list creation/edit/delete/submit flows, attachments opening linked recipes/SOPs, completion alerts, CSV exports, and two-business tenant isolation.
+- Current pass: Begin Phase 8 reports and exports completion. Phase 7 list completion/history/alert foundation is locally complete to the code-validation point; detailed multi-user and multi-tenant list testing remains in the final manual run.
+- Return point after branch work: Continue Phase 8 by auditing all report/export routes for tenant scoping, read-only role access, useful coverage, row limits, CSV behavior, and production-safe payload sizes.
 - Last verified: 2026-06-05 focused Phase 7 validation passed: `npm.cmd run test:operational-events`, `npm.cmd run test:email-system`, `npm.cmd run test:scale-performance`, `npm.cmd run check`, and elevated `npm.cmd run build`. Local migrations are current through `0079_list_activity_lookup_index.sql`. Prior full `npm.cmd run test:static` passed after Phase 6 schedule permission and notification-routing alignment. Resend API send confirmed through `send.criminiops.com`; Cloudflare production Resend secret names confirmed through Wrangler. Public-route local smoke passed against `http://localhost:5173`; authenticated smoke was not rerun because this shell has no smoke credentials or internal token.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`
+- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`
 
 ## Final Multi-Tenant Test Notes
 
@@ -135,6 +135,8 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 6 notification pass: process operational events after schedule publish, shift offer, shift request, open-shift request, approval, decline, and time-off decisions; confirm emails route to opted-in users, managers, affected employees, and eligible department employees only.
 - Phase 7 list pass: create checklist, prep, inventory, and order lists; add/edit/delete items; attach recipes and SOPs; submit counts/completions; reopen completed items; verify new items appear immediately; confirm saved inputs clear after save; confirm deleted lists/items disappear everywhere they should.
 - Phase 7 history/alert pass: submit prep and checklist data as multiple employees; verify submitter and executor fields; confirm two-week prep history, checklist history, CSV/export behavior, completion alerts, item-completed events, and tenant isolation across two businesses.
+- Phase 7 report URL pass: verify `/reports/lists?domain=preplists`, `/reports/lists?domain=inventory`, `/reports/lists?domain=orders`, and `/reports/lists?domain=checklists`; download each matching CSV and confirm date, list, item, action/value, completed-by, and submitted-by fields.
+- Phase 7 event delivery pass: after list submission, item completion, item reopen, and full-list completion, run the operational event processor; confirm opted-in manager/content-access users receive the correct alerts and unrelated business users receive nothing.
 
 ## Launch Completion List
 
@@ -209,6 +211,7 @@ Current audit status:
 - Add checklist history reporting.
 - Confirm two-week prep history includes submitter and task executor detail.
 - Confirm history and alert writes are business scoped and efficient.
+- Phase 7 manual validation needs: run the list/report/event passes from Final Multi-Tenant Test Notes before launch, including CSV downloads, event processing, attachments, two-business isolation, and multiple-user submitter versus executor confirmation.
 
 8. Reports and exports completion
 - Add executor detail to list history.
