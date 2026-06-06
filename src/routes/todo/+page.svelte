@@ -42,12 +42,12 @@
     return `${description}\n\nAssigned to: ${assigned}${completedBy}${completedAt}`;
   }
 
-  const withTodoFeedback: SubmitFunction = () => {
+  const withTodoFeedback = (message: string): SubmitFunction => () => {
     return async ({ result }) => {
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
-        pushToast('Todo completed.', 'success');
+        pushToast(message, 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That todo could not be updated.', 'error');
       }
@@ -85,9 +85,9 @@
               <p>{expandedText(todo)}</p>
             {/if}
           </button>
-          <form method="POST" action="?/complete" use:enhance={withTodoFeedback}>
+          <form method="POST" action="?/complete" use:enhance={withTodoFeedback('Todo completed.')}>
             <input type="hidden" name="id" value={todo.id} />
-            <button class="complete-button" type="submit">Complete</button>
+            <button class="todo-action complete-button" type="submit">Complete</button>
           </form>
         </div>
       {/each}
@@ -100,15 +100,21 @@
   {#if activeTab === 'completed'}
     <div class="card-list" role="region" aria-label="Completed Tasks">
       {#each completedTodos as todo (todo.id)}
-        <button class="card-hit" type="button" aria-expanded={expandedId === todo.id} on:click={() => toggleExpand(todo.id)}>
-          <span>
-            <strong>{todo.title}</strong>
-            <small>{todo.completed_at ? new Date(todo.completed_at * 1000).toLocaleString() : 'Completed'}</small>
-          </span>
-          {#if expandedId === todo.id}
-            <p>{expandedText(todo, true)}</p>
-          {/if}
-        </button>
+        <div class="card-wrapper">
+          <button class="card-hit" type="button" aria-expanded={expandedId === todo.id} on:click={() => toggleExpand(todo.id)}>
+            <span>
+              <strong>{todo.title}</strong>
+              <small>{todo.completed_at ? new Date(todo.completed_at * 1000).toLocaleString() : 'Completed'}</small>
+            </span>
+            {#if expandedId === todo.id}
+              <p>{expandedText(todo, true)}</p>
+            {/if}
+          </button>
+          <form method="POST" action="?/reopen" use:enhance={withTodoFeedback('Todo reopened.')}>
+            <input type="hidden" name="id" value={todo.id} />
+            <button class="todo-action" type="submit">Reopen</button>
+          </form>
+        </div>
       {/each}
       {#if completedTodos.length === 0}
         <p class="empty-state">No completed tasks.</p>
@@ -193,17 +199,22 @@
     white-space: pre-line;
   }
 
-  .complete-button {
+  .todo-action {
     align-self: flex-start;
-    background: color-mix(in srgb, var(--color-success) 14%, var(--color-surface));
-    border: 1px solid color-mix(in srgb, var(--color-success) 42%, var(--color-border) 58%);
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 34%, var(--color-border) 66%);
     color: var(--color-text);
     font-size: 0.74rem;
     font-weight: var(--weight-semibold);
-    padding: 0.34rem 0.7rem;
-    border-radius: var(--radius-sm);
+    padding: 0.34rem 0.15rem;
+    border-radius: 0;
     cursor: pointer;
     width: auto;
+  }
+
+  .complete-button {
+    border-bottom-color: color-mix(in srgb, var(--color-success) 52%, var(--color-border) 48%);
   }
 
   .empty-state {
@@ -232,7 +243,7 @@
       grid-template-columns: 1fr;
     }
 
-    .complete-button {
+    .todo-action {
       width: 100%;
     }
   }

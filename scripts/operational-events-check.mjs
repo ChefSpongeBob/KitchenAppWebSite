@@ -133,8 +133,9 @@ expect('src/lib/server/storeBilling.ts', 'store purchase events feed operational
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks operational event phase', (source) =>
-  source.includes('Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`') &&
-  source.includes('Active phase: `7. Lists, completion history, and alerts`')
+  source.includes('`2. Operational event and notification foundation`') &&
+  source.includes('Operational event and notification foundation') &&
+  source.includes('Launch Completion List')
 );
 
 const failed = checks.filter((check) => !check.ok);

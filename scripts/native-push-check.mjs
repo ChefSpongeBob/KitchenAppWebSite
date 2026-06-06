@@ -93,7 +93,7 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks native push foundation status', (source) =>
-  source.includes('Active phase: `7. Lists, completion history, and alerts`') &&
+  source.includes('`4. Native push notification foundation`') &&
   source.includes('Phase 4 remaining needs') &&
   source.includes('Native push notification foundation')
 );

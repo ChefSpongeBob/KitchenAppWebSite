@@ -221,5 +221,66 @@ export const actions: Actions = {
 		}
 
 		return { success: true };
+	},
+	reopen: async ({ request, locals }) => {
+		const db = locals.DB;
+		if (!db) return fail(503, { error: 'Database not configured.' });
+		await ensureTenantSchema(db);
+		const businessId = requireBusinessId(locals);
+		const formData = await request.formData();
+		const id = String(formData.get('id') || '');
+
+		if (!id) return fail(400);
+
+		const now = Math.floor(Date.now() / 1000);
+		const hasAssignmentsTable = await hasTable(db, 'todo_assignments');
+
+		const todo = hasAssignmentsTable
+			? await db
+					.prepare(`
+			SELECT
+				t.id,
+				t.completed_at,
+				ta.user_id AS assigned_to
+			FROM todos t
+			LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
+			WHERE t.id = ? AND t.business_id = ?
+		`)
+					.bind(id, businessId)
+					.first<{ id: string; completed_at: number | null; assigned_to: string | null }>()
+			: await db
+					.prepare(
+						`
+            SELECT
+              t.id,
+              t.completed_at,
+              NULL AS assigned_to
+            FROM todos t
+            WHERE t.id = ? AND t.business_id = ?
+          `
+					)
+					.bind(id, businessId)
+					.first<{ id: string; completed_at: number | null; assigned_to: string | null }>();
+
+		if (!todo) return fail(404);
+		if (todo.completed_at === null) return { success: true };
+		if (todo.assigned_to && todo.assigned_to !== locals.userId && locals.userRole !== 'admin') {
+			return fail(403, { error: 'This task is assigned to another user.' });
+		}
+
+		const updateResult = await db
+			.prepare(`
+			UPDATE todos
+			SET completed_by = NULL, completed_at = NULL, updated_at = ?
+			WHERE id = ? AND business_id = ?
+		`)
+			.bind(now, id, businessId)
+			.run();
+
+		if (!updateResult.success || (updateResult.meta?.changes ?? 0) < 1) {
+			return fail(409, { error: 'Task could not be reopened.' });
+		}
+
+		return { success: true };
 	}
 };
