@@ -115,10 +115,8 @@
     },
     {
       label: "Systems",
-      icon: "videocam",
+      icon: "device_thermostat",
       items: [
-        { label: "Camera Media", route: "/admin/camera", icon: "videocam" },
-        { label: "Camera Setup", route: "/admin/camera/setup", icon: "settings_input_antenna" },
         { label: "Temperature Sensors", route: "/admin/sensors", icon: "device_thermostat" }
       ]
     }
@@ -244,6 +242,7 @@
     "/whiteboard",
     "/temper",
     "/conversions",
+    "/tools",
     "/vendors",
     "/reports",
     "/menu",
@@ -302,8 +301,11 @@
           item.featureKey,
           data.user?.businessPermissionTemplate,
           data.user?.businessCapabilities
-        ))
+      ))
   );
+  $: toolNavItems = filteredPrimaryNav.filter((item) => item.group === "tools");
+  $: mainNavItems = filteredPrimaryNav.filter((item) => item.group !== "tools");
+  $: toolsGroupActive = toolNavItems.some((item) => isActive(item.route, currentPath));
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
       ...group,
@@ -334,7 +336,7 @@
     .filter((group) => group.items.length > 0);
   $: userBusinesses = data.user?.businesses ?? [];
   $: isAdminRoute = currentPath.startsWith("/admin");
-  $: navItems = isAdminAccount || isAdminRoute ? [...filteredPrimaryNav, adminNavItem] : filteredPrimaryNav;
+  $: navItems = isAdminAccount || isAdminRoute ? [...mainNavItems, adminNavItem] : mainNavItems;
   $: isAdminSidebar = isAdminRoute;
   $: if (currentPath) {
     sidebarOpen = false;
@@ -561,6 +563,29 @@
             <span>{item.label}</span>
           </a>
         {/each}
+        {#if toolNavItems.length > 0}
+          <details class="side-group" open={toolsGroupActive}>
+            <summary class="side-group-summary tap" class:active={toolsGroupActive}>
+              <span class="material-icons">build</span>
+              <span>Tools</span>
+              <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
+            </summary>
+            <div class="side-group-items">
+              {#each toolNavItems as item}
+                <a
+                  href={item.route}
+                  class="side-item side-sub-item tap"
+                  class:active={isActive(item.route, currentPath)}
+                  on:click={() => (sidebarOpen = false)}
+                >
+                  <span class="active-indicator"></span>
+                  <span class="material-icons">{item.icon}</span>
+                  <span>{item.label}</span>
+                </a>
+              {/each}
+            </div>
+          </details>
+        {/if}
       {/if}
       <div class="sidebar-footer">
         <button

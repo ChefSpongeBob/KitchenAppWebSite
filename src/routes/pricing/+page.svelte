@@ -4,39 +4,39 @@
 	const plans = [
 		{
 			name: 'Small',
-			price: '$50/mo',
+			price: '$30/mo',
 			target: 'Lean team launch',
 			description: 'Built for focused teams getting live quickly.',
 			items: [
 				'Up to 20 employees',
 				'Core scheduling, todo, and lists',
-				'Temperature monitoring add-on available (+$30/mo)',
-				'Camera monitoring add-on available (+$30/mo)'
+				'Temperature monitoring starts at Medium',
+				'Camera monitoring planned after launch'
 			]
 		},
 		{
 			name: 'Medium',
-			price: '$120/mo',
+			price: '$65/mo',
 			target: 'Growing operations',
 			description: 'For active teams needing stronger control tooling.',
 			recommended: true,
 			items: [
 				'Up to 75 users',
 				'Advanced admin and editor controls',
-				'Temperature monitoring add-on available (+$30/mo)',
-				'Camera monitoring add-on available (+$30/mo)'
+				'Temperature monitoring included',
+				'Camera monitoring planned after launch'
 			]
 		},
 		{
 			name: 'Large',
-			price: '$160/mo',
+			price: '$90/mo',
 			target: 'Scaled service teams',
 			description: 'For high-capacity teams running full platform coverage.',
 			items: [
 				'Up to 250 employees',
 				'Full platform + multi-team scale',
 				'Temperature monitoring included',
-				'Camera monitoring included'
+				'Camera monitoring planned after launch'
 			]
 		}
 	];
@@ -62,15 +62,15 @@
 		},
 		{
 			label: 'Temperature Sensors',
-			starter: 'Optional +$30/mo',
-			growth: 'Optional +$30/mo',
+			starter: 'Not included',
+			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
 			label: 'Camera Monitoring',
-			starter: 'Optional +$30/mo',
-			growth: 'Optional +$30/mo',
-			enterprise: 'Included'
+			starter: 'Planned',
+			growth: 'Planned',
+			enterprise: 'Planned'
 		}
 	];
 
@@ -79,7 +79,7 @@
 		'Prep lists, checklists, inventory, and orders',
 		'Recipes, document library, and SOP pages',
 		'Todo assignments, whiteboard, and announcements',
-		'Monitoring dashboards (active when add-ons are enabled)'
+		'Monitoring dashboards on eligible tiers'
 	];
 
 	const launchNotes = [
@@ -94,7 +94,7 @@
 		<p class="eyebrow">Pricing</p>
 		<h1>Straightforward pricing for active kitchen teams.</h1>
 		<p>
-			Choose a plan by team size and operational complexity. Monitoring add-ons are optional on Small and Medium, included on Large.
+			Choose a plan by team size and operational complexity. Temperature monitoring is included with Medium and Large.
 		</p>
 		<div class="head-actions">
 			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Trial</a>

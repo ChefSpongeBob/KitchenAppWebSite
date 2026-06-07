@@ -88,13 +88,13 @@
 		{
 			title: 'Communication + Monitoring',
 			summary:
-				'Keep managers and staff aligned with live homepage context, announcements, specials, whiteboard ideas, vendors, and optional monitoring.',
+				'Keep managers and staff aligned with live homepage context, announcements, specials, whiteboard ideas, vendors, and tier-based monitoring.',
 			items: [
 				'Announcements and specials',
 				'Whiteboard ideas and voting',
 				'Employee spotlight',
 				'Vendor directory for admin users',
-				'Temperature node and camera monitoring readiness',
+				'Temperature node monitoring and future camera expansion readiness',
 				'History exports for schedules, prep, inventory, and orders'
 			],
 			image: '/marketing/app/admin-dashboard.png',
@@ -184,15 +184,15 @@
 		},
 		{
 			module: 'Temperature monitoring',
-			starter: 'Add-on',
-			growth: 'Add-on',
+			starter: 'Medium+',
+			growth: 'Included',
 			enterprise: 'Included'
 		},
 		{
 			module: 'Camera monitoring',
-			starter: 'Add-on',
-			growth: 'Add-on',
-			enterprise: 'Included'
+			starter: 'Planned',
+			growth: 'Planned',
+			enterprise: 'Planned'
 		}
 	];
 

@@ -646,12 +646,8 @@ export async function applyVerifiedEntitlementsToBusiness(db: D1, businessId: st
 
 	if (!activePlan) return { applied: false };
 
-	const addOnTempMonitoring =
-		activePlan.addon_temp_monitoring === 1 ||
-		active.some((entitlement) => entitlement.addon_temp_monitoring === 1);
-	const addOnCameraMonitoring =
-		activePlan.addon_camera_monitoring === 1 ||
-		active.some((entitlement) => entitlement.addon_camera_monitoring === 1);
+	const addOnTempMonitoring = activePlan.plan_tier === 'growth' || activePlan.plan_tier === 'enterprise';
+	const addOnCameraMonitoring = false;
 
 	await db
 		.prepare(

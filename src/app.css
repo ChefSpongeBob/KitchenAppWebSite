@@ -248,18 +248,14 @@ body::before {
   opacity: 0.075;
   background-image:
     url("/crimini-mark.svg"),
-    url("/kitchen-icons/chicken-leg.svg"),
-    url("/kitchen-icons/fries.svg"),
-    url("/kitchen-icons/whisk.svg"),
     url("/crimini-mark.svg"),
-    url("/kitchen-icons/fries.svg");
+    url("/crimini-mark.svg"),
+    url("/crimini-mark.svg");
   background-repeat: no-repeat;
-  background-size: 92px auto, 82px auto, 62px auto, 72px auto, 86px auto, 56px auto;
+  background-size: 92px auto, 72px auto, 86px auto, 56px auto;
   background-position:
     left 2.5rem top 8rem,
     right 2.5rem top 13rem,
-    left 6rem top 22rem,
-    center top 5.5rem,
     left 3rem bottom 7rem,
     right 8rem bottom 22rem;
   filter: none;

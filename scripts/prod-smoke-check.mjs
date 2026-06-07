@@ -41,7 +41,7 @@ const adminRoutes = [
   ['/admin/creator', 'Creator'],
   ['/admin/users', 'Admin users'],
   ['/admin/schedule', 'Admin schedule builder'],
-  ['/admin/camera', 'Camera and sensors']
+  ['/admin/sensors', 'Temperature sensors']
 ];
 
 function logPass(message) {

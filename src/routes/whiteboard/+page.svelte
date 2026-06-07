@@ -225,7 +225,7 @@
     border-radius: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
-    color: var(--color-text);
+    color: #111214 !important;
     animation: cloudFloat var(--floatDur) ease-in-out infinite, cloudBreathe var(--pulseDur) ease-in-out infinite;
     animation-delay: var(--delay);
     isolation: isolate;
@@ -274,15 +274,10 @@
     font-size: var(--idea-font);
     font-weight: var(--weight-semibold);
     line-height: 1.18;
-    color: var(--color-text);
+    color: #111214 !important;
     overflow-wrap: break-word;
     text-wrap: balance;
     text-align: center;
-  }
-
-  :global(html[data-theme='dark']) .idea-text {
-    color: #f8f1e5;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
   }
 
   small {
@@ -291,12 +286,7 @@
     opacity: 0.78;
     font-size: var(--vote-font);
     margin-top: 0;
-    color: rgba(17, 18, 20, 0.62);
-  }
-
-  :global(html[data-theme='dark']) small {
-    color: rgba(248, 241, 229, 0.78);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+    color: rgba(17, 18, 20, 0.68) !important;
   }
 
   @media (max-width: 760px) {

@@ -173,7 +173,8 @@ export async function sendInviteEmail({
   inviteeEmail,
   inviteCode,
   expiresAt,
-  businessName
+  businessName,
+  onboardingRequired = true
 }: {
   env?: EmailEnv | null;
   origin: string;
@@ -181,6 +182,7 @@ export async function sendInviteEmail({
   inviteCode: string;
   expiresAt: number | null;
   businessName?: string | null;
+  onboardingRequired?: boolean;
 }) {
   const baseUrl = getAppBaseUrl(origin, env);
   const registerUrl = `${baseUrl}/register?invite=${encodeURIComponent(inviteCode)}`;
@@ -197,6 +199,10 @@ export async function sendInviteEmail({
   const safeLogoUrl = escapeHtml(logoUrl);
   const safeBusinessName = escapeHtml(businessName?.trim() || 'your workspace');
   const subjectBusinessName = businessName?.trim() || 'Your team';
+  const bodyText = onboardingRequired
+    ? 'Complete your Crimini setup and onboarding forms.'
+    : 'Complete your Crimini setup.';
+  const actionLabel = onboardingRequired ? 'Complete onboarding' : 'Create account';
 
   return sendTransactionalEmail({
     env,
@@ -213,8 +219,8 @@ export async function sendInviteEmail({
             <div style="padding:34px 28px 30px;">
               <p style="margin:0 0 8px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#7a6f61;">Employee Onboarding</p>
               <h1 style="margin:0 0 14px;font-size:32px;line-height:1.05;font-weight:400;color:#181716;">Welcome to ${safeBusinessName}</h1>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#4c463f;">Complete your Crimini setup and onboarding packet.</p>
-              <a href="${safeRegisterUrl}" style="display:inline-block;background:#181716;color:#fffdf8;text-decoration:none;border-radius:999px;padding:14px 24px;font-size:15px;letter-spacing:.03em;">Complete onboarding</a>
+              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#4c463f;">${escapeHtml(bodyText)}</p>
+              <a href="${safeRegisterUrl}" style="display:inline-block;background:#181716;color:#fffdf8;text-decoration:none;border-radius:999px;padding:14px 24px;font-size:15px;letter-spacing:.03em;">${escapeHtml(actionLabel)}</a>
               <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#746b60;">Expires ${escapeHtml(expirationText)}.</p>
             </div>
             <div style="padding:18px 28px 26px;border-top:1px solid #ded2bf;color:#746b60;font-size:12px;line-height:1.5;">
@@ -229,7 +235,7 @@ export async function sendInviteEmail({
     text: [
       `${subjectBusinessName} invited you to Crimini.`,
       '',
-      'Complete your setup and onboarding packet:',
+      onboardingRequired ? 'Complete your setup and onboarding forms:' : 'Complete your setup:',
       registerUrl,
       '',
       `Expires: ${expirationText}`,

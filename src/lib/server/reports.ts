@@ -58,6 +58,18 @@ export type OnboardingReportRow = {
   updated_at: number;
 };
 
+export type WasteReportRow = {
+  product: string;
+  amount: number | null;
+  unit: string;
+  reason: string;
+  notes: string;
+  submitted_by_name: string;
+  submitted_by_email: string;
+  created_at: number;
+  created_date: string;
+};
+
 function isoDate(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -308,6 +320,41 @@ export async function loadOnboardingReport(
     )
     .bind(businessId, startDate, endDate)
     .all<OnboardingReportRow>();
+
+  return { startDate, endDate, rows: rows.results ?? [] };
+}
+
+export async function loadWasteReport(
+  db: DB,
+  businessId: string,
+  params: { start?: string | null; end?: string | null } = {}
+) {
+  await ensureTenantSchema(db, true);
+  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        w.product,
+        w.amount,
+        w.unit,
+        w.reason,
+        w.notes,
+        COALESCE(u.display_name, u.email, 'Unknown') AS submitted_by_name,
+        COALESCE(u.email, '') AS submitted_by_email,
+        w.created_at,
+        date(w.created_at, 'unixepoch') AS created_date
+      FROM waste_logs w
+      LEFT JOIN users u ON u.id = w.submitted_by_user_id
+      WHERE w.business_id = ?
+        AND date(w.created_at, 'unixepoch') BETWEEN ? AND ?
+      ORDER BY w.created_at DESC
+      LIMIT 1000
+      `
+    )
+    .bind(businessId, startDate, endDate)
+    .all<WasteReportRow>();
 
   return { startDate, endDate, rows: rows.results ?? [] };
 }

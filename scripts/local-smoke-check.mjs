@@ -52,7 +52,7 @@ const adminRoutes = [
   ['/admin/schedule-roles', 'Schedule roles'],
   ['/admin/schedule-settings', 'Schedule settings'],
   ['/admin/users', 'Admin users'],
-  ['/admin/camera', 'Camera and sensors']
+  ['/admin/sensors', 'Temperature sensors']
 ];
 
 function log(status, message) {

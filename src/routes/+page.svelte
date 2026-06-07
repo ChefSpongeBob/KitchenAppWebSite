@@ -68,14 +68,14 @@
 		{
 			tag: 'Daily Operations',
 			title: 'Run prep, checklists, recipes, docs, menus, and live updates in one app.',
-			subtitle: 'Keep service aligned with the homepage, tasks, announcements, specials, and optional monitoring.',
+			subtitle: 'Keep service aligned with the homepage, tasks, announcements, specials, and tier-based monitoring.',
 			image: '/marketing/FB_IMG_3952972665318110830.jpg',
 			fit: 'cover',
 			position: 'center 42%'
 		}
 	];
 
-	const keyStats = ['Workspace setup', 'Employee onboarding', 'Scheduling', 'Daily execution', 'Monitoring'];
+	const keyStats = ['Workspace setup', 'Employee onboarding', 'Scheduling', 'Daily execution', 'Temperature monitoring'];
 
 	const coreCapabilities: CapabilityItem[] = [
 		{
@@ -104,7 +104,7 @@
 		},
 		{
 			title: 'Monitoring + Vendor Tools',
-			detail: 'Prepare for temperature nodes, camera monitoring, vendors, history exports, and operational review.'
+			detail: 'Prepare for temperature nodes, vendors, history exports, operational review, and future camera expansion.'
 		}
 	];
 

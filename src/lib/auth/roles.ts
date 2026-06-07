@@ -28,7 +28,7 @@ export const businessAccessOptions = [
   { value: 'owner', label: 'Owner' }
 ] as const;
 
-export const inviteAccessOptions = businessAccessOptions.filter((option) => option.value !== 'owner');
+export const inviteAccessOptions = businessAccessOptions;
 
 export const permissionTemplateOptions = [
   { value: 'staff', label: 'Staff' },
@@ -60,7 +60,7 @@ export const businessCapabilityOptions: ReadonlyArray<{
   { value: 'manage_announcements', label: 'Announcements', group: 'Operations' },
   { value: 'manage_specials', label: 'Specials', group: 'Operations' },
   { value: 'manage_vendors', label: 'Vendors', group: 'Operations' },
-  { value: 'manage_devices', label: 'Cameras and Sensors', group: 'Operations' },
+  { value: 'manage_devices', label: 'Temperature Sensors', group: 'Operations' },
   { value: 'view_reports', label: 'Reports and Exports', group: 'Visibility' },
   { value: 'view_vendors', label: 'Vendor Directory', group: 'Visibility' },
   { value: 'manage_billing', label: 'Billing', group: 'Visibility' }

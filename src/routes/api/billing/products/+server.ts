@@ -13,18 +13,21 @@ export const GET: RequestHandler = async ({ locals, url, request }) => {
 		return json(
 			{
 				ok: true,
-				products: products.map((product) => ({
-					store: product.store,
-					productId: product.product_id,
-					displayName: product.display_name,
-					entitlementKey: product.entitlement_key,
-					planTier: product.plan_tier,
-					billingPeriod: product.billing_period,
-					priceCents: product.price_cents,
-					currency: product.currency,
-					addOnTempMonitoring: product.addon_temp_monitoring === 1,
-					addOnCameraMonitoring: product.addon_camera_monitoring === 1
-				}))
+				products: products
+					.filter((product) => product.addon_camera_monitoring !== 1)
+					.filter((product) => !(product.addon_temp_monitoring === 1 && !product.plan_tier))
+					.map((product) => ({
+						store: product.store,
+						productId: product.product_id,
+						displayName: product.display_name,
+						entitlementKey: product.entitlement_key,
+						planTier: product.plan_tier,
+						billingPeriod: product.billing_period,
+						priceCents: product.price_cents,
+						currency: product.currency,
+						addOnTempMonitoring: product.addon_temp_monitoring === 1,
+						addOnCameraMonitoring: product.addon_camera_monitoring === 1
+					}))
 			},
 			{ headers: { 'cache-control': 'no-store' } }
 		);

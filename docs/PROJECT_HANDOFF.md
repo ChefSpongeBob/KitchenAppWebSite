@@ -68,6 +68,7 @@ npm.cmd run test:auth-abuse
 npm.cmd run test:hr-onboarding
 npm.cmd run test:admin-consolidation
 npm.cmd run test:core-feature-actions
+npm.cmd run test:camera-shelving
 npm.cmd run test:billing-lifecycle
 npm.cmd run test:store-release
 npm.cmd run test:cloudflare-readiness
@@ -105,7 +106,7 @@ Before production migrations, Create/confirm backup before migrations.
 
 - Native app id / bundle id: `com.nexusnorthsystems.crimini`.
 - Store products must be created in App Store Connect and Google Play before sandbox tests.
-- Product IDs currently expected by the app/store plan include `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, `crimini.plan.large.monthly`, temp monitoring, and camera monitoring equivalents.
+- Product IDs currently expected by the launch app/store plan include `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`. Temperature monitoring is included with Medium and Large, not sold as a standalone Small add-on. Camera monitoring products are deferred post-launch.
 - Cloudflare Secrets must include App Store, Google Play, and billing webhook values before real purchase testing.
 - Native purchase submissions stay pending until Apple/Google verification succeeds.
 - Restore purchases path is wired but needs real device/store testing.
@@ -120,10 +121,11 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `12. Core feature action test`
+- Active phase: `13. Camera feature shelving`
 - Status: In progress
-- Current pass: Phase 12A added static verification of core feature action wiring after Phase 11 consolidation.
-- Return point after branch work: Continue Phase 12 by validating lists, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, and business registry routes/actions.
+- Current pass: Phase 14 pricing, onboarding, and billing entitlement alignment after camera shelving.
+- Phase 13 camera shelving is complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
+- Phase 14 local corrections are complete: owner/invite onboarding paths are separated, launch pricing is Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, and temperature monitoring is included only with Medium and Large.
 - Last verified: 2026-06-06 focused Phase 12A validation passed: `npm.cmd run test:core-feature-actions`, `npm.cmd run test:email-system`, `npm.cmd run test:native-push`, `npm.cmd run test:operational-events`, `npm.cmd run test:report-exports`, `npm.cmd run test:admin-consolidation`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely. Public-route local smoke and authenticated smoke were not rerun in this pass.
 - Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`, `10. Invite/onboarding/HR guardrails`, `11. Creator, editor, and legacy route consolidation`
 
@@ -142,8 +144,11 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 7 event delivery pass: after list submission, item completion, and full-list completion, run the operational event processor; confirm opted-in manager/content-access users receive the correct alerts and unrelated business users receive nothing.
 - Phase 8 reports pass: open `/reports`, `/reports/schedule`, `/reports/requests`, `/reports/temperature`, `/reports/onboarding`, and all list report domains as owner, manager, consultant, contractor, and staff. Confirm permitted roles are read-only, staff is blocked, each route stays inside the active business, and CSV exports match the visible rows.
 - Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
-- Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, enterprise, temperature add-on, and camera add-on from native builds; restore purchases; confirm entitlements activate the correct business only; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state.
-- Phase 10 invite/onboarding pass: from `/admin/onboarding`, create owner-blocked, manager, employee, consultant, and contractor invites; open the email link into `/register?invite=...`; confirm employee registration skips business/pricing controls and lands at `/login`; log in and complete packet items from `/settings`; review, request changes, approve, and view source forms from `/admin/users/[id]` and `/admin/onboarding`; confirm contractor invites do not create employee tax packets; confirm staff cannot open HR-sensitive media or admin review routes; confirm owner/manager HR-sensitive access is audited and business scoped.
+- Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, and enterprise from native builds; restore purchases; confirm entitlements activate the correct business only; confirm Medium/Large enable temperature monitoring and Small does not; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state. Camera add-ons are deferred post-launch.
+- Phase 9 pricing pass: confirm `/pricing`, `/register`, `/billing`, `/api/billing/products`, Apple sandbox products, and Google Play sandbox products all reflect Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only on Medium and Large. Confirm standalone temperature and camera products are unavailable during launch.
+- Tools pass: open sidebar Tools and confirm Conversions, Food Cost Calculator, Safety & HealthCode, and Waste Tracker are visible to staff by default. Submit waste as staff, then confirm Waste Logs appears only in Reports for report-access roles and downloads tenant-scoped CSV rows.
+- Phase 10 invite/onboarding pass: from `/admin/onboarding`, create owner, manager, employee, consultant, and contractor invites; open the email link into `/register?invite=...`; confirm employee and manager registration skips business/pricing controls and creates required packet forms, owner registration skips required employee packet forms unless sent manually, contractor registration does not create employee tax packets, and each flow lands at `/login`; log in and complete packet items from `/settings`; review, request changes, approve, and view source forms from `/admin/users/[id]` and `/admin/onboarding`; confirm staff cannot open HR-sensitive media or admin review routes; confirm owner/manager HR-sensitive access is audited and business scoped.
+- Phase 10 route pass: test `/admin/onboarding`, `/register?invite=VALID_CODE`, `/register?invite=OWNER_CODE`, `/register?invite=CONTRACTOR_CODE`, `/register/welcome`, `/login`, `/settings`, `/admin/users/[id]`, `/reports/onboarding`, and onboarding media links. Confirm invite emails use onboarding copy only when packet forms are required.
 - Phase 11 creator consolidation pass: open `/admin/creator` and each editor mode for category, list, recipe, document, menu, and item attachments; confirm old admin editor links redirect to the matching Creator Studio mode; toggle lists, recipes, documents, and menus off in App Editor and confirm the matching `/admin/creator?editor=...` mode is blocked or hidden while unrelated creator modes still work.
 - Phase 12 core action pass: create, edit, delete, and view real data for lists, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, and business registry inside two test businesses. Confirm each action saves, updates the visible page immediately, stays tenant scoped, respects permissions/feature flags, and has no stale hardcoded rows.
 
@@ -244,10 +249,13 @@ Current audit status:
 - Remove or rename remaining billing placeholder language before launch.
 - Phase 9 current foundation: native purchase verification, restore submission, billing status, webhook token auth, webhook dedupe, entitlement lifecycle updates, business billing reconciliation, and lifecycle lookup indexes exist.
 - Phase 9 manual validation needs: run the billing pass from Final Multi-Tenant Test Notes after App Store Connect, Google Play Console, native builds, and sandbox tester accounts are ready.
+- Phase 9 pricing validation needs: verify store product rows, `/api/billing/products`, `/pricing`, `/register`, and `/billing` agree on Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, temperature included on Medium/Large only, and deferred camera products.
 
 10. Invite, employee onboarding, and HR completion
 - Test owner, manager, employee, consultant, and contractor invites.
 - Test employee invite flow from email link to onboarding to login.
+- Confirm owner invite flow is owner-only, skips required employee packet forms by default, and can still receive a packet manually if needed.
+- Confirm manager and employee invite flows create required packet forms, while contractor and consultant flows do not create employee tax packets.
 - Confirm employee onboarding skips business pricing and keeps valid entered data after validation errors.
 - Confirm employee packet fields, in-app forms, source document uploads, profile attachment, admin review, changes requested, approval, and document access work.
 - Confirm contractors do not receive employee tax onboarding packets.
@@ -274,13 +282,12 @@ Current audit status:
 - Announcements and spotlight: edit permissions and homepage display.
 - Vendors, reminders, conversions, and business registry: confirm save, edit, delete, access, and tenant behavior.
 
-13. Camera system completion
-- Confirm camera device provisioning, unique serial registration, naming, and revoke flow.
-- Confirm camera upload endpoint accepts only valid authenticated image and video uploads.
-- Confirm R2 media is private, business scoped, and no-store.
-- Confirm camera dashboard, preview, events, delete, and retention cleanup work.
-- Confirm wrong business, wrong serial, revoked device, and invalid credentials are rejected.
-- Test real device or simulator uploads against production.
+13. Camera feature shelving
+- Keep camera backend code, migrations, R2 binding, and beta-gated APIs in place for post-launch work.
+- Hide camera media/setup from launch navigation, admin dropdowns, signup, billing, pricing, and active marketing promises.
+- Keep `/admin/camera`, `/admin/camera/setup`, and camera API/media routes unavailable unless `PUBLIC_CAMERA_BETA_ENABLED` is intentionally enabled.
+- Treat camera monitoring as planned post-launch expansion, not an active launch feature.
+- Confirm camera add-on products cannot be selected or activated from launch signup, billing UI, product API, or native purchase path.
 
 14. Authentication, session, abuse, and account lifecycle test
 - Test every major route locally with fresh admin and employee accounts.
@@ -307,7 +314,7 @@ Current audit status:
 - Confirm polling is limited, visibility aware, and not used for event delivery.
 - Confirm pages do not load full document or media content when only listings are needed.
 - Confirm R2 media streams where practical instead of buffering large files.
-- Load test schedules, reports, list submissions, temp ingest, camera activity, and concurrent tenant use.
+- Load test schedules, reports, list submissions, temp ingest, and concurrent tenant use. Camera activity load testing is deferred until the camera module resumes.
 - Confirm cleanup and retention jobs are bounded and do not create excessive D1 writes.
 
 17. Observability, backup, and incident readiness
@@ -359,12 +366,12 @@ Current audit status:
 23. Production smoke and multi-tenant validation
 - Deploy to Cloudflare after the domain hold is lifted.
 - Run `npm.cmd run schema:readiness:prod` and `npm.cmd run smoke:prod`.
-- Run deferred Phase 3 real email flow tests for invite, approval, password reset, employee onboarding, schedule, shift, time-off, list, billing, temperature, and camera emails.
+- Run deferred Phase 3 real email flow tests for invite, approval, password reset, employee onboarding, schedule, shift, time-off, list, billing, and temperature emails. Camera emails are deferred until the camera module resumes.
 - Run deferred Phase 4 real-device push tests for native opt-in, token refresh, logout/device revocation, APNs delivery, FCM delivery, and event-triggered operational alerts.
 - Create at least two test business tenants with different roles and employees.
 - Invite admin, manager, employee, consultant, and contractor accounts.
 - Upload docs and menus.
-- Create schedules, lists, ToDos, specials, announcements, temp events, and camera events.
+- Create schedules, lists, ToDos, specials, announcements, and temp events. Camera events are deferred until the camera module resumes.
 - Purchase and restore test subscriptions in sandbox.
 - Confirm tenant data isolation and access denial across every major system.
 

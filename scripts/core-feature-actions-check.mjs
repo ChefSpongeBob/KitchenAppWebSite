@@ -141,6 +141,12 @@ expect('src/routes/api/whiteboard/+server.ts', 'whiteboard API supports business
   ])
 );
 
+expect('src/routes/whiteboard/+page.svelte', 'whiteboard cloud text stays black in all themes', (source) =>
+  source.includes('color: #111214 !important') &&
+  !source.includes(":global(html[data-theme='dark']) .idea-text") &&
+  !source.includes(":global(html[data-theme='dark']) small")
+);
+
 expect('src/routes/specials/+page.server.ts', 'specials save through permission checked tenant storage', (source) =>
   includesAll(source, [
     'save_specials',

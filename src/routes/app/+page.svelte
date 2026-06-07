@@ -344,7 +344,7 @@
           <div class="announcement-block">
             <div class="shift-title-row">
               <span class="tile-label">Today's Shift</span>
-              <img src="/crimini-mark.svg" alt="" aria-hidden="true" class="shift-fish-icon" />
+              <img src="/crimini-mark.svg" alt="" aria-hidden="true" class="shift-crimini-icon" />
             </div>
             {#if todaySchedule.length === 0}
               <div class="shift-empty-state">
@@ -445,7 +445,7 @@
     >
       <div class="tile-head employee-head">
         <div class="employee-title">
-          <img src="/kitchen-icons/chicken-leg.svg" alt="" aria-hidden="true" class="fish-icon" />
+          <span class="material-icons spotlight-icon" aria-hidden="true">star</span>
           <span class="tile-label employee-label">Employee Spotlight</span>
         </div>
       </div>
@@ -653,7 +653,7 @@
     justify-content: space-between;
     gap: 0.75rem;
   }
-  .shift-fish-icon {
+  .shift-crimini-icon {
     width: 1.9rem;
     height: 1.9rem;
     object-fit: contain;
@@ -662,7 +662,7 @@
     flex: 0 0 auto;
   }
 
-  :global([data-theme='dark']) .shift-fish-icon {
+  :global([data-theme='dark']) .shift-crimini-icon {
     filter:
       brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
     opacity: 0.96;
@@ -755,13 +755,10 @@
     text-transform: none;
     color: var(--color-text);
   }
-  .fish-icon {
-    width: 1.15rem;
-    height: 1.15rem;
-    object-fit: contain;
-    filter:
-      brightness(0) saturate(100%) invert(94%) sepia(8%) saturate(369%) hue-rotate(307deg) brightness(104%) contrast(92%);
-    opacity: 0.96;
+  .spotlight-icon {
+    color: var(--color-text-muted);
+    font-size: 1.05rem;
+    line-height: 1;
     flex: 0 0 auto;
   }
   .employee-copy {

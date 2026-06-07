@@ -45,6 +45,27 @@ expect('src/routes/register/+page.server.ts', 'employee invite onboarding skips 
   source.includes('ensureEmployeeOnboardingRequirement')
 );
 
+expect('src/lib/server/admin.ts', 'owner invites are owner-only and do not require employee packets by default', (source) =>
+  source.includes("accessType === 'owner' && !isOwnerRole(locals.businessRole)") &&
+  source.includes("Only the owner can invite another owner.") &&
+  source.includes("accessType === 'owner' || employmentType === 'contractor' ? 0 : 1") &&
+  source.includes('onboardingRequired === 1')
+);
+
+expect('src/routes/register/+page.server.ts', 'invited owners are not auto-created as employees', (source) =>
+  source.includes("if (invitedBusinessRole !== 'owner')") &&
+  source.includes('INSERT INTO employee_employment_records') &&
+  source.includes('recordLegalAgreementAcceptance') &&
+  source.includes('if (!inviteCode)')
+);
+
+expect('src/lib/server/email.ts', 'invite email copy matches packet requirement', (source) =>
+  source.includes('onboardingRequired = true') &&
+  source.includes('Complete your Crimini setup and onboarding forms.') &&
+  source.includes('Complete your Crimini setup.') &&
+  source.includes("onboardingRequired ? 'Complete your setup and onboarding forms:' : 'Complete your setup:'")
+);
+
 expect('src/routes/register/+page.svelte', 'employee invite flow hides business purchase controls', (source) =>
   source.includes('$: inviteMode = Boolean(data.inviteCode)') &&
   source.includes('visibleSlides = inviteMode') &&

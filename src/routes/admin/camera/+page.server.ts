@@ -1,6 +1,7 @@
-import { fail } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { requireAdmin } from '$lib/server/admin';
+import { cameraBetaEnabled } from '$lib/config/features';
 import { cleanupExpiredCameraMedia, deleteCameraEventAssets, ensureCameraSchema } from '$lib/server/camera';
 import { loadIoTDevices } from '$lib/server/iotIngest';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
@@ -28,6 +29,7 @@ type CameraSource = {
 type IoTDevice = Awaited<ReturnType<typeof loadIoTDevices>>[number];
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
+  if (!cameraBetaEnabled) throw error(404, 'Not found.');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) {
@@ -89,6 +91,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 
 export const actions: Actions = {
   clear_events: async ({ locals, platform }) => {
+    if (!cameraBetaEnabled) return fail(404, { error: 'Not found.' });
     requireAdmin(locals.userRole);
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
@@ -110,6 +113,7 @@ export const actions: Actions = {
   },
 
   delete_event: async ({ request, locals, platform }) => {
+    if (!cameraBetaEnabled) return fail(404, { error: 'Not found.' });
     requireAdmin(locals.userRole);
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });

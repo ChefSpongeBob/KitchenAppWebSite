@@ -186,7 +186,7 @@
 		},
 		{
 			title: 'Monitoring + Reports',
-			detail: 'Temperature and camera readiness, vendors, history, exports, and operational review.'
+			detail: 'Temperature readiness, vendors, history, exports, operational review, and future camera expansion.'
 		}
 	];
 
@@ -208,19 +208,19 @@
 			a: 'The base packet includes personal information, emergency contact, payroll setup, I-9, W-4, state withholding when available, handbook acknowledgement, and policy acknowledgement.'
 		},
 		{
-			q: 'Can we launch before sensors or cameras are connected?',
+			q: 'Can we launch before sensors are connected?',
 			a: 'Yes. Scheduling, onboarding, lists, docs, menus, recipes, tasks, and communication can launch first.'
 		},
 		{
 			q: 'Can we start small and add more later?',
-			a: 'Yes. Workspaces can begin with core operations and expand with monitoring, cameras, and deeper workflows over time.'
+			a: 'Yes. Workspaces can begin with core operations and expand with temperature monitoring and deeper workflows over time.'
 		}
 	];
 
 	const rolloutNotes = [
 		'The owner account creates the business workspace first.',
 		'Employee onboarding is controlled from admin after workspace setup.',
-		'Temperature and camera systems can be connected after the core app is running.',
+		'Temperature systems can be connected after the core app is running. Camera monitoring is planned as a later expansion.',
 		'Store billing and mobile store release remain part of the final production launch path.'
 	];
 

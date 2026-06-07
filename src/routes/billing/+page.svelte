@@ -74,8 +74,6 @@
 		| undefined;
 
 	let selectedPlan = data.business.planTier === 'enterprise' ? 'large' : data.business.planTier === 'growth' ? 'medium' : 'small';
-	let addOnTempMonitoring = data.business.addOnTempMonitoring;
-	let addOnCameraMonitoring = data.business.addOnCameraMonitoring;
 	let storeBillingPreference: 'both' | 'google_play' | 'app_store' =
 		data.storeBillingPlaceholder?.preferredStore ?? 'both';
 	let clientFingerprint = '';
@@ -89,9 +87,13 @@
 		? new Date(data.trial.trialEndsAt * 1000).toLocaleDateString()
 		: 'N/A';
 
-	$: availableProducts = data.storeProducts.filter((product) =>
-		nativeStore ? product.store === nativeStore : product.store === 'google_play'
+	$: availableProducts = data.storeProducts.filter(
+		(product) =>
+			!product.addOnCameraMonitoring &&
+			!(product.addOnTempMonitoring && !product.planTier) &&
+			(nativeStore ? product.store === nativeStore : product.store === 'google_play')
 	);
+	$: addOnTempMonitoring = selectedPlan === 'medium' || selectedPlan === 'large';
 	$: if (!selectedProductId && availableProducts.length) {
 		selectedProductId =
 			availableProducts.find((product) => product.planTier === 'starter')?.productId ??
@@ -188,6 +190,8 @@
 		nativeStore = nativeStoreForPlatform();
 		if (nativeStore) {
 			const productIds = data.storeProducts
+				.filter((product) => !product.addOnCameraMonitoring)
+				.filter((product) => !(product.addOnTempMonitoring && !product.planTier))
 				.filter((product) => product.store === nativeStore)
 				.map((product) => product.productId);
 			CriminiBilling.getProducts({ productIds })
@@ -235,7 +239,7 @@
 			<article class="panel">
 				<h3>Plans</h3>
 				<div class="stack">
-					<label for="store-product">Plan or add-on</label>
+					<label for="store-product">Plan</label>
 					<select id="store-product" bind:value={selectedProductId}>
 						{#each availableProducts as product}
 							<option value={product.productId}>
@@ -266,7 +270,7 @@
 					<form method="POST" action="?/convert" class="dev-convert">
 						<input type="hidden" name="plan_tier" value={selectedPlan} />
 						<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
-						<input type="hidden" name="addon_camera_monitoring" value={addOnCameraMonitoring ? '1' : '0'} />
+						<input type="hidden" name="addon_camera_monitoring" value="0" />
 						<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
 						<button type="submit" class="secondary">Local activate</button>
 					</form>

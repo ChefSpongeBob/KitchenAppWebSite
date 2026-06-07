@@ -84,6 +84,10 @@ const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	enterprise: 'enterprise'
 };
 
+function tempMonitoringIncludedForPlan(planTier: 'starter' | 'growth' | 'enterprise') {
+	return planTier === 'growth' || planTier === 'enterprise';
+}
+
 async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
 	return hasColumn(db, 'users', 'email_normalized');
 }
@@ -163,8 +167,9 @@ export const actions: Actions = {
 			const businessName = String(formData.get('business_name') || '').trim();
 			const requestedBusinessSlug = String(formData.get('business_slug') || '').trim();
 			const planTierRaw = String(formData.get('plan_tier') || 'starter').trim().toLowerCase();
-			const addOnTempMonitoring = String(formData.get('addon_temp_monitoring') || '0') === '1';
-			const addOnCameraMonitoring = String(formData.get('addon_camera_monitoring') || '0') === '1';
+			const planTier = PLAN_TIER_MAP[planTierRaw] ?? 'starter';
+			const addOnTempMonitoring = tempMonitoringIncludedForPlan(planTier);
+			const addOnCameraMonitoring = false;
 			const legalName = toOptionalString(formData, 'legal_name', 120);
 			const registryId = toOptionalString(formData, 'registry_id', 80);
 			const contactEmail = toOptionalString(formData, 'contact_email', 120).toLowerCase();
@@ -261,10 +266,10 @@ export const actions: Actions = {
 			if (contactEmail && !looksLikeEmail(contactEmail)) {
 				return registerFailure(400, 'Enter a valid business contact email.', 'business', submittedValues);
 			}
-			if (!liabilityAgreementAccepted) {
+			if (!inviteCode && !liabilityAgreementAccepted) {
 				return registerFailure(400, 'You must accept the liability agreement to continue.', 'purchase', submittedValues);
 			}
-			if (liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
+			if (!inviteCode && liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
 				return registerFailure(400, 'Please refresh and accept the latest liability agreement.', 'purchase', submittedValues);
 			}
 
@@ -272,8 +277,6 @@ export const actions: Actions = {
 			if (websiteRaw && !websiteUrl) {
 				return registerFailure(400, 'Enter a valid business website URL.', 'business', submittedValues);
 			}
-
-			const planTier = PLAN_TIER_MAP[planTierRaw] ?? 'starter';
 
 			const db = locals.DB;
 			if (!db) {
@@ -622,9 +625,10 @@ export const actions: Actions = {
 						now
 					)
 					.run();
-				await db
-					.prepare(
-						`
+				if (invitedBusinessRole !== 'owner') {
+					await db
+						.prepare(
+							`
 				INSERT INTO employee_employment_records (
 					business_id,
 					user_id,
@@ -658,34 +662,34 @@ export const actions: Actions = {
 					updated_at = excluded.updated_at,
 					updated_by = excluded.updated_by
 			`
-					)
-					.bind(
-						businessInvite.business_id,
-						userId,
-						businessInvite.employment_type || 'employee',
-						businessInvite.job_title || '',
-						businessInvite.department || '',
-						businessInvite.primary_schedule_department || businessInvite.department || '',
-						businessInvite.start_date || '',
-						businessInvite.start_date || '',
-						businessInvite.pay_type || '',
-						businessInvite.manager_user_id ?? null,
-						now,
-						now,
-						businessInvite.manager_user_id ?? null
-					)
-					.run();
+						)
+						.bind(
+							businessInvite.business_id,
+							userId,
+							businessInvite.employment_type || 'employee',
+							businessInvite.job_title || '',
+							businessInvite.department || '',
+							businessInvite.primary_schedule_department || businessInvite.department || '',
+							businessInvite.start_date || '',
+							businessInvite.start_date || '',
+							businessInvite.pay_type || '',
+							businessInvite.manager_user_id ?? null,
+							now,
+							now,
+							businessInvite.manager_user_id ?? null
+						)
+						.run();
 
-				const invitedDepartments = parseInviteDepartments(
-					businessInvite.schedule_departments_json,
-					businessInvite.primary_schedule_department || businessInvite.department || ''
-				);
-				if (invitedDepartments.length > 0) {
-					await db.batch(
-						invitedDepartments.map((department) =>
-							db
-								.prepare(
-									`
+					const invitedDepartments = parseInviteDepartments(
+						businessInvite.schedule_departments_json,
+						businessInvite.primary_schedule_department || businessInvite.department || ''
+					);
+					if (invitedDepartments.length > 0) {
+						await db.batch(
+							invitedDepartments.map((department) =>
+								db
+									.prepare(
+										`
 					INSERT OR IGNORE INTO user_schedule_departments (
 						user_id,
 						department,
@@ -694,10 +698,11 @@ export const actions: Actions = {
 					)
 					VALUES (?, ?, ?, ?)
 				`
-								)
-								.bind(userId, department, now, businessInvite.business_id)
-						)
-					);
+									)
+									.bind(userId, department, now, businessInvite.business_id)
+							)
+						);
+					}
 				}
 				resolvedBusinessId = businessInvite.business_id;
 			} else if (invite) {
@@ -900,16 +905,18 @@ export const actions: Actions = {
 				await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null);
 			}
 
-			await recordLegalAgreementAcceptance(db, {
-				businessId: resolvedBusinessId,
-				userId,
-				agreementKey: LIABILITY_AGREEMENT_KEY,
-				agreementVersion: LIABILITY_AGREEMENT_VERSION,
-				acceptedAt: now,
-				acceptanceSource: 'register',
-				ipAddress: getRequestIpAddress(request),
-				userAgent: request.headers.get('user-agent') ?? ''
-			});
+			if (!inviteCode) {
+				await recordLegalAgreementAcceptance(db, {
+					businessId: resolvedBusinessId,
+					userId,
+					agreementKey: LIABILITY_AGREEMENT_KEY,
+					agreementVersion: LIABILITY_AGREEMENT_VERSION,
+					acceptedAt: now,
+					acceptanceSource: 'register',
+					ipAddress: getRequestIpAddress(request),
+					userAgent: request.headers.get('user-agent') ?? ''
+				});
+			}
 
 			await writeAuditLog(db, {
 				action: inviteCode ? 'signup_completed_from_invite' : 'signup_completed_new_business',

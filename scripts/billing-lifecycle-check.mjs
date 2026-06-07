@@ -124,6 +124,37 @@ expect('migrations/0081_billing_webhook_lifecycle_indexes.sql', 'billing webhook
   source.includes('idx_store_webhook_events_processed_created')
 );
 
+expect('migrations/0083_temperature_tier_entitlements.sql', 'temperature monitoring is tier-gated to medium and large', (source) =>
+  source.includes("WHERE product_id = 'crimini.addon.temps.monthly'") &&
+  source.includes('SET active = 0') &&
+  source.includes("WHEN 'growth' THEN 1") &&
+  source.includes("WHEN 'enterprise' THEN 1") &&
+  source.includes('ELSE 0')
+);
+
+expect('src/routes/register/+page.server.ts', 'registration derives temperature monitoring from plan tier only', (source) =>
+  source.includes('tempMonitoringIncludedForPlan(planTier)') &&
+  !source.includes("formData.get('addon_temp_monitoring')")
+);
+
+expect('src/routes/billing/+page.server.ts', 'billing conversion derives temperature monitoring from plan tier only', (source) =>
+  source.includes('tempMonitoringIncludedForPlan(planTier)') &&
+  !source.includes("form.get('addon_temp_monitoring')")
+);
+
+expect('src/routes/api/billing/products/+server.ts', 'billing products API hides standalone temperature add-ons', (source) =>
+  source.includes('product.addon_temp_monitoring === 1 && !product.plan_tier')
+);
+
+expect('src/routes/api/billing/native-purchase/+server.ts', 'native purchase rejects standalone temperature add-ons', (source) =>
+  source.includes('product.addon_temp_monitoring === 1 && !product.plan_tier')
+);
+
+expect('src/lib/server/storeBilling.ts', 'verified entitlements apply temperature monitoring by active plan tier', (source) =>
+  source.includes("activePlan.plan_tier === 'growth' || activePlan.plan_tier === 'enterprise'") &&
+  !source.includes('active.some((entitlement) => entitlement.addon_temp_monitoring === 1)')
+);
+
 expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires exact configured token', (source) =>
   source.includes('if (!token) return false') &&
   source.includes("request.headers.get('authorization')") &&

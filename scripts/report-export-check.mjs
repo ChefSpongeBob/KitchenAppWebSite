@@ -15,7 +15,7 @@ function expect(path, label, predicate) {
   checks.push({ ok: Boolean(predicate(source)), label, detail: path });
 }
 
-for (const route of ['requests', 'temperature', 'onboarding']) {
+for (const route of ['requests', 'temperature', 'onboarding', 'waste']) {
   expect(`src/routes/reports/${route}/+page.server.ts`, `${route} report page is report-access gated`, (source) =>
     source.includes('hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)') &&
     source.includes('requireBusinessId(locals)')
@@ -33,9 +33,11 @@ expect('src/lib/server/reports.ts', 'report helpers keep exports tenant scoped a
     'loadScheduleRequestsReport',
     'loadTemperatureReport',
     'loadOnboardingReport',
+    'loadWasteReport',
     'WHERE r.business_id = ?',
     'WHERE t.business_id = ?',
     'WHERE p.business_id = ?',
+    'WHERE w.business_id = ?',
     'LIMIT 1000',
     'LIMIT 500'
   ].every((token) => source.includes(token))
@@ -59,7 +61,7 @@ expect('migrations/0080_report_export_indexes.sql', 'report export indexes suppo
 );
 
 expect('src/routes/reports/+page.svelte', 'reports landing links to Phase 8 exports', (source) =>
-  ['/reports/requests', '/reports/temperature', '/reports/onboarding'].every((href) => source.includes(href))
+  ['/reports/requests', '/reports/temperature', '/reports/onboarding', '/reports/waste'].every((href) => source.includes(href))
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 8 reports/export phase', (source) =>

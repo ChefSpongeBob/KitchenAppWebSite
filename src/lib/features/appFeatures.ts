@@ -19,7 +19,10 @@ export type AppFeatureKey =
   | 'documents'
   | 'menus'
   | 'vendors'
-  | 'conversions';
+  | 'conversions'
+  | 'food_cost_calculator'
+  | 'safety_healthcode'
+  | 'waste_tracker';
 
 export type AppFeatureDefinition = {
   key: AppFeatureKey;
@@ -129,6 +132,27 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Conversions',
     description: 'Cooking and baking measurement reference tools.',
     userRoutePrefixes: ['/conversions'],
+    adminRoutePrefixes: []
+  },
+  {
+    key: 'food_cost_calculator',
+    label: 'Food Cost Calculator',
+    description: 'Dish costing and margin calculator.',
+    userRoutePrefixes: ['/tools/food-cost'],
+    adminRoutePrefixes: []
+  },
+  {
+    key: 'safety_healthcode',
+    label: 'Safety & HealthCode',
+    description: 'Kitchen safety and health-code reference sheet.',
+    userRoutePrefixes: ['/tools/safety-healthcode'],
+    adminRoutePrefixes: []
+  },
+  {
+    key: 'waste_tracker',
+    label: 'Waste Tracker',
+    description: 'Waste entry log for product loss tracking.',
+    userRoutePrefixes: ['/tools/waste'],
     adminRoutePrefixes: []
   }
 ];

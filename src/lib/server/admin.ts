@@ -5888,8 +5888,8 @@ export async function createUserInvite(
   const email = String(formData.get('email') ?? '').trim();
   const emailNormalized = email.toLowerCase();
   const accessType = normalizeInviteAccessType(String(formData.get('access_type') ?? 'staff'));
-  if (accessType === 'owner') {
-    return fail(400, { error: 'Owner access cannot be assigned by invite.' });
+  if (accessType === 'owner' && !isOwnerRole(locals.businessRole)) {
+    return fail(403, { error: 'Only the owner can invite another owner.' });
   }
   const requestedPermissionTemplate = normalizePermissionTemplate(
     String(formData.get('permission_template') ?? '')
@@ -5917,6 +5917,7 @@ export async function createUserInvite(
   const startDate = String(formData.get('start_date') ?? '').trim().slice(0, 10);
   const payTypeRaw = String(formData.get('pay_type') ?? '').trim().toLowerCase();
   const payType = payTypeRaw === 'hourly' || payTypeRaw === 'salary' ? payTypeRaw : '';
+  const onboardingRequired = accessType === 'owner' || employmentType === 'contractor' ? 0 : 1;
   if (!email || !email.includes('@')) {
     return fail(400, { error: 'A valid email is required.' });
   }
@@ -5988,7 +5989,7 @@ export async function createUserInvite(
         expires_at,
         revoked_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `
     )
     .bind(
@@ -6007,6 +6008,7 @@ export async function createUserInvite(
       JSON.stringify(scheduleDepartments),
       startDate,
       payType,
+      onboardingRequired,
       now,
       expiresAt
     )
@@ -6036,7 +6038,8 @@ export async function createUserInvite(
     inviteeEmail: email,
     inviteCode,
     expiresAt,
-    businessName: locals.businessName
+    businessName: locals.businessName,
+    onboardingRequired: onboardingRequired === 1
   });
 
   return {

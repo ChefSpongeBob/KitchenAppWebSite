@@ -31,6 +31,10 @@ const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	enterprise: 'enterprise'
 };
 
+function tempMonitoringIncludedForPlan(planTier: 'starter' | 'growth' | 'enterprise') {
+	return planTier === 'growth' || planTier === 'enterprise';
+}
+
 function clearSessionCookies(
 	cookies: Parameters<Actions['convert']>[0]['cookies'],
 	request: Request
@@ -178,12 +182,12 @@ export const actions: Actions = {
 
 			const form = await request.formData();
 			const planRaw = String(form.get('plan_tier') ?? 'small').trim().toLowerCase();
-			const addOnTempMonitoring = String(form.get('addon_temp_monitoring') ?? '0') === '1';
-			const addOnCameraMonitoring = String(form.get('addon_camera_monitoring') ?? '0') === '1';
+			const addOnCameraMonitoring = false;
 			const storeBillingPreference = String(form.get('store_billing_preference') ?? 'both')
 				.trim()
 				.toLowerCase();
 			const planTier = PLAN_TIER_MAP[planRaw] ?? 'starter';
+			const addOnTempMonitoring = tempMonitoringIncludedForPlan(planTier);
 
 			if (!dev) {
 				logOperationalEvent({

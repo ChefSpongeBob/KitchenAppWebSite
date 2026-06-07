@@ -18,6 +18,7 @@
     pathname.startsWith('/recipes') ||
     pathname.startsWith('/specials') ||
     pathname.startsWith('/conversions') ||
+    pathname.startsWith('/tools') ||
     pathname.startsWith('/settings');
 </script>
 

@@ -44,6 +44,12 @@
       title: 'Onboarding Report',
       description: 'Employee packet status and review counts.',
       icon: 'assignment_ind'
+    },
+    {
+      href: '/reports/waste',
+      title: 'Waste Logs',
+      description: 'Product waste submissions and CSV export.',
+      icon: 'delete_sweep'
     }
   ];
 </script>

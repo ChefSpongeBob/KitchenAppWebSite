@@ -6,6 +6,7 @@ export type NavItem = {
   icon: string;
   featureKey?: AppFeatureKey;
   adminOnly?: boolean;
+  group?: 'tools';
 };
 
 export const primaryNav: NavItem[] = [
@@ -18,7 +19,10 @@ export const primaryNav: NavItem[] = [
   { label: 'Docs', route: '/docs', icon: 'description', featureKey: 'documents' },
   { label: 'Vendors', route: '/vendors', icon: 'local_shipping', featureKey: 'vendors', adminOnly: true },
   { label: 'Reports', route: '/reports', icon: 'analytics', adminOnly: true },
-  { label: 'Conversions', route: '/conversions', icon: 'calculate', featureKey: 'conversions' },
+  { label: 'Conversions', route: '/conversions', icon: 'calculate', featureKey: 'conversions', group: 'tools' },
+  { label: 'Food Cost Calculator', route: '/tools/food-cost', icon: 'price_check', featureKey: 'food_cost_calculator', group: 'tools' },
+  { label: 'Safety & HealthCode', route: '/tools/safety-healthcode', icon: 'health_and_safety', featureKey: 'safety_healthcode', group: 'tools' },
+  { label: 'Waste Tracker', route: '/tools/waste', icon: 'delete_sweep', featureKey: 'waste_tracker', group: 'tools' },
   { label: 'Whiteboard', route: '/whiteboard', icon: 'lightbulb', featureKey: 'whiteboard' },
   { label: 'Temps', route: '/temper', icon: 'thermostat', featureKey: 'temps' }
 ];

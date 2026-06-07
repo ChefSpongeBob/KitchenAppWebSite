@@ -59,7 +59,6 @@
 		businessName: string;
 		planTier: string;
 		addOnTempMonitoring: boolean;
-		addOnCameraMonitoring: boolean;
 		legalName: string;
 		registryId: string;
 		contactEmail: string;
@@ -225,8 +224,6 @@
 	let touchStartY = 0;
 
 	let planTier = formValues.planTier ?? 'small';
-	let addOnTempMonitoring = formValues.addOnTempMonitoring ?? false;
-	let addOnCameraMonitoring = formValues.addOnCameraMonitoring ?? false;
 	let displayName = formValues.displayName ?? '';
 	let realName = formValues.realName ?? '';
 	let birthday = formValues.birthday ?? '';
@@ -261,9 +258,9 @@
 	let purchaseMode: 'trial' | 'buy_now' = formValues.purchaseMode ?? 'trial';
 	let storeBillingPreference: 'both' | 'google_play' | 'app_store' = formValues.storeBillingPreference ?? 'both';
 	let liabilityAgreementAccepted = formValues.liabilityAgreementAccepted ?? false;
-	$: basePlanPrice = planTier === 'large' ? 275 : planTier === 'medium' ? 120 : 50;
-	$: addOnTotal = (addOnTempMonitoring ? 30 : 0) + (addOnCameraMonitoring ? 30 : 0);
-	$: estimatedMonthlyTotal = basePlanPrice + addOnTotal;
+	$: basePlanPrice = planTier === 'large' ? 90 : planTier === 'medium' ? 65 : 30;
+	$: tempMonitoringIncluded = planTier === 'medium' || planTier === 'large';
+	$: estimatedMonthlyTotal = basePlanPrice;
 
 	let showPassword = false;
 	let showConfirmPassword = false;
@@ -442,11 +439,11 @@
 									aria-pressed={planTier === 'small'}
 								>
 									<strong>Small</strong>
-									<p class="tier-price">$50/mo</p>
+									<p class="tier-price">$30/mo</p>
 									<ul class="tier-features">
 										<li>Up to 20 employees</li>
 										<li>Core scheduling, todo, lists</li>
-										<li>Add monitoring options as needed</li>
+										<li>Temperature monitoring starts at Medium</li>
 									</ul>
 									{#if planTier === 'small'}
 										<p class="tier-status">Selected plan</p>
@@ -460,11 +457,11 @@
 									aria-pressed={planTier === 'medium'}
 								>
 									<strong>Medium</strong>
-									<p class="tier-price">$120/mo</p>
+									<p class="tier-price">$65/mo</p>
 									<ul class="tier-features">
 										<li>Up to 75 users</li>
 										<li>Advanced admin + editor controls</li>
-										<li>Add monitoring options as needed</li>
+										<li>Temperature monitoring included</li>
 									</ul>
 									{#if planTier === 'medium'}
 										<p class="tier-status">Selected plan</p>
@@ -478,11 +475,11 @@
 									aria-pressed={planTier === 'large'}
 								>
 									<strong>Large</strong>
-									<p class="tier-price">$160/mo</p>
+									<p class="tier-price">$90/mo</p>
 									<ul class="tier-features">
 										<li>Up to 250 employees</li>
 										<li>Full platform + multi-team scale</li>
-										<li>Add monitoring options as needed</li>
+										<li>Temperature monitoring included</li>
 									</ul>
 									{#if planTier === 'large'}
 										<p class="tier-status">Selected plan</p>
@@ -490,38 +487,6 @@
 								</button>
 							</div>
 
-							<div class="addons-showcase">
-								<div class="addon-grid" aria-label="Optional monitoring add-ons">
-									<button
-										type="button"
-										class="addon-card"
-										class:active={addOnTempMonitoring}
-										on:click={() => (addOnTempMonitoring = !addOnTempMonitoring)}
-										aria-pressed={addOnTempMonitoring}
-									>
-										<strong>Cooler + Freezer Sensors</strong>
-										<span>Temperature monitoring</span>
-										<em>+$30/mo</em>
-										{#if addOnTempMonitoring}
-											<p class="tier-status">Selected add-on</p>
-										{/if}
-									</button>
-									<button
-										type="button"
-										class="addon-card"
-										class:active={addOnCameraMonitoring}
-										on:click={() => (addOnCameraMonitoring = !addOnCameraMonitoring)}
-										aria-pressed={addOnCameraMonitoring}
-									>
-										<strong>Camera Security Monitoring</strong>
-										<span>Security camera monitoring</span>
-										<em>+$30/mo</em>
-										{#if addOnCameraMonitoring}
-											<p class="tier-status">Selected add-on</p>
-										{/if}
-									</button>
-								</div>
-							</div>
 						</div>
 					</div>
 				{/if}
@@ -674,8 +639,8 @@
 						<input type="hidden" name="email_updates" value={emailUpdates ? '1' : '0'} />
 						<input type="hidden" name="business_name" value={businessName} />
 						<input type="hidden" name="plan_tier" value={planTier} />
-						<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
-						<input type="hidden" name="addon_camera_monitoring" value={addOnCameraMonitoring ? '1' : '0'} />
+						<input type="hidden" name="addon_temp_monitoring" value={tempMonitoringIncluded ? '1' : '0'} />
+						<input type="hidden" name="addon_camera_monitoring" value="0" />
 						<input type="hidden" name="legal_name" value={legalName} />
 						<input type="hidden" name="registry_id" value={registryId} />
 						<input type="hidden" name="contact_email" value={contactEmail} />
@@ -782,17 +747,19 @@
 							</div>
 						{/if}
 
-						<label class="inline-toggle agreement-toggle" for="liability-agreement-accepted">
-							<input
-								id="liability-agreement-accepted"
-								name="liability_agreement_accepted"
-								type="checkbox"
-								bind:checked={liabilityAgreementAccepted}
-								value="1"
-								required
-							/>
-							<span>I agree to the Crimini by NNS, LLC liability release agreement.</span>
-						</label>
+						{#if !inviteMode}
+							<label class="inline-toggle agreement-toggle" for="liability-agreement-accepted">
+								<input
+									id="liability-agreement-accepted"
+									name="liability_agreement_accepted"
+									type="checkbox"
+									bind:checked={liabilityAgreementAccepted}
+									value="1"
+									required
+								/>
+								<span>I agree to the Crimini by NNS, LLC liability release agreement.</span>
+							</label>
+						{/if}
 
 						<button type="submit" class="primary submit-btn">Create account</button>
 						<p class="auth-note">
@@ -1283,17 +1250,6 @@
 		grid-template-columns: 1fr;
 	}
 
-	.addons-showcase {
-		display: grid;
-		gap: 0.7rem;
-	}
-
-	.addon-grid {
-		display: grid;
-		gap: 0.8rem;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
 	.tier-card {
 		padding: 1.2rem 1.1rem;
 		min-height: 8.6rem;
@@ -1344,48 +1300,6 @@
 		transform: translateY(-1px);
 	}
 
-	.addon-card {
-		padding: 1rem;
-		min-height: 7.4rem;
-		border-radius: 0;
-		border: 1px solid rgba(17, 18, 20, 0.16);
-		background: rgba(255, 255, 255, 0.88);
-		color: #111214;
-		text-align: left;
-		display: grid;
-		gap: 0.3rem;
-		align-content: start;
-		transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
-	}
-
-	.addon-card:hover {
-		transform: translateY(-1px);
-		box-shadow: none;
-	}
-
-	.addon-card strong {
-		font-size: 1rem;
-		line-height: 1.2;
-	}
-
-	.addon-card span {
-		font-size: 0.86rem;
-		color: rgba(17, 18, 20, 0.68);
-	}
-
-	.addon-card em {
-		font-size: 0.84rem;
-		font-style: normal;
-		color: rgba(17, 18, 20, 0.72);
-	}
-
-	.addon-card.active {
-		border-color: #111214;
-		background: #f8f4ec;
-		box-shadow: none;
-		transform: translateY(-1px);
-	}
-
 	.tier-status {
 		margin: 0.2rem 0 0;
 		font-size: 0.78rem;
@@ -1395,10 +1309,6 @@
 	}
 
 	.tier-card.active .tier-status {
-		color: rgba(17, 18, 20, 0.8);
-	}
-
-	.addon-card.active .tier-status {
 		color: rgba(17, 18, 20, 0.8);
 	}
 
@@ -1492,7 +1402,6 @@
 	.agreement-toggle,
 	.auth-note,
 	.purchase-mode-card span,
-	.addon-card span,
 	.tier-features li {
 		color: rgba(17, 18, 20, 0.68);
 	}
@@ -1502,7 +1411,6 @@
 	}
 
 	.tier-card,
-	.addon-card,
 	.purchase-mode-card,
 	.store-pref-card,
 	.payment-placeholder {
@@ -1515,7 +1423,6 @@
 	}
 
 	.tier-card:hover,
-	.addon-card:hover,
 	.purchase-mode-card:hover,
 	.store-pref-card:hover {
 		box-shadow: 0 22px 46px rgba(17, 18, 20, 0.1);
@@ -1563,16 +1470,13 @@
 	}
 
 	.tier-card strong,
-	.addon-card strong,
 	.purchase-mode-card strong,
 	.store-pref-card strong,
-	.tier-price,
-	.addon-card em {
+	.tier-price {
 		color: #111214;
 	}
 
 	.tier-card.active,
-	.addon-card.active,
 	.purchase-mode-card.active,
 	.store-pref-card.active {
 		border-color: #111214;
@@ -1583,8 +1487,7 @@
 	}
 
 	.tier-status,
-	.tier-card.active .tier-status,
-	.addon-card.active .tier-status {
+	.tier-card.active .tier-status {
 		color: rgba(17, 18, 20, 0.66);
 	}
 
@@ -1670,10 +1573,6 @@
 		}
 
 		.tier-grid {
-			grid-template-columns: 1fr;
-		}
-
-		.addon-grid {
 			grid-template-columns: 1fr;
 		}
 

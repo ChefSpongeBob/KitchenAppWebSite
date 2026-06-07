@@ -37,7 +37,8 @@ const REQUIRED_CORE_TABLES = [
 	'operational_event_delivery_attempts',
 	'push_notification_devices',
 	'temperature_sensor_settings',
-	'temperature_alert_events'
+	'temperature_alert_events',
+	'waste_logs'
 ];
 
 const REQUIRED_CORE_INDEXES = [
@@ -77,7 +78,8 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_push_devices_user_active',
 	'idx_temp_alert_events_business_status',
 	'idx_temp_alert_events_business_sensor_status',
-	'idx_temp_settings_business_sensor'
+	'idx_temp_settings_business_sensor',
+	'idx_waste_logs_business_created'
 ];
 
 function missingRequiredSecrets(env: App.Platform['env'] | undefined) {
