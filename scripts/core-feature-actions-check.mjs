@@ -103,15 +103,15 @@ expect('src/routes/recipes/+page.server.ts', 'recipe categories are tenant scope
   includesAll(source, ['requireBusinessId(locals)', 'business_id = ?', 'category'])
 );
 
-expect('src/routes/todo/+page.server.ts', 'ToDo supports tenant-scoped complete and reopen', (source) =>
+expect('src/routes/todo/+page.server.ts', 'ToDo supports tenant-scoped completion', (source) =>
   includesAll(source, [
     'requireBusinessId(locals)',
     'business_id = ?',
     'complete: async',
-    'reopen: async',
-    'completed_by = NULL, completed_at = NULL',
     'todo_completion_log'
-  ])
+  ]) &&
+  !source.includes('reopen: async') &&
+  !source.includes('completed_by = NULL, completed_at = NULL')
 );
 
 expect('src/routes/admin/+page.server.ts', 'admin dashboard owns ToDo reminders moderation announcement and spotlight actions', (source) =>

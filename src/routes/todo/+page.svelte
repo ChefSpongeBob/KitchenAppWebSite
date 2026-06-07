@@ -110,10 +110,6 @@
               <p>{expandedText(todo, true)}</p>
             {/if}
           </button>
-          <form method="POST" action="?/reopen" use:enhance={withTodoFeedback('Todo reopened.')}>
-            <input type="hidden" name="id" value={todo.id} />
-            <button class="todo-action" type="submit">Reopen</button>
-          </form>
         </div>
       {/each}
       {#if completedTodos.length === 0}

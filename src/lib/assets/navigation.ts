@@ -9,7 +9,7 @@ export type NavItem = {
 };
 
 export const primaryNav: NavItem[] = [
-  { label: 'Home', route: '/app', icon: 'home' },
+  { label: 'Dashboard', route: '/app', icon: 'home' },
   { label: 'My Profile', route: '/settings', icon: 'person' },
   { label: 'Schedule', route: '/my-schedule', icon: 'calendar_month', featureKey: 'scheduling' },
   { label: 'Lists', route: '/lists', icon: 'checklist', featureKey: 'lists' },

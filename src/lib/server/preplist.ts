@@ -306,32 +306,32 @@ export function createListPage(
         .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
         .run();
 
-      await recordListItemActivity(
-        db,
-        businessId,
-        domain,
-        section.id,
-        id,
-        isChecked === 1 ? 'completed' : 'reopened',
-        locals.userId,
-        String(isChecked)
-      );
-      await recordOperationalEventBestEffort(db, {
-        businessId,
-        eventType: isChecked === 1 ? `list.${domain}.item_completed` : `list.${domain}.item_reopened`,
-        category: 'lists',
-        actorUserId: locals.userId,
-        subjectType: 'list_item',
-        subjectId: id,
-        title: isChecked === 1 ? 'List item completed' : 'List item reopened',
-        payload: {
-          domain,
-          sectionId: section.id,
-          checked: isChecked === 1
-        }
-      });
-
       if (isChecked === 1) {
+        await recordListItemActivity(
+          db,
+          businessId,
+          domain,
+          section.id,
+          id,
+          'completed',
+          locals.userId,
+          String(isChecked)
+        );
+        await recordOperationalEventBestEffort(db, {
+          businessId,
+          eventType: `list.${domain}.item_completed`,
+          category: 'lists',
+          actorUserId: locals.userId,
+          subjectType: 'list_item',
+          subjectId: id,
+          title: 'List item completed',
+          payload: {
+            domain,
+            sectionId: section.id,
+            checked: true
+          }
+        });
+
         const completion = await db
           .prepare(
             `

@@ -204,34 +204,34 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
         .run();
 
-      await recordListItemActivity(
-        db,
-        businessId,
-        'checklists',
-        section.id,
-        id,
-        isChecked === 1 ? 'completed' : 'reopened',
-        locals.userId,
-        String(isChecked)
-      );
-
-      await recordOperationalEventBestEffort(db, {
-        businessId,
-        eventType: isChecked === 1 ? 'list.checklists.item_completed' : 'list.checklists.item_reopened',
-        category: 'lists',
-        actorUserId: locals.userId,
-        subjectType: 'checklist_item',
-        subjectId: id,
-        title: isChecked === 1 ? 'Checklist item completed' : 'Checklist item reopened',
-        payload: {
-          domain: 'checklists',
-          sectionTitle: pageTitle,
-          sectionId: section.id,
-          checked: isChecked === 1
-        }
-      });
-
       if (isChecked === 1) {
+        await recordListItemActivity(
+          db,
+          businessId,
+          'checklists',
+          section.id,
+          id,
+          'completed',
+          locals.userId,
+          String(isChecked)
+        );
+
+        await recordOperationalEventBestEffort(db, {
+          businessId,
+          eventType: 'list.checklists.item_completed',
+          category: 'lists',
+          actorUserId: locals.userId,
+          subjectType: 'checklist_item',
+          subjectId: id,
+          title: 'Checklist item completed',
+          payload: {
+            domain: 'checklists',
+            sectionTitle: pageTitle,
+            sectionId: section.id,
+            checked: true
+          }
+        });
+
         const completion = await db
           .prepare(
             `

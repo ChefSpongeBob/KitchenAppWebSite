@@ -27,6 +27,7 @@
   type AdminControlGroup = {
     label: string;
     icon: string;
+    ungrouped?: boolean;
     items: FeatureAwareNavItem[];
   };
 
@@ -78,10 +79,11 @@
   };
   const adminControlGroups: AdminControlGroup[] = [
     {
-      label: "General",
+      label: "",
       icon: "space_dashboard",
+      ungrouped: true,
       items: [
-        { label: "Home", route: "/app", icon: "home" },
+        { label: "Dashboard", route: "/app", icon: "home" },
         { label: "Manager Dashboard", route: "/admin", icon: "space_dashboard" }
       ]
     },
@@ -507,13 +509,8 @@
       {#if isAdminSidebar}
         <div class="side-section-label">Manager Controls</div>
         {#each visibleAdminControlGroups as group}
-          <details class="side-group" open={isAdminGroupActive(group)}>
-            <summary class="side-group-summary tap" class:active={isAdminGroupActive(group)}>
-              <span class="material-icons">{group.icon}</span>
-              <span>{group.label}</span>
-              <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
-            </summary>
-            <div class="side-group-items">
+          {#if group.ungrouped}
+            <div class="side-group-items side-group-items--standalone">
               {#each group.items as item}
                 <a
                   href={item.route}
@@ -527,7 +524,29 @@
                 </a>
               {/each}
             </div>
-          </details>
+          {:else}
+            <details class="side-group" open={isAdminGroupActive(group)}>
+              <summary class="side-group-summary tap" class:active={isAdminGroupActive(group)}>
+                <span class="material-icons">{group.icon}</span>
+                <span>{group.label}</span>
+                <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
+              </summary>
+              <div class="side-group-items">
+                {#each group.items as item}
+                  <a
+                    href={item.route}
+                    class="side-item side-sub-item tap"
+                    class:active={isActive(item.route, currentPath)}
+                    on:click={() => (sidebarOpen = false)}
+                  >
+                    <span class="active-indicator"></span>
+                    <span class="material-icons">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </a>
+                {/each}
+              </div>
+            </details>
+          {/if}
         {/each}
       {:else}
         {#each navItems as item}
@@ -1281,6 +1300,10 @@
     display: grid;
     gap: 3px;
     padding-left: 0.6rem;
+  }
+
+  .side-group-items--standalone {
+    padding-left: 0;
   }
 
   .side-item {

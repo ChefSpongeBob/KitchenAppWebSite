@@ -538,9 +538,6 @@ function eventBodyFromPayload(event: OperationalEventRow) {
       if (event.event_type.startsWith('list.') && event.event_type.endsWith('.item_completed')) {
         return 'A list item was completed.';
       }
-      if (event.event_type.startsWith('list.') && event.event_type.endsWith('.item_reopened')) {
-        return 'A list item was reopened.';
-      }
       if (event.event_type.startsWith('list.') && event.event_type.endsWith('.completed')) {
         return `${sectionTitle} is complete.`;
       }
@@ -744,7 +741,6 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
     event.event_type.startsWith('list.') &&
     (event.event_type.endsWith('.submitted') ||
       event.event_type.endsWith('.item_completed') ||
-      event.event_type.endsWith('.item_reopened') ||
       event.event_type.endsWith('.completed'))
   ) {
     return loadRecipientsWithCapability(db, event, 'manage_content');
