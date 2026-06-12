@@ -121,14 +121,14 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `7. Lists/history/completion alerts`
-- Status: Phase 6 is complete locally; Phase 7 is next.
-- Current pass: Phase 6 scheduling workflow completion and business-scoped schedule schema hardening.
+- Active phase: `8. Reports/export foundation`
+- Status: Phase 7 is complete locally; Phase 8 is next.
+- Current pass: Phase 7 lists/history/completion alerts validation and content-permission cleanup.
 - Phase 5 Lists / Recipes / Docs / Menus is validated: Creator Studio is the single editor source, legacy admin content routes redirect to Creator Studio, list pages no longer seed old hardcoded data, menus are separated from documents, document/media access is private and business scoped, and recipe/document/list/menu routes are tenant scoped.
 - Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
 - Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
-- Last verified: 2026-06-12 Phase 6 scheduling pass passed `npm.cmd run check`, `npm.cmd run mobile:check`, production build, schedule-adjacent authorization/tenant/report/static checks, and local D1 migration `0085_schedule_business_scoped_constraints.sql`. Live smoke and production schema readiness remain deferred while the public domain is intentionally held offline.
-- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, and `6. Scheduling workflow completion`.
+- Last verified: 2026-06-12 Phase 7 list/history pass passed `npm.cmd run check`, `test:core-feature-actions`, `test:authorization-capabilities`, `test:operational-events`, and `test:report-exports`. Phase 6 also passed production build and local D1 migration `0085_schedule_business_scoped_constraints.sql`. Live smoke and production schema readiness remain deferred while the public domain is intentionally held offline.
+- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, and `7. Lists/history/completion alerts`.
 
 ## Final Multi-Tenant Test Notes
 
@@ -144,6 +144,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 7 history/alert pass: submit prep and checklist data as multiple employees; verify submitter and executor fields; confirm two-week prep history, checklist history, CSV/export behavior, completion alerts, item-completed events, and tenant isolation across two businesses.
 - Phase 7 report URL pass: verify `/reports/lists?domain=preplists`, `/reports/lists?domain=inventory`, `/reports/lists?domain=orders`, and `/reports/lists?domain=checklists`; download each matching CSV and confirm date, list, item, action/value, completed-by, and submitted-by fields.
 - Phase 7 event delivery pass: after list submission, item completion, and full-list completion, run the operational event processor; confirm opted-in manager/content-access users receive the correct alerts and unrelated business users receive nothing.
+- Phase 7 permission pass: as owner, manager, shift lead, consultant, contractor, and staff, confirm list par controls and item attachment editor actions are available only to users with `manage_content`, while normal staff can still submit counts and complete checklist/list items.
 - Phase 8 reports pass: open `/reports`, `/reports/schedule`, `/reports/requests`, `/reports/temperature`, `/reports/onboarding`, and all list report domains as owner, manager, consultant, contractor, and staff. Confirm permitted roles are read-only, staff is blocked, each route stays inside the active business, and CSV exports match the visible rows.
 - Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
 - Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, and enterprise from native builds; restore purchases; confirm entitlements activate the correct business only; confirm Medium/Large enable temperature monitoring and Small does not; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state. Camera add-ons are deferred post-launch.

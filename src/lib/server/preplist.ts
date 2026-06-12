@@ -4,6 +4,7 @@ import { ensureTenantSchema } from '$lib/server/tenant';
 import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
 import { recordListItemActivity, recordListSubmission } from '$lib/server/history';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
 
 type ItemRow = {
   id: string;
@@ -22,6 +23,9 @@ type PreplistLocals = {
   userId?: string | null;
   userRole?: string | null;
   businessId?: string | null;
+  businessRole?: string | null;
+  businessPermissionTemplate?: string | null;
+  businessCapabilities?: readonly BusinessCapability[] | null;
 };
 
 type Domain = 'preplists' | 'inventory' | 'orders';
@@ -45,6 +49,15 @@ function requireScopedBusinessId(locals: PreplistLocals) {
   const businessId = String(locals.businessId ?? '').trim();
   if (!businessId) throw error(401, 'Business workspace required.');
   return businessId;
+}
+
+function canManageListContent(locals: PreplistLocals) {
+  return hasBusinessCapability(
+    locals.businessRole ?? locals.userRole,
+    locals.businessPermissionTemplate,
+    'manage_content',
+    locals.businessCapabilities
+  );
 }
 
 function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: string) {
@@ -178,7 +191,7 @@ export function createListPage(
             : String(item.amount ?? 0),
         attachments: attachmentsByItem.get(item.id) ?? []
       })),
-      isAdmin: locals.userRole === 'admin',
+      isAdmin: canManageListContent(locals),
       valueLabel: options.valueLabel,
       submitLabel: options.submitLabel,
       resetLabel: options.resetLabel,
@@ -366,7 +379,7 @@ export function createListPage(
       return { success: true };
     },
     save_par_levels: async ({ request, locals }: { request: Request; locals: PreplistLocals }) => {
-      if (locals.userRole !== 'admin') return fail(403, { error: 'Admin only.' });
+      if (!canManageListContent(locals)) return fail(403, { error: 'Admin only.' });
       const db = locals.DB;
       if (!db) return fail(503, { error: 'Database not configured.' });
       await ensureTenantSchema(db);

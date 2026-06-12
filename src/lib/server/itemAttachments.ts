@@ -1,6 +1,7 @@
 import { dev } from '$app/environment';
 import { fail } from '@sveltejs/kit';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 type DB = App.Platform['env']['DB'];
 
@@ -82,6 +83,15 @@ async function ensureItemAttachmentSchema(db: DB) {
 function parseSourceType(value: FormDataEntryValue | null): ItemAttachmentSourceType | null {
   const sourceType = String(value ?? '').trim();
   return sourceType === 'list_item' || sourceType === 'checklist_item' ? sourceType : null;
+}
+
+function canManageItemAttachments(locals: App.Locals) {
+  return hasBusinessCapability(
+    locals.businessRole ?? locals.userRole,
+    locals.businessPermissionTemplate,
+    'manage_content',
+    locals.businessCapabilities
+  );
 }
 
 function parseTargetType(value: FormDataEntryValue | null): ItemAttachmentTargetType | null {
@@ -230,7 +240,7 @@ export async function loadItemAttachmentsForItems(
 }
 
 export async function createItemAttachment(request: Request, locals: App.Locals) {
-  if (locals.userRole !== 'admin') return fail(403, { error: 'Admin only.' });
+  if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -284,7 +294,7 @@ export async function createItemAttachment(request: Request, locals: App.Locals)
 }
 
 export async function attachTargetToItem(request: Request, locals: App.Locals) {
-  if (locals.userRole !== 'admin') return fail(403, { error: 'Admin only.' });
+  if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -338,7 +348,7 @@ export async function attachTargetToItem(request: Request, locals: App.Locals) {
 }
 
 export async function deleteItemAttachment(request: Request, locals: App.Locals) {
-  if (locals.userRole !== 'admin') return fail(403, { error: 'Admin only.' });
+  if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);

@@ -81,9 +81,21 @@ expect('src/lib/server/preplist.ts', 'list submissions record history and operat
     'recordListItemActivity',
     'recordOperationalEventBestEffort',
     'business_id = ?',
+    "'manage_content'",
     "eventType: `list.${domain}.submitted`",
     "eventType: `list.${domain}.completed`"
   ])
+);
+
+expect('src/lib/server/itemAttachments.ts', 'item attachment management follows content permissions', (source) =>
+  includesAll(source, [
+    'canManageItemAttachments',
+    'hasBusinessCapability',
+    "'manage_content'",
+    'createItemAttachment',
+    'attachTargetToItem',
+    'deleteItemAttachment'
+  ]) && !source.includes("locals.userRole !== 'admin'")
 );
 
 expect('src/routes/docs/+page.server.ts', 'documents viewer is category and business scoped', (source) =>
