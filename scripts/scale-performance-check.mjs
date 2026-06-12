@@ -39,6 +39,19 @@ expect('migrations/0060_schedule_resource_indexes.sql', 'schedule resource migra
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0085_schedule_business_scoped_constraints.sql', 'schedule core constraints are business scoped', (source) =>
+  [
+    'UNIQUE (business_id, name)',
+    'UNIQUE (business_id, department, role_name)',
+    'PRIMARY KEY (business_id, user_id, department)',
+    'PRIMARY KEY (business_id, user_id, weekday)',
+    'idx_schedule_departments_business_active_order',
+    'idx_schedule_role_definitions_business_active_department',
+    'idx_user_schedule_departments_business_user',
+    'idx_user_schedule_availability_business_user'
+  ].every((token) => source.includes(token))
+);
+
 expect('migrations/0061_employee_hr_compliance_foundation.sql', 'employee HR compliance migration covers business-first indexes', (source) =>
   [
     'idx_employee_employment_records_business_status',

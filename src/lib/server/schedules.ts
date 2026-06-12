@@ -920,10 +920,11 @@ export async function ensureScheduleSchema(db: DB) {
       .prepare(
         `
         CREATE TABLE IF NOT EXISTS user_schedule_departments (
+          business_id TEXT NOT NULL DEFAULT '',
           user_id TEXT NOT NULL,
           department TEXT NOT NULL,
           updated_at INTEGER NOT NULL,
-          PRIMARY KEY (user_id, department),
+          PRIMARY KEY (business_id, user_id, department),
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         `
@@ -935,11 +936,13 @@ export async function ensureScheduleSchema(db: DB) {
         `
         CREATE TABLE IF NOT EXISTS schedule_departments (
           id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
           sort_order INTEGER NOT NULL DEFAULT 0,
           is_active INTEGER NOT NULL DEFAULT 1,
           created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
+          updated_at INTEGER NOT NULL,
+          business_id TEXT,
+          UNIQUE (business_id, name)
         )
         `
       )
@@ -956,7 +959,8 @@ export async function ensureScheduleSchema(db: DB) {
           is_active INTEGER NOT NULL DEFAULT 1,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
-          UNIQUE (department, role_name)
+          business_id TEXT,
+          UNIQUE (business_id, department, role_name)
         )
         `
       )
@@ -980,13 +984,14 @@ export async function ensureScheduleSchema(db: DB) {
       .prepare(
         `
         CREATE TABLE IF NOT EXISTS user_schedule_availability (
+          business_id TEXT NOT NULL DEFAULT '',
           user_id TEXT NOT NULL,
           weekday INTEGER NOT NULL,
           is_available INTEGER NOT NULL DEFAULT 0,
           start_time TEXT NOT NULL DEFAULT '',
           end_time TEXT NOT NULL DEFAULT '',
           updated_at INTEGER NOT NULL,
-          PRIMARY KEY (user_id, weekday),
+          PRIMARY KEY (business_id, user_id, weekday),
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         `
@@ -1100,7 +1105,7 @@ export async function ensureScheduleSchema(db: DB) {
       .prepare(
         `
         CREATE INDEX IF NOT EXISTS idx_user_schedule_departments_department
-        ON user_schedule_departments(department, user_id)
+        ON user_schedule_departments(business_id, department, user_id)
         `
       )
       .run();
@@ -1109,7 +1114,7 @@ export async function ensureScheduleSchema(db: DB) {
       .prepare(
         `
         CREATE INDEX IF NOT EXISTS idx_schedule_departments_order
-        ON schedule_departments(sort_order, name)
+        ON schedule_departments(business_id, sort_order, name)
         `
       )
       .run();
@@ -1118,7 +1123,7 @@ export async function ensureScheduleSchema(db: DB) {
       .prepare(
         `
         CREATE INDEX IF NOT EXISTS idx_schedule_role_definitions_department
-        ON schedule_role_definitions(department, sort_order, role_name)
+        ON schedule_role_definitions(business_id, department, sort_order, role_name)
         `
       )
       .run();
@@ -1127,7 +1132,7 @@ export async function ensureScheduleSchema(db: DB) {
       .prepare(
         `
         CREATE INDEX IF NOT EXISTS idx_user_schedule_availability_user
-        ON user_schedule_availability(user_id, weekday)
+        ON user_schedule_availability(business_id, user_id, weekday)
         `
       )
       .run();
@@ -4518,31 +4523,17 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
   const existing = await db
     .prepare(
       `
-      SELECT id
+      SELECT id, is_active
       FROM schedule_departments
-      WHERE LOWER(name) = LOWER(?) AND (business_id = ? OR business_id IS NULL)
+      WHERE LOWER(name) = LOWER(?) AND business_id = ?
       LIMIT 1
       `
     )
     .bind(departmentName, businessId)
-    .first<{ id: string }>();
+    .first<{ id: string; is_active: number }>();
 
   if (existing) {
-    const inactive = await db
-      .prepare(
-        `
-        SELECT id
-        FROM schedule_departments
-        WHERE LOWER(name) = LOWER(?)
-          AND is_active = 0
-          AND (business_id = ? OR business_id IS NULL)
-        LIMIT 1
-        `
-      )
-      .bind(departmentName, businessId)
-      .first<{ id: string }>();
-
-    if (!inactive) {
+    if (existing.is_active === 1) {
       return fail(400, { error: 'That department already exists.' });
     }
 
@@ -4554,7 +4545,7 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
         WHERE id = ?
         `
       )
-      .bind(Math.floor(Date.now() / 1000), businessId, inactive.id)
+      .bind(Math.floor(Date.now() / 1000), businessId, existing.id)
       .run();
 
     return { success: true, message: 'Department restored.' };
@@ -4642,7 +4633,7 @@ export async function deleteScheduleDepartment(request: Request, locals: App.Loc
       SELECT id
       FROM schedule_departments
       WHERE LOWER(name) = LOWER(?)
-        AND (business_id = ? OR business_id IS NULL)
+        AND business_id = ?
       LIMIT 1
       `
     )
@@ -4707,18 +4698,21 @@ export async function deleteScheduleRoleDefinition(request: Request, locals: App
   const role = await db
     .prepare(
       `
-      SELECT id, department, role_name
+      SELECT id, department, role_name, business_id
       FROM schedule_role_definitions
       WHERE id = ? AND (business_id = ? OR business_id IS NULL)
       LIMIT 1
       `
     )
     .bind(roleId, businessId)
-    .first<{ id: string; department: string; role_name: string }>();
+    .first<{ id: string; department: string; role_name: string; business_id: string | null }>();
 
   const departments = await loadScheduleDepartments(db, businessId);
   if (!role || !isValidScheduleDepartment(role.department, departments)) {
     return fail(404, { error: 'That schedule role could not be found.' });
+  }
+  if (role.business_id !== businessId) {
+    return fail(400, { error: 'Default schedule roles stay available. Add a custom role to manage it here.' });
   }
   const departmentAccessFailure = await scheduleDepartmentAccessFailure(db, locals, businessId, role.department);
   if (departmentAccessFailure) return departmentAccessFailure;
@@ -4755,7 +4749,7 @@ export async function deleteScheduleRoleDefinition(request: Request, locals: App
   }
 
   await db
-    .prepare(`DELETE FROM schedule_role_definitions WHERE id = ? AND (business_id = ? OR business_id IS NULL)`)
+    .prepare(`DELETE FROM schedule_role_definitions WHERE id = ? AND business_id = ?`)
     .bind(roleId, businessId)
     .run();
   return { success: true, message: 'Schedule role deleted.' };

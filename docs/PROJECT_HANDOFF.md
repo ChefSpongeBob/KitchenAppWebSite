@@ -121,13 +121,14 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `13. Camera feature shelving`
-- Status: In progress
-- Current pass: Phase 14 pricing, onboarding, and billing entitlement alignment after camera shelving.
-- Phase 13 camera shelving is complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
-- Phase 14 local corrections are complete: owner/invite onboarding paths are separated, launch pricing is Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, and temperature monitoring is included only with Medium and Large.
-- Last verified: 2026-06-06 focused Phase 12A validation passed: `npm.cmd run test:core-feature-actions`, `npm.cmd run test:email-system`, `npm.cmd run test:native-push`, `npm.cmd run test:operational-events`, `npm.cmd run test:report-exports`, `npm.cmd run test:admin-consolidation`, `npm.cmd run check`, and production `npm.cmd run build` outside the sandbox. D1 migrations are current locally and remotely. Public-route local smoke and authenticated smoke were not rerun in this pass.
-- Completed local phases: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring foundation`, `6. Scheduling workflow foundation`, `7. Lists/history/alert foundation`, `8. Reports/export foundation`, `9. Billing/store lifecycle foundation`, `10. Invite/onboarding/HR guardrails`, `11. Creator, editor, and legacy route consolidation`
+- Active phase: `7. Lists/history/completion alerts`
+- Status: Phase 6 is complete locally; Phase 7 is next.
+- Current pass: Phase 6 scheduling workflow completion and business-scoped schedule schema hardening.
+- Phase 5 Lists / Recipes / Docs / Menus is validated: Creator Studio is the single editor source, legacy admin content routes redirect to Creator Studio, list pages no longer seed old hardcoded data, menus are separated from documents, document/media access is private and business scoped, and recipe/document/list/menu routes are tenant scoped.
+- Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
+- Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
+- Last verified: 2026-06-12 Phase 6 scheduling pass passed `npm.cmd run check`, `npm.cmd run mobile:check`, production build, schedule-adjacent authorization/tenant/report/static checks, and local D1 migration `0085_schedule_business_scoped_constraints.sql`. Live smoke and production schema readiness remain deferred while the public domain is intentionally held offline.
+- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, and `6. Scheduling workflow completion`.
 
 ## Final Multi-Tenant Test Notes
 
@@ -138,6 +139,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 6 schedule save/publish pass: add shifts, edit shifts, delete shifts, duplicate a day, navigate away and back to confirm autosaved draft data remains, publish with unsaved changes, confirm publish creates the final schedule, and verify schedule publish history/report exports still show the published week.
 - Phase 6 employee schedule pass: log in as staff and verify `/schedule` and `/my-schedule` only show published shifts for that business/user; create availability, time-off requests, open-shift requests, shift offers, targeted shift offers, approvals, declines, withdrawals, and manager decisions. Confirm every action is tenant scoped and unavailable to unrelated businesses.
 - Phase 6 notification pass: process operational events after schedule publish, shift offer, shift request, open-shift request, approval, decline, and time-off decisions; confirm emails route to opted-in users, managers, affected employees, and eligible department employees only.
+- Phase 6 schema pass: in two businesses, create matching schedule departments and matching role names, assign availability and department approvals to similarly named employees, then confirm each business saves independently and no department, role, availability, template, or schedule change appears in the other business.
 - Phase 7 list pass: create checklist, prep, inventory, and order lists; add/edit/delete items; attach recipes and SOPs; submit counts/completions; verify new items appear immediately; confirm saved inputs clear after save; confirm deleted lists/items disappear everywhere they should.
 - Phase 7 history/alert pass: submit prep and checklist data as multiple employees; verify submitter and executor fields; confirm two-week prep history, checklist history, CSV/export behavior, completion alerts, item-completed events, and tenant isolation across two businesses.
 - Phase 7 report URL pass: verify `/reports/lists?domain=preplists`, `/reports/lists?domain=inventory`, `/reports/lists?domain=orders`, and `/reports/lists?domain=checklists`; download each matching CSV and confirm date, list, item, action/value, completed-by, and submitted-by fields.
@@ -228,6 +230,7 @@ Current audit status:
 - Phase 7 manual validation needs: run the list/report/event passes from Final Multi-Tenant Test Notes before launch, including CSV downloads, event processing, attachments, two-business isolation, and multiple-user submitter versus executor confirmation.
 
 8. Reports and exports completion
+- Tracked launch phase: `8. Reports/export foundation`.
 - Add executor detail to list history.
 - Add checklist, time-off, shift-request, temperature, onboarding, and other useful operational exports.
 - Confirm consultant and contractor report access is read-only and tenant scoped.
