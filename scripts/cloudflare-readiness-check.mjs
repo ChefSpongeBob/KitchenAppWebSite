@@ -41,7 +41,7 @@ if (wrangler) {
 
 const packageJson = JSON.parse(read('package.json') || '{}');
 const scripts = packageJson.scripts ?? {};
-expect('Remote migration script uses DB binding', scripts['db:migrations:apply:remote'] === 'npx wrangler d1 migrations apply DB --remote');
+expect('Remote migration script targets crimini-production database', scripts['db:migrations:apply:remote'] === 'npx wrangler d1 migrations apply crimini-production --remote');
 expect('Local migration script uses DB binding', scripts['db:migrations:apply:local'] === 'npx wrangler d1 migrations apply DB --local');
 expect('Static checks include Cloudflare readiness', String(scripts['test:static'] ?? '').includes('test:cloudflare-readiness'));
 
