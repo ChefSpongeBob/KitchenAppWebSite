@@ -66,7 +66,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     locals.businessPermissionTemplate,
     locals.businessCapabilities
   );
-  const HOMEPAGE_TEMP_LIMIT = 480;
+  const HOMEPAGE_TEMP_LIMIT = 240;
   if (!db) {
     return {
       isAdmin,

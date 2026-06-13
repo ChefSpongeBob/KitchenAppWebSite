@@ -170,6 +170,39 @@ expect('src/routes/api/temps/+server.ts', 'temp index repair is skipped on produ
   source.includes("import { dev } from '$app/environment'") && source.includes('tempsIndexesEnsured = true')
 );
 
+expect('src/routes/api/temps/+server.ts', 'temperature API payloads are capped for polling', (source) =>
+  source.includes('MAX_TEMP_QUERY_LIMIT = 500') &&
+  source.includes('DEFAULT_TEMP_QUERY_LIMIT = 240') &&
+  source.includes('Math.min(MAX_TEMP_QUERY_LIMIT')
+);
+
+expect('src/routes/app/+page.server.ts', 'homepage temperature sample stays bounded', (source) =>
+  source.includes('const HOMEPAGE_TEMP_LIMIT = 240')
+);
+
+expect('src/lib/client/polling.ts', 'shared polling is visibility aware with backoff and in-flight protection', (source) =>
+  source.includes("document.visibilityState === 'visible'") &&
+  source.includes('currentIntervalMs = Math.min') &&
+  source.includes('inFlight') &&
+  source.includes('visibleRefreshThrottleMs')
+);
+
+expect('src/routes/app/+page.svelte', 'homepage polling uses the shared visibility-aware helper', (source) =>
+  source.includes('startVisiblePolling') &&
+  source.includes('intervalMs: 90000') &&
+  source.includes('jitterMs: 10000')
+);
+
+expect('src/routes/temper/+page.svelte', 'temperature page polling uses the shared visibility-aware helper', (source) =>
+  source.includes('startVisiblePolling') &&
+  source.includes('intervalMs: 45000') &&
+  source.includes('jitterMs: 8000')
+);
+
+expect('src/routes/+page.svelte', 'marketing carousel does not advance while hidden', (source) =>
+  source.includes("document.visibilityState !== 'visible'")
+);
+
 expect('src/routes/api/documents/media/[...key]/+server.ts', 'document media responses stream from R2', (source) =>
   source.includes('new Response(object.body') && !source.includes('object.arrayBuffer()')
 );

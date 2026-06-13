@@ -156,6 +156,7 @@
 
 	onMount(() => {
 		slideTimer = setInterval(() => {
+			if (document.visibilityState !== 'visible') return;
 			activeSlide = (activeSlide + 1) % carouselSlides.length;
 		}, 5200);
 
@@ -467,24 +468,27 @@
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		border: 1px solid rgba(19, 20, 22, 0.18);
-		background: rgba(255, 255, 255, 0.9);
+		border: 0;
+		border-bottom: 1px solid rgba(17, 18, 20, 0.22);
+		background: transparent;
 		color: #111214;
 		border-radius: 0;
-		padding: 0.58rem 0.84rem;
+		padding: 0.28rem 0.12rem;
 		font-weight: var(--weight-semibold);
-		transition: transform 140ms ease, border-color 140ms ease;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		font-size: 0.78rem;
+		transition: border-color 140ms ease, color 140ms ease;
 	}
 
 	.btn:hover {
-		transform: translateY(-1px);
-		border-color: rgba(19, 20, 22, 0.5);
+		border-bottom-color: #111214;
+		color: #111214;
 	}
 
 	.btn-primary {
-		background: #111214;
-		border-color: #111214;
-		color: #f8f4ec;
+		border-bottom-color: #111214;
+		color: #111214;
 	}
 
 	.section-head {
@@ -831,15 +835,16 @@
 	}
 
 	.bottom-cta .btn {
-		border-color: rgba(248, 244, 236, 0.32);
+		border: 0;
+		border-bottom: 1px solid rgba(248, 244, 236, 0.34);
 		background: transparent;
 		color: #f8f4ec;
 	}
 
 	.bottom-cta .btn-primary {
-		background: #f8f4ec;
-		color: #111214;
-		border-color: #f8f4ec;
+		background: transparent;
+		color: #f8f4ec;
+		border-bottom-color: #f8f4ec;
 	}
 
 	.store-badge-row {

@@ -20,6 +20,8 @@ type RawTempRow = {
   ts: number;
 };
 
+const DEFAULT_TEMP_QUERY_LIMIT = 240;
+const MAX_TEMP_QUERY_LIMIT = 500;
 let tempsIndexesEnsured = false;
 
 async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
@@ -112,7 +114,10 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
     return json({ error: 'Workspace required.' }, { status: 401 });
   }
 
-  const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit') ?? 500)));
+  const requestedLimit = Number(url.searchParams.get('limit') ?? DEFAULT_TEMP_QUERY_LIMIT);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(MAX_TEMP_QUERY_LIMIT, Math.floor(requestedLimit)))
+    : DEFAULT_TEMP_QUERY_LIMIT;
   const sensor = url.searchParams.get('sensor');
 
   if (sensor) {

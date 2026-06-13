@@ -971,20 +971,28 @@
   .marketing-btn {
     text-decoration: none;
     border-radius: 0;
-    border: 1px solid rgba(17, 18, 20, 0.18);
-    padding: 0.44rem 0.72rem;
+    border: 0;
+    border-bottom: 1px solid rgba(17, 18, 20, 0.22);
+    padding: 0.28rem 0.12rem;
     font-size: 0.78rem;
     font-weight: var(--weight-semibold);
     color: #111214;
     background: transparent;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .marketing-btn:hover,
+  .marketing-btn:focus-visible {
+    border-bottom-color: #111214;
+    color: #111214;
   }
 
   .marketing-btn-primary {
-    border-color: #111214;
-    background: #111214;
-    color: #ffffff;
+    border-bottom-color: #111214;
+    background: transparent;
+    color: #111214;
   }
 
   .marketing-menu-btn {
@@ -1014,16 +1022,17 @@
     text-decoration: none;
     color: #111214;
     border-radius: 0;
-    border: 1px solid rgba(17, 18, 20, 0.12);
-    background: #ffffff;
-    padding: 0.5rem 0.62rem;
+    border: 0;
+    border-bottom: 1px solid rgba(17, 18, 20, 0.16);
+    background: transparent;
+    padding: 0.42rem 0.12rem;
     font-size: 0.78rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
   .marketing-mobile-menu a.active {
-    border-color: #111214;
+    border-bottom-color: #111214;
   }
 
   .marketing-mobile-cta {
@@ -1034,9 +1043,9 @@
   }
 
   .marketing-mobile-cta a.primary {
-    border-color: #111214;
-    background: #111214;
-    color: #ffffff;
+    border-bottom-color: #111214;
+    background: transparent;
+    color: #111214;
   }
 
   /* ===== Hamburger ===== */

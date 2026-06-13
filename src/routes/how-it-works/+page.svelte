@@ -475,17 +475,27 @@
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
+		background: transparent;
 		color: var(--color-text);
-		border-radius: 10px;
-		padding: 0.58rem 0.84rem;
+		border-radius: 0;
+		padding: 0.28rem 0.12rem;
 		font-weight: var(--weight-semibold);
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		font-size: 0.78rem;
+		transition: border-color 140ms ease, color 140ms ease;
+	}
+
+	.btn:hover {
+		border-bottom-color: var(--color-text);
+		color: var(--color-text);
 	}
 
 	.btn-primary {
-		background: linear-gradient(180deg, rgba(122, 132, 148, 0.26), rgba(122, 132, 148, 0.14));
-		border-color: rgba(122, 132, 148, 0.36);
+		border-bottom-color: var(--color-text);
+		color: var(--color-text);
 	}
 
 	.intro-band {

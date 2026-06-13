@@ -268,27 +268,34 @@
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		border: 1px solid rgba(17, 18, 20, 0.18);
+		border: 0;
+		border-bottom: 1px solid rgba(17, 18, 20, 0.22);
 		background: transparent;
 		color: #111214;
 		border-radius: 0;
-		padding: 0.58rem 0.84rem;
+		padding: 0.28rem 0.12rem;
 		font-weight: var(--weight-semibold);
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		font-size: 0.78rem;
+		transition: border-color 140ms ease, color 140ms ease;
+	}
+
+	.btn:hover {
+		border-bottom-color: #111214;
+		color: #111214;
 	}
 
 	.btn-primary {
-		background: #111214;
-		border-color: #111214;
-		color: #ffffff;
+		border-bottom-color: #111214;
+		color: #111214;
 	}
 
 	.btn-ghost {
 		background: transparent;
 		color: #111214;
-		border: 1px solid rgba(17, 18, 20, 0.18);
+		border: 0;
+		border-bottom: 1px solid rgba(17, 18, 20, 0.22);
 	}
 
 	.pricing-band {
@@ -418,11 +425,13 @@
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		border: 1px solid rgba(17, 18, 20, 0.18);
+		width: fit-content;
+		border: 0;
+		border-bottom: 1px solid #111214;
 		border-radius: 0;
-		padding: 0.5rem 0.76rem;
-		background: #111214;
-		color: #ffffff;
+		padding: 0.28rem 0.12rem;
+		background: transparent;
+		color: #111214;
 		font-weight: var(--weight-semibold);
 		font-size: 0.78rem;
 		letter-spacing: 0.06em;
