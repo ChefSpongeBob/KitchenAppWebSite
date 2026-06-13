@@ -1,114 +1,16 @@
-﻿<script lang="ts">
+<script lang="ts">
+  import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import DashboardCard from '$lib/components/ui/DashboardCard.svelte';
-  import { fade } from 'svelte/transition';
-  import { enhance } from '$app/forms';
-
-  type Recipe = {
-    id: string;
-    title: string;
-    category: string;
-    ingredients: string;
-    instructions: string;
-  };
-
-  export let data: { recipes?: Recipe[]; categories?: string[] };
-
-  let recipes: Recipe[] = data.recipes ?? [];
-  let categories: string[] = data.categories ?? [];
 </script>
 
-<PageHeader title="Manage Recipes" />
-
-<section class="create-recipe-grid">
-  {#each recipes as r, index}
-    <div in:fade={{ delay: index * 80, duration: 180 }}>
-      <DashboardCard title={r.title} description={r.category}>
-        <!-- Update Recipe -->
-        <form method="POST" action="?/updateRecipe" use:enhance>
-          <input type="hidden" name="id" value={r.id} />
-          <input name="title" value={r.title} required />
-          <select name="category" required>
-            {#each categories as c}
-              <option value={c} selected={c === r.category}>{c}</option>
-            {/each}
-          </select>
-          <input name="ingredients" value={r.ingredients} required />
-          <input name="instructions" value={r.instructions} required />
-          <button>Update</button>
-        </form>
-
-        <!-- Delete Recipe -->
-        <form method="POST" action="?/deleteRecipe" use:enhance>
-          <input type="hidden" name="id" value={r.id} />
-          <button>Delete</button>
-        </form>
-      </DashboardCard>
-    </div>
-  {/each}
-
-  <!-- Add Recipe -->
-  <div in:fade>
-    <DashboardCard title="Add Recipe">
-      <form method="POST" action="?/createRecipe" use:enhance>
-        <input name="title" placeholder="Title" required />
-
-        <!-- Category dropdown -->
-        <select name="category" required>
-          <option value="" disabled selected>Select a category</option>
-          {#each categories as c}
-            <option value={c}>{c}</option>
-          {/each}
-        </select>
-
-        <input name="ingredients" placeholder="Ingredients" required />
-        <input name="instructions" placeholder="Instructions" required />
-        <button>Create</button>
-      </form>
-    </DashboardCard>
-  </div>
-</section>
+<Layout>
+  <PageHeader title="Creator Studio" />
+  <p class="redirect-note">Opening Creator Studio.</p>
+</Layout>
 
 <style>
-  .create-recipe-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-  }
-
-  form {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  form + form {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  input,
-  select {
-    display: block;
-    width: 100%;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 0.48rem 0.6rem;
-    background: var(--surface-wash), var(--color-surface-alt);
-    color: var(--color-text);
-    font-size: 0.84rem;
-  }
-
-  button {
-    margin-top: 0.25rem;
-    min-height: 2.35rem;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--color-surface-alt) 72%, var(--color-text) 5%);
-    color: var(--color-primary-contrast);
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: var(--weight-medium);
+  .redirect-note {
+    margin: 0;
+    color: var(--color-text-muted);
   }
 </style>
-

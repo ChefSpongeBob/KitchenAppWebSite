@@ -121,14 +121,14 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `10. Invite, employee onboarding, and HR completion`
-- Status: Phase 10 invite/onboarding/HR wiring is validated locally; full validation still needs real invite links, real email delivery, multi-role tenant testing, and legal/payroll review of final form requirements.
-- Current pass: Phase 10 invite flow, employee packet, sensitive HR storage, admin review, and onboarding media access validation.
+- Active phase: `11. Creator, editor, and legacy route consolidation`
+- Status: Phase 11 creator/editor consolidation is validated locally; remaining confidence comes from manual creator-mode walkthroughs with real tenant data.
+- Current pass: Phase 11 Creator Studio source-of-truth validation, legacy route redirect cleanup, and feature-gated creator mode checks.
 - Phase 5 Lists / Recipes / Docs / Menus is validated: Creator Studio is the single editor source, legacy admin content routes redirect to Creator Studio, list pages no longer seed old hardcoded data, menus are separated from documents, document/media access is private and business scoped, and recipe/document/list/menu routes are tenant scoped.
 - Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
 - Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
-- Last verified: 2026-06-12 Phase 10 onboarding pass confirmed business-scoped admin onboarding, owner/manager/employee/consultant/contractor invite rules, invited employee/manager pricing-skip flow, contractor packet exclusion, owner packet exclusion by default, source form uploads, encrypted sensitive HR form storage, admin review/change-request/approval events, private onboarding media access, and profile/settings packet submission. Live smoke, real email delivery, real invite links, legal/payroll form review, real store sandbox tests, and production schema readiness remain deferred while the public domain is intentionally held offline.
-- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, `7. Lists/history/completion alerts`, `8. Reports/export foundation`, `9. Billing and store subscription lifecycle code hardening`, and `10. Invite, employee onboarding, and HR completion`.
+- Last verified: 2026-06-13 Phase 11 consolidation pass confirmed Creator Studio owns category, list, recipe, document, menu, and attachment creation; legacy admin editor routes redirect to the correct Creator Studio mode; `/recipes/manage` no longer carries hidden legacy editor UI; creator feature gating is URL/editor-aware; and admin navigation exposes one content editor entry. Live smoke, real email delivery, real invite links, legal/payroll form review, real store sandbox tests, and production schema readiness remain deferred while the public domain is intentionally held offline.
+- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, `7. Lists/history/completion alerts`, `8. Reports/export foundation`, `9. Billing and store subscription lifecycle code hardening`, `10. Invite, employee onboarding, and HR completion`, and `11. Creator, editor, and legacy route consolidation`.
 
 ## Final Multi-Tenant Test Notes
 

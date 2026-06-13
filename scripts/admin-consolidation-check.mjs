@@ -59,7 +59,8 @@ const redirectRoutes = [
   ['src/routes/admin/lists/+page.server.ts', 'src/routes/admin/lists/+page.svelte', '/admin/creator?editor=list'],
   ['src/routes/admin/menus/+page.server.ts', 'src/routes/admin/menus/+page.svelte', '/admin/creator?editor=menu'],
   ['src/routes/admin/documents/+page.server.ts', 'src/routes/admin/documents/+page.svelte', '/admin/creator?editor=document'],
-  ['src/routes/admin/recipes/+page.server.ts', 'src/routes/admin/recipes/+page.svelte', '/admin/creator?editor=recipe']
+  ['src/routes/admin/recipes/+page.server.ts', 'src/routes/admin/recipes/+page.svelte', '/admin/creator?editor=recipe'],
+  ['src/routes/recipes/manage/+page.server.ts', 'src/routes/recipes/manage/+page.svelte', '/admin/creator?editor=recipe']
 ];
 
 for (const [path, _pagePath, target] of redirectRoutes) {
