@@ -15,7 +15,7 @@ function expect(path, label, predicate) {
   checks.push({ ok: Boolean(predicate(source)), label, detail: path });
 }
 
-for (const route of ['requests', 'temperature', 'onboarding', 'waste']) {
+for (const route of ['lists', 'schedule', 'requests', 'temperature', 'onboarding', 'waste']) {
   expect(`src/routes/reports/${route}/+page.server.ts`, `${route} report page is report-access gated`, (source) =>
     source.includes('hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)') &&
     source.includes('requireBusinessId(locals)')
@@ -27,6 +27,12 @@ for (const route of ['requests', 'temperature', 'onboarding', 'waste']) {
     source.includes('csvEscape')
   );
 }
+
+expect('src/lib/server/history.ts', 'CSV escaping prevents spreadsheet formula injection', (source) =>
+  source.includes("const raw = String(value ?? '')") &&
+  source.includes("/^[=+\\-@\\t\\r]/") &&
+  source.includes("`'${raw}`")
+);
 
 expect('src/lib/server/reports.ts', 'report helpers keep exports tenant scoped and bounded', (source) =>
   [

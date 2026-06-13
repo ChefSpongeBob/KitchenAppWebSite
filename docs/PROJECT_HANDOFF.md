@@ -121,14 +121,14 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `8. Reports/export foundation`
-- Status: Phase 7 is complete locally; Phase 8 is next.
-- Current pass: Phase 7 lists/history/completion alerts validation and content-permission cleanup.
+- Active phase: `9. Billing and store subscription lifecycle`
+- Status: Phase 9 code hardening is complete locally; full validation still depends on external Apple/Google store setup, native builds, and sandbox tester accounts.
+- Current pass: Phase 9 billing/store lifecycle validation and launch product guard checks.
 - Phase 5 Lists / Recipes / Docs / Menus is validated: Creator Studio is the single editor source, legacy admin content routes redirect to Creator Studio, list pages no longer seed old hardcoded data, menus are separated from documents, document/media access is private and business scoped, and recipe/document/list/menu routes are tenant scoped.
 - Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
 - Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
-- Last verified: 2026-06-12 Phase 7 list/history pass passed `npm.cmd run check`, `test:core-feature-actions`, `test:authorization-capabilities`, `test:operational-events`, and `test:report-exports`. Phase 6 also passed production build and local D1 migration `0085_schedule_business_scoped_constraints.sql`. Live smoke and production schema readiness remain deferred while the public domain is intentionally held offline.
-- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, and `7. Lists/history/completion alerts`.
+- Last verified: 2026-06-12 Phase 9 billing/store pass confirmed native purchase submissions stay pending until Apple/Google verification, webhook endpoints require `BILLING_WEBHOOK_TOKEN`, entitlement lifecycle reconciliation is wired, launch products are guarded at Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, temperature is Medium/Large only, and camera billing remains deferred. Phase 8 also added CSV formula-injection hardening for spreadsheet-safe exports. Live smoke, real store sandbox tests, and production schema readiness remain deferred while the public domain is intentionally held offline.
+- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, `7. Lists/history/completion alerts`, `8. Reports/export foundation`, and `9. Billing and store subscription lifecycle code hardening`.
 
 ## Final Multi-Tenant Test Notes
 
@@ -147,6 +147,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 7 permission pass: as owner, manager, shift lead, consultant, contractor, and staff, confirm list par controls and item attachment editor actions are available only to users with `manage_content`, while normal staff can still submit counts and complete checklist/list items.
 - Phase 8 reports pass: open `/reports`, `/reports/schedule`, `/reports/requests`, `/reports/temperature`, `/reports/onboarding`, and all list report domains as owner, manager, consultant, contractor, and staff. Confirm permitted roles are read-only, staff is blocked, each route stays inside the active business, and CSV exports match the visible rows.
 - Phase 8 CSV pass: download schedule, requests, temperature, onboarding, prep, inventory, order, and checklist CSVs with real data; open in spreadsheet software; confirm no sensitive onboarding form payloads, document URLs, password/session data, or cross-business rows appear.
+- Phase 8 CSV safety pass: enter/export values beginning with `=`, `+`, `-`, `@`, tab, and carriage return; confirm downloaded CSVs open in spreadsheet tools as text values and do not execute formulas.
 - Phase 9 billing pass: create matching Apple and Google sandbox products; purchase starter, growth, and enterprise from native builds; restore purchases; confirm entitlements activate the correct business only; confirm Medium/Large enable temperature monitoring and Small does not; cancel auto-renew without early lockout; test renewal, grace, hold/past-due, refund/revoke, and expiration notifications; confirm webhook rows become processed/failed/ignored and billing status updates match store state. Camera add-ons are deferred post-launch.
 - Phase 9 pricing pass: confirm `/pricing`, `/register`, `/billing`, `/api/billing/products`, Apple sandbox products, and Google Play sandbox products all reflect Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only on Medium and Large. Confirm standalone temperature and camera products are unavailable during launch.
 - Tools pass: open sidebar Tools and confirm Conversions, Food Cost Calculator, Safety & HealthCode, and Waste Tracker are visible to staff by default. Submit waste as staff, then confirm Waste Logs appears only in Reports for report-access roles and downloads tenant-scoped CSV rows.
@@ -238,7 +239,7 @@ Current audit status:
 - Add pagination, chunking, or asynchronous exports so large reports do not silently stop at fixed row limits.
 - Confirm schedule history supports the required retention period.
 - Test CSV files with real data and external spreadsheet tools.
-- Phase 8 current foundation: schedule requests, temperature monitoring, and onboarding status reports/CSVs exist; report queries are bounded and business scoped; `test:report-exports` guards report access, CSV endpoints, sensitive onboarding exclusions, and report links.
+- Phase 8 current foundation: schedule history, list history, schedule requests, temperature monitoring, onboarding status, and waste reports/CSVs exist; report queries are bounded and business scoped; `test:report-exports` guards report access, all CSV endpoints, spreadsheet formula hardening, sensitive onboarding exclusions, and report links.
 - Phase 8 manual validation needs: run the reports and CSV passes from Final Multi-Tenant Test Notes before launch, including owner/manager/consultant/contractor/staff access, read-only behavior, spreadsheet opening, row-limit behavior, sensitive onboarding exclusion, and two-business isolation.
 
 9. Billing and store subscription lifecycle

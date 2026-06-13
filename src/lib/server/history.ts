@@ -554,6 +554,7 @@ export async function loadScheduleHistoryReport(
 }
 
 export function csvEscape(value: unknown) {
-  const text = String(value ?? '');
+  const raw = String(value ?? '');
+  const text = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }

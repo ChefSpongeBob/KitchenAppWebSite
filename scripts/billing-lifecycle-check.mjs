@@ -124,6 +124,18 @@ expect('migrations/0081_billing_webhook_lifecycle_indexes.sql', 'billing webhook
   source.includes('idx_store_webhook_events_processed_created')
 );
 
+expect('migrations/0082_update_launch_plan_prices.sql', 'launch store prices are the current approved tiers', (source) =>
+  source.includes("WHEN 'crimini.plan.small.monthly' THEN 3000") &&
+  source.includes("WHEN 'crimini.plan.medium.monthly' THEN 6500") &&
+  source.includes("WHEN 'crimini.plan.large.monthly' THEN 9000")
+);
+
+expect('migrations/0082_update_launch_plan_prices.sql', 'camera billing products are deferred for launch', (source) =>
+  source.includes("WHERE product_id = 'crimini.addon.cameras.monthly'") &&
+  source.includes('SET active = 0') &&
+  source.includes("WHERE product_id = 'crimini.plan.large.monthly'")
+);
+
 expect('migrations/0083_temperature_tier_entitlements.sql', 'temperature monitoring is tier-gated to medium and large', (source) =>
   source.includes("WHERE product_id = 'crimini.addon.temps.monthly'") &&
   source.includes('SET active = 0') &&
