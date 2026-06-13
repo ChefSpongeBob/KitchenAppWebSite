@@ -1,5 +1,9 @@
 import { redirect, type Actions } from '@sveltejs/kit';
 import { hashSessionToken } from '$lib/server/auth';
+import {
+	ACTIVE_BUSINESS_COOKIE,
+	getActiveBusinessCookieDeleteOptions
+} from '$lib/server/activeBusiness';
 import { getSessionCookieDeleteOptions, getSessionCookieName } from '$lib/server/authCookies';
 
 export const actions: Actions = {
@@ -29,6 +33,7 @@ export const actions: Actions = {
 		cookies.delete(primaryCookie, getSessionCookieDeleteOptions(request));
 		cookies.delete('session_id', { path: '/' });
 		cookies.delete('session_id_pwa', { path: '/' });
+		cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 
 		throw redirect(303, '/login');
 	}
