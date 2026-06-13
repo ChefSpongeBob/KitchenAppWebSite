@@ -6,6 +6,7 @@ import {
 	type StoreEntitlementStatus
 } from '$lib/server/storeBilling';
 import { verifyStorePurchase } from '$lib/server/storeVerification';
+import { bearerTokenFromRequest, constantTimeTokenEqual } from '$lib/server/requestTokens';
 
 function base64UrlDecodeJson<T>(input: string): T {
 	const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -17,11 +18,11 @@ function authorized(request: Request, env: App.Platform['env'] | undefined) {
 	const token = env?.BILLING_WEBHOOK_TOKEN?.trim();
 	if (!token) return false;
 
-	const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
-	if (bearer === token) return true;
+	const bearer = bearerTokenFromRequest(request);
+	if (constantTimeTokenEqual(token, bearer)) return true;
 
 	const url = new URL(request.url);
-	return url.searchParams.get('token') === token;
+	return constantTimeTokenEqual(token, url.searchParams.get('token'));
 }
 
 function decodeNotificationId(signedPayload: string) {

@@ -29,6 +29,22 @@ const SAFE_METADATA_KEYS = new Set([
 	'type'
 ]);
 
+const SENSITIVE_TEXT_PATTERNS: Array<[RegExp, string]> = [
+	[/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [redacted]'],
+	[/(x-smoke-token["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(api[_-]?key["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(password["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(secret["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(token["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(SENSITIVE_DATA_KEY["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(RESEND_API_KEY["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]'],
+	[/(BILLING_WEBHOOK_TOKEN["'\s:=]+)[^"',\s)]+/gi, '$1[redacted]']
+];
+
+function redactSensitiveText(value: string) {
+	return SENSITIVE_TEXT_PATTERNS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), value);
+}
+
 function requestId(request?: Request) {
 	return (
 		request?.headers.get('cf-ray') ??
@@ -53,11 +69,11 @@ function errorPayload(error: unknown) {
 	if (error instanceof Error) {
 		return {
 			name: error.name,
-			message: error.message.slice(0, 500)
+			message: redactSensitiveText(error.message).slice(0, 500)
 		};
 	}
 	return {
-		message: String(error).slice(0, 500)
+		message: redactSensitiveText(String(error)).slice(0, 500)
 	};
 }
 

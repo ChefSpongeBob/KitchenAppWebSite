@@ -2,6 +2,7 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { verifyTenantSchema } from '$lib/server/tenant';
 import { logOperationalEvent } from '$lib/server/observability';
 import { isSensitiveEncryptionConfigured } from '$lib/server/sensitive';
+import { bearerTokenFromRequest, constantTimeTokenEqual } from '$lib/server/requestTokens';
 
 const REQUIRED_CORE_TABLES = [
 	'users',
@@ -92,8 +93,8 @@ function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
 	const token = env?.SMOKE_INTERNAL_TOKEN?.trim();
 	if (!token) return false;
 	const headerToken = request.headers.get('x-smoke-token')?.trim();
-	const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
-	return headerToken === token || bearer === token;
+	const bearer = bearerTokenFromRequest(request);
+	return constantTimeTokenEqual(token, headerToken) || constantTimeTokenEqual(token, bearer);
 }
 
 async function missingCoreTables(db: App.Platform['env']['DB']) {

@@ -101,13 +101,15 @@ expect('src/hooks.server.ts', 'request guard rejects revoked sessions devices in
 
 expect('src/routes/api/internal/operational-events/process/+server.ts', 'operational event processor requires internal token', (source) =>
   source.includes('SMOKE_INTERNAL_TOKEN') &&
-  source.includes('authorization') &&
+  source.includes('internalTokenFromRequest') &&
+  source.includes('constantTimeTokenEqual') &&
   source.includes("return json({ ok: false, error: 'Not found.' }, { status: 404 })")
 );
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness requires internal token', (source) =>
   source.includes('SMOKE_INTERNAL_TOKEN') &&
-  source.includes('authorization') &&
+  source.includes('bearerTokenFromRequest') &&
+  source.includes('constantTimeTokenEqual') &&
   source.includes("return json({ ok: false, error: 'Unauthorized.' }, { status: 401 })")
 );
 
@@ -126,13 +128,15 @@ expect('src/routes/api/camera/activity/+server.ts', 'camera activity ingest rema
 
 expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires billing webhook token', (source) =>
   source.includes('BILLING_WEBHOOK_TOKEN') &&
-  source.includes('authorization') &&
+  source.includes('bearerTokenFromRequest') &&
+  source.includes('constantTimeTokenEqual') &&
   source.includes("return json({ ok: false, error: 'Unauthorized.' }, { status: 401 })")
 );
 
 expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play webhook requires billing webhook token', (source) =>
   source.includes('BILLING_WEBHOOK_TOKEN') &&
-  source.includes('authorization') &&
+  source.includes('bearerTokenFromRequest') &&
+  source.includes('constantTimeTokenEqual') &&
   source.includes("return json({ ok: false, error: 'Unauthorized.' }, { status: 401 })")
 );
 

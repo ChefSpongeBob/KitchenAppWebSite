@@ -1,12 +1,13 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { processTemperatureStaleAlerts } from '$lib/server/temperatureMonitoring';
+import { bearerTokenFromRequest, constantTimeTokenEqual } from '$lib/server/requestTokens';
 
 function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
   const token = env?.SMOKE_INTERNAL_TOKEN?.trim();
   if (!token) return false;
   const headerToken = request.headers.get('x-smoke-token')?.trim();
-  const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
-  return headerToken === token || bearer === token;
+  const bearer = bearerTokenFromRequest(request);
+  return constantTimeTokenEqual(token, headerToken) || constantTimeTokenEqual(token, bearer);
 }
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {

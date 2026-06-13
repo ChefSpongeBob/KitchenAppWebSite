@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { processOperationalEvents } from '$lib/server/operationalEvents';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
+import { constantTimeTokenEqual, internalTokenFromRequest } from '$lib/server/requestTokens';
 
 function readInternalToken(platform: App.Platform | undefined) {
   const platformValue = platform?.env?.SMOKE_INTERNAL_TOKEN;
@@ -14,14 +15,13 @@ function readInternalToken(platform: App.Platform | undefined) {
 }
 
 function suppliedToken(request: Request) {
-  const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
-  return bearer || request.headers.get('x-smoke-token')?.trim() || '';
+  return internalTokenFromRequest(request);
 }
 
 function isAuthorized(request: Request, platform: App.Platform | undefined) {
   const expected = readInternalToken(platform);
   const supplied = suppliedToken(request);
-  return Boolean(expected && supplied && supplied === expected);
+  return constantTimeTokenEqual(expected, supplied);
 }
 
 async function readLimit(request: Request) {

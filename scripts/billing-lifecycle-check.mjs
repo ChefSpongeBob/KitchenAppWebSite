@@ -169,14 +169,16 @@ expect('src/lib/server/storeBilling.ts', 'verified entitlements apply temperatur
 
 expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires exact configured token', (source) =>
   source.includes('if (!token) return false') &&
-  source.includes("request.headers.get('authorization')") &&
-  source.includes("url.searchParams.get('token') === token")
+  source.includes('bearerTokenFromRequest') &&
+  source.includes("url.searchParams.get('token')") &&
+  source.includes('constantTimeTokenEqual')
 );
 
 expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play webhook requires exact configured token', (source) =>
   source.includes('if (!token) return false') &&
-  source.includes("request.headers.get('authorization')") &&
-  source.includes("url.searchParams.get('token') === token")
+  source.includes('bearerTokenFromRequest') &&
+  source.includes("url.searchParams.get('token')") &&
+  source.includes('constantTimeTokenEqual')
 );
 
 expect('src/lib/billing/nativeBilling.ts', 'web app has native billing bridge', (source) =>

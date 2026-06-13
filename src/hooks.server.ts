@@ -56,6 +56,9 @@ function applySecurityHeaders(response: Response) {
 		'camera=(self), geolocation=(), microphone=(), payment=(self)'
 	);
 	response.headers.set('cross-origin-opener-policy', 'same-origin');
+	response.headers.set('origin-agent-cluster', '?1');
+	response.headers.set('x-permitted-cross-domain-policies', 'none');
+	response.headers.set('x-download-options', 'noopen');
 
 	if (!dev) {
 		response.headers.set('strict-transport-security', 'max-age=31536000; includeSubDomains; preload');

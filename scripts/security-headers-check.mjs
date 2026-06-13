@@ -9,6 +9,9 @@ const checks = [
 	['framing is denied globally', source.includes("x-frame-options', 'DENY")],
 	['referrer policy is set globally', source.includes("referrer-policy', 'strict-origin-when-cross-origin")],
 	['permissions policy is set globally', source.includes('permissions-policy')],
+	['origin agent cluster is isolated', source.includes("origin-agent-cluster', '?1")],
+	['cross-domain policy files are disabled', source.includes("x-permitted-cross-domain-policies', 'none")],
+	['legacy download opening is disabled', source.includes("x-download-options', 'noopen")],
 	['HSTS is enabled outside dev', source.includes('strict-transport-security') && source.includes('!dev')],
 	['private no-store responses keep security headers', source.includes('return applySecurityHeaders(response);')],
 	[

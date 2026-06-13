@@ -22,6 +22,21 @@ expect('src/lib/server/observability.ts', 'structured observability helper exist
   source.includes('business_id')
 );
 
+expect('src/lib/server/observability.ts', 'observability errors redact sensitive strings', (source) =>
+  source.includes('SENSITIVE_TEXT_PATTERNS') &&
+  source.includes('redactSensitiveText') &&
+  source.includes('Bearer [redacted]') &&
+  source.includes('RESEND_API_KEY') &&
+  source.includes('BILLING_WEBHOOK_TOKEN')
+);
+
+expect('src/lib/server/requestTokens.ts', 'request token comparison is constant time', (source) =>
+  source.includes('constantTimeTokenEqual') &&
+  source.includes('left.length ^ right.length') &&
+  source.includes('charCodeAt') &&
+  source.includes('bearerTokenFromRequest')
+);
+
 expect('src/lib/server/security.ts', 'account audit emits structured server logs', (source) =>
   source.includes('account_audit_log') && source.includes('logOperationalEvent')
 );
@@ -40,6 +55,26 @@ expect('src/routes/billing/+page.server.ts', 'billing lifecycle failures are log
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness failures are logged', (source) =>
   source.includes('schema_readiness_failed') && source.includes('schema_readiness_db_unavailable')
+);
+
+expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness uses constant-time internal token checks', (source) =>
+  source.includes('constantTimeTokenEqual') && source.includes('bearerTokenFromRequest')
+);
+
+expect('src/routes/api/internal/operational-events/process/+server.ts', 'operational processor uses constant-time internal token checks', (source) =>
+  source.includes('constantTimeTokenEqual') && source.includes('internalTokenFromRequest')
+);
+
+expect('src/routes/api/internal/temperature-monitoring/process/+server.ts', 'temperature processor uses constant-time internal token checks', (source) =>
+  source.includes('constantTimeTokenEqual') && source.includes('bearerTokenFromRequest')
+);
+
+expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook uses constant-time token checks', (source) =>
+  source.includes('constantTimeTokenEqual') && source.includes('bearerTokenFromRequest')
+);
+
+expect('src/routes/api/billing/google-play-notifications/+server.ts', 'google play webhook uses constant-time token checks', (source) =>
+  source.includes('constantTimeTokenEqual') && source.includes('bearerTokenFromRequest')
 );
 
 expect('src/routes/api/documents/media/[...key]/+server.ts', 'document media failures are logged', (source) =>
