@@ -29,6 +29,7 @@ if (wrangler) {
   const d1 = wrangler.d1_databases?.find((binding) => binding.binding === 'DB');
   const docMedia = wrangler.r2_buckets?.find((bucket) => bucket.binding === 'DOC_MEDIA');
   const cameraMedia = wrangler.r2_buckets?.find((bucket) => bucket.binding === 'CAMERA_MEDIA');
+  const wranglerSource = JSON.stringify(wrangler);
 
   expect('Cloudflare Pages output directory is configured', wrangler.pages_build_output_dir === '.svelte-kit/cloudflare');
   expect('Cloudflare nodejs_compat flag is enabled', wrangler.compatibility_flags?.includes('nodejs_compat'));
@@ -37,6 +38,7 @@ if (wrangler) {
   expect('DOC_MEDIA R2 binding is configured', docMedia?.bucket_name === 'crimini-doc-media');
   expect('CAMERA_MEDIA R2 binding is configured', cameraMedia?.bucket_name === 'crimini-camera-media');
   expect('APP_BASE_URL points to production domain', wrangler.vars?.APP_BASE_URL === 'https://criminiops.com');
+  expect('No old copied Cloudflare resources are bound in wrangler config', !/kitchensoftware|kitchen-camera-media|"database_name":"kitchen"/i.test(wranglerSource));
 }
 
 const packageJson = JSON.parse(read('package.json') || '{}');
@@ -80,6 +82,9 @@ const playbook = read('docs/PROJECT_HANDOFF.md');
 expect('Deploy playbook references DB binding, not old kitchen binding', playbook.includes('d1 execute DB --remote') && !playbook.includes('d1 execute kitchen --remote'));
 expect('Deploy playbook includes Cloudflare readiness check', playbook.includes('npm run test:cloudflare-readiness'));
 expect('Deploy playbook lists sensitive encryption secret', playbook.includes('SENSITIVE_DATA_KEY'));
+
+const gitignore = read('.gitignore');
+expect('Local database backup folder is ignored', gitignore.includes('.db-backups/'));
 
 const failed = checks.filter((check) => !check.ok);
 for (const check of checks) {

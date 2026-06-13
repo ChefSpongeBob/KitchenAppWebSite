@@ -30,3 +30,6 @@ android/app/src/main/assets/public
 # Local assistant logs
 .codex-pages.log
 .codex-pages.err.log
+
+# Local database backups
+.db-backups/
