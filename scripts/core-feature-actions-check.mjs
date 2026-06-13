@@ -200,6 +200,77 @@ expect('src/routes/conversions/+page.svelte', 'conversions page remains availabl
   includesAll(source, ['const units', 'convertedAmount', 'cupChart', 'weightChart'])
 );
 
+expect('src/routes/tools/food-cost/+page.svelte', 'food cost calculator computes ingredient cost and margin locally', (source) =>
+  includesAll(source, [
+    'Food Cost Calculator',
+    'totalFoodCost',
+    'salePrice',
+    'foodCostPercent',
+    'marginPercent',
+    'addIngredient',
+    'removeIngredient'
+  ])
+);
+
+expect('src/routes/tools/safety-healthcode/+page.svelte', 'safety and healthcode tool provides real reference sections', (source) =>
+  includesAll(source, [
+    'Safety & HealthCode',
+    'cookTemps',
+    'sanitizerBasics',
+    'quickRules',
+    'boardColors',
+    'FoodSafety.gov temperatures',
+    'FDA Food Code'
+  ])
+);
+
+expect('src/routes/tools/waste/+page.server.ts', 'waste tracker saves tenant-scoped submissions and records events', (source) =>
+  includesAll(source, [
+    'requireBusinessId(locals)',
+    'business_id = ?',
+    'INSERT INTO waste_logs',
+    'submitted_by_user_id',
+    "eventType: 'waste.submitted'",
+    'LIMIT 25'
+  ])
+);
+
+expect('src/routes/tools/waste/+page.svelte', 'waste tracker clears form input after successful submit', (source) =>
+  includesAll(source, [
+    'use:enhance',
+    'formElement.reset()',
+    'Submit Waste',
+    'Report exports live under Reports.'
+  ])
+);
+
+expect('src/routes/reports/waste/+page.server.ts', 'waste report is protected by reports access and business scope', (source) =>
+  includesAll(source, ['hasReportsAccess', 'loadWasteReport', 'requireBusinessId(locals)'])
+);
+
+expect('src/routes/reports/waste.csv/+server.ts', 'waste report CSV export is permission checked and CSV hardened', (source) =>
+  includesAll(source, [
+    'hasReportsAccess',
+    'requireBusinessId(locals)',
+    'csvEscape',
+    'loadWasteReport',
+    'waste-logs.csv'
+  ])
+);
+
+expect('src/lib/assets/navigation.ts', 'sidebar groups all kitchen tools under Tools with feature keys', (source) =>
+  includesAll(source, [
+    "label: 'Conversions'",
+    "label: 'Food Cost Calculator'",
+    "label: 'Safety & HealthCode'",
+    "label: 'Waste Tracker'",
+    "group: 'tools'",
+    "featureKey: 'food_cost_calculator'",
+    "featureKey: 'safety_healthcode'",
+    "featureKey: 'waste_tracker'"
+  ])
+);
+
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 12 manual core feature test needs', (source) =>
   source.includes('12. Core feature action test') &&
   source.includes('Phase 12 core action pass')
