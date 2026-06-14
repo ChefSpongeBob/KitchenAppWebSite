@@ -107,6 +107,13 @@
     border-bottom-color: var(--color-text);
   }
 
+  .action-btn:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-text) 48%, transparent);
+    outline-offset: 4px;
+    border-bottom-color: var(--color-text);
+    color: var(--color-text);
+  }
+
   .error {
     border-color: color-mix(in srgb, var(--color-error) 36%, var(--color-border) 64%);
     background: transparent;

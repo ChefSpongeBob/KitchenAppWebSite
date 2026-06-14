@@ -12,9 +12,6 @@
   <div class="title-block">
     <span class="header-rule" aria-hidden="true"></span>
     <h1>{title}</h1>
-    {#if subtitle}
-      <p>{subtitle}</p>
-    {/if}
   </div>
 
   {#if showAdminEditorMenu}
@@ -52,13 +49,6 @@
     font-weight: var(--weight-semibold);
     line-height: 1.02;
     letter-spacing: -0.045em;
-  }
-
-  p {
-    margin: 0;
-    max-width: 44rem;
-    color: var(--color-text-muted);
-    font-size: clamp(0.92rem, 1.5vw, 1rem);
   }
 
   .admin-editor-slot {

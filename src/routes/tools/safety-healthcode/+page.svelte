@@ -43,11 +43,6 @@
 <Layout>
 	<PageHeader title="Safety & HealthCode" />
 
-	<section class="safety-note">
-		<span class="material-icons" aria-hidden="true">health_and_safety</span>
-		<p>Use this as a quick kitchen reference. Local code, product labels, and manager instruction still control final practice.</p>
-	</section>
-
 	<section class="section-block">
 		<header>
 			<h2>Cooking Temperatures</h2>
@@ -116,29 +111,11 @@
 </Layout>
 
 <style>
-	.safety-note,
 	.section-block,
 	.source-strip {
 		border-top: 1px solid var(--color-divider);
 		border-bottom: 1px solid var(--color-divider);
 		background: transparent;
-	}
-
-	.safety-note {
-		display: flex;
-		gap: 0.7rem;
-		align-items: center;
-		padding: 0.9rem 0;
-		color: var(--color-text-muted);
-	}
-
-	.safety-note p {
-		margin: 0;
-	}
-
-	.safety-note .material-icons {
-		color: var(--color-text);
-		font-size: 1.25rem;
 	}
 
 	.section-block {
