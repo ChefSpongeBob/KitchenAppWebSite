@@ -656,6 +656,7 @@
           <a href="/how-it-works">How It Works</a>
           <a href="/about">About</a>
           <a href="/pricing">Pricing</a>
+          <a href="/support">Support</a>
           <a href="/privacy">Privacy</a>
           <a href="/account-deletion">Account Deletion</a>
           <a href="/register#onboarding-slideshow">Start Free</a>

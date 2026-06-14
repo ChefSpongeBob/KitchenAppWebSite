@@ -250,6 +250,18 @@
 						{/each}
 					</select>
 
+					{#if selectedStoreProduct}
+						<div class="subscription-summary" aria-live="polite">
+							<strong>{selectedStoreProduct.displayName}</strong>
+							<span>
+								{nativeProducts.length && nativeProduct?.price ? nativeProduct.price : priceLabel(selectedStoreProduct)}
+								/month
+							</span>
+							<small>Renews monthly until canceled.</small>
+							<small>Restore is available for existing App Store or Google Play purchases.</small>
+						</div>
+					{/if}
+
 					<div class="button-row">
 						<button type="button" class="primary" disabled={purchaseBusy} on:click={purchaseSelectedProduct}>
 							{purchaseBusy ? 'Working...' : 'Purchase'}
@@ -265,6 +277,11 @@
 					{#if purchaseStatus}
 						<p class="notice">{purchaseStatus}</p>
 					{/if}
+					<nav class="billing-links" aria-label="Billing links">
+						<a href="/privacy">Privacy</a>
+						<a href="/support">Support</a>
+						<a href="/account-deletion">Account Deletion</a>
+					</nav>
 				</div>
 				{#if data.localMode}
 					<form method="POST" action="?/convert" class="dev-convert">
@@ -346,6 +363,23 @@
 		gap: 0.6rem;
 	}
 
+	.subscription-summary {
+		display: grid;
+		gap: 0.18rem;
+		padding: 0.7rem 0;
+		border-top: 1px solid var(--color-divider);
+		border-bottom: 1px solid var(--color-divider);
+	}
+
+	.subscription-summary strong,
+	.subscription-summary span {
+		color: var(--color-text);
+	}
+
+	.subscription-summary small {
+		color: var(--color-text-muted);
+	}
+
 	.primary,
 	.secondary,
 	.danger-btn {
@@ -386,6 +420,26 @@
 
 	.notice {
 		margin: 0.45rem 0 0;
+		color: var(--color-text);
+	}
+
+	.billing-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+	}
+
+	.billing-links a {
+		width: fit-content;
+		border-bottom: 1px solid var(--color-border);
+		color: var(--color-text-soft);
+		text-decoration: none;
+		font-size: var(--text-sm);
+	}
+
+	.billing-links a:hover,
+	.billing-links a:focus-visible {
+		border-bottom-color: var(--color-text);
 		color: var(--color-text);
 	}
 
