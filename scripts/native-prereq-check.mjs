@@ -67,6 +67,21 @@ androidManifest.includes('android:allowBackup="false"')
 	? pass('Android app backup is disabled')
 	: fail('Android app backup is disabled');
 
+const rootGitignore = read('.gitignore');
+const androidGitignore = read('android/.gitignore');
+rootGitignore.includes('*.jks') &&
+rootGitignore.includes('*.keystore') &&
+rootGitignore.includes('android/key.properties') &&
+rootGitignore.includes('android/app/google-services.json')
+	? pass('Native release secrets are ignored at repo root')
+	: fail('Native release secrets are ignored at repo root');
+androidGitignore.includes('*.jks') &&
+androidGitignore.includes('*.keystore') &&
+androidGitignore.includes('key.properties') &&
+androidGitignore.includes('google-services.json')
+	? pass('Native release secrets are ignored in Android project')
+	: fail('Native release secrets are ignored in Android project');
+
 const xcodeProject = read('ios/App/App.xcodeproj/project.pbxproj');
 if (!xcodeProject) {
 	fail('iOS Xcode project exists');

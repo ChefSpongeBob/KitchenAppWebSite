@@ -27,6 +27,13 @@ vite.config.ts.timestamp-*
 ios/App/App/public
 android/app/src/main/assets/public
 
+# Native release secrets and generated service configs
+*.jks
+*.keystore
+android/key.properties
+android/app/key.properties
+android/app/google-services.json
+
 # Local assistant logs
 .codex-pages.log
 .codex-pages.err.log

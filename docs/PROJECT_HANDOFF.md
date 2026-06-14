@@ -56,6 +56,8 @@ Run local/static gates before pushes or large changes:
 npm.cmd run check
 npm.cmd run build
 npm.cmd run mobile:check
+npm.cmd run native:prereq
+npm.cmd run android:release:check
 npm.cmd run test:tenant-authority
 npm.cmd run test:authorization-capabilities
 npm.cmd run test:operational-events
@@ -122,13 +124,13 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `18. Crimini UI, accessibility, and responsive polish`
-- Status: Phase 17 observability, backup, incident readiness, and security hardening is validated locally; remaining confidence comes from live Cloudflare alert setup and restore drills once production testing resumes.
-- Current pass: Phase 18 Crimini UI, accessibility, responsive behavior, contrast, copy, and final screenshot polish. Phase 18 foundation pass removed legacy page-header subtitles, cleaned the Safety & HealthCode intro strip, added global keyboard focus and reduced-motion handling, and added `test:ui-polish`.
+- Active phase: `19. Native app release preparation`
+- Status: Phase 19 native repo readiness is validated locally. Remaining native release blockers are external/manual: configure JDK/JAVA_HOME, set Android signing environment values, decide/test Android release minification on a signed build, and run real iOS/Android device builds.
+- Current pass: Phase 19 native app release preparation. Native app IDs, package IDs, bundle IDs, billing bridge, push foundation, WebView security settings, and native secret ignore rules are validated.
 - Phase 5 Lists / Recipes / Docs / Menus is validated: Creator Studio is the single editor source, legacy admin content routes redirect to Creator Studio, list pages no longer seed old hardcoded data, menus are separated from documents, document/media access is private and business scoped, and recipe/document/list/menu routes are tenant scoped.
 - Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
 - Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
-- Last verified: 2026-06-13 Phase 18 foundation pass confirmed UI polish guard, no Svelte diagnostics, mobile release check, security header check, and production build. Phase 17 security and incident readiness pass confirmed security headers, auth abuse controls, billing lifecycle token gates, private media access, structured observability, sensitive error redaction, constant-time internal/webhook token comparison, and production build. Extra hardening headers are set globally, internal/schema/temperature processors use hardened token helpers, and webhook integrations keep header/query token compatibility while avoiding direct string equality.
+- Last verified: 2026-06-13 Phase 19 native readiness pass confirmed Capacitor app identity, Android package identity, iOS bundle identity, native billing bridge, native push foundation, Android WebView debugging disabled, Android cleartext traffic disabled, Android backup disabled, Android/iOS version values present, and native release secrets ignored. Phase 18 foundation pass confirmed UI polish guard, no Svelte diagnostics, mobile release check, security header check, and production build. Phase 17 security and incident readiness pass confirmed security headers, auth abuse controls, billing lifecycle token gates, private media access, structured observability, sensitive error redaction, constant-time internal/webhook token comparison, and production build. Extra hardening headers are set globally, internal/schema/temperature processors use hardened token helpers, and webhook integrations keep header/query token compatibility while avoiding direct string equality.
 - Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, `7. Lists/history/completion alerts`, `8. Reports/export foundation`, `9. Billing and store subscription lifecycle code hardening`, `10. Invite, employee onboarding, and HR completion`, `11. Creator, editor, and legacy route consolidation`, `12. Core feature action test`, `13. Camera feature shelving`, `14. Authentication, session, abuse, and account lifecycle test`, `15. Production database and Cloudflare readiness`, `16. Performance, scale, and reliability`, and `17. Observability, backup, and incident readiness`.
 
 ## Final Multi-Tenant Test Notes
@@ -162,6 +164,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Phase 16 live scale pass: after the public hold is lifted, test sustained schedule building, report export downloads, list submissions, temp ingest, temp polling, concurrent tenants, and user switching on Cloudflare. Confirm no excessive polling, no full media/document payloads in listing routes, no unbounded cleanup writes, no cross-tenant data, and no worker resource warnings under normal usage.
 - Phase 17 incident/security pass: in Cloudflare, configure notifications or log monitoring for `schema_readiness_failed`, `tenant_access_denied`, `billing_conversion_failed`, `billing_cancel_failed`, media access denials, device auth failures, temperature alert failures, notification delivery failures, repeated 500s, and deployment failures. Run one D1 export/restore drill in a non-production target and one rollback drill from a known-good deployment before public launch.
 - Phase 18 UI/accessibility pass: manually walk app, admin, auth, onboarding, billing, schedule, reports, tools, docs, menus, and marketing routes in light/dark mode and mobile/desktop. Confirm no legacy page-header subtitles, old rounded floating-card styling, low-contrast controls, clipped footer/sidebar layouts, missing focus states, or verbose helper copy remain.
+- Phase 19 native release pass: after JDK/JAVA_HOME and Android signing values are configured, run `npm.cmd run native:prereq`, `npm.cmd run android:release:check`, `npm.cmd run build`, `npm.cmd run cap:sync`, Android release build, and iOS archive/TestFlight build. Confirm login/session persistence, store billing bridge, push opt-in/token refresh, external links, PDFs, uploaded menus/docs, and account deletion on real devices.
 
 ## Launch Completion List
 
