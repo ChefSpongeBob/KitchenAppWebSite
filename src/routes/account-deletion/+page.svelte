@@ -82,8 +82,7 @@
 		<div class="legal-section">
 			<h2>Contact</h2>
 			<p>
-				Send deletion requests to Crimini by NNS, LLC using the business contact channel connected
-				to your Crimini workspace.
+				Send deletion questions to support@criminiops.com.
 			</p>
 		</div>
 	</section>

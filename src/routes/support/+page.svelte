@@ -10,7 +10,7 @@
 
 		<div class="support-section">
 			<h2>Account Help</h2>
-			<p>For access, billing, onboarding, or workspace issues, contact Crimini support through your business account channel.</p>
+			<p>For access, billing, onboarding, or workspace issues, contact support@criminiops.com.</p>
 		</div>
 
 		<div class="support-section">
@@ -22,6 +22,8 @@
 			<h2>Privacy And Deletion</h2>
 			<nav aria-label="Support links">
 				<a href="/privacy">Privacy</a>
+				<a href="/terms">Terms</a>
+				<a href="/billing-terms">Billing Terms</a>
 				<a href="/account-deletion">Account Deletion</a>
 			</nav>
 		</div>

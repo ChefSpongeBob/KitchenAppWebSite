@@ -60,7 +60,8 @@
 		<div class="legal-section">
 			<h2>Contact</h2>
 			<p>
-				Privacy and deletion requests can be submitted through the account deletion page.
+				Privacy and deletion requests can be submitted through the account deletion page or sent to
+				support@criminiops.com.
 			</p>
 		</div>
 	</section>

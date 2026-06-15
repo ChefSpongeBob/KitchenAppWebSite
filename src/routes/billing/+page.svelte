@@ -279,6 +279,8 @@
 					{/if}
 					<nav class="billing-links" aria-label="Billing links">
 						<a href="/privacy">Privacy</a>
+						<a href="/terms">Terms</a>
+						<a href="/billing-terms">Billing Terms</a>
 						<a href="/support">Support</a>
 						<a href="/account-deletion">Account Deletion</a>
 					</nav>

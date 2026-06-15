@@ -222,7 +222,10 @@
     "/how-it-works",
     "/about",
     "/pricing",
+    "/support",
     "/privacy",
+    "/terms",
+    "/billing-terms",
     "/account-deletion",
     "/register",
     "/login",
@@ -658,6 +661,8 @@
           <a href="/pricing">Pricing</a>
           <a href="/support">Support</a>
           <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/billing-terms">Billing Terms</a>
           <a href="/account-deletion">Account Deletion</a>
           <a href="/register#onboarding-slideshow">Start Free</a>
         {:else if data.user}
@@ -665,6 +670,8 @@
           <a href="/docs">Documentation</a>
           <a href="/settings">Support</a>
           <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/billing-terms">Billing Terms</a>
           <a href="/account-deletion">Account Deletion</a>
         {:else}
           <a href="/features">Features</a>
