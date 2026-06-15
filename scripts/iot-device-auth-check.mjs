@@ -65,20 +65,44 @@ assertIncludes(
 
 assertIncludes(
   'src/routes/admin/sensors/+page.server.ts',
-  'provisionIoTDevice',
-  'admins can provision sensor and gateway device credentials'
+  'claimTemperatureGateway',
+  'admins can claim pre-provisioned sensor gateways'
+);
+
+assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  'claimTemperatureSensorNode',
+  'admins can assign radio sensor nodes to gateways'
 );
 
 assertIncludes(
   'src/routes/admin/sensors/+page.server.ts',
   'revokeIoTDevice',
-  'admins can revoke sensor and gateway device credentials'
+  'admins can revoke gateway credentials'
+);
+
+assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  'revokeTemperatureSensorNode',
+  'admins can revoke assigned sensor nodes'
 );
 
 assertIncludes(
   'migrations/0052_iot_devices.sql',
   'UNIQUE (business_id, external_device_id)',
   'iot device ids are unique per business'
+);
+
+assertIncludes(
+  'migrations/0086_temperature_gateway_nodes.sql',
+  'CREATE TABLE IF NOT EXISTS iot_device_inventory',
+  'factory-programmed device inventory exists'
+);
+
+assertIncludes(
+  'migrations/0086_temperature_gateway_nodes.sql',
+  'CREATE TABLE IF NOT EXISTS temperature_sensor_nodes',
+  'temperature sensor nodes are assigned under gateways'
 );
 
 console.log('\nIoT device auth check passed.');

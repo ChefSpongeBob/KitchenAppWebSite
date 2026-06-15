@@ -28,6 +28,7 @@ const TENANT_TABLES = [
   'sensor_nodes',
   'temps',
   'temperature_sensor_settings',
+  'temperature_sensor_nodes',
   'temperature_alert_events',
   'camera_events',
   'camera_sources',

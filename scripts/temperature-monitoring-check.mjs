@@ -25,6 +25,22 @@ expect('migrations/0078_temperature_monitoring.sql', 'temperature monitoring mig
   source.includes('idx_temp_alert_events_business_status')
 );
 
+expect('migrations/0086_temperature_gateway_nodes.sql', 'temperature gateway/node migration adds inventory and gateway-owned nodes', (source) =>
+  source.includes('CREATE TABLE IF NOT EXISTS iot_device_inventory') &&
+  source.includes("device_type IN ('sensor_gateway', 'sensor_node')") &&
+  source.includes('CREATE TABLE IF NOT EXISTS temperature_sensor_nodes') &&
+  source.includes('gateway_device_id TEXT NOT NULL') &&
+  source.includes('UNIQUE (node_serial)')
+);
+
+expect('src/lib/server/temperatureDeviceProvisioning.ts', 'temperature provisioning claims gateways and assigns radio nodes', (source) =>
+  source.includes('claimTemperatureGateway') &&
+  source.includes('claimTemperatureSensorNode') &&
+  source.includes('resolveGatewayNodeReading') &&
+  source.includes('iot_device_inventory') &&
+  source.includes('temperature_sensor_nodes')
+);
+
 expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds, stale state, acknowledgement, and recovery', (source) =>
   source.includes('evaluateTemperatureReadings') &&
   source.includes('processTemperatureStaleAlerts') &&
@@ -37,12 +53,16 @@ expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates 
 expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rules after saving readings', (source) =>
   source.includes('evaluateTemperatureReadings') &&
   source.includes('TemperatureReading') &&
+  source.includes("authenticateIoTDevice(db, request, 'sensor_gateway')") &&
+  source.includes('resolveGatewayNodeReading') &&
   source.includes('eventType:') &&
   source.includes('temperature.reading_batch.received')
 );
 
 expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves alert rules', (source) =>
   source.includes('loadTemperatureSensorSettings') &&
+  source.includes('claimTemperatureGateway') &&
+  source.includes('claimTemperatureSensorNode') &&
   source.includes('saveTemperatureSensorSetting') &&
   source.includes('acknowledgeTemperatureAlert') &&
   source.includes('save_sensor_settings') &&
@@ -50,6 +70,8 @@ expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves
 );
 
 expect('src/routes/admin/sensors/+page.svelte', 'sensor admin exposes thresholds and active alerts', (source) =>
+  source.includes('Register Sensor Node') &&
+  source.includes('gateway_device_id') &&
   source.includes('Alert Rules') &&
   source.includes('High') &&
   source.includes('Low') &&
@@ -64,13 +86,17 @@ expect('src/routes/api/internal/temperature-monitoring/process/+server.ts', 'sta
 );
 
 expect('src/lib/server/tenant.ts', 'tenant readiness tracks temperature monitoring tables', (source) =>
+  source.includes("'temperature_sensor_nodes'") &&
   source.includes("'temperature_sensor_settings'") &&
   source.includes("'temperature_alert_events'")
 );
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness checks temperature monitoring tables and indexes', (source) =>
+  source.includes("'temperature_sensor_nodes'") &&
+  source.includes("'iot_device_inventory'") &&
   source.includes("'temperature_sensor_settings'") &&
   source.includes("'temperature_alert_events'") &&
+  source.includes("'idx_temp_sensor_nodes_business_active'") &&
   source.includes("'idx_temp_alert_events_business_status'")
 );
 
@@ -80,7 +106,8 @@ expect('package.json', 'static suite includes temperature monitoring check', (so
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 5 temperature pass', (source) =>
-  source.includes('Temperature monitoring foundation') &&
+  source.includes('Temperature hardware model now targets ESP32-C6 sensor nodes') &&
+  source.includes('Phase 5 hardware pass') &&
   source.includes('Phase 5 remaining needs') &&
   source.includes('sensor ingest')
 );

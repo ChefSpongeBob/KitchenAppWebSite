@@ -3,7 +3,8 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { cleanupExpiredTemps } from '$lib/server/retention';
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
-import { normalizeDeviceSerial, sensorNodeIdFromSerial } from '$lib/server/temperatureSensors';
+import { normalizeDeviceSerial } from '$lib/server/temperatureSensors';
+import { resolveGatewayNodeReading } from '$lib/server/temperatureDeviceProvisioning';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 import { evaluateTemperatureReadings, type TemperatureReading } from '$lib/server/temperatureMonitoring';
 
@@ -14,10 +15,11 @@ type TempRow = {
 };
 
 type RawTempRow = {
-  sensor_id: number | null;
-  sensor_serial: string | null;
+  node_serial: string | null;
   temperature: number;
   ts: number;
+  battery_mv: number | null;
+  rssi: number | null;
 };
 
 const DEFAULT_TEMP_QUERY_LIMIT = 240;
@@ -38,68 +40,52 @@ async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
 }
 
 function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
-  const sensorRaw = input.sensor_id ?? input.sensorId ?? input.node;
-  const serialRaw = input.sensor_serial ?? input.sensorSerial ?? input.device_serial ?? input.deviceSerial;
+  const serialRaw =
+    input.node_serial ??
+    input.nodeSerial ??
+    input.sensor_serial ??
+    input.sensorSerial ??
+    input.device_serial ??
+    input.deviceSerial;
   const tempRaw = input.temperature ?? input.temp;
   const tsRaw = input.ts ?? input.timestamp ?? Math.floor(Date.now() / 1000);
+  const batteryRaw = input.battery_mv ?? input.batteryMv ?? input.battery;
+  const rssiRaw = input.rssi ?? input.signal;
 
-  const sensor_id = Number(sensorRaw);
-  const sensor_serial = normalizeDeviceSerial(String(serialRaw ?? ''));
+  const node_serial = normalizeDeviceSerial(String(serialRaw ?? ''));
   const temperature = Number(tempRaw);
   const ts = Number(tsRaw);
+  const battery_mv = Number(batteryRaw);
+  const rssi = Number(rssiRaw);
 
-  if ((!Number.isFinite(sensor_id) && !sensor_serial) || !Number.isFinite(temperature) || !Number.isFinite(ts)) {
+  if (!node_serial || !Number.isFinite(temperature) || !Number.isFinite(ts)) {
     return null;
   }
 
   return {
-    sensor_id: Number.isFinite(sensor_id) ? sensor_id : null,
-    sensor_serial: sensor_serial || null,
+    node_serial,
     temperature,
-    ts
+    ts,
+    battery_mv: Number.isFinite(battery_mv) ? battery_mv : null,
+    rssi: Number.isFinite(rssi) ? rssi : null
   };
 }
 
 async function resolveReadingSensor(
   db: App.Platform['env']['DB'],
   businessId: string,
+  gatewayDeviceId: string,
   row: RawTempRow
 ): Promise<TempRow | null> {
-  if (!row.sensor_serial) {
-    if (!row.sensor_id) return null;
-    return { sensor_id: row.sensor_id, temperature: row.temperature, ts: row.ts };
-  }
-
-  const sensor = await db
-    .prepare(
-      `
-      SELECT display_name
-      FROM iot_devices
-      WHERE business_id = ?
-        AND external_device_id = ?
-        AND device_type = 'sensor'
-        AND is_active = 1
-        AND revoked_at IS NULL
-      LIMIT 1
-      `
-    )
-    .bind(businessId, row.sensor_serial)
-    .first<{ display_name: string }>();
-
-  if (!sensor) return null;
-
-  const sensorId = sensorNodeIdFromSerial(row.sensor_serial);
-  await db
-    .prepare(
-      `
-      INSERT OR IGNORE INTO sensor_nodes (sensor_id, name, updated_at, business_id)
-      VALUES (?, ?, ?, ?)
-      `
-    )
-    .bind(sensorId, sensor.display_name, Math.floor(Date.now() / 1000), businessId)
-    .run();
-
-  return { sensor_id: sensorId, temperature: row.temperature, ts: row.ts };
+  return resolveGatewayNodeReading(db, {
+    businessId,
+    gatewayDeviceId,
+    nodeSerial: row.node_serial ?? '',
+    temperature: row.temperature,
+    ts: row.ts,
+    batteryMv: row.battery_mv,
+    rssi: row.rssi
+  });
 }
 
 export const GET: RequestHandler = async ({ platform, url, request, locals }) => {
@@ -164,11 +150,9 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   }
   await ensureTempsIndexes(db);
   await ensureTenantSchema(db);
-  const device =
-    (await authenticateIoTDevice(db, request, 'sensor_gateway')) ||
-    (await authenticateIoTDevice(db, request, 'sensor'));
+  const device = await authenticateIoTDevice(db, request, 'sensor_gateway');
   if (!device) {
-    return json({ error: 'Device credentials required.' }, { status: 401 });
+    return json({ error: 'Gateway credentials required.' }, { status: 401 });
   }
   const businessId = device.businessId;
 
@@ -179,11 +163,16 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
     return json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const rawItems = Array.isArray(body) ? body : [body];
+  const rawItems =
+    body && typeof body === 'object' && !Array.isArray(body) && Array.isArray((body as { readings?: unknown }).readings)
+      ? ((body as { readings: unknown[] }).readings)
+      : Array.isArray(body)
+        ? body
+        : [body];
   const rawReadings = rawItems
     .map((entry) => normalizeReading((entry ?? {}) as Record<string, unknown>))
     .filter((entry): entry is RawTempRow => entry !== null);
-  const resolved = await Promise.all(rawReadings.map((entry) => resolveReadingSensor(db, businessId, entry)));
+  const resolved = await Promise.all(rawReadings.map((entry) => resolveReadingSensor(db, businessId, device.id, entry)));
   const items = resolved.filter((entry): entry is TemperatureReading => entry !== null);
 
   if (items.length === 0) {

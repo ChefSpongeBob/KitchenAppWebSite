@@ -107,6 +107,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Store release checks pass for current code wiring.
 - Cloudflare readiness checks pass against current config.
 - Security headers and observability checks pass.
+- Temperature hardware model now targets ESP32-C6 sensor nodes that radio to a claimed gateway; only the gateway authenticates to Cloudflare, and customer setup is serial-based.
 
 ## Store Billing
 
@@ -141,6 +142,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Employee permissions pass: in `/admin/users`, search by name, email, department, role, and permission template; open an employee through `Permissions`; change account type, permission template, capability checkboxes, department access, and delete only in test tenants. Repeat as owner, manager, staff, consultant, and contractor. Confirm staff cannot directly open admin, reports, vendor, HR-sensitive, billing, device setup, or permission routes.
 - Session cleanup note: employee login sessions are security plumbing, not normal staff-management UI. Revoke-session behavior should be tested later through account/security lifecycle tests, not the visible staff manager page.
 - Phase 5 temp pass: register gateway/sensor serials, ingest valid readings, trigger high/low/stale/offline/recovery states, acknowledge alerts, verify wrong-business/wrong-serial/revoked-device rejection, and confirm dashboard/temp pages stay tenant scoped.
+- Phase 5 hardware pass: pre-provision gateway and sensor-node serials in `iot_device_inventory`; claim one gateway in `/admin/sensors`; assign multiple sensor nodes to that gateway; send gateway-authenticated readings using node serials; confirm unassigned, wrong-gateway, wrong-business, and revoked node readings are rejected.
 - Phase 6 schedule pass: create two businesses with separate employees; set owner, general manager, FOH manager, BOH manager, hourly manager, shift lead, consultant, contractor, and staff permissions; confirm each role/template/individual override sees only the correct schedule tools. Test department-scoped managers against FOH-only and BOH-only employees, including schedule builder visibility, shift creation, publish, approvals, templates, labor targets, and open shifts.
 - Phase 6 schedule save/publish pass: add shifts, edit shifts, delete shifts, duplicate a day, navigate away and back to confirm autosaved draft data remains, publish with unsaved changes, confirm publish creates the final schedule, and verify schedule publish history/report exports still show the published week.
 - Phase 6 employee schedule pass: log in as staff and verify `/schedule` and `/my-schedule` only show published shifts for that business/user; create availability, time-off requests, open-shift requests, shift offers, targeted shift offers, approvals, declines, withdrawals, and manager decisions. Confirm every action is tenant scoped and unavailable to unrelated businesses.

@@ -2,9 +2,15 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { addNodeName, deleteNodeName, loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
 import { ensureCameraSchema } from '$lib/server/camera';
-import { loadIoTDevices, provisionIoTDevice, revokeIoTDevice } from '$lib/server/iotIngest';
+import { revokeIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
-import { normalizeDeviceSerial, sensorNodeIdFromSerial } from '$lib/server/temperatureSensors';
+import {
+  claimTemperatureGateway,
+  claimTemperatureSensorNode,
+  loadTemperatureGateways,
+  loadTemperatureSensorNodes,
+  revokeTemperatureSensorNode
+} from '$lib/server/temperatureDeviceProvisioning';
 import {
   acknowledgeTemperatureAlert,
   defaultTemperatureSetting,
@@ -16,20 +22,21 @@ import {
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
-  if (!db) return { nodeNames: [], iotDevices: [] as Awaited<ReturnType<typeof loadIoTDevices>> };
+  if (!db) return { nodeNames: [], gateways: [], sensorNodes: [], sensorSettings: [], activeAlerts: [] };
   const businessId = requireBusinessId(locals);
 
   await ensureCameraSchema(db);
   await ensureTenantSchema(db, true);
 
-  const [nodeNames, iotDevices, sensorSettings, activeAlerts] = await Promise.all([
+  const [nodeNames, gateways, sensorNodes, sensorSettings, activeAlerts] = await Promise.all([
     loadAdminNodeNames(db, businessId),
-    loadIoTDevices(db, businessId),
+    loadTemperatureGateways(db, businessId),
+    loadTemperatureSensorNodes(db, businessId),
     loadTemperatureSensorSettings(db, businessId),
     loadActiveTemperatureAlerts(db, businessId)
   ]);
 
-  return { nodeNames, iotDevices, sensorSettings, activeAlerts };
+  return { nodeNames, gateways, sensorNodes, sensorSettings, activeAlerts };
 };
 
 export const actions: Actions = {
@@ -43,19 +50,21 @@ export const actions: Actions = {
     await ensureTenantSchema(db, true);
 
     const formData = await request.formData();
-    const externalDeviceId = normalizeDeviceSerial(formData.get('external_device_id'));
+    const serial = String(formData.get('external_device_id') ?? '');
     const displayName = String(formData.get('display_name') ?? '').trim();
 
-    if (!externalDeviceId) return fail(400, { error: 'Gateway serial is required.' });
     if (!displayName) return fail(400, { error: 'Name is required.' });
 
-    await provisionIoTDevice(db, {
-      businessId,
-      deviceType: 'sensor_gateway',
-      externalDeviceId,
-      displayName,
-      createdBy: locals.userId ?? null
-    });
+    try {
+      await claimTemperatureGateway(db, {
+        businessId,
+        serial,
+        displayName,
+        createdBy: locals.userId ?? null
+      });
+    } catch (error) {
+      return fail(400, { error: error instanceof Error ? error.message : 'Gateway could not be registered.' });
+    }
 
     return { success: true, deviceName: displayName };
   },
@@ -70,30 +79,24 @@ export const actions: Actions = {
     await ensureTenantSchema(db, true);
 
     const formData = await request.formData();
-    const externalDeviceId = normalizeDeviceSerial(formData.get('external_device_id'));
+    const gatewayDeviceId = String(formData.get('gateway_device_id') ?? '').trim();
+    const nodeSerial = String(formData.get('external_device_id') ?? '');
     const displayName = String(formData.get('display_name') ?? '').trim();
-    const sensorId = sensorNodeIdFromSerial(externalDeviceId);
 
-    if (!externalDeviceId) return fail(400, { error: 'Sensor serial is required.' });
+    if (!gatewayDeviceId) return fail(400, { error: 'Choose a gateway.' });
     if (!displayName) return fail(400, { error: 'Name is required.' });
 
-    await provisionIoTDevice(db, {
-      businessId,
-      deviceType: 'sensor',
-      externalDeviceId,
-      displayName,
-      createdBy: locals.userId ?? null
-    });
-
-    await db
-      .prepare(
-        `
-        INSERT OR REPLACE INTO sensor_nodes (sensor_id, name, updated_at, business_id)
-        VALUES (?, ?, ?, ?)
-        `
-      )
-      .bind(sensorId, displayName, Math.floor(Date.now() / 1000), businessId)
-      .run();
+    try {
+      await claimTemperatureSensorNode(db, {
+        businessId,
+        gatewayDeviceId,
+        nodeSerial,
+        displayName,
+        createdBy: locals.userId ?? null
+      });
+    } catch (error) {
+      return fail(400, { error: error instanceof Error ? error.message : 'Sensor could not be registered.' });
+    }
 
     return {
       success: true,
@@ -168,6 +171,20 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: 'Missing device id.' });
 
     await revokeIoTDevice(db, businessId, id);
+    return { success: true };
+  },
+
+  revoke_sensor_node: async ({ request, locals }) => {
+    requireAdmin(locals.userRole);
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = requireBusinessId(locals);
+
+    const formData = await request.formData();
+    const id = String(formData.get('id') ?? '').trim();
+    if (!id) return fail(400, { error: 'Missing sensor.' });
+
+    await revokeTemperatureSensorNode(db, businessId, id);
     return { success: true };
   }
 };

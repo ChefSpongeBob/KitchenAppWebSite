@@ -11,15 +11,35 @@
     name: string;
   };
 
-  type IoTDevice = {
+  type GatewayDevice = {
     id: string;
     businessId: string;
-    deviceType: 'sensor' | 'camera' | 'sensor_gateway';
+    deviceType: 'sensor_gateway';
     externalDeviceId: string;
     displayName: string;
     keyPrefix: string;
     isActive: number;
     lastSeenAt: number | null;
+    revokedAt: number | null;
+    createdAt: number;
+    updatedAt: number;
+  };
+
+  type SensorNode = {
+    id: string;
+    businessId: string;
+    gatewayDeviceId: string;
+    gatewaySerial: string | null;
+    gatewayName: string | null;
+    nodeSerial: string;
+    sensorId: number;
+    displayName: string;
+    hardwareModel: string | null;
+    firmwareVersion: string | null;
+    isActive: number;
+    lastSeenAt: number | null;
+    batteryMv: number | null;
+    rssi: number | null;
     revokedAt: number | null;
     createdAt: number;
     updatedAt: number;
@@ -47,23 +67,24 @@
 
   export let data: {
     nodeNames: NodeName[];
-    iotDevices: IoTDevice[];
+    gateways: GatewayDevice[];
+    sensorNodes: SensorNode[];
     sensorSettings: SensorSetting[];
     activeAlerts: ActiveAlert[];
   };
 
   let feedbackMessage = '';
 
-  $: sensorDevices = data.iotDevices.filter((device) => device.deviceType === 'sensor');
-  $: gatewayDevices = data.iotDevices.filter((device) => device.deviceType === 'sensor_gateway');
-  $: activeSensorCount = sensorDevices.filter((device) => device.isActive === 1).length;
+  $: gatewayDevices = data.gateways;
+  $: activeSensorNodes = data.sensorNodes.filter((node) => node.isActive === 1);
+  $: activeSensorCount = activeSensorNodes.length;
   $: activeGatewayCount = gatewayDevices.filter((device) => device.isActive === 1).length;
-  $: latestSensorSeen = Math.max(0, ...sensorDevices.map((device) => device.lastSeenAt ?? 0));
+  $: latestSensorSeen = Math.max(0, ...data.sensorNodes.map((node) => node.lastSeenAt ?? 0));
   $: settingsBySensor = new Map(data.sensorSettings.map((setting) => [setting.sensor_id, setting]));
   $: sensorIds = Array.from(
     new Set([
       ...data.nodeNames.map((node) => node.sensor_id),
-      ...sensorDevices.map((device) => sensorNodeIdFromSerial(device.externalDeviceId))
+      ...activeSensorNodes.map((node) => node.sensorId)
     ])
   ).sort((a, b) => a - b);
   $: activeAlertCount = data.activeAlerts.filter((alert) => alert.status === 'active').length;
@@ -73,18 +94,10 @@
     return new Date(value * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  function sensorNodeIdFromSerial(serial: string) {
-    let hash = 2166136261;
-    const normalized = serial.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/^-+|-+$/g, '');
-    for (let index = 0; index < normalized.length; index += 1) {
-      hash ^= normalized.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0) % 2147480000 || 1;
-  }
-
   function sensorName(sensorId: number) {
-    return data.nodeNames.find((node) => node.sensor_id === sensorId)?.name ?? `Sensor ${sensorId}`;
+    return activeSensorNodes.find((node) => node.sensorId === sensorId)?.displayName
+      ?? data.nodeNames.find((node) => node.sensor_id === sensorId)?.name
+      ?? `Sensor ${sensorId}`;
   }
 
   function settingFor(sensorId: number): SensorSetting {
@@ -142,12 +155,12 @@
       <strong>{activeGatewayCount}/{gatewayDevices.length}</strong>
     </div>
     <div>
-      <span>Sensors</span>
-      <strong>{activeSensorCount}/{sensorDevices.length}</strong>
+      <span>Nodes</span>
+      <strong>{activeSensorCount}/{data.sensorNodes.length}</strong>
     </div>
     <div>
-      <span>Labels</span>
-      <strong>{data.nodeNames.length}</strong>
+      <span>Assigned</span>
+      <strong>{data.sensorNodes.length}</strong>
     </div>
     <div>
       <span>Latest Check-In</span>
@@ -191,13 +204,22 @@
       <summary class="section-heading">
         <span class="material-icons" aria-hidden="true">add_circle</span>
         <div>
-          <h2>Register Sensor</h2>
-          <p>Serial number and name.</p>
+          <h2>Register Sensor Node</h2>
+          <p>Gateway, serial number, and name.</p>
         </div>
       </summary>
 
       <form method="POST" action="?/register_sensor" use:enhance={withFeedback}>
-        <div class="field-grid">
+        <div class="field-grid three">
+          <label>
+            <span>Gateway</span>
+            <select name="gateway_device_id" required>
+              <option value="">Choose gateway</option>
+              {#each gatewayDevices.filter((device) => device.isActive === 1) as gateway}
+                <option value={gateway.id}>{gateway.displayName}</option>
+              {/each}
+            </select>
+          </label>
           <label>
             <span>Sensor Serial</span>
             <input name="external_device_id" placeholder="CRIMINI-SENSOR-001" required />
@@ -253,71 +275,42 @@
       <summary class="section-heading">
         <span class="material-icons" aria-hidden="true">device_thermostat</span>
         <div>
-          <h2>Registered Sensors</h2>
+          <h2>Registered Sensor Nodes</h2>
           <p>{activeSensorCount} active</p>
         </div>
       </summary>
 
       <div class="unit-list">
-        {#if sensorDevices.length === 0}
-          <p class="empty-line">No sensors registered yet.</p>
+        {#if data.sensorNodes.length === 0}
+          <p class="empty-line">No sensor nodes registered yet.</p>
         {:else}
-          {#each sensorDevices as device}
-            <article class="unit-row" class:muted={device.isActive !== 1}>
+          {#each data.sensorNodes as node}
+            <article class="unit-row" class:muted={node.isActive !== 1}>
               <span class="material-icons" aria-hidden="true">device_thermostat</span>
               <div>
-                <strong>{device.displayName}</strong>
-                <small>{device.externalDeviceId}</small>
-                <small>Last seen {formatShortTime(device.lastSeenAt)}</small>
+                <strong>{node.displayName}</strong>
+                <small>{node.nodeSerial}</small>
+                <small>{node.gatewayName ?? 'Gateway'} | Last seen {formatShortTime(node.lastSeenAt)}</small>
+                <small>
+                  {#if node.batteryMv}
+                    Battery {node.batteryMv}mV
+                  {:else}
+                    Battery no data
+                  {/if}
+                  {#if node.rssi}
+                    | Signal {node.rssi}dBm
+                  {/if}
+                </small>
               </div>
-              {#if device.isActive === 1}
-                <form method="POST" action="?/revoke_iot_device" use:enhance={withFeedback}>
-                  <input type="hidden" name="id" value={device.id} />
+              {#if node.isActive === 1}
+                <form method="POST" action="?/revoke_sensor_node" use:enhance={withFeedback}>
+                  <input type="hidden" name="id" value={node.id} />
                   <button type="submit" class="danger">Revoke</button>
                 </form>
               {:else}
                 <span class="status-text">Revoked</span>
               {/if}
             </article>
-          {/each}
-        {/if}
-      </div>
-    </details>
-
-    <details class="labels-panel">
-      <summary class="section-heading">
-        <span class="material-icons" aria-hidden="true">label</span>
-        <div>
-          <h2>Sensor Labels</h2>
-          <p>{data.nodeNames.length} saved</p>
-        </div>
-      </summary>
-
-      <form method="POST" action="?/add_node_name" use:enhance={withFeedback} class="node-form">
-        <label>
-          <span>Node</span>
-          <input name="sensor_id" type="number" min="1" placeholder="1" required />
-        </label>
-        <label>
-          <span>Name</span>
-          <input name="name" placeholder="Walk-in cooler" required />
-        </label>
-        <button type="submit">Save</button>
-      </form>
-
-      <div class="node-list">
-        {#if data.nodeNames.length === 0}
-          <p class="empty-line">No sensor labels yet.</p>
-        {:else}
-          {#each data.nodeNames as node}
-            <div class="node-row">
-              <span>#{node.sensor_id}</span>
-              <strong>{node.name}</strong>
-              <form method="POST" action="?/delete_node_name" use:enhance={withFeedback}>
-                <input type="hidden" name="sensor_id" value={node.sensor_id} />
-                <button type="submit" class="danger">Delete</button>
-              </form>
-            </div>
           {/each}
         {/if}
       </div>
@@ -455,7 +448,6 @@
   .status-strip span,
   .section-heading p,
   .unit-row small,
-  .node-row span,
   .empty-line,
   label span {
     color: var(--color-text-muted);
@@ -513,11 +505,14 @@
     margin: 0.08rem 0 0;
   }
 
-  .field-grid,
-  .node-form {
+  .field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.72rem;
+  }
+
+  .field-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   label {
@@ -526,7 +521,8 @@
     min-width: 0;
   }
 
-  input {
+  input,
+  select {
     width: 100%;
     min-width: 0;
     min-height: 2.35rem;
@@ -567,7 +563,6 @@
   }
 
   .unit-list,
-  .node-list,
   .rules-list,
   .alert-list {
     display: grid;
@@ -575,7 +570,6 @@
   }
 
   .unit-row,
-  .node-row,
   .alert-row {
     display: flex;
     align-items: center;
@@ -586,14 +580,12 @@
   }
 
   .unit-row:first-child,
-  .node-row:first-child,
   .alert-row:first-child {
     border-top: 0;
     padding-top: 0;
   }
 
-  .unit-row > div,
-  .node-row strong {
+  .unit-row > div {
     min-width: 0;
     flex: 1;
   }
@@ -610,11 +602,6 @@
   .status-text {
     color: var(--color-text-muted);
     font-size: 0.78rem;
-  }
-
-  .node-form button {
-    grid-column: 1 / -1;
-    justify-self: start;
   }
 
   .rule-row {
@@ -670,7 +657,6 @@
   @media (max-width: 900px) {
     .sensor-workbench,
     .field-grid,
-    .node-form,
     .status-strip,
     .rule-row {
       grid-template-columns: minmax(0, 1fr);
