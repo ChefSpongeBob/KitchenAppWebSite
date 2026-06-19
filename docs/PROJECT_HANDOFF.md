@@ -47,6 +47,7 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - R2 buckets: `crimini-doc-media`, `crimini-camera-media`
 - Production base URL: `APP_BASE_URL=https://criminiops.com`
 - Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY`.
+- Optional private testing gate: set `PRIVATE_TEST_GATE_ENABLED=true` and `PRIVATE_TEST_ACCESS_CODE` on the private Pages environment while the public site is withheld. Remove or set `PRIVATE_TEST_GATE_ENABLED=false` before public launch.
 - Login Turnstile is enabled automatically when both Turnstile secrets are present; local/dev remains open when they are absent.
 - Cloudflare edge security before public launch: enable Managed WAF rules, OWASP managed rules where available, and rate limits/challenges for `/login`, `/register`, `/forgot-password`, `/account-deletion`, and public API abuse paths. Keep billing webhooks, smoke/schema readiness, temperature ingest, and camera ingest token/device-auth protected at the app layer.
 
@@ -131,14 +132,76 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Active phase: `22. Legal, public site, and business readiness`
-- Status: Phase 22 repo readiness is validated locally. Remaining legal/business blockers are external/manual: qualified legal review, payroll/HR review, state-specific employment form guidance, final support inbox forwarding, final privacy/data safety answers, final terms approval, and public launch timing after trademark/LLC clearance.
-- Current pass: Phase 22 Legal, public site, and business readiness. Public Terms, Billing Terms, Privacy, Support, Account Deletion, footer legal links, billing legal links, support contact, account deletion request persistence, and legal readiness guard are validated.
-- Phase 5 Lists / Recipes / Docs / Menus is validated: Creator Studio is the single editor source, legacy admin content routes redirect to Creator Studio, list pages no longer seed old hardcoded data, menus are separated from documents, document/media access is private and business scoped, and recipe/document/list/menu routes are tenant scoped.
+- Last full static validation: 2026-06-19 after login Turnstile hardening and malicious-user hardening checks.
+- Current repository status: app code is ready for controlled multi-tenant test data entry, not public production launch.
+- Current hold: public production launch and live-domain customer onboarding still wait for trademark/LLC timing, final legal/payroll review, store setup, and live operational integrations.
+- Phase status: Phases 1-18 and code-readiness parts of 20-22 are locally validated by scripts. Store, native-device, legal, live-domain, hardware, and edge-dashboard items remain manual/external.
 - Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
 - Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
-- Last verified: 2026-06-15 Phase 22 legal readiness pass confirmed public Terms, Billing Terms, Privacy, Support, Account Deletion, support contact, footer legal links, billing legal links, account deletion request storage/rate limits, business responsibility language, subscription cancellation/refund language, legal readiness guard, Svelte check, and production build. Phase 21 Google Play readiness pass confirmed Android package identity, app labels, target SDK readiness, cleartext disabled, backup disabled, no launch camera/storage permissions, Play Billing dependency, Play Billing purchase verification, Google Play notification processing, support/privacy/account deletion URLs, subscription purchase/restore/management copy, Google Play readiness guard, store release check, Svelte check, and production build. Phase 20 Apple readiness pass confirmed Apple app identity, support/privacy/account deletion URLs, subscription purchase/restore/management copy, Apple readiness guard, store release check, Svelte check, and production build.
-- Completed local phase validations: `1. Authorization and permission model`, `2. Operational event and notification foundation`, `3. Email system completion`, `4. Native push notification foundation`, `5. Temperature monitoring completion`, `Phase 5 Lists / Recipes / Docs / Menus`, `6. Scheduling workflow completion`, `7. Lists/history/completion alerts`, `8. Reports/export foundation`, `9. Billing and store subscription lifecycle code hardening`, `10. Invite, employee onboarding, and HR completion`, `11. Creator, editor, and legacy route consolidation`, `12. Core feature action test`, `13. Camera feature shelving`, `14. Authentication, session, abuse, and account lifecycle test`, `15. Production database and Cloudflare readiness`, `16. Performance, scale, and reliability`, and `17. Observability, backup, and incident readiness`.
+- Turnstile login hardening is wired: login challenge appears only when `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are present, and server validation is fail-closed when configured.
+- The only project completion/checklist file is this handoff. Do not create scattered task lists.
+
+## Pre-Restaurant Data Entry Gate
+
+Before entering information for three real restaurants, complete this gate in order:
+
+1. Run local/static validation: `npm.cmd run test:static`.
+2. Confirm repo is pushed and Cloudflare deployment passed for the same commit you intend to test.
+3. Enable private test protection on the target environment with `PRIVATE_TEST_GATE_ENABLED=true` and `PRIVATE_TEST_ACCESS_CODE`, then verify `/test-access` gates the Pages URL.
+4. Confirm Cloudflare bindings/secrets on the target environment: `DB`, `DOC_MEDIA`, `CAMERA_MEDIA`, `APP_BASE_URL`, `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO_EMAIL`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `PRIVATE_TEST_GATE_ENABLED`, and `PRIVATE_TEST_ACCESS_CODE`.
+5. Create or confirm a D1 backup/export before loading real tenant data.
+6. Run production schema readiness against the exact Pages environment being tested: `npm.cmd run schema:readiness:prod`.
+7. Run production smoke against the exact Pages environment being tested: `npm.cmd run smoke:prod`.
+8. Create at least two fake businesses first and run the Final Multi-Tenant Test Notes below against fake data.
+9. Only after fake tenants pass, create the three restaurant tenants and enter real restaurant information.
+
+If any gate item fails, stop real data entry and fix/debug before continuing.
+
+## Validated Code Areas
+
+These areas are validated by current scripts/builds and do not have known code blockers before controlled multi-tenant testing:
+
+- Authorization, roles, business membership, capability gates, direct-route denial, and tenant context.
+- Session lifecycle, login/logout, reset-password plumbing, account deletion request persistence, rate limits, same-origin mutation guard, security headers, Turnstile login validation, and malicious-user regression checks.
+- Creator Studio as the single editor surface for categories, lists, recipes, documents, menus, and item attachments.
+- Core app feature actions for lists, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, tools, business registry, and waste tracking.
+- Lists/history/report foundation, including checklist/prep/inventory/order list domains, item attachments, CSV hardening, and tenant-scoped report routes.
+- Scheduling code foundation: departments, roles, availability, time off, templates, autosave drafts, publish, open shifts, offers, approvals, My Schedule, and bounded schedule/report queries.
+- Employee invite/onboarding/HR code foundation: invite role paths, packet requirements, sensitive vault encryption, HR-sensitive permission checks, audited reads, onboarding reports, and private media.
+- Email code foundation: branded transactional helper, Resend integration, invite/approval/password reset/onboarding/operational email event wiring, idempotency, and delivery failure logging.
+- Native push foundation: Capacitor plugin, token storage/revoke endpoints, user preferences, and native client registration plumbing.
+- Temperature monitoring code foundation: gateway/node serial model, device auth, tenant-scoped ingest, thresholds, alert events, stale processor endpoint, acknowledgements, history/report wiring, and bounded ingest.
+- Billing/store lifecycle code foundation: native purchase submission, pending entitlements, Apple/Google verification paths, token-gated webhooks, entitlement reconciliation, launch pricing, and deferred camera products.
+- Camera shelving: launch navigation and purchase paths hide cameras; backend remains beta-gated for post-launch work.
+- Cloudflare readiness: Pages config, D1/R2 bindings, schema guard, Node version, package lock, no old copied-app Cloudflare bindings, and deploy readiness checks.
+- UI/readiness guards: current Crimini UI requirements, accessibility/focus checks, legal/support/public routes, Apple/Google readiness checks, and production build.
+
+## Pending Manual Or External Items
+
+These are not code blockers found by the current static suite, but they must be completed or tested before public launch:
+
+- Cloudflare dashboard: enable the private test gate secrets while testing, then enable Managed WAF rules, OWASP managed rules where available, auth-route rate limits/challenges, Turnstile widget keys, alerting, and log monitoring.
+- Resend: verify live invite, approval, password reset, employee onboarding, schedule, shift, time-off, list, billing, and temperature emails against the production sender.
+- Push notifications: configure APNs/FCM credentials and test delivery on real iOS/Android builds.
+- Store billing: create App Store Connect and Google Play products, configure sandbox testers, test purchase/restore/cancel/refund/renewal/grace/past-due flows on real native builds.
+- Temperature hardware: provision gateway and node serials, run real ESP32-C6 gateway/node ingest, tune sensor thresholds, and verify sustained live polling on Cloudflare.
+- Legal/payroll: qualified review of privacy, terms, billing terms, account deletion, employee onboarding forms, I-9/W-4/state form handling, trial/payment wording, device monitoring language, and retention language.
+- Native release: configure Android signing/JDK and iOS/TestFlight builds, then test login/session persistence, uploads, PDFs, push, billing bridge, deep links, and account deletion on devices.
+- Production domain: keep `criminiops.com` offline until trademark/LLC timing is safe, then re-run production smoke after attaching the domain.
+
+## Code/Debugging Queue Before Three Real Restaurants
+
+Current status: no known code blocker was found by the completion-list audit. The next code/debugging work should be driven by failed validation from the fake-tenant test gate.
+
+If the fake-tenant gate exposes failures, fix them before adding real restaurant data, especially in these high-risk areas:
+
+- Cross-tenant data isolation between businesses with similar employee names, departments, list names, and schedules.
+- Invite/onboarding flows for owner, manager, employee, consultant, and contractor accounts.
+- Schedule autosave/publish, My Schedule visibility, shift offers, time-off approvals, department-scoped managers, and report history.
+- Lists/docs/menus/recipes uploads, item attachments, delete/replace flows, CSV exports, and feature hiding.
+- Permission-specific access to admin, reports, vendors, HR-sensitive data, billing, device setup, and creator actions.
+- Live email delivery and operational event processing.
+- Temperature gateway/node serial claim and ingest rejection paths.
 
 ## Final Multi-Tenant Test Notes
 
@@ -179,236 +242,140 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Launch Completion List
 
-This is the only active completion checklist. Work it in order and do not create additional scattered task lists.
-Next Phase List refers to this launch completion list.
+This is the only active completion checklist. Work it in order and do not create additional scattered task lists. Next Phase List refers to this launch completion list.
 
-Current audit status:
+Status legend:
 
-- Core app routes, tenant scoping, authenticated local smoke, static validation, IoT authentication, private media, security headers, observability, and local migrations pass.
-- The system is not feature-complete until granular permissions, operational notifications, native push, temperature alert rules, billing webhook processing, report depth, live integrations, and store testing are complete.
+- `Validated`: local code, schema, route, and static guards pass.
+- `Manual Gate`: code exists, but it must be proven with fake tenants, real services, hardware, native builds, or store sandboxes before real/customer production use.
+- `External`: requires Cloudflare dashboard, store consoles, legal/payroll review, hardware, DNS/domain, or native-device setup.
+- `Debug If Failed`: no current known code blocker, but failed manual validation becomes the next code/debug task before real restaurant data continues.
 
-1. Authorization and permission model
-- Define exact capabilities for owner, manager, general manager, FOH manager, BOH manager, hourly manager, shift lead, consultant, contractor, staff, and user.
-- Enforce business membership role and permission template on every privileged page, action, endpoint, and export.
-- Enforce manager department scope in schedule builder, schedule approvals, templates, labor targets, and employee scheduling.
-- Keep consultants and contractors read-only where intended, including reports and vendors.
-- Confirm regular users cannot access admin, HR-sensitive, vendor, report, device setup, or billing administration actions.
-- Add automated role and department access tests.
+1. Authorization and permission model - Validated
+- Exact capabilities, business membership roles, manager/owner authority, consultant/contractor limits, route gating, and admin/report/vendor/device/billing/HR access are guarded by `test:tenant-authority` and `test:authorization-capabilities`.
+- Debug If Failed: any role that sees another business, opens unauthorized admin/report/HR routes, or bypasses feature hiding.
 
-2. Operational event and notification foundation
-- Create a business-scoped event or outbox system for operational changes.
-- Record events for schedule publish, shift offers, shift requests, approvals, declines, time off, list completion, onboarding, temperature alerts, device state, and billing changes.
-- Add deduplication, retry status, failure status, timestamps, and audit metadata.
-- Keep delivery event-driven instead of adding more page polling.
-- Add retention rules for delivered and failed events.
+2. Operational event and notification foundation - Validated / Manual Gate
+- `2. Operational event and notification foundation` is implemented as business-scoped operational events with delivery state, dedupe, failure tracking, and internal-token processing.
+- Manual Gate: process operational events with fake tenants and confirm emails/events route only to intended users.
+- Debug If Failed: incorrect recipient targeting, duplicate events, missing event writes, or cross-business notifications.
 
-3. Email system completion
-- Confirm Resend domain and sender are verified.
-- Confirm `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and reply-to are set in Cloudflare.
-- Test invite, approval, password reset, and employee onboarding emails.
-- Add operational emails for schedule publishing, shift activity, time-off decisions, onboarding status, and configured alerts.
-- Respect each user's `email_updates` preference.
-- Add delivery failure logging and retry handling.
-- Remove any user-facing technical configuration warnings.
+3. Email system completion - Validated / Manual Gate
+- `3. Email system completion` code is validated: branded Resend helper, invite, approval, password reset, employee onboarding, and operational email wiring exist.
+- Required Cloudflare secret: `RESEND_API_KEY` plus sender/reply-to values.
+- Manual Gate: Run deferred Phase 3 real email flow tests for invite, approval, password reset, employee onboarding, schedule, shift, time-off, list, billing, and temperature emails.
+- Debug If Failed: delivery failure, wrong branding, wrong recipient, missing idempotency, or technical config text exposed to users.
 
-4. Native push notification system
-- Add Capacitor push notification support for iOS and Android.
-- Store device tokens per user, business, platform, and device.
-- Add opt-in, opt-out, token refresh, logout cleanup, and revoked-device handling.
-- Deliver temperature, schedule, shift, approval, and other configured operational alerts.
-- Respect user notification preferences.
-- Test APNs and FCM delivery on real devices.
+4. Native push notification foundation - Validated / External
+- `4. Native push notification foundation` exists: Capacitor plugin, token storage, register/revoke endpoints, settings opt-in, and native client registration.
 - Phase 4 remaining needs: configure APNs/FCM credentials, wire push delivery into the operational event processor, verify token refresh on real iOS/Android devices, revoke only the current device on logout, and test live event-triggered notifications after native builds exist.
+- Debug If Failed: token persistence, revoke behavior, preference respect, or native runtime errors.
 
-5. Temperature monitoring completion
-- Add per-business and per-sensor high and low thresholds instead of hardcoded display thresholds.
-- Add stale, offline, recovery, high-temperature, and low-temperature events.
-- Add alert cooldown, deduplication, acknowledgement, and recovery behavior.
-- Add temperature history and export.
-- Confirm device provisioning creates unique serials and per-business device credentials.
-- Confirm device auth rejects wrong business, wrong serial, revoked device, and invalid credentials.
-- Confirm temp ingest stores under the correct business.
-- Confirm dashboard cards, temp page, node names, history, and alerts update correctly.
-- Test live polling and sustained ingest under production Cloudflare.
-- Phase 5 remaining needs: connect scheduled Cloudflare processing for stale/offline checks, test real sensor ingest against provisioned serials, tune thresholds by sensor type, add richer temperature history/export views, and verify live polling behavior on the deployed site.
+5. Temperature monitoring completion - Validated / Manual Gate / External Hardware
+- Code foundation is validated: ESP32-C6 gateway/node serial model, tenant-scoped ingest, thresholds, stale/offline/recovery/high/low events, acknowledgements, reports, and bounded API payloads.
+- Phase 5 hardware pass: pre-provision gateway and sensor-node serials in `iot_device_inventory`; claim one gateway in `/admin/sensors`; assign multiple sensor nodes to that gateway; send gateway-authenticated readings using node serials; confirm unassigned, wrong-gateway, wrong-business, and revoked node readings are rejected.
+- Phase 5 remaining needs: connect scheduled Cloudflare processing for stale/offline checks, test real sensor ingest against provisioned serials, tune thresholds by sensor type, add richer temperature history/export views if needed, and verify live polling behavior on the deployed site.
+- Debug If Failed: serial claim collisions, wrong tenant ingest, stale/offline processor issues, threshold tuning, or dashboard/report mismatch.
 
-6. Scheduling workflow completion
-- Test employee departments, roles, availability, time off, templates, drafts, autosave, publish, labor warnings, open shifts, shift offers, approvals, and My Schedule.
-- Confirm managers can only schedule and approve within allowed departments and permissions.
-- Confirm publish can run without requiring a separate draft save first.
-- Add schedule publish, shift offer, shift request, approval, decline, and time-off notifications.
-- Decide whether Crimini needs true reciprocal shift swaps in addition to shift transfer and claim.
-- Confirm employee schedule visibility and every schedule mutation are tenant scoped.
-- Confirm schedule publish history remains available for the required retention period.
-- Phase 6 manual validation needs: run the schedule pass from Final Multi-Tenant Test Notes before launch, including autosave, publish-with-unsaved-changes, department-scoped managers, templates, labor targets, open shifts, shift offers, approvals, time off, My Schedule, event processing, and tenant isolation.
+6. Scheduling workflow completion - Validated / Manual Gate
+- Code foundation is validated for employee departments, roles, availability, time off, templates, drafts, autosave, publish, labor warnings, open shifts, shift offers, approvals, and My Schedule.
+- Manual Gate: run schedule tests with fake tenants, many employees, department-scoped managers, autosave, publish-with-unsaved-changes, templates, labor targets, open shifts, shift offers, approvals, time off, My Schedule, event processing, and tenant isolation.
+- Debug If Failed: draft loss, publish mismatch, wrong manager scope, employee visibility errors, or schedule report/history gaps.
 
-7. Lists, completion history, and alerts
-- Confirm checklist, prep, inventory, and order lists can be created, edited, deleted, submitted, and restored where intended.
-- Detect full list completion and record who completed each item.
-- Add configured completion alerts for prep lists, checklists, inventory, and orders.
-- Confirm item attachments open the linked recipe or SOP directly.
-- Add checklist history reporting.
-- Confirm two-week prep history includes submitter and task executor detail.
-- Confirm history and alert writes are business scoped and efficient.
-- Phase 7 manual validation needs: run the list/report/event passes from Final Multi-Tenant Test Notes before launch, including CSV downloads, event processing, attachments, two-business isolation, and multiple-user submitter versus executor confirmation.
+7. Lists, completion history, and alerts - Validated / Manual Gate
+- Code foundation is validated for checklist/prep/inventory/order lists, item save/edit/delete, item attachments, two-week prep history, list reports, CSV safety, and tenant scoping.
+- Manual Gate: create, edit, delete, submit, and export list data with multiple fake employees and businesses.
+- Debug If Failed: missing executor/submitter, stale UI after save, attachment opening issues, completion alert routing, or cross-tenant list rows.
 
-8. Reports and exports completion
+8. Reports and exports completion - Validated / Manual Gate
 - Tracked launch phase: `8. Reports/export foundation`.
-- Add executor detail to list history.
-- Add checklist, time-off, shift-request, temperature, onboarding, and other useful operational exports.
-- Confirm consultant and contractor report access is read-only and tenant scoped.
-- Add pagination, chunking, or asynchronous exports so large reports do not silently stop at fixed row limits.
-- Confirm schedule history supports the required retention period.
-- Test CSV files with real data and external spreadsheet tools.
-- Phase 8 current foundation: schedule history, list history, schedule requests, temperature monitoring, onboarding status, and waste reports/CSVs exist; report queries are bounded and business scoped; `test:report-exports` guards report access, all CSV endpoints, spreadsheet formula hardening, sensitive onboarding exclusions, and report links.
-- Phase 8 manual validation needs: run the reports and CSV passes from Final Multi-Tenant Test Notes before launch, including owner/manager/consultant/contractor/staff access, read-only behavior, spreadsheet opening, row-limit behavior, sensitive onboarding exclusion, and two-business isolation.
+- Reports and exports completion is validated for schedule, requests, temperature, onboarding, waste, and list domains with CSV hardening and sensitive onboarding exclusions.
+- Manual Gate: open reports as owner, manager, consultant, contractor, and staff; confirm read-only access, denial behavior, row limits, spreadsheet opening, and tenant isolation.
+- Debug If Failed: unbounded queries, missing rows, formula injection, sensitive data leakage, or cross-tenant exports.
 
-9. Billing and store subscription lifecycle
-- Finalize Apple and Google product IDs.
-- Create subscription tiers and add-ons in App Store Connect and Google Play Console.
-- Match store product IDs to Crimini billing configuration.
-- Keep native purchase submissions pending until Apple or Google verification succeeds.
-- Process Apple and Google webhook events into entitlement renewals, cancellations, refunds, grace periods, billing failures, and expirations.
-- Add webhook retry, failure monitoring, deduplication, and processed status updates.
-- Confirm webhook endpoints require `BILLING_WEBHOOK_TOKEN`.
-- Test native purchase, restore, billing status, entitlement activation, trial conversion, cancellation, and data retention.
-- Remove or rename remaining billing placeholder language before launch.
-- Phase 9 current foundation: native purchase verification, restore submission, billing status, webhook token auth, webhook dedupe, entitlement lifecycle updates, business billing reconciliation, and lifecycle lookup indexes exist.
-- Phase 9 manual validation needs: run the billing pass from Final Multi-Tenant Test Notes after App Store Connect, Google Play Console, native builds, and sandbox tester accounts are ready.
-- Phase 9 pricing validation needs: verify store product rows, `/api/billing/products`, `/pricing`, `/register`, and `/billing` agree on Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, temperature included on Medium/Large only, and deferred camera products.
+9. Billing and store subscription lifecycle - Validated / External Store Gate
+- Code foundation is validated: Trial identity claims prevent free-trial reuse, cancellation creates a pre-purge snapshot, native purchase submissions stay pending until Apple/Google verification, webhooks are token-gated, entitlement lifecycle updates are wired, and pricing is Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`.
+- Manual Gate: create App Store Connect and Google Play products, sandbox testers, native builds, and test purchase/restore/cancel/refund/renewal/grace/past-due flows.
+- Debug If Failed: product mismatch, verification failure, entitlement leak, wrong tenant activation, or billing status mismatch.
 
-10. Invite, employee onboarding, and HR completion
-- Test owner, manager, employee, consultant, and contractor invites.
-- Test employee invite flow from email link to onboarding to login.
-- Confirm owner invite flow is owner-only, skips required employee packet forms by default, and can still receive a packet manually if needed.
-- Confirm manager and employee invite flows create required packet forms, while contractor and consultant flows do not create employee tax packets.
-- Confirm employee onboarding skips business pricing and keeps valid entered data after validation errors.
-- Confirm employee packet fields, in-app forms, source document uploads, profile attachment, admin review, changes requested, approval, and document access work.
-- Confirm contractors do not receive employee tax onboarding packets.
-- Confirm sensitive HR, tax, identity, and bank fields use encrypted storage and audited reads.
-- Confirm HR-sensitive permissions are enforced.
-- Review I-9, W-4, state forms, signatures, retention, and employer procedures with qualified legal or payroll guidance.
-- Confirm legacy admin aliases resolve cleanly to Manager behavior without duplicated user-facing roles.
+10. Invite, employee onboarding, and HR completion - Validated / Manual Gate / Legal Review
+- Code foundation is validated for owner, manager, employee, consultant, and contractor invite paths; employee invite flow from email link to onboarding to login; packet requirements; encrypted sensitive vault; audited reads; and onboarding reports.
+- Manual Gate: Phase 10 invite/onboarding pass with fake employees, packet submission, review, changes requested, approval, HR-sensitive media, and admin review routes.
+- Legal Gate: contractors do not receive employee tax onboarding packets, but I-9/W-4/state form procedures still need qualified legal or payroll guidance.
+- Debug If Failed: wrong invite role path, business/pricing appearing on employee invite, packet misassignment, media access leak, or HR audit gaps.
 
-11. Creator, editor, and legacy route consolidation
-- Confirm `/admin/creator` is the intended source of truth for list, recipe, document, menu, category, and attachment creation.
-- Retire or redirect duplicate legacy editor routes without losing valid functions.
-- Confirm feature hiding applies to shared creator routes and not only sidebar links.
-- Remove dead compatibility code, old copied-app bindings, unused assets, visible hardcoded data, and test data.
-- Review remaining internal legacy naming and rename only where it is safe and useful.
+11. Creator, editor, and legacy route consolidation - Validated
+- `/admin/creator` is the editor source of truth; legacy admin editor routes redirect; feature hiding applies to shared creator routes.
+- Debug If Failed: duplicate editor access, old hardcoded categories/data, or feature-hidden routes still opening.
 
-12. Core feature action test
-- Lists: create, edit, delete checklist, prep, inventory, and order lists.
-- Docs: upload PDFs, create categories, view docs, delete files, and replace files.
-- Menus: upload separately from docs and confirm homepage menu card reflects active menus.
-- Recipes: create categories, add recipes, edit, delete, view by category, and attach to list items.
-- ToDo: create, assign, complete, delete, and verify feature hiding.
-- Whiteboard: submit, vote, review, approve, reject, and cleanup.
-- Specials: create and confirm the homepage special area stays clean.
-- Announcements and spotlight: edit permissions and homepage display.
-- Vendors, reminders, conversions, and business registry: confirm save, edit, delete, access, and tenant behavior.
+12. Core feature action test - Validated / Manual Gate
+- `12. Core feature action test` is guarded for lists, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, food cost, safety reference, waste tracker, waste reports, and business registry.
+- Phase 12 core action pass: create, edit, delete, and view real data in fake tenants before real restaurant entry.
+- Debug If Failed: save/delete failure, stale UI, wrong sidebar visibility, permission mismatch, or cross-tenant data.
 
-13. Camera feature shelving
-- Keep camera backend code, migrations, R2 binding, and beta-gated APIs in place for post-launch work.
-- Hide camera media/setup from launch navigation, admin dropdowns, signup, billing, pricing, and active marketing promises.
-- Keep `/admin/camera`, `/admin/camera/setup`, and camera API/media routes unavailable unless `PUBLIC_CAMERA_BETA_ENABLED` is intentionally enabled.
-- Treat camera monitoring as planned post-launch expansion, not an active launch feature.
-- Confirm camera add-on products cannot be selected or activated from launch signup, billing UI, product API, or native purchase path.
+13. Camera feature shelving - Validated / Deferred
+- `13. Camera feature shelving` is complete for launch. Camera UI, purchase paths, active marketing promises, and product activation are hidden/blocked.
+- Camera monitoring products are deferred post-launch. Backend and R2 code remain beta-gated for later work.
+- Debug If Failed: visible camera menu, selectable camera product, camera API available without beta, or marketing claiming active cameras.
 
-14. Authentication, session, abuse, and account lifecycle test
-- Test every major route locally with fresh admin and employee accounts.
-- Confirm login, register, invite, onboarding, logout, reset password, continue signed-in, tenant switching, and account deletion.
-- Test wrong password, wrong email, too many attempts, expired reset token, invalid invite, reused invite, inactive user, revoked session, and revoked device.
-- Confirm feature hiding removes sidebar visibility and direct route access.
-- Confirm delete and trial-cancel flows preserve only required trial-abuse records.
-- Confirm no admin endpoint accepts regular user access.
-- Confirm every public API endpoint requires the correct user auth, device credential, internal token, or webhook token.
+14. Authentication, session, abuse, and account lifecycle - Validated / Manual Gate
+- Code foundation is validated for login, logout, register, invite, reset password, account deletion, session/device revocation, inactive users, feature hiding, internal APIs, device APIs, billing webhooks, Turnstile login, same-origin request guard, and malicious-user hardening.
+- Manual Gate: wrong password/email, rate limits, expired reset token, invalid/reused invite, revoked session/device, inactive user, direct route probing, and account deletion requests.
+- Debug If Failed: session cookie leak, route bypass, missing audit log, or account lifecycle inconsistency.
 
-15. Production database and Cloudflare readiness
-- Confirm all D1 migrations are applied locally and remotely.
-- Create or confirm a backup before production migrations.
-- Run schema readiness against production Cloudflare bindings.
-- Confirm every tenant-owned table is business scoped.
-- Confirm Pages has the correct D1, document R2 bucket, camera R2 bucket, environment variables, and secrets.
-- Confirm preview and production bindings are separated correctly.
-- Confirm `criminiops.com` points to the intended Pages project when the hold is lifted.
-- Confirm no old copied-app Cloudflare resources remain.
+15. Production database and Cloudflare readiness - Validated / Manual Gate
+- Code/config foundation is validated: Pages config, D1/R2 bindings, schema guard, Node version, package lock, no copied-app Cloudflare resources, Turnstile secret names, WAF/rate-limit note, and schema readiness endpoint.
+- Manual Gate: backup/export D1, apply/confirm migrations on target environment, run `schema:readiness:prod`, run `smoke:prod`, confirm preview/production separation, and only then add real restaurant data.
+- Debug If Failed: schema mismatch, missing secrets, wrong Pages project, wrong binding, or deployment/runtime error.
 
-16. Performance, scale, and reliability
-- Run Cloudflare readiness, scale performance, tenant isolation, production schema, media access, build, auth abuse, billing, security header, and observability checks.
-- Inspect heavy routes for payload size and query count.
-- Confirm polling is limited, visibility aware, and not used for event delivery.
-- Confirm pages do not load full document or media content when only listings are needed.
-- Confirm R2 media streams where practical instead of buffering large files.
-- Load test schedules, reports, list submissions, temp ingest, and concurrent tenant use. Camera activity load testing is deferred until the camera module resumes.
-- Confirm cleanup and retention jobs are bounded and do not create excessive D1 writes.
+16. Performance, scale, and reliability - Validated / Manual Gate
+- Scale/performance static checks pass: bounded polling, bounded cleanup, bounded temperature payloads, business-first indexes, private media streaming, and route payload trimming.
+- Manual Gate: run load-style fake tenant tests for schedules, reports, list submissions, temp ingest, temp polling, concurrent tenants, and user switching on Cloudflare.
+- Debug If Failed: worker resource warnings, slow route, heavy polling, unbounded D1 writes, or oversized route payload.
 
-17. Observability, backup, and incident readiness
-- Configure alerts for schema failures, tenant denials, billing failures, repeated 500s, media denials, device auth failures, temperature alerts, and notification delivery failures.
-- Confirm structured logs provide enough business, route, event, and failure context without exposing sensitive data.
-- Confirm D1 backup, migration rollback, forward-fix, and R2 recovery procedures.
-- Confirm a failed deployment can be rolled back safely.
+17. Observability, backup, and incident readiness - Validated / External
+- Structured Logs, Alert Targets, Alert watchlist, and Backup And Restore notes exist.
+- External Gate: configure Cloudflare notifications/log monitoring and run one D1 export/restore drill plus one rollback drill before public launch.
+- Debug If Failed: missing context in logs, sensitive log leakage, broken rollback, or backup restore gap.
 
-18. Crimini UI, accessibility, and responsive polish
-- Use the current Crimini UI system for every component changed during this completion plan.
-- Sweep all app, admin, auth, onboarding, billing, schedule, report, device, docs, menu, and marketing pages for theme consistency.
-- Remove old rounded floating-card styling, glow-heavy panels, oversized buttons, nested cards, and mismatched visual patterns.
-- Fix light-mode and dark-mode contrast everywhere.
-- Confirm desktop and mobile layouts, including complex schedule and admin pages.
-- Standardize empty, loading, error, disabled, success, and permission-denied states.
-- Keep UI copy short and remove technical or over-explained user-facing text.
-- Check keyboard navigation, focus states, labels, contrast, and screen-reader behavior.
-- Replace outdated marketing screenshots when final app screenshots are ready.
+18. Crimini UI, accessibility, and responsive polish - Validated / Manual Gate
+- UI static guards pass for current theme, focus treatment, reduced motion, old icon removal, and subtitle cleanup.
+- Manual Gate: inspect app/admin/auth/onboarding/billing/schedule/reports/tools/docs/menus/marketing in light/dark and mobile/desktop.
+- Debug If Failed: clipped footer/sidebar, contrast issues, verbose helper copy, old rounded-card styling, or broken mobile layout.
 
-19. Native app release preparation
-- Configure a working JDK and Android build environment.
-- Configure Android signing keystore values and secure release signing.
-- Enable Android release minification if practical.
-- Generate Android and iOS release builds.
-- Confirm final app icons, launch/loading behavior, permissions, camera/media usage, and WebView behavior.
-- Confirm login and session persistence inside native shells.
-- Confirm store billing bridge, push notifications, external links, PDFs, uploaded menus/docs, and account deletion work on real devices.
+19. Native app release preparation - External / Manual Gate
+- Native shell config and store readiness code exist, but real native builds require local Android/iOS setup.
+- Manual Gate: configure JDK/JAVA_HOME, Android signing, iOS/TestFlight, `cap:sync`, device testing, uploaded docs/PDFs, session persistence, push, billing bridge, and account deletion.
+- Debug If Failed: native-only login, file, billing, push, or deep-link issues.
 
-20. Apple App Store readiness
-- Set final bundle ID, app name, listing, screenshots, privacy policy, support URL, and account deletion URL.
-- Add in-app subscriptions and add-ons in App Store Connect.
-- Confirm paid digital service access uses Apple In-App Purchase where required.
-- Confirm subscription screen clearly shows price, term, included features, cancellation, and restore.
-- Complete Apple privacy disclosures and submit IAP products with the app build.
+20. Apple App Store readiness - Validated Code / External
+- `20. Apple App Store readiness` code checks pass for bundle ID, public URLs, billing page, and readiness guards.
+- External Gate: App Store Connect app record, IAP subscription products, screenshots, metadata, TestFlight, privacy disclosures, demo account, and review notes.
+- Debug If Failed: IAP product mismatch, restore failure, privacy URL issue, native billing bridge issue, or Apple review blocker.
 
-21. Google Play Store readiness
-- Set final package name, app listing, screenshots, privacy policy, data safety, and account deletion URL.
-- Add Play Billing subscription products and add-ons.
-- Confirm production and sandbox product IDs are not mixed.
-- Confirm purchase, restore, notification, and entitlement behavior in Android builds.
-- Prepare the internal testing track before public release.
+21. Google Play Store readiness - Validated Code / External
+- `21. Google Play Store readiness` code checks pass for Android identity, Play Billing dependency, support/privacy/account deletion URLs, Google Play Console notification wiring, data safety references, internal testing readiness, `crimini.plan.small.monthly`, and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` expectations.
+- External Gate: Play Console app record, subscription products, Data safety, content rating, screenshots, metadata, internal testing track, demo account, and review notes.
+- Debug If Failed: Play Billing product mismatch, notification verification failure, restore issue, or Android runtime issue.
 
-22. Legal, public site, and business readiness
-- Finalize privacy policy, terms, billing terms, subscription cancellation information, account deletion page, support contact, and company footer.
-- Confirm Apple and Google data safety answers match actual collection and retention.
-- Confirm trial, payment, cancellation, liability, employee data, and device monitoring language is accurate.
-- Keep the public site offline until trademark and LLC timing is safe.
+22. Legal, public site, and business readiness - Validated Routes / External
+- `22. Legal, public site, and business readiness` routes exist for privacy policy, terms, billing terms, support contact, account deletion, footer links, billing disclosures, and account deletion request persistence.
+- External Gate: qualified legal or payroll guidance for privacy policy, billing terms, support contact, employee forms, I-9/W-4/state guidance, trial/payment/cancellation language, device monitoring, and retention.
+- Debug If Failed: public route missing, incorrect footer/support link, account deletion issue, or legal-required copy change.
 
-23. Production smoke and multi-tenant validation
-- Deploy to Cloudflare after the domain hold is lifted.
+23. Production smoke and multi-tenant validation - Next Required Gate
+- Deploy to the intended Cloudflare Pages environment after the public/domain hold is handled or use the current Pages preview URL for private testing.
 - Run `npm.cmd run schema:readiness:prod` and `npm.cmd run smoke:prod`.
-- Run deferred Phase 3 real email flow tests for invite, approval, password reset, employee onboarding, schedule, shift, time-off, list, billing, and temperature emails. Camera emails are deferred until the camera module resumes.
-- Run deferred Phase 4 real-device push tests for native opt-in, token refresh, logout/device revocation, APNs delivery, FCM delivery, and event-triggered operational alerts.
-- Create at least two test business tenants with different roles and employees.
-- Invite admin, manager, employee, consultant, and contractor accounts.
-- Upload docs and menus.
-- Create schedules, lists, ToDos, specials, announcements, and temp events. Camera events are deferred until the camera module resumes.
-- Purchase and restore test subscriptions in sandbox.
-- Confirm tenant data isolation and access denial across every major system.
+- Run the Final Multi-Tenant Test Notes with fake tenants first.
+- If fake tenants pass, enter the three restaurant tenants.
+- Debug If Failed: fix the failing system before adding more real data.
 
-24. Store internal testing
-- Upload an Android internal testing build.
-- Upload an iOS TestFlight build.
-- Test real purchase sandbox flows on both platforms.
-- Test onboarding, invite links, deep links, logout, reset password, media uploads, push notifications, and account deletion.
-- Fix store-specific issues before public review.
+24. Store internal testing - External / Manual Gate
+- Upload Android internal testing and iOS TestFlight builds after native signing/setup.
+- Test real purchase sandbox flows, onboarding, invite links, deep links, logout, reset password, media uploads, push notifications, and account deletion.
+- Debug If Failed: store/native specific code fix before public review.
 
-25. Launch candidate
+25. Launch candidate - Final Gate
 - Freeze feature changes.
 - Run the full validation suite.
 - Complete the final manual test matrix.
@@ -416,3 +383,4 @@ Current audit status:
 - Deploy the final Cloudflare build.
 - Submit Apple and Google builds.
 - Keep backup, incident, and rollback plans ready.
+

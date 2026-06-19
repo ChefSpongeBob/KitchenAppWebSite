@@ -18,10 +18,12 @@ npm.cmd run build
 
 ## Cloudflare
 Configured in `wrangler.jsonc`:
-- Pages project: `criminikitchenapp`
+- Pages project: `criminikitchenappwebsite`
+- Wrangler app name: `criminikitchenapp`
 - D1 binding: `DB` -> `crimini-production`
 - R2 bindings: `DOC_MEDIA`, `CAMERA_MEDIA`
 - `APP_BASE_URL=https://criminiops.com`
+- Optional private test gate: `PRIVATE_TEST_GATE_ENABLED=true` and `PRIVATE_TEST_ACCESS_CODE=<private code>`
 
 ## Migrations
 ```powershell

@@ -30,6 +30,11 @@ import { hasBusinessCapability } from '$lib/server/permissions';
 import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
 import { wrapProductionSchemaGuard } from '$lib/server/schemaGuard';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
+import {
+	hasPrivateTestAccess,
+	isPrivateTestGateBypassed,
+	isPrivateTestGateEnabled
+} from '$lib/server/privateTestGate';
 
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const cookieName = getSessionCookieName();
@@ -119,6 +124,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA;
 
 	const { pathname } = event.url;
+	const privateTestEnv = event.platform?.env;
+	if (
+		isPrivateTestGateEnabled(privateTestEnv) &&
+		!isPrivateTestGateBypassed(pathname) &&
+		!(await hasPrivateTestAccess(event.cookies, privateTestEnv))
+	) {
+		throw redirect(303, `/test-access?next=${encodeURIComponent(event.url.pathname + event.url.search)}`);
+	}
+
 	const isAuthRoute =
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||
