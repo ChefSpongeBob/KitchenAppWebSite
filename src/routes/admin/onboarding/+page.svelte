@@ -436,7 +436,7 @@
 
           <label>
             <span>Upload PDF/Image</span>
-            <input name="source_file" type="file" accept="application/pdf,image/*" />
+            <input name="source_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
           </label>
 
           <label>
@@ -523,7 +523,7 @@
 
                 <label>
                   <span>Replace Upload</span>
-                  <input name="source_file" type="file" accept="application/pdf,image/*" />
+                  <input name="source_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
                 </label>
 
                 <label>

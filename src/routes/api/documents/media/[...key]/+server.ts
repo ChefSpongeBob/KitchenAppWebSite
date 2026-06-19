@@ -3,6 +3,17 @@ import { logOperationalEvent } from '$lib/server/observability';
 import { hasBusinessCapability } from '$lib/server/permissions';
 import { canAccessEmployeeSensitiveData, writeSensitiveRecordAudit } from '$lib/server/sensitive';
 
+function decodeMediaKey(value: string) {
+  try {
+    return value
+      .split('/')
+      .map((part) => decodeURIComponent(part))
+      .join('/');
+  } catch {
+    return '';
+  }
+}
+
 export const GET: RequestHandler = async ({ params, platform, locals, request }) => {
   const bucket = platform?.env?.DOC_MEDIA;
   if (!bucket) {
@@ -17,10 +28,7 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
     return new Response('Document media bucket not configured.', { status: 503 });
   }
 
-  const key = params.key
-    .split('/')
-    .map((part) => decodeURIComponent(part))
-    .join('/');
+  const key = decodeMediaKey(params.key);
 
   if (!key || key.includes('..') || key.startsWith('/') || key.includes('\\')) {
     return new Response('Missing media key.', { status: 400 });

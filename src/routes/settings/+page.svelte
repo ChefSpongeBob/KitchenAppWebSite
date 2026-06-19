@@ -683,7 +683,7 @@
                   {:else if item.item_type === 'document'}
                     <label>
                       <span>Document</span>
-                      <input name="file" type="file" accept="application/pdf,image/*" />
+                      <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
                     </label>
                     {#if item.file_name}
                       <p class="form-note">Current upload: {item.file_name}</p>

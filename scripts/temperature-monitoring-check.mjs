@@ -55,6 +55,8 @@ expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rule
   source.includes('TemperatureReading') &&
   source.includes("authenticateIoTDevice(db, request, 'sensor_gateway')") &&
   source.includes('resolveGatewayNodeReading') &&
+  source.includes('MAX_TEMP_BATCH_SIZE') &&
+  source.includes("'Too many readings supplied.'") &&
   source.includes('eventType:') &&
   source.includes('temperature.reading_batch.received')
 );

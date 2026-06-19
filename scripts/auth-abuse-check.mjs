@@ -28,6 +28,13 @@ expect('src/lib/server/security.ts', 'shared security helper exists', (source) =
   source.includes('hashedAuditValue')
 );
 
+expect('src/lib/server/auth.ts', 'password hashing uses high-iteration salted PBKDF2 and rehash upgrades', (source) =>
+  source.includes('const PASSWORD_ITERATIONS = 600_000') &&
+  source.includes('const PASSWORD_SALT_BYTES = 16') &&
+  source.includes('needsRehash = iterations < PASSWORD_ITERATIONS') &&
+  source.includes('upgradedHash: needsRehash ? await hashPassword(password) : undefined')
+);
+
 expect('src/routes/login/+page.server.ts', 'login is rate limited and audited', (source) =>
   source.includes("action: 'login_ip'") &&
   source.includes("action: 'login_email'") &&
@@ -99,6 +106,14 @@ expect('src/hooks.server.ts', 'request guard rejects revoked sessions devices in
   source.includes('clearSessionCookies(event)')
 );
 
+expect('src/hooks.server.ts', 'cookie-authenticated mutations reject cross-site requests', (source) =>
+  source.includes('isTrustedStateChangingRequest') &&
+  source.includes('cross_site_state_change_rejected') &&
+  source.includes('origin === requestUrl.origin') &&
+  source.includes('fetchSite ===') &&
+  source.includes('!isPublicApiRoute && !isTrustedStateChangingRequest(event.request, event.url)')
+);
+
 expect('src/routes/api/internal/operational-events/process/+server.ts', 'operational event processor requires internal token', (source) =>
   source.includes('SMOKE_INTERNAL_TOKEN') &&
   source.includes('internalTokenFromRequest') &&
@@ -115,8 +130,8 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
 
 expect('src/routes/api/temps/+server.ts', 'temperature ingest requires device authentication', (source) =>
   source.includes("authenticateIoTDevice(db, request, 'sensor_gateway')") &&
-  source.includes("authenticateIoTDevice(db, request, 'sensor')") &&
-  source.includes("return json({ error: 'Device credentials required.' }, { status: 401 })")
+  source.includes('resolveGatewayNodeReading') &&
+  source.includes("return json({ error: 'Gateway credentials required.' }, { status: 401 })")
 );
 
 expect('src/routes/api/camera/activity/+server.ts', 'camera activity ingest remains beta gated and device authenticated', (source) =>

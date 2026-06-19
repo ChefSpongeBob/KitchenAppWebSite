@@ -1,6 +1,7 @@
 const PASSWORD_SCHEME = 'pbkdf2_sha256';
-const MAX_PBKDF2_ITERATIONS = 100_000;
-const PASSWORD_ITERATIONS = MAX_PBKDF2_ITERATIONS;
+const MIN_PBKDF2_ITERATIONS = 100_000;
+const PASSWORD_ITERATIONS = 600_000;
+const MAX_PBKDF2_ITERATIONS = 1_000_000;
 const PASSWORD_KEY_BYTES = 32;
 const PASSWORD_SALT_BYTES = 16;
 
@@ -77,12 +78,19 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 		const iterations = Number(parts[1]);
 		const saltHex = parts[2];
 		const expected = parts[3];
-		if (!Number.isFinite(iterations) || iterations < 10_000 || iterations > MAX_PBKDF2_ITERATIONS) {
+		if (!Number.isFinite(iterations) || iterations < MIN_PBKDF2_ITERATIONS || iterations > MAX_PBKDF2_ITERATIONS) {
 			return { valid: false, needsRehash: false };
 		}
 		try {
 			const actual = await pbkdf2Hex(password, saltHex, iterations);
-			return { valid: timingSafeEqual(actual, expected), needsRehash: false };
+			const valid = timingSafeEqual(actual, expected);
+			if (!valid) return { valid: false, needsRehash: false };
+			const needsRehash = iterations < PASSWORD_ITERATIONS;
+			return {
+				valid: true,
+				needsRehash,
+				upgradedHash: needsRehash ? await hashPassword(password) : undefined
+			};
 		} catch {
 			return { valid: false, needsRehash: false };
 		}

@@ -3,6 +3,9 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+	"engines": {
+		"node": ">=22.12.0"
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -87,24 +90,30 @@
 		"format": "prettier --write ."
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-auto": "^7.0.0",
-		"@sveltejs/adapter-cloudflare": "^7.2.6",
-		"@sveltejs/kit": "^2.50.1",
-		"@sveltejs/vite-plugin-svelte": "^6.2.4",
-		"prettier": "^3.8.1",
+		"@sveltejs/adapter-cloudflare": "^7.2.9",
+		"@sveltejs/kit": "^2.65.2",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"prettier": "^3.8.4",
 		"prettier-plugin-svelte": "^3.4.1",
-		"svelte": "^5.48.2",
-		"svelte-check": "^4.3.5",
+		"svelte": "^5.56.3",
+		"svelte-check": "^4.6.0",
 		"typescript": "^5.9.3",
-		"vite": "^7.3.1"
+		"vite": "^8.0.16",
+		"wrangler": "^4.102.0"
 	},
 	"dependencies": {
-		"@capacitor/android": "^8.2.0",
-		"@capacitor/cli": "^8.2.0",
-		"@capacitor/core": "^8.2.0",
-		"@capacitor/ios": "^8.2.0",
-		"@capacitor/push-notifications": "^8.0.0",
-		"pdfjs-dist": "^5.5.207",
+		"@capacitor/android": "^8.4.0",
+		"@capacitor/cli": "^8.4.0",
+		"@capacitor/core": "^8.4.0",
+		"@capacitor/ios": "^8.4.0",
+		"@capacitor/push-notifications": "^8.1.1",
+		"pdfjs-dist": "^5.7.284",
 		"tesseract.js": "^6.0.1"
+	},
+	"overrides": {
+		"cookie": "^1.1.1",
+		"esbuild": "^0.28.1",
+		"undici": "^7.28.0",
+		"ws": "^8.21.0"
 	}
 }

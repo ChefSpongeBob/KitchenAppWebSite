@@ -400,14 +400,13 @@ function extensionFromContentType(contentType: string) {
   if (contentType === 'image/png') return 'png';
   if (contentType === 'image/webp') return 'webp';
   if (contentType === 'image/gif') return 'gif';
-  if (contentType === 'image/svg+xml') return 'svg';
   return '';
 }
 
 function isAllowedDocumentUpload(contentType: string, extension: string) {
   if (contentType === 'application/pdf') return true;
-  if (contentType.startsWith('image/')) return true;
-  return ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(extension);
+  if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(contentType)) return true;
+  return ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);
 }
 
 async function uploadDocumentMedia(
@@ -420,6 +419,11 @@ async function uploadDocumentMedia(
   const filenameExtension = extensionFromFilename(file.name);
   const typeExtension = extensionFromContentType(contentType);
   const extension = filenameExtension || typeExtension || 'bin';
+
+  if (!isAllowedDocumentUpload(contentType, extension)) {
+    throw new Error('Unsupported document type.');
+  }
+
   const normalizedSlug = normalizeSlug(slug) || 'document';
   const key = `businesses/${businessId}/documents/${normalizedSlug}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
   await bucket.put(key, file.stream() as unknown as WorkerReadableStream, {

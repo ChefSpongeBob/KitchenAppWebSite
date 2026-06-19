@@ -24,6 +24,7 @@ type RawTempRow = {
 
 const DEFAULT_TEMP_QUERY_LIMIT = 240;
 const MAX_TEMP_QUERY_LIMIT = 500;
+const MAX_TEMP_BATCH_SIZE = 200;
 let tempsIndexesEnsured = false;
 
 async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
@@ -169,6 +170,11 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
       : Array.isArray(body)
         ? body
         : [body];
+
+  if (rawItems.length > MAX_TEMP_BATCH_SIZE) {
+    return json({ error: 'Too many readings supplied.' }, { status: 413 });
+  }
+
   const rawReadings = rawItems
     .map((entry) => normalizeReading((entry ?? {}) as Record<string, unknown>))
     .filter((entry): entry is RawTempRow => entry !== null);

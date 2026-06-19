@@ -47,9 +47,49 @@ function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
 	event.cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(event.request));
 }
 
+function isTrustedStateChangingRequest(request: Request, requestUrl: URL) {
+	const method = request.method.toUpperCase();
+	if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+
+	const origin = request.headers.get('origin');
+	if (origin) return origin === requestUrl.origin;
+
+	const referer = request.headers.get('referer');
+	if (referer) {
+		try {
+			return new URL(referer).origin === requestUrl.origin;
+		} catch {
+			return false;
+		}
+	}
+
+	const fetchSite = request.headers.get('sec-fetch-site');
+	if (fetchSite) return fetchSite === 'same-origin' || fetchSite === 'same-site' || fetchSite === 'none';
+
+	// Native app/webview requests may omit browser CSRF headers. Browser form posts include Origin.
+	return true;
+}
+
 function applySecurityHeaders(response: Response) {
 	response.headers.set('x-content-type-options', 'nosniff');
 	response.headers.set('x-frame-options', 'DENY');
+	response.headers.set(
+		'content-security-policy',
+		[
+			"default-src 'self'",
+			"base-uri 'self'",
+			"object-src 'none'",
+			"frame-ancestors 'none'",
+			"img-src 'self' data: blob: https:",
+			"font-src 'self' data: https://fonts.gstatic.com",
+			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+			"script-src 'self' 'unsafe-inline'",
+			"connect-src 'self'",
+			"media-src 'self' blob:",
+			"form-action 'self'",
+			...(dev ? [] : ['upgrade-insecure-requests'])
+		].join('; ')
+	);
 	response.headers.set('referrer-policy', 'strict-origin-when-cross-origin');
 	response.headers.set(
 		'permissions-policy',
@@ -104,6 +144,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isBillingRoute = pathname.startsWith('/billing');
 
 	const isPrivateRoute = !isAuthRoute && !isPublicMarketingRoute && !isPublicApiRoute;
+	if (!isPublicApiRoute && !isTrustedStateChangingRequest(event.request, event.url)) {
+		logOperationalEvent({
+			level: 'warn',
+			event: 'cross_site_state_change_rejected',
+			request: event.request,
+			route: pathname,
+			status: 403
+		});
+		return applySecurityHeaders(new Response('Forbidden', { status: 403 }));
+	}
 	const resolveWithNoStore = async () => {
 		const response = await resolve(event);
 		response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');

@@ -847,7 +847,7 @@
                       <input type="hidden" name="category" value={category} />
                       <input type="hidden" name="file_url" value="" />
                       <input type="hidden" name="content" value="" />
-                      <input name="file" type="file" accept="application/pdf,image/*" />
+                      <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
                       <select name="is_active">
                         <option value="1" selected>Active</option>
                         <option value="0">Inactive</option>
@@ -877,7 +877,7 @@
                                 <input type="hidden" name="file_url" value={document.file_url ?? ''} />
                                 <input type="hidden" name="content" value="" />
                                 <input name="title" value={document.title} required />
-                                <input name="file" type="file" accept="application/pdf,image/*" />
+                                <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
                                 <select name="is_active">
                                   <option value="1" selected={document.is_active === 1}>Active</option>
                                   <option value="0" selected={document.is_active === 0}>Inactive</option>
@@ -911,7 +911,7 @@
             <input type="hidden" name="file_url" value="" />
             <input type="hidden" name="content" value="" />
             <input name="title" placeholder="Menu title" required />
-            <input name="file" type="file" accept="application/pdf,image/*" required />
+            <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" required />
             <select name="is_active">
               <option value="1" selected>Active</option>
               <option value="0">Hidden</option>
@@ -945,7 +945,7 @@
                       <input type="hidden" name="file_url" value={menu.file_url ?? ''} />
                       <input type="hidden" name="content" value="" />
                       <input name="title" value={menu.title} required />
-                      <input name="file" type="file" accept="application/pdf,image/*" />
+                      <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
                       <select name="is_active">
                         <option value="1" selected={menu.is_active === 1}>Active</option>
                         <option value="0" selected={menu.is_active === 0}>Hidden</option>

@@ -43,6 +43,12 @@ assertIncludes(
 
 assertIncludes(
   'src/routes/api/documents/media/[...key]/+server.ts',
+  'decodeMediaKey',
+  'document media keys are safely decoded before lookup'
+);
+
+assertIncludes(
+  'src/routes/api/documents/media/[...key]/+server.ts',
   'sidebar_logo_url',
   'business branding media is authorized through the active business'
 );
@@ -69,6 +75,18 @@ assertIncludes(
   'src/lib/server/admin.ts',
   'businesses/${businessId}/employee-onboarding/',
   'employee onboarding uploads are stored under business-scoped paths'
+);
+
+assertNotIncludes(
+  'src/lib/server/admin.ts',
+  "'image/svg+xml'",
+  'document uploads do not allow active SVG content'
+);
+
+assertIncludes(
+  'src/routes/admin/creator/+page.svelte',
+  '.pdf,.jpg,.jpeg,.png,.webp,.gif',
+  'document upload pickers only suggest PDF and raster images'
 );
 
 assertIncludes(
