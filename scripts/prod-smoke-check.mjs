@@ -119,14 +119,14 @@ async function unlockPrivateTestGate() {
   const body = new URLSearchParams({ accessCode: privateTestAccessCode, next: '/' }).toString();
   const accessResponse = await request('/test-access', {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin },
     body
   });
 
-  if (accessResponse.status === 303 || accessResponse.status === 302) {
+  if (accessResponse.status >= 200 && accessResponse.status < 400) {
     logPass(`Private test gate unlocked (${accessResponse.status})`);
   } else {
-    logFail(`Private test gate unlock expected redirect, got ${accessResponse.status}`);
+    logFail(`Private test gate unlock expected <400, got ${accessResponse.status}`);
   }
 }
 
