@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import TurnstileWidget from '$lib/components/security/TurnstileWidget.svelte';
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import AuthShell from '$lib/components/ui/AuthShell.svelte';
 
@@ -19,6 +20,7 @@
 					role?: string | null;
 					continuePath?: string | null;
 				} | null;
+				turnstileSiteKey?: string;
 		  }
 		| undefined;
 
@@ -27,6 +29,7 @@
 	let lastSeededEmail = '';
 
 	$: activeSession = data?.activeSession ?? null;
+	$: turnstileSiteKey = data?.turnstileSiteKey ?? '';
 	$: seededEmail = form?.email ?? '';
 	$: if (seededEmail !== lastSeededEmail) {
 		emailValue = seededEmail;
@@ -101,6 +104,8 @@
 					</button>
 				</div>
 			</div>
+
+			<TurnstileWidget siteKey={turnstileSiteKey} />
 
 			<button type="submit" class="auth-button">Sign in</button>
 		</form>

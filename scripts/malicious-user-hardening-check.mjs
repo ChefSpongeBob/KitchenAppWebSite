@@ -97,6 +97,28 @@ expect('src/routes/login/+page.server.ts', 'login abuse is rate limited by IP an
   source.includes("action: 'login_success'")
 );
 
+expect('src/lib/server/turnstile.ts', 'Turnstile validation is server-side and fail-closed when configured', (source) =>
+  source.includes('challenges.cloudflare.com/turnstile/v0/siteverify') &&
+  source.includes('cf-turnstile-response') &&
+  source.includes('TURNSTILE_SECRET_KEY') &&
+  source.includes('TURNSTILE_SITE_KEY') &&
+  source.includes('ok: false')
+);
+
+expect('src/routes/login/+page.server.ts', 'login validates Turnstile before account lookup and session creation', (source) => {
+  const turnstileIndex = source.indexOf('validateTurnstileSubmission');
+  const accountLookupIndex = source.indexOf('SELECT id, email, display_name, password_hash');
+  const sessionCreateIndex = source.indexOf('INSERT INTO sessions');
+  return (
+    turnstileIndex !== -1 &&
+    accountLookupIndex !== -1 &&
+    sessionCreateIndex !== -1 &&
+    turnstileIndex < accountLookupIndex &&
+    turnstileIndex < sessionCreateIndex &&
+    source.includes("action: 'login_turnstile_failed'")
+  );
+});
+
 expect('src/routes/register/+page.server.ts', 'signup abuse is rate limited before creating accounts', (source) => {
   const rateLimitIndex = source.indexOf("action: 'signup_ip'");
   const createUserIndex = source.indexOf('const userId = crypto.randomUUID()');

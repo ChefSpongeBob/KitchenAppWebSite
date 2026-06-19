@@ -46,7 +46,9 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - R2 bindings: `DOC_MEDIA`, `CAMERA_MEDIA`
 - R2 buckets: `crimini-doc-media`, `crimini-camera-media`
 - Production base URL: `APP_BASE_URL=https://criminiops.com`
-- Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, and `BILLING_WEBHOOK_TOKEN`.
+- Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY`.
+- Login Turnstile is enabled automatically when both Turnstile secrets are present; local/dev remains open when they are absent.
+- Cloudflare edge security before public launch: enable Managed WAF rules, OWASP managed rules where available, and rate limits/challenges for `/login`, `/register`, `/forgot-password`, `/account-deletion`, and public API abuse paths. Keep billing webhooks, smoke/schema readiness, temperature ingest, and camera ingest token/device-auth protected at the app layer.
 
 ## Validation Gates
 
@@ -67,6 +69,7 @@ npm.cmd run test:media-access
 npm.cmd run test:production-schema
 npm.cmd run test:scale-performance
 npm.cmd run test:auth-abuse
+npm.cmd run test:malicious-user-hardening
 npm.cmd run test:hr-onboarding
 npm.cmd run test:admin-consolidation
 npm.cmd run test:core-feature-actions

@@ -28,6 +28,8 @@ declare global {
 				GOOGLE_PLAY_PACKAGE_NAME?: string;
 				GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?: string;
 				BILLING_WEBHOOK_TOKEN?: string;
+				TURNSTILE_SITE_KEY?: string;
+				TURNSTILE_SECRET_KEY?: string;
 			};
 		}
 

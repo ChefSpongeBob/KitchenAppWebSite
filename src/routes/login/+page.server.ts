@@ -20,6 +20,7 @@ import {
 	rateLimitFailure,
 	writeAuditLogSafe
 } from '$lib/server/security';
+import { getTurnstileSiteKey, validateTurnstileSubmission } from '$lib/server/turnstile';
 import type { PageServerLoad } from './$types';
 
 const GENERIC_LOGIN_ERROR = 'We could not sign you in with those details. Check your email and password and try again.';
@@ -88,10 +89,11 @@ async function revokeActiveSession(
 	cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 }
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, platform }) => {
+	const turnstileSiteKey = getTurnstileSiteKey(platform?.env);
 	const db = locals.DB;
 	if (!db || !locals.userId) {
-		return { activeSession: null };
+		return { activeSession: null, turnstileSiteKey };
 	}
 
 	try {
@@ -115,6 +117,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		);
 
 		return {
+			turnstileSiteKey,
 			activeSession: {
 				email: String(user?.email ?? '').trim().toLowerCase(),
 				displayName: String(user?.display_name ?? '').trim(),
@@ -125,7 +128,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			}
 		};
 	} catch {
-		return { activeSession: null };
+		return { activeSession: null, turnstileSiteKey };
 	}
 };
 
@@ -134,7 +137,7 @@ export const actions: Actions = {
 		await revokeActiveSession(locals.DB, cookies, request);
 		throw redirect(303, '/login?switch=1');
 	},
-	login: async ({ request, cookies, locals, getClientAddress }) => {
+	login: async ({ request, cookies, locals, platform, getClientAddress }) => {
 		let email = '';
 		try {
 			const formData = await request.formData();
@@ -149,6 +152,21 @@ export const actions: Actions = {
 			const db = locals.DB;
 			if (!db) {
 				return fail(503, { error: 'Sign in is temporarily unavailable. Please try again in a moment.', email });
+			}
+
+			const turnstile = await validateTurnstileSubmission({
+				env: platform?.env,
+				formData,
+				request
+			});
+			if (!turnstile.ok) {
+				await writeAuditLogSafe(db, {
+					action: 'login_turnstile_failed',
+					request,
+					getClientAddress,
+					email
+				});
+				return fail(400, { error: 'Security check failed. Refresh and try again.', email });
 			}
 
 			const ipAddress = getRequestIpAddress(request, getClientAddress);

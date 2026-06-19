@@ -83,8 +83,9 @@ function applySecurityHeaders(response: Response) {
 			"img-src 'self' data: blob: https:",
 			"font-src 'self' data: https://fonts.gstatic.com",
 			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-			"script-src 'self' 'unsafe-inline'",
-			"connect-src 'self'",
+			"script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+			"connect-src 'self' https://challenges.cloudflare.com",
+			"frame-src https://challenges.cloudflare.com",
 			"media-src 'self' blob:",
 			"form-action 'self'",
 			...(dev ? [] : ['upgrade-insecure-requests'])

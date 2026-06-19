@@ -11,6 +11,7 @@ const checks = [
 	['CSP blocks plugin/object content', source.includes("object-src 'none'")],
 	['CSP restricts form posts to this app', source.includes("form-action 'self'")],
 	['CSP denies embedded framing', source.includes("frame-ancestors 'none'")],
+	['CSP allows only Cloudflare Turnstile challenge resources externally', source.includes("script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com") && source.includes("connect-src 'self' https://challenges.cloudflare.com") && source.includes("frame-src https://challenges.cloudflare.com")],
 	['referrer policy is set globally', source.includes("referrer-policy', 'strict-origin-when-cross-origin")],
 	['permissions policy is set globally', source.includes('permissions-policy')],
 	['origin agent cluster is isolated', source.includes("origin-agent-cluster', '?1")],

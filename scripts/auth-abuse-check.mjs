@@ -42,6 +42,17 @@ expect('src/routes/login/+page.server.ts', 'login is rate limited and audited', 
   source.includes("action: 'login_success'")
 );
 
+expect('src/routes/login/+page.server.ts', 'login supports server-validated Turnstile when configured', (source) =>
+  source.includes('validateTurnstileSubmission') &&
+  source.includes("action: 'login_turnstile_failed'") &&
+  source.includes('Security check failed')
+);
+
+expect('src/routes/login/+page.svelte', 'login renders Turnstile challenge from runtime site key', (source) =>
+  source.includes('TurnstileWidget') &&
+  source.includes('turnstileSiteKey')
+);
+
 expect('src/routes/forgot-password/+page.server.ts', 'password reset requests are rate limited and audited', (source) =>
   source.includes("action: 'password_reset_ip'") &&
   source.includes("action: 'password_reset_email'") &&

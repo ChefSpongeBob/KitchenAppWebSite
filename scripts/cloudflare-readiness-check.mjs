@@ -77,6 +77,8 @@ expect('Sensitive vault enforces HR access permission', sensitiveServer.includes
 
 const storeDoc = read('docs/PROJECT_HANDOFF.md');
 expect('Store billing doc lists Cloudflare billing secrets', storeDoc.includes('APP_STORE_PRIVATE_KEY') && storeDoc.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'));
+expect('Cloudflare handoff lists Turnstile secrets', storeDoc.includes('TURNSTILE_SITE_KEY') && storeDoc.includes('TURNSTILE_SECRET_KEY'));
+expect('Cloudflare handoff lists edge WAF and auth route rate limits', storeDoc.includes('Managed WAF rules') && storeDoc.includes('/login') && storeDoc.includes('/register') && storeDoc.includes('/forgot-password'));
 
 const playbook = read('docs/PROJECT_HANDOFF.md');
 expect('Deploy playbook references DB binding, not old kitchen binding', playbook.includes('d1 execute DB --remote') && !playbook.includes('d1 execute kitchen --remote'));
