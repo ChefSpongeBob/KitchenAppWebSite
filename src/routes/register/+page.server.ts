@@ -759,6 +759,7 @@ export const actions: Actions = {
 			} else {
 				const businessId = crypto.randomUUID();
 				const businessSlug = await reserveBusinessSlug(db, requestedBusinessSlug || businessName);
+				const initialBusinessStatus = purchaseMode === 'buy_now' ? 'pending_payment' : 'trialing';
 				await db
 					.prepare(
 						`
@@ -784,7 +785,7 @@ export const actions: Actions = {
 					created_at,
 					updated_at
 				)
-				VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`
 					)
 					.bind(
@@ -792,6 +793,7 @@ export const actions: Actions = {
 						businessName,
 						businessSlug,
 						planTier,
+						initialBusinessStatus,
 						legalName || null,
 						registryId || null,
 						contactEmail || null,
