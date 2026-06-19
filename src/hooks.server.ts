@@ -146,7 +146,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname === '/how-it-works' ||
 		pathname === '/pricing' ||
 		pathname === '/privacy' ||
-		pathname === '/account-deletion';
+		pathname === '/account-deletion' ||
+		pathname === '/test-access';
 
 	const isPublicApiRoute =
 		pathname.startsWith('/api/internal/smoke') ||
