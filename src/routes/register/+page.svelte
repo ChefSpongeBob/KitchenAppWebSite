@@ -630,7 +630,11 @@
 						<input id="user-city" bind:value={userCity} />
 
 						<label for="user-state">State / Region</label>
-						<input id="user-state" bind:value={userState} />
+						<select id="user-state" bind:value={userState}>
+							{#each US_STATES as [value, label]}
+								<option value={value}>{label}</option>
+							{/each}
+						</select>
 
 						<label for="user-postal-code">Postal code</label>
 						<input id="user-postal-code" bind:value={userPostalCode} />

@@ -23,7 +23,7 @@ import {
 } from '$lib/server/trial';
 import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { validateNewPassword } from '$lib/server/passwordReset';
-import { checkRateLimit, writeAuditLog } from '$lib/server/security';
+import { checkRateLimit, writeAuditLog, writeAuditLogSafe } from '$lib/server/security';
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/server/permissions';
 import { sendSignupConfirmationEmail } from '$lib/server/email';
@@ -221,12 +221,17 @@ function registerFailure(
 export const actions: Actions = {
 	default: async ({ request, locals, url, cookies, platform }) => {
 		let submittedValues: Partial<RegisterFormValues> = {};
+		let registerDb: App.Platform['env']['DB'] | null = null;
+		let registerEmail = '';
+		let registerPhase = 'start';
 		try {
+			registerPhase = 'read_form';
 			const formData = await request.formData();
 
 			const displayName = String(formData.get('display_name') || '').trim();
 			const ownerTitle = toOptionalString(formData, 'owner_title', 120);
 			const email = String(formData.get('email') || '').trim().toLowerCase();
+			registerEmail = email;
 			const confirmEmail = String(formData.get('confirm_email') || '').trim().toLowerCase();
 			const password = String(formData.get('password') || '');
 			const confirmPassword = String(formData.get('confirm_password') || '');
@@ -350,15 +355,19 @@ export const actions: Actions = {
 				return registerFailure(400, 'Enter a valid business website URL.', 'business', submittedValues);
 			}
 
+			registerPhase = 'database';
 			const db = locals.DB;
+			registerDb = db ?? null;
 			if (!db) {
 				return registerFailure(503, 'Database is not configured yet.', 'purchase', submittedValues);
 			}
 			const buyNowRequested = !inviteCode && purchaseMode === 'buy_now';
 
+			registerPhase = 'schema';
 			await ensureUserInvitesTable(db);
 			await ensureBusinessSchema(db);
 
+			registerPhase = 'rate_limit';
 			const signupIp = getRequestIpAddress(request);
 			const [signupIpLimit, signupEmailLimit] = await Promise.all([
 				checkRateLimit(db, {
@@ -385,6 +394,7 @@ export const actions: Actions = {
 				return registerFailure(429, 'Too many attempts. Try again shortly.', 'security', submittedValues);
 			}
 
+			registerPhase = 'existing_account';
 			const hasNormalized = await hasEmailNormalizedColumn(db);
 			const hasIsActive = await hasIsActiveColumn(db);
 			const hasRole = await hasRoleColumn(db);
@@ -418,6 +428,7 @@ export const actions: Actions = {
 			}
 
 			const now = Math.floor(Date.now() / 1000);
+			registerPhase = 'trial_eligibility';
 			let trialEligibility: TrialEligibility = { eligible: true, reason: null };
 			if (!inviteCode && purchaseMode !== 'buy_now') {
 				trialEligibility = await evaluateTrialEligibility(db, {
@@ -569,10 +580,12 @@ export const actions: Actions = {
 				}
 			}
 
+			registerPhase = 'password_hash';
 			const userId = crypto.randomUUID();
 			const passwordHash = await hashPassword(password);
 			let resolvedBusinessId: string | null = null;
 
+			registerPhase = 'create_user';
 			const invitedBusinessRole = normalizeBusinessRole(businessInvite?.role ?? '');
 			const roleValue = inviteCode
 				? effectiveAppRoleFromBusinessRole(invitedBusinessRole, businessInvite?.permission_template)
@@ -655,6 +668,7 @@ export const actions: Actions = {
 				}
 			}
 
+			registerPhase = 'user_preferences';
 			await ensureUserPreferencesSchema(db);
 			await ensureEmployeeProfilesTable(db);
 			await db
@@ -670,6 +684,7 @@ export const actions: Actions = {
 				.bind(userId, wantsEmailUpdates ? 1 : 0, now)
 				.run();
 
+			registerPhase = inviteCode ? 'accept_invite' : 'create_business';
 			if (businessInvite) {
 				await db
 					.prepare(
@@ -943,6 +958,7 @@ export const actions: Actions = {
 				});
 			}
 
+			registerPhase = 'employee_profile';
 			if (!resolvedBusinessId) {
 				return registerFailure(
 					400,
@@ -1012,6 +1028,7 @@ export const actions: Actions = {
 				await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null);
 			}
 
+			registerPhase = 'legal_agreement';
 			if (!inviteCode) {
 				await recordLegalAgreementAcceptance(db, {
 					businessId: resolvedBusinessId,
@@ -1025,6 +1042,7 @@ export const actions: Actions = {
 				});
 			}
 
+			registerPhase = 'audit_success';
 			await writeAuditLog(db, {
 				action: inviteCode ? 'signup_completed_from_invite' : 'signup_completed_new_business',
 				request,
@@ -1034,6 +1052,7 @@ export const actions: Actions = {
 				email
 			});
 
+			registerPhase = 'signup_confirmation_email';
 			if (!inviteCode) {
 				const emailResult = await sendSignupConfirmationEmail({
 					env: platform?.env,
@@ -1050,6 +1069,7 @@ export const actions: Actions = {
 				}
 			}
 
+			registerPhase = 'create_session';
 			await createRegistrationSession({
 				db,
 				cookies,
@@ -1059,6 +1079,7 @@ export const actions: Actions = {
 				now
 			});
 
+			registerPhase = 'billing_or_redirect';
 			if (buyNowRequested) {
 				await upsertStoreBillingPlaceholder(db, {
 					businessId: resolvedBusinessId,
@@ -1080,6 +1101,17 @@ export const actions: Actions = {
 			}
 			const message = err instanceof Error ? err.message : String(err ?? '');
 			console.error('Register action failed:', message);
+			if (registerDb) {
+				await writeAuditLogSafe(registerDb, {
+					action: 'signup_failed_exception',
+					request,
+					email: registerEmail || null,
+					metadata: {
+						phase: registerPhase,
+						message: message.slice(0, 240)
+					}
+				});
+			}
 			if (message.includes('UNIQUE constraint failed')) {
 				return registerFailure(400, 'Account already exists.', 'security', submittedValues);
 			}
