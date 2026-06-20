@@ -246,6 +246,118 @@ export async function sendInviteEmail({
   });
 }
 
+function signupPlanDetails(planTier: string) {
+  const normalized = planTier.trim().toLowerCase();
+  if (normalized === 'growth' || normalized === 'medium') {
+    return {
+      label: 'Medium',
+      price: '$65/mo',
+      features: 'Up to 75 employees, scheduling, lists, recipes, docs, ToDo, whiteboard, reports, vendors, tools, and temperature monitoring.'
+    };
+  }
+  if (normalized === 'enterprise' || normalized === 'large') {
+    return {
+      label: 'Large',
+      price: '$90/mo',
+      features: 'Up to 250 employees, full workspace tools, multi-team operations, reporting, vendors, and temperature monitoring.'
+    };
+  }
+  return {
+    label: 'Small',
+    price: '$30/mo',
+    features: 'Up to 20 employees with core scheduling, lists, recipes, docs, ToDo, whiteboard, reports, vendors, and tools.'
+  };
+}
+
+export async function sendSignupConfirmationEmail({
+  env,
+  origin,
+  ownerEmail,
+  ownerName,
+  ownerTitle,
+  businessName,
+  planTier,
+  purchaseMode
+}: {
+  env?: EmailEnv | null;
+  origin: string;
+  ownerEmail: string;
+  ownerName: string;
+  ownerTitle?: string | null;
+  businessName: string;
+  planTier: string;
+  purchaseMode: 'trial' | 'buy_now';
+}) {
+  const baseUrl = getAppBaseUrl(origin, env);
+  const loginUrl = `${baseUrl}/login`;
+  const logoUrl = `${baseUrl}/crimini-full-logo.jpg`;
+  const plan = signupPlanDetails(planTier);
+  const safeLogoUrl = escapeHtml(logoUrl);
+  const safeBusinessName = escapeHtml(businessName);
+  const safeOwnerName = escapeHtml(ownerName);
+  const safeOwnerTitle = escapeHtml(ownerTitle?.trim() || 'Owner / Manager');
+  const safePlanLabel = escapeHtml(plan.label);
+  const safePlanPrice = escapeHtml(plan.price);
+  const safePlanFeatures = escapeHtml(plan.features);
+  const safeLoginUrl = escapeHtml(loginUrl);
+  const billingText =
+    purchaseMode === 'buy_now'
+      ? 'Billing activation continues through the app store setup path.'
+      : 'Your one month trial is ready. Billing can be activated from the app when you are ready.';
+
+  return sendTransactionalEmail({
+    env,
+    to: ownerEmail,
+    subject: 'Welcome to Crimini',
+    html: `
+      <div style="margin:0;padding:0;background:#f7f2e8;color:#181716;font-family:Georgia,'Times New Roman',serif;">
+        <div style="max-width:660px;margin:0 auto;padding:34px 18px;">
+          <div style="background:#fffdf8;border:1px solid #ded2bf;border-radius:28px;overflow:hidden;">
+            <div style="padding:28px 28px 18px;text-align:center;border-bottom:1px solid #ded2bf;">
+              <img src="${safeLogoUrl}" alt="Crimini" style="display:block;width:190px;max-width:72%;height:auto;margin:0 auto 18px;" />
+              <div style="height:1px;width:100%;background:linear-gradient(90deg,transparent,#b7aa98,transparent);"></div>
+            </div>
+            <div style="padding:34px 28px 30px;">
+              <p style="margin:0 0 8px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#7a6f61;">Signup Confirmed</p>
+              <h1 style="margin:0 0 16px;font-size:32px;line-height:1.05;font-weight:400;color:#181716;">Thank you for choosing Crimini.</h1>
+              <div style="display:grid;gap:10px;margin:0 0 24px;padding:18px 0;border-top:1px solid #ded2bf;border-bottom:1px solid #ded2bf;">
+                <p style="margin:0;font-size:15px;line-height:1.5;color:#292520;"><strong>Restaurant:</strong> ${safeBusinessName}</p>
+                <p style="margin:0;font-size:15px;line-height:1.5;color:#292520;"><strong>Account owner:</strong> ${safeOwnerName}</p>
+                <p style="margin:0;font-size:15px;line-height:1.5;color:#292520;"><strong>Title:</strong> ${safeOwnerTitle}</p>
+                <p style="margin:0;font-size:15px;line-height:1.5;color:#292520;"><strong>Plan:</strong> ${safePlanLabel} - ${safePlanPrice}</p>
+              </div>
+              <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#4c463f;">${escapeHtml(billingText)}</p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#4c463f;">${safePlanFeatures}</p>
+              <a href="${safeLoginUrl}" style="display:inline-block;background:#181716;color:#fffdf8;text-decoration:none;border-radius:999px;padding:14px 24px;font-size:15px;letter-spacing:.03em;">Open Crimini</a>
+            </div>
+            <div style="padding:18px 28px 26px;border-top:1px solid #ded2bf;color:#746b60;font-size:12px;line-height:1.5;">
+              <p style="margin:0 0 8px;">If the button does not open, use this link:</p>
+              <a href="${safeLoginUrl}" style="color:#181716;word-break:break-all;">${safeLoginUrl}</a>
+              <p style="margin:18px 0 0;">Crimini by NNS, LLC</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+    text: [
+      'Thank you for choosing Crimini.',
+      '',
+      `Restaurant: ${businessName}`,
+      `Account owner: ${ownerName}`,
+      `Title: ${ownerTitle?.trim() || 'Owner / Manager'}`,
+      `Plan: ${plan.label} - ${plan.price}`,
+      '',
+      billingText,
+      plan.features,
+      '',
+      `Open Crimini: ${loginUrl}`,
+      '',
+      'Crimini by NNS, LLC'
+    ].join('\n'),
+    idempotencyKey: `signup/${ownerEmail.toLowerCase()}`
+  });
+}
+
 export async function sendApprovalEmail({
   env,
   origin,

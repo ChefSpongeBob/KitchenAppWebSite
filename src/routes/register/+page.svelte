@@ -42,6 +42,7 @@
 
 	type RegisterFormValues = {
 		displayName: string;
+		ownerTitle: string;
 		realName: string;
 		birthday: string;
 		email: string;
@@ -286,6 +287,7 @@
 
 	let planTier = formValues.planTier ?? 'small';
 	let displayName = formValues.displayName ?? '';
+	let ownerTitle = formValues.ownerTitle ?? '';
 	let realName = formValues.realName ?? '';
 	let birthday = formValues.birthday ?? '';
 	let email = formValues.email ?? '';
@@ -460,6 +462,7 @@
 			class:shot-left={activeSlide.shot?.align === 'left'}
 			class:shot-center={activeSlide.shot?.align === 'center'}
 			class:shot-right={!activeSlide.shot || activeSlide.shot.align === 'right'}
+			class:profile-slide={activeSlide.id === 'security'}
 			in:fade={{ duration: 220 }}
 			out:fade={{ duration: 160 }}
 		>
@@ -597,6 +600,11 @@
 						<label for="register-display-name">Display name</label>
 						<input id="register-display-name" bind:value={displayName} placeholder="Alex Rivera" required />
 
+						{#if !inviteMode}
+							<label for="owner-title">Title</label>
+							<input id="owner-title" bind:value={ownerTitle} placeholder="Owner / General Manager" />
+						{/if}
+
 						<label for="real-name">Legal name</label>
 						<input id="real-name" bind:value={realName} placeholder="Alex Jordan Rivera" />
 
@@ -676,6 +684,7 @@
 							<p class="tour-feedback error form-feedback">{form.error}</p>
 						{/if}
 						<input type="hidden" name="display_name" value={displayName} />
+						<input type="hidden" name="owner_title" value={ownerTitle} />
 						<input type="hidden" name="real_name" value={realName} />
 						<input type="hidden" name="birthday" value={birthday} />
 						<input type="hidden" name="email" value={email} />
@@ -964,6 +973,25 @@
 
 	.tour-main.shot-center .tour-shot {
 		justify-self: center;
+	}
+
+	.tour-main.profile-slide {
+		grid-template-columns: minmax(0, 1.22fr) minmax(14rem, 0.78fr);
+		align-items: center;
+	}
+
+	.tour-main.profile-slide .tour-copy {
+		justify-self: end;
+		width: min(100%, 44rem);
+	}
+
+	.tour-main.profile-slide .inline-signup {
+		width: 100%;
+	}
+
+	.tour-main.profile-slide .tour-shot {
+		justify-self: start;
+		width: min(24vw, 17rem);
 	}
 
 	.tour-copy {
@@ -1567,6 +1595,15 @@
 			grid-template-columns: 1fr;
 			align-items: start;
 			min-height: 100dvh;
+		}
+
+		.tour-main.profile-slide {
+			grid-template-columns: 1fr;
+		}
+
+		.tour-main.profile-slide .tour-copy,
+		.tour-main.profile-slide .tour-shot {
+			justify-self: center;
 		}
 
 		.tour-shot {

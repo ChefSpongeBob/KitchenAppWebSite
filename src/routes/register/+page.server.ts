@@ -26,12 +26,14 @@ import { validateNewPassword } from '$lib/server/passwordReset';
 import { checkRateLimit, writeAuditLog } from '$lib/server/security';
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/server/permissions';
+import { sendSignupConfirmationEmail } from '$lib/server/email';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
 
 type RegisterFormValues = {
 	displayName: string;
+	ownerTitle: string;
 	realName: string;
 	birthday: string;
 	email: string;
@@ -217,12 +219,13 @@ function registerFailure(
 }
 
 export const actions: Actions = {
-	default: async ({ request, locals, url, cookies }) => {
+	default: async ({ request, locals, url, cookies, platform }) => {
 		let submittedValues: Partial<RegisterFormValues> = {};
 		try {
 			const formData = await request.formData();
 
 			const displayName = String(formData.get('display_name') || '').trim();
+			const ownerTitle = toOptionalString(formData, 'owner_title', 120);
 			const email = String(formData.get('email') || '').trim().toLowerCase();
 			const confirmEmail = String(formData.get('confirm_email') || '').trim().toLowerCase();
 			const password = String(formData.get('password') || '');
@@ -281,6 +284,7 @@ export const actions: Actions = {
 
 			submittedValues = {
 				displayName,
+				ownerTitle,
 				realName,
 				birthday,
 				email,
@@ -888,6 +892,39 @@ export const actions: Actions = {
 					)
 					.bind(businessId, userId, now, now)
 					.run();
+				await db
+					.prepare(
+						`
+				INSERT INTO employee_employment_records (
+					business_id,
+					user_id,
+					employment_status,
+					employment_type,
+					job_title,
+					department,
+					primary_schedule_department,
+					hire_date,
+					start_date,
+					pay_type,
+					manager_user_id,
+					created_at,
+					updated_at,
+					updated_by
+				)
+				VALUES (?, ?, 'active', 'owner', ?, '', '', '', '', '', NULL, ?, ?, ?)
+				ON CONFLICT(business_id, user_id) DO UPDATE SET
+					employment_status = CASE
+						WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
+						ELSE 'active'
+					END,
+					employment_type = 'owner',
+					job_title = excluded.job_title,
+					updated_at = excluded.updated_at,
+					updated_by = excluded.updated_by
+			`
+					)
+					.bind(businessId, userId, ownerTitle || 'Owner', now, now, userId)
+					.run();
 				resolvedBusinessId = businessId;
 				await initializeBusinessTrial(db, {
 					businessId,
@@ -996,6 +1033,22 @@ export const actions: Actions = {
 				targetUserId: userId,
 				email
 			});
+
+			if (!inviteCode) {
+				const emailResult = await sendSignupConfirmationEmail({
+					env: platform?.env,
+					origin: url.origin,
+					ownerEmail: email,
+					ownerName: displayName,
+					ownerTitle: ownerTitle || 'Owner',
+					businessName,
+					planTier,
+					purchaseMode
+				});
+				if (!emailResult.sent && !emailResult.skipped) {
+					console.warn('Signup confirmation email was not sent:', emailResult.reason ?? 'unknown error');
+				}
+			}
 
 			await createRegistrationSession({
 				db,
