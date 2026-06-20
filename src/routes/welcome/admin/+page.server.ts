@@ -26,5 +26,14 @@ export const actions: Actions = {
     await ensureUserPreferencesSchema(locals.DB);
     await markWelcomeTourComplete(locals.DB, locals.userId, 'admin');
     throw redirect(303, '/admin?guided=1');
+  },
+  setup_forms: async ({ locals }) => {
+    if (!locals.userId || !locals.DB) {
+      return fail(401, { error: 'Session expired. Sign in again.' });
+    }
+
+    await ensureUserPreferencesSchema(locals.DB);
+    await markWelcomeTourComplete(locals.DB, locals.userId, 'admin');
+    throw redirect(303, '/admin/onboarding');
   }
 };

@@ -3112,7 +3112,8 @@ export async function ensureEmployeeOnboardingRequirement(
     .bind(businessId, userId)
     .first<{ employment_type: string | null }>();
   const employmentType = String(employment?.employment_type ?? '').trim().toLowerCase();
-  if (employmentType === 'contractor') {
+  const businessRole = normalizeBusinessRole(membership.role);
+  if (employmentType === 'contractor' || employmentType === 'owner' || businessRole === 'owner') {
     return { required: false, approved: true, status: 'not_required' as const };
   }
 

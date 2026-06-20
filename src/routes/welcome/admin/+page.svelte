@@ -228,6 +228,9 @@
 			<form method="POST" action="?/complete">
 				<button type="submit" class="primary">Enter Admin</button>
 			</form>
+			<form method="POST" action="?/setup_forms">
+				<button type="submit" class="secondary">Set Up Employee Forms</button>
+			</form>
 		</div>
 	{/if}
 
@@ -480,6 +483,15 @@
 		color: #ffffff;
 		font-weight: 700;
 		background: #111214;
+	}
+
+	button.secondary {
+		padding: 0.56rem 0.88rem;
+		border-radius: 0;
+		border: 1px solid rgba(17, 18, 20, 0.32);
+		color: #111214;
+		font-weight: 700;
+		background: rgba(255, 255, 255, 0.72);
 	}
 
 	.tour-footer {

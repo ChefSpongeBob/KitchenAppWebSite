@@ -1094,7 +1094,7 @@ export const actions: Actions = {
 				throw redirect(303, '/billing?purchase=pending');
 			}
 
-			throw redirect(303, '/app');
+			throw redirect(303, inviteCode ? '/welcome' : '/welcome/admin');
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;
