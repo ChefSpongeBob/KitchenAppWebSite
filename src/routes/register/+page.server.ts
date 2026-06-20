@@ -1,6 +1,11 @@
 import { dev } from '$app/environment';
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
-import { hashPassword } from '$lib/server/auth';
+import { hashPassword, hashSessionToken } from '$lib/server/auth';
+import { getSessionCookieName, getSessionCookieOptions } from '$lib/server/authCookies';
+import {
+	ACTIVE_BUSINESS_COOKIE,
+	getActiveBusinessCookieOptions
+} from '$lib/server/activeBusiness';
 import { hasColumn } from '$lib/server/dbSchema';
 import { ensureBusinessSchema, reserveBusinessSlug } from '$lib/server/business';
 import { ensureEmployeeOnboardingRequirement, ensureEmployeeProfilesTable } from '$lib/server/admin';
@@ -100,6 +105,69 @@ async function hasRoleColumn(db: App.Platform['env']['DB']) {
 	return hasColumn(db, 'users', 'role');
 }
 
+async function createRegistrationSession({
+	db,
+	cookies,
+	request,
+	userId,
+	businessId,
+	now
+}: {
+	db: App.Platform['env']['DB'];
+	cookies: Parameters<Actions['default']>[0]['cookies'];
+	request: Request;
+	userId: string;
+	businessId: string;
+	now: number;
+}) {
+	const deviceId = crypto.randomUUID();
+	const sessionId = crypto.randomUUID();
+	const sessionToken = crypto.randomUUID();
+	const sessionTokenHash = await hashSessionToken(sessionToken);
+	const expires = now + 60 * 60 * 24 * 30;
+
+	await db
+		.prepare(
+			`
+			INSERT INTO devices (
+				id,
+				user_id,
+				pin_hash,
+				user_agent,
+				last_ip,
+				created_at,
+				updated_at
+			)
+			VALUES (?, ?, '', ?, ?, ?, ?)
+		`
+		)
+		.bind(deviceId, userId, request.headers.get('user-agent') ?? null, getRequestIpAddress(request), now, now)
+		.run();
+
+	await db
+		.prepare(
+			`
+			INSERT INTO sessions (
+				id,
+				user_id,
+				device_id,
+				session_token_hash,
+				created_at,
+				last_seen_at,
+				expires_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`
+		)
+		.bind(sessionId, userId, deviceId, sessionTokenHash, now, now, expires)
+		.run();
+
+	cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions(request));
+	cookies.set(ACTIVE_BUSINESS_COOKIE, businessId, getActiveBusinessCookieOptions(request));
+	cookies.delete('session_id', { path: '/' });
+	cookies.delete('session_id_pwa', { path: '/' });
+}
+
 async function ensureUserInvitesTable(db: App.Platform['env']['DB']) {
 	if (!dev) return;
 
@@ -149,7 +217,7 @@ function registerFailure(
 }
 
 export const actions: Actions = {
-	default: async ({ request, locals, url }) => {
+	default: async ({ request, locals, url, cookies }) => {
 		let submittedValues: Partial<RegisterFormValues> = {};
 		try {
 			const formData = await request.formData();
@@ -929,6 +997,15 @@ export const actions: Actions = {
 				email
 			});
 
+			await createRegistrationSession({
+				db,
+				cookies,
+				request,
+				userId,
+				businessId: resolvedBusinessId,
+				now
+			});
+
 			if (buyNowRequested) {
 				await upsertStoreBillingPlaceholder(db, {
 					businessId: resolvedBusinessId,
@@ -940,10 +1017,10 @@ export const actions: Actions = {
 					status: 'pending_setup',
 					now
 				});
-				throw redirect(303, '/register/welcome?purchase=pending');
+				throw redirect(303, '/billing?purchase=pending');
 			}
 
-			throw redirect(303, '/register/welcome');
+			throw redirect(303, '/app');
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;

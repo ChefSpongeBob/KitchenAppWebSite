@@ -75,6 +75,67 @@
 		liabilityAgreementAccepted: boolean;
 	};
 
+	const US_STATES = [
+		['', 'Select state'],
+		['AL', 'Alabama'],
+		['AK', 'Alaska'],
+		['AZ', 'Arizona'],
+		['AR', 'Arkansas'],
+		['CA', 'California'],
+		['CO', 'Colorado'],
+		['CT', 'Connecticut'],
+		['DE', 'Delaware'],
+		['FL', 'Florida'],
+		['GA', 'Georgia'],
+		['HI', 'Hawaii'],
+		['ID', 'Idaho'],
+		['IL', 'Illinois'],
+		['IN', 'Indiana'],
+		['IA', 'Iowa'],
+		['KS', 'Kansas'],
+		['KY', 'Kentucky'],
+		['LA', 'Louisiana'],
+		['ME', 'Maine'],
+		['MD', 'Maryland'],
+		['MA', 'Massachusetts'],
+		['MI', 'Michigan'],
+		['MN', 'Minnesota'],
+		['MS', 'Mississippi'],
+		['MO', 'Missouri'],
+		['MT', 'Montana'],
+		['NE', 'Nebraska'],
+		['NV', 'Nevada'],
+		['NH', 'New Hampshire'],
+		['NJ', 'New Jersey'],
+		['NM', 'New Mexico'],
+		['NY', 'New York'],
+		['NC', 'North Carolina'],
+		['ND', 'North Dakota'],
+		['OH', 'Ohio'],
+		['OK', 'Oklahoma'],
+		['OR', 'Oregon'],
+		['PA', 'Pennsylvania'],
+		['RI', 'Rhode Island'],
+		['SC', 'South Carolina'],
+		['SD', 'South Dakota'],
+		['TN', 'Tennessee'],
+		['TX', 'Texas'],
+		['UT', 'Utah'],
+		['VT', 'Vermont'],
+		['VA', 'Virginia'],
+		['WA', 'Washington'],
+		['WV', 'West Virginia'],
+		['WI', 'Wisconsin'],
+		['WY', 'Wyoming'],
+		['DC', 'District of Columbia']
+	];
+
+	const COUNTRIES = [
+		['United States', 'United States'],
+		['Canada', 'Canada'],
+		['Mexico', 'Mexico']
+	];
+
 	const slides: Slide[] = [
 		{
 			id: 'intro',
@@ -240,7 +301,7 @@
 	let addressCity = formValues.addressCity ?? '';
 	let addressState = formValues.addressState ?? '';
 	let addressPostalCode = formValues.addressPostalCode ?? '';
-	let addressCountry = formValues.addressCountry ?? '';
+	let addressCountry = formValues.addressCountry ?? 'United States';
 
 	let userPhone = formValues.userPhone ?? '';
 	let userAddressLine1 = formValues.userAddressLine1 ?? '';
@@ -522,13 +583,21 @@
 							<input id="address-city" bind:value={addressCity} />
 
 							<label for="address-state">Business state / region</label>
-							<input id="address-state" bind:value={addressState} />
+							<select id="address-state" bind:value={addressState}>
+								{#each US_STATES as [value, label]}
+									<option value={value}>{label}</option>
+								{/each}
+							</select>
 
 							<label for="address-postal-code">Business postal code</label>
 							<input id="address-postal-code" bind:value={addressPostalCode} />
 
 							<label for="address-country">Business country</label>
-							<input id="address-country" bind:value={addressCountry} placeholder="United States" />
+							<select id="address-country" bind:value={addressCountry}>
+								{#each COUNTRIES as [value, label]}
+									<option value={value}>{label}</option>
+								{/each}
+							</select>
 						{/if}
 					</div>
 				{/if}
@@ -788,6 +857,12 @@
 			{/if}
 		</main>
 	{/key}
+
+	{#if activeSlide.id !== 'purchase' && activeSlide.id !== 'security'}
+		<div class="bottom-continue">
+			<button type="button" class="primary inline-continue" on:click={nextSlide}>Continue</button>
+		</div>
+	{/if}
 
 	<nav class="side-nav" aria-label="Slideshow navigation">
 		<button type="button" class="side-arrow side-arrow-left" on:click={previousSlide} disabled={activeIndex === 0}>
@@ -1064,7 +1139,8 @@
 		color: rgba(17, 18, 20, 0.58);
 	}
 
-	.form-zone input {
+	.form-zone input,
+	.form-zone select {
 		grid-column: span 2;
 		width: 100%;
 		padding: 0.66rem 0.74rem;
@@ -1072,9 +1148,11 @@
 		border: 1px solid rgba(17, 18, 20, 0.16);
 		background: rgba(255, 255, 255, 0.9);
 		color: #111214;
+		font: inherit;
 	}
 
-	.form-zone input:focus {
+	.form-zone input:focus,
+	.form-zone select:focus {
 		outline: none;
 		border-color: rgba(17, 18, 20, 0.52);
 	}
@@ -1218,6 +1296,22 @@
 	.submit-btn {
 		grid-column: span 2;
 		justify-self: start;
+	}
+
+	.bottom-continue {
+		position: fixed;
+		left: 50%;
+		bottom: max(1rem, calc(var(--safe-bottom) + 1rem));
+		z-index: 4;
+		transform: translateX(-50%);
+		display: flex;
+		justify-content: center;
+		pointer-events: none;
+	}
+
+	.bottom-continue button {
+		pointer-events: auto;
+		box-shadow: 0 14px 34px rgba(17, 18, 20, 0.12);
 	}
 
 	.auth-note {
@@ -1437,14 +1531,16 @@
 		color: rgba(17, 18, 20, 0.58);
 	}
 
-	.form-zone input {
+	.form-zone input,
+	.form-zone select {
 		border-radius: 0;
 		border: 1px solid rgba(17, 18, 20, 0.16);
 		background: rgba(255, 255, 255, 0.9);
 		color: #111214;
 	}
 
-	.form-zone input:focus {
+	.form-zone input:focus,
+	.form-zone select:focus {
 		border-color: rgba(17, 18, 20, 0.52);
 		box-shadow: 0 0 0 3px rgba(17, 18, 20, 0.08);
 	}
@@ -1560,6 +1656,7 @@
 
 		.form-zone label,
 		.form-zone input,
+		.form-zone select,
 		.password-row,
 		.submit-btn,
 		.auth-note,
