@@ -1,7 +1,8 @@
 const PASSWORD_SCHEME = 'pbkdf2_sha256';
 const MIN_PBKDF2_ITERATIONS = 100_000;
-const PASSWORD_ITERATIONS = 600_000;
-const MAX_PBKDF2_ITERATIONS = 1_000_000;
+// Cloudflare Workers currently cap PBKDF2 at 100k iterations, so keep new hashes portable.
+const PASSWORD_ITERATIONS = 100_000;
+const MAX_PBKDF2_ITERATIONS = 100_000;
 const PASSWORD_KEY_BYTES = 32;
 const PASSWORD_SALT_BYTES = 16;
 
