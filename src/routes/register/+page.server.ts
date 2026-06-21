@@ -1008,7 +1008,7 @@ export const actions: Actions = {
 				.bind(
 					resolvedBusinessId,
 					userId,
-					realName || '',
+					realName || displayName || '',
 					userPhone || '',
 					birthday || '',
 					userAddressLine1 || '',

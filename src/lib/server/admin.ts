@@ -2784,10 +2784,14 @@ async function refreshEmployeeOnboardingPackageStatus(
   }
 }
 
-function profilePayloadForCompletedOnboardingItem(profile: AdminEmployeeProfile, formKey: string) {
+function profilePayloadForCompletedOnboardingItem(
+  profile: AdminEmployeeProfile,
+  formKey: string,
+  fallbackLegalName = ''
+) {
   if (formKey === 'personal_information') {
     const payload = {
-      legal_name: profile.real_name,
+      legal_name: profile.real_name || fallbackLegalName,
       preferred_name: '',
       birthday: profile.birthday,
       phone: profile.phone,
@@ -2832,9 +2836,22 @@ async function hydrateProfileBackedOnboardingItems(
   }
 
   const profile = await loadAdminEmployeeProfile(db, userId, businessId);
+  const user = await db
+    .prepare(
+      `
+      SELECT display_name, email
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+      `
+    )
+    .bind(userId)
+    .first<{ display_name: string | null; email: string | null }>();
+  const fallbackLegalName = String(user?.display_name || user?.email || '').trim();
+
   return items.map((item) => {
     if (item.status !== 'pending') return item;
-    const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key);
+    const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key, fallbackLegalName);
     if (!payload) return item;
     return {
       ...item,
