@@ -1466,8 +1466,14 @@ export async function loadScheduleWeek(
   };
 }
 
-export async function loadMyWeekSchedule(db: DB, weekStart: string, userId: string, businessId?: string | null) {
-  const result = await loadScheduleWeek(db, weekStart, { publishedOnly: true, businessId });
+export async function loadMyWeekSchedule(
+  db: DB,
+  weekStart: string,
+  userId: string,
+  businessId?: string | null,
+  options: { publishedOnly?: boolean } = {}
+) {
+  const result = await loadScheduleWeek(db, weekStart, { publishedOnly: options.publishedOnly ?? true, businessId });
   return {
     week: result.week,
     shifts: result.shifts.filter((shift) => shift.userId === userId),
@@ -1475,10 +1481,18 @@ export async function loadMyWeekSchedule(db: DB, weekStart: string, userId: stri
   };
 }
 
-export async function loadTodayShifts(db: DB, userId: string, date = isoDate(new Date()), businessId?: string | null) {
+export async function loadTodayShifts(
+  db: DB,
+  userId: string,
+  date = isoDate(new Date()),
+  businessId?: string | null,
+  options: { publishedOnly?: boolean } = {}
+) {
   await ensureScheduleSchema(db);
   const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
-  const schedule = await loadMyWeekSchedule(db, weekStart, userId, businessId);
+  const schedule = await loadMyWeekSchedule(db, weekStart, userId, businessId, {
+    publishedOnly: options.publishedOnly ?? true
+  });
   return schedule.shifts
     .filter((shift) => shift.shiftDate === date)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));

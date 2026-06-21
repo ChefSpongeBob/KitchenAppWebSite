@@ -740,9 +740,13 @@
                       <span class="material-icons" aria-hidden="true">{editorIcon('recipe')}</span>
                       <strong>{category}</strong>
                     </span>
-                    <small>{items.length} recipe{items.length === 1 ? '' : 's'}</small>
+                    <small class="count-pill">{items.length} recipe{items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
+                    <div class="category-context">
+                      <span class="material-icons" aria-hidden="true">restaurant_menu</span>
+                      <span>Editing recipes in {category}</span>
+                    </div>
                     <div class="category-tools">
                       <form method="POST" action="?/update_creator_category" use:enhance={withFeedback} class="inline-form">
                         <input type="hidden" name="editor_type" value="recipe" />
@@ -786,7 +790,7 @@
                               <form method="POST" action="?/update_recipe" use:enhance={withFeedback} class="inline-form">
                                 <input type="hidden" name="id" value={recipe.id} />
                                 <input name="title" value={recipe.title} required />
-                                <input name="category" value={recipe.category} required />
+                                <input type="hidden" name="category" value={recipe.category} />
                                 <textarea name="ingredients" rows="4" required>{recipe.ingredients}</textarea>
                                 <textarea name="instructions" rows="6" required>{recipe.instructions}</textarea>
                                 <button type="submit">Save Recipe</button>
@@ -858,9 +862,13 @@
                       <span class="material-icons" aria-hidden="true">{editorIcon('document')}</span>
                       <strong>{category}</strong>
                     </span>
-                    <small>{items.length} document{items.length === 1 ? '' : 's'}</small>
+                    <small class="count-pill">{items.length} document{items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
+                    <div class="category-context">
+                      <span class="material-icons" aria-hidden="true">description</span>
+                      <span>Editing documents in {category}</span>
+                    </div>
                     <div class="category-tools">
                       <form method="POST" action="?/update_creator_category" use:enhance={withFeedback} class="inline-form">
                         <input type="hidden" name="editor_type" value="document" />
@@ -1118,6 +1126,31 @@
     color: var(--color-text-muted);
     font-size: 1.05rem;
     line-height: 1;
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0 0 0 0.68rem;
+    border-left: 1px solid var(--color-divider);
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+  }
+
+  .category-context {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    width: fit-content;
+    padding: 0.34rem 0;
+    border-bottom: 1px solid var(--color-divider);
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+  }
+
+  .category-context .material-icons {
+    font-size: 1rem;
   }
 
   .empty-action {

@@ -191,7 +191,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     : Promise.resolve({ results: [] as HomeTask[] });
   const todaySchedulePromise =
     featureAccess.scheduling && locals.userId && db
-      ? safeHomeData(loadTodayShifts(db, locals.userId, undefined, businessId), [] as TodayShift[], 'today schedule')
+      ? safeHomeData(
+          loadTodayShifts(db, locals.userId, undefined, businessId, { publishedOnly: !isAdmin }),
+          [] as TodayShift[],
+          'today schedule'
+        )
       : Promise.resolve([] as TodayShift[]);
   const tempsPromise = featureAccess.temps
     ? safeRows(

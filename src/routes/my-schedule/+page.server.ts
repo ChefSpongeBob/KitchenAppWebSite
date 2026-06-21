@@ -16,7 +16,17 @@ import {
   withdrawScheduleOpenShiftRequest,
   withdrawScheduleShiftRequest
 } from '$lib/server/schedules';
+import { hasBusinessCapability } from '$lib/server/permissions';
 import type { Actions } from './$types';
+
+function canManageSchedule(locals: App.Locals) {
+  return hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    'manage_schedule',
+    locals.businessCapabilities
+  );
+}
 
 export const load: PageServerLoad = async ({ locals, url, depends }) => {
   depends('app:my-schedule');
@@ -41,8 +51,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     };
   }
 
+  const canManage = canManageSchedule(locals);
   const [schedule, offers, openShifts, openShiftRequests, employees] = await Promise.all([
-    loadMyWeekSchedule(db, weekStart, locals.userId, locals.businessId),
+    loadMyWeekSchedule(db, weekStart, locals.userId, locals.businessId, { publishedOnly: !canManage }),
     loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
     loadScheduleOpenShiftsForWeek(db, weekStart, locals.businessId),
     loadScheduleOpenShiftRequestsForWeek(db, weekStart, locals.businessId),
@@ -51,7 +62,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
 
   const currentUser = employees.find((employee) => employee.id === locals.userId);
   const approvedDepartments = new Set(currentUser?.approvedDepartments ?? []);
-  const hasPublishedWeek = Boolean(schedule.week);
+  const hasPublishedWeek = schedule.week?.status === 'published';
 
   const visibleOffers = offers.filter(
     (offer) =>

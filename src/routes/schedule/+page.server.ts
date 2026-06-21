@@ -26,6 +26,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const db = locals.DB;
   const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
+  const canManage = canManageSchedule(locals);
   if (!db) {
     return {
       weekStart,
@@ -33,24 +34,24 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       nextWeekStart: addDays(weekStart, 7),
       week: null,
       days: [],
-      isAdmin: canManageSchedule(locals),
+      isAdmin: canManage,
       departments: ['General'],
       visibleDepartments: ['General']
     };
   }
 
   const [schedule, approvalsByUser, departments, managerDepartments] = await Promise.all([
-    loadScheduleWeek(db, weekStart, { publishedOnly: true, businessId: locals.businessId }),
+    loadScheduleWeek(db, weekStart, { publishedOnly: !canManage, businessId: locals.businessId }),
     loadScheduleDepartmentApprovalsByUser(db, [locals.userId], locals.businessId),
     loadScheduleDepartments(db, locals.businessId),
-    canManageSchedule(locals)
+    canManage
       ? loadScheduleManagerDepartments(db, locals, locals.businessId ?? '')
       : Promise.resolve([])
   ]);
 
   const approvedDepartments = approvalsByUser.get(locals.userId) ?? [];
   const defaultDepartments =
-    canManageSchedule(locals)
+    canManage
       ? managerDepartments
       : approvedDepartments.filter((department) => departments.includes(department));
 
@@ -60,7 +61,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     nextWeekStart: addDays(weekStart, 7),
     week: schedule.week,
     days: schedule.days,
-    isAdmin: canManageSchedule(locals),
+    isAdmin: canManage,
     departments,
     visibleDepartments: defaultDepartments
   };

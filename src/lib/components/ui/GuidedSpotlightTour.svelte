@@ -24,6 +24,7 @@
 	let targetMissing = false;
 	let cardPosition: CardPosition = { top: 24, left: 24 };
 	let recomputeFrame = 0;
+	let scrollRecomputeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	$: currentStep = steps[activeIndex];
 	$: isLastStep = activeIndex >= steps.length - 1;
@@ -92,10 +93,16 @@
 		recomputeFrame = requestAnimationFrame(recompute);
 	}
 
+	function schedulePostScrollRecompute() {
+		if (scrollRecomputeTimer) clearTimeout(scrollRecomputeTimer);
+		scrollRecomputeTimer = setTimeout(scheduleRecompute, 360);
+	}
+
 	function scrollStepTargetIntoView(step: GuidedStep | undefined = currentStep) {
 		if (!step) return;
 		const target = document.querySelector<HTMLElement>(step.selector);
 		target?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+		schedulePostScrollRecompute();
 	}
 
 	async function nextStep() {
@@ -138,6 +145,7 @@
 
 	onDestroy(() => {
 		cancelAnimationFrame(recomputeFrame);
+		if (scrollRecomputeTimer) clearTimeout(scrollRecomputeTimer);
 	});
 </script>
 
