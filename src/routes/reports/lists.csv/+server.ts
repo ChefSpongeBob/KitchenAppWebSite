@@ -22,7 +22,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const domain = parseDomain(url.searchParams.get('domain'));
   const report = await loadListHistoryReport(db, requireBusinessId(locals), domain, {
     start: url.searchParams.get('start'),
-    end: url.searchParams.get('end')
+    end: url.searchParams.get('end'),
+    submittedAt: url.searchParams.get('submitted_at')
   });
   const valueHeader = domain === 'checklists' ? 'action' : 'value';
   const header = ['date', 'list', 'item', 'details', valueHeader, 'par', 'done', 'completed_by', 'submitted_by'];

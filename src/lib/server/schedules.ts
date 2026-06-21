@@ -3463,6 +3463,9 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     if (!shiftDate || !userId || !department || !role || !startTime) {
       return fail(400, { error: 'Every shift needs a date, employee, department, role, and start time.' });
     }
+    if (!isDateInWeek(shiftDate, weekStart)) {
+      return fail(400, { error: 'Every shift must stay inside the selected week.' });
+    }
 
     if (!isValidScheduleDepartment(department, departments)) {
       return fail(400, { error: `Invalid department on ${shiftDate}.` });
@@ -3614,6 +3617,12 @@ async function saveScheduleWeekDraftFromForm(
       return {
         ok: false as const,
         failure: fail(400, { error: 'Every shift needs a date, employee, department, role, and start time.' })
+      };
+    }
+    if (!isDateInWeek(shiftDate, weekStart)) {
+      return {
+        ok: false as const,
+        failure: fail(400, { error: 'Every shift must stay inside the selected week.' })
       };
     }
 

@@ -1,10 +1,65 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
 
-  export let data;
+  type ScheduleHistoryRow = {
+    week_start: string;
+    version_number: number;
+    published_at: number;
+    published_by_name: string;
+  };
+
+  type PublishedWeek = ScheduleHistoryRow & {
+    shift_count: number;
+  };
+
+  export let data: {
+    startDate: string;
+    endDate: string;
+    rows: ScheduleHistoryRow[];
+  };
 
   $: csvHref = `/reports/schedule.csv?start=${data.startDate}&end=${data.endDate}`;
+  $: publishedWeeks = Object.values(
+    data.rows.reduce<Record<string, PublishedWeek>>((weeks, row) => {
+      const key = row.week_start;
+      const existing = weeks[key];
+      if (!existing || row.version_number > existing.version_number) {
+        weeks[key] = {
+          week_start: row.week_start,
+          version_number: row.version_number,
+          published_at: row.published_at,
+          published_by_name: row.published_by_name,
+          shift_count: 1
+        };
+      } else if (row.version_number === existing.version_number) {
+        existing.shift_count += 1;
+      }
+      return weeks;
+    }, {})
+  ).sort((a, b) => b.week_start.localeCompare(a.week_start));
+
+  function formatPublishedDate(timestamp: number) {
+    if (!timestamp) return 'Not recorded';
+    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+
+  function weekCsvHref(week: PublishedWeek) {
+    return `/reports/schedule.csv?start=${week.week_start}&end=${week.week_start}&version=${week.version_number}`;
+  }
+
+  $: entries = publishedWeeks.map((week): ReportExportEntry => ({
+    title: `Week of ${week.week_start}`,
+    meta: `Version ${week.version_number} · ${week.shift_count} shift${week.shift_count === 1 ? '' : 's'} · Published ${formatPublishedDate(week.published_at)}`,
+    detail: week.published_by_name,
+    href: weekCsvHref(week),
+    icon: 'calendar_month'
+  }));
 </script>
 
 <Layout>
@@ -12,49 +67,10 @@
 
   <div class="report-toolbar">
     <a href="/reports"><span class="material-icons" aria-hidden="true">arrow_back</span>Reports</a>
-    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>CSV</a>
+    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>Full CSV</a>
   </div>
 
-  <section class="report-table-wrap">
-    {#if data.rows.length}
-      <table class="report-table">
-        <thead>
-          <tr>
-            <th>Week</th>
-            <th>Version</th>
-            <th>Date</th>
-            <th>Employee</th>
-            <th>Role</th>
-            <th>Shift</th>
-            <th>Published By</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each data.rows as row}
-            <tr>
-              <td>{row.week_start}</td>
-              <td>{row.version_number}</td>
-              <td>{row.shift_date}</td>
-              <td>{row.employee_name_snapshot}</td>
-              <td>
-                <strong>{row.role_name}</strong>
-                <span>{row.department}</span>
-              </td>
-              <td>
-                {row.start_time} - {row.end_label || 'Close'}
-                {#if row.break_minutes}
-                  <span>{row.break_minutes} min break</span>
-                {/if}
-              </td>
-              <td>{row.published_by_name}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {:else}
-      <p class="empty-state">No schedule history yet.</p>
-    {/if}
-  </section>
+  <ReportExportList {entries} empty="No published schedules yet." icon="calendar_month" />
 </Layout>
 
 <style>
@@ -84,43 +100,4 @@
     line-height: 1;
   }
 
-  .report-table-wrap {
-    overflow-x: auto;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .report-table {
-    width: 100%;
-    min-width: 820px;
-    border-collapse: collapse;
-  }
-
-  th,
-  td {
-    padding: 0.75rem 0.55rem;
-    border-bottom: 1px solid var(--color-divider);
-    text-align: left;
-    vertical-align: top;
-  }
-
-  th {
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  td span {
-    display: block;
-    margin-top: 0.2rem;
-    color: var(--color-text-muted);
-    font-size: 0.88rem;
-  }
-
-  .empty-state {
-    margin: 0;
-    padding: 1rem 0;
-    color: var(--color-text-muted);
-  }
 </style>

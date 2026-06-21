@@ -13,7 +13,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
   const report = await loadScheduleHistoryReport(db, requireBusinessId(locals), {
     start: url.searchParams.get('start'),
-    end: url.searchParams.get('end')
+    end: url.searchParams.get('end'),
+    version: url.searchParams.get('version')
   });
   const header = [
     'week_start',

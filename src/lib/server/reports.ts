@@ -40,6 +40,17 @@ export type TemperatureReportRow = {
   recovered_at: number | null;
 };
 
+export type TemperatureHourlyAverageReportRow = {
+  event_date: string;
+  event_hour: string;
+  sensor_id: number;
+  sensor_name: string;
+  avg_temperature: number;
+  min_temperature: number;
+  max_temperature: number;
+  reading_count: number;
+};
+
 export type OnboardingReportRow = {
   employee_name: string;
   employee_email: string;
@@ -277,6 +288,43 @@ export async function loadTemperatureReport(
   return { startDate, endDate, rows };
 }
 
+export async function loadTemperatureHourlyAverageReport(
+  db: DB,
+  businessId: string,
+  params: { start?: string | null; end?: string | null } = {}
+) {
+  await ensureTenantSchema(db, true);
+  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 14);
+
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        date(t.ts, 'unixepoch') AS event_date,
+        strftime('%H:00', t.ts, 'unixepoch') AS event_hour,
+        t.sensor_id,
+        COALESCE(sn.name, 'Sensor ' || t.sensor_id) AS sensor_name,
+        ROUND(AVG(t.temperature), 2) AS avg_temperature,
+        ROUND(MIN(t.temperature), 2) AS min_temperature,
+        ROUND(MAX(t.temperature), 2) AS max_temperature,
+        COUNT(*) AS reading_count
+      FROM temps t
+      LEFT JOIN sensor_nodes sn
+        ON sn.business_id = t.business_id
+        AND sn.sensor_id = t.sensor_id
+      WHERE t.business_id = ?
+        AND date(t.ts, 'unixepoch') BETWEEN ? AND ?
+      GROUP BY event_date, event_hour, t.sensor_id, sensor_name
+      ORDER BY event_date DESC, event_hour DESC, sensor_name ASC
+      LIMIT 3000
+      `
+    )
+    .bind(businessId, startDate, endDate)
+    .all<TemperatureHourlyAverageReportRow>();
+
+  return { startDate, endDate, rows: rows.results ?? [] };
+}
+
 export async function loadOnboardingReport(
   db: DB,
   businessId: string,
@@ -327,10 +375,12 @@ export async function loadOnboardingReport(
 export async function loadWasteReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null } = {}
+  params: { start?: string | null; end?: string | null; createdAt?: string | number | null } = {}
 ) {
   await ensureTenantSchema(db, true);
   const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+  const createdAt = Number(params.createdAt);
+  const hasCreatedAt = Number.isFinite(createdAt) && createdAt > 0;
 
   const rows = await db
     .prepare(
@@ -349,11 +399,12 @@ export async function loadWasteReport(
       LEFT JOIN users u ON u.id = w.submitted_by_user_id
       WHERE w.business_id = ?
         AND date(w.created_at, 'unixepoch') BETWEEN ? AND ?
+        ${hasCreatedAt ? 'AND w.created_at = ?' : ''}
       ORDER BY w.created_at DESC
       LIMIT 1000
       `
     )
-    .bind(businessId, startDate, endDate)
+    .bind(businessId, startDate, endDate, ...(hasCreatedAt ? [createdAt] : []))
     .all<WasteReportRow>();
 
   return { startDate, endDate, rows: rows.results ?? [] };

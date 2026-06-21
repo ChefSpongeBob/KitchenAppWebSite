@@ -458,6 +458,7 @@
     data.days.map((day) => day.date),
     data.weekStart
   );
+  $: visibleWeekDateSet = new Set(data.days.map((day) => day.date));
 
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
@@ -856,6 +857,7 @@
 
   function toggleDraftDuplicateDay(date: string) {
     if (!editorDraft) return;
+    if (date === editorDraft.shiftDate || !visibleWeekDateSet.has(date)) return;
     editorDraft = {
       ...editorDraft,
       duplicateDates: editorDraft.duplicateDates.includes(date)
@@ -1094,7 +1096,7 @@
     let nextRows = upsertShiftIntoGrid(employeeRows, userId, shiftDate, baseShift, sourceClientId);
     nextRows = ensureShiftInCell(nextRows, userId, shiftDate, baseShift);
 
-    for (const duplicateDate of duplicateDates.filter((date) => date !== shiftDate)) {
+    for (const duplicateDate of duplicateDates.filter((date) => date !== shiftDate && visibleWeekDateSet.has(date))) {
       const duplicatedShift: DraftShift = {
         ...baseShift,
         clientId: crypto.randomUUID(),

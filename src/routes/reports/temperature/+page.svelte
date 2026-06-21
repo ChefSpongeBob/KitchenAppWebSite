@@ -1,10 +1,85 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
 
-  export let data;
+  type TemperatureRow = {
+    event_date: string;
+    sensor_id: number;
+    row_type: string;
+  };
+
+  export let data: {
+    startDate: string;
+    endDate: string;
+    rows: TemperatureRow[];
+  };
 
   $: csvHref = `/reports/temperature.csv?start=${data.startDate}&end=${data.endDate}`;
+
+  function formatDate(dateIso: string) {
+    return new Date(`${dateIso}T00:00:00`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+
+  function weekStart(dateIso: string) {
+    const date = new Date(`${dateIso}T00:00:00`);
+    const day = date.getDay();
+    date.setDate(date.getDate() - day);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function addDays(dateIso: string, days: number) {
+    const date = new Date(`${dateIso}T00:00:00`);
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function uniqueNodeCount(rows: TemperatureRow[]) {
+    return new Set(rows.map((row) => row.sensor_id)).size;
+  }
+
+  $: dailyEntries = Object.values(
+    data.rows.reduce<Record<string, TemperatureRow[]>>((days, row) => {
+      days[row.event_date] = [...(days[row.event_date] ?? []), row];
+      return days;
+    }, {})
+  )
+    .sort((a, b) => b[0].event_date.localeCompare(a[0].event_date))
+    .map((rows): ReportExportEntry => {
+      const date = rows[0].event_date;
+      return {
+        title: formatDate(date),
+        meta: `${uniqueNodeCount(rows)} node${uniqueNodeCount(rows) === 1 ? '' : 's'} · Hourly averages`,
+        detail: `${rows.filter((row) => row.row_type === 'alert').length} alert event${rows.filter((row) => row.row_type === 'alert').length === 1 ? '' : 's'}`,
+        href: `/reports/temperature.csv?start=${date}&end=${date}`,
+        icon: 'device_thermostat'
+      };
+    });
+
+  $: weeklyEntries = Object.values(
+    data.rows.reduce<Record<string, TemperatureRow[]>>((weeks, row) => {
+      const week = weekStart(row.event_date);
+      weeks[week] = [...(weeks[week] ?? []), row];
+      return weeks;
+    }, {})
+  )
+    .sort((a, b) => b[0].event_date.localeCompare(a[0].event_date))
+    .map((rows): ReportExportEntry => {
+      const week = weekStart(rows[0].event_date);
+      return {
+        title: `Week of ${formatDate(week)}`,
+        meta: `${uniqueNodeCount(rows)} node${uniqueNodeCount(rows) === 1 ? '' : 's'} · Hourly averages`,
+        detail: `${formatDate(week)} to ${formatDate(addDays(week, 6))}`,
+        href: `/reports/temperature.csv?start=${week}&end=${addDays(week, 6)}`,
+        icon: 'monitor_heart'
+      };
+    });
+
+  $: entries = [...weeklyEntries, ...dailyEntries];
 </script>
 
 <Layout>
@@ -12,44 +87,10 @@
 
   <div class="report-toolbar">
     <a href="/reports"><span class="material-icons" aria-hidden="true">arrow_back</span>Reports</a>
-    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>CSV</a>
+    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>Full CSV</a>
   </div>
 
-  <section class="report-table-wrap">
-    {#if data.rows.length}
-      <table class="report-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Sensor</th>
-            <th>Temp</th>
-            <th>Status</th>
-            <th>Threshold</th>
-            <th>Ack</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each data.rows as row}
-            <tr>
-              <td>{row.event_date}</td>
-              <td>{row.row_type}</td>
-              <td>
-                <strong>{row.sensor_name}</strong>
-                <span>Node {row.sensor_id}</span>
-              </td>
-              <td>{row.temperature === null ? '-' : `${Number(row.temperature).toFixed(1)}F`}</td>
-              <td>{row.event_type || row.status || '-'}</td>
-              <td>{row.threshold === null ? '-' : `${Number(row.threshold).toFixed(1)}F`}</td>
-              <td>{row.acknowledged_by_name || '-'}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {:else}
-      <p class="empty-state">No temperature records yet.</p>
-    {/if}
-  </section>
+  <ReportExportList {entries} empty="No temperature exports yet." icon="device_thermostat" />
 </Layout>
 
 <style>
@@ -77,45 +118,5 @@
     color: var(--color-text-muted);
     font-size: 1rem;
     line-height: 1;
-  }
-
-  .report-table-wrap {
-    overflow-x: auto;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .report-table {
-    width: 100%;
-    min-width: 760px;
-    border-collapse: collapse;
-  }
-
-  th,
-  td {
-    padding: 0.75rem 0.55rem;
-    border-bottom: 1px solid var(--color-divider);
-    text-align: left;
-    vertical-align: top;
-  }
-
-  th {
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  td span {
-    display: block;
-    margin-top: 0.2rem;
-    color: var(--color-text-muted);
-    font-size: 0.88rem;
-  }
-
-  .empty-state {
-    margin: 0;
-    padding: 1rem 0;
-    color: var(--color-text-muted);
   }
 </style>

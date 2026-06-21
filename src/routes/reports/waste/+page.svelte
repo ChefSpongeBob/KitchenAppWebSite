@@ -1,19 +1,43 @@
 <script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
 
-	export let data;
+	type WasteRow = {
+		product: string;
+		amount: number | null;
+		unit: string;
+		reason: string;
+		submitted_by_name: string;
+		created_at: number;
+		created_date: string;
+	};
+
+	export let data: {
+		startDate: string;
+		endDate: string;
+		rows: WasteRow[];
+	};
 
 	$: csvHref = `/reports/waste.csv?start=${data.startDate}&end=${data.endDate}`;
 
 	function dateLabel(timestamp: number) {
-		return new Date(timestamp * 1000).toLocaleString([], {
+		return new Date(timestamp * 1000).toLocaleString('en-US', {
 			month: 'short',
 			day: 'numeric',
+			year: 'numeric',
 			hour: 'numeric',
 			minute: '2-digit'
 		});
 	}
+
+	$: entries = data.rows.map((row): ReportExportEntry => ({
+		title: `${row.product} · ${dateLabel(row.created_at)}`,
+		meta: `${row.amount ?? '-'} ${row.unit} · ${row.reason}`,
+		detail: row.submitted_by_name,
+		href: `/reports/waste.csv?start=${row.created_date}&end=${row.created_date}&created_at=${row.created_at}`,
+		icon: 'delete_sweep'
+	}));
 </script>
 
 <Layout>
@@ -21,42 +45,10 @@
 
 	<div class="report-toolbar">
 		<a href="/reports"><span class="material-icons" aria-hidden="true">arrow_back</span>Reports</a>
-		<a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>CSV</a>
+		<a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>Full CSV</a>
 	</div>
 
-	<section class="report-table-wrap">
-		{#if data.rows.length}
-			<table class="report-table">
-				<thead>
-					<tr>
-						<th>Date</th>
-						<th>Product</th>
-						<th>Amount</th>
-						<th>Reason</th>
-						<th>Submitted By</th>
-						<th>Notes</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each data.rows as row}
-						<tr>
-							<td>{dateLabel(row.created_at)}</td>
-							<td><strong>{row.product}</strong></td>
-							<td>{row.amount ?? '-'} {row.unit}</td>
-							<td>{row.reason}</td>
-							<td>
-								<strong>{row.submitted_by_name}</strong>
-								<span>{row.submitted_by_email}</span>
-							</td>
-							<td>{row.notes || '-'}</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		{:else}
-			<p class="empty-state">No waste logs yet.</p>
-		{/if}
-	</section>
+	<ReportExportList {entries} empty="No waste log exports yet." icon="delete_sweep" />
 </Layout>
 
 <style>
@@ -84,45 +76,5 @@
 		color: var(--color-text-muted);
 		font-size: 1rem;
 		line-height: 1;
-	}
-
-	.report-table-wrap {
-		overflow-x: auto;
-		border-top: 1px solid var(--color-divider);
-		border-bottom: 1px solid var(--color-divider);
-	}
-
-	.report-table {
-		width: 100%;
-		min-width: 840px;
-		border-collapse: collapse;
-	}
-
-	th,
-	td {
-		padding: 0.75rem 0.55rem;
-		border-bottom: 1px solid var(--color-divider);
-		text-align: left;
-		vertical-align: top;
-	}
-
-	th {
-		color: var(--color-text-muted);
-		font-size: 0.78rem;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-
-	td span {
-		display: block;
-		margin-top: 0.2rem;
-		color: var(--color-text-muted);
-		font-size: 0.88rem;
-	}
-
-	.empty-state {
-		margin: 0;
-		padding: 1rem 0;
-		color: var(--color-text-muted);
 	}
 </style>

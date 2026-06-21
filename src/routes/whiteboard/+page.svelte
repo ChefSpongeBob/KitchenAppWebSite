@@ -32,8 +32,8 @@
 
   function ideaFontSize(idea: Idea) {
     const cloudSize = size(idea.votes);
-    const lengthPenalty = Math.min(0.16, Math.max(0, idea.text.length - 24) * 0.005);
-    return Math.max(0.5, Math.min(0.82, cloudSize * 0.0102 - lengthPenalty)).toFixed(3);
+    const lengthPenalty = Math.min(0.34, Math.max(0, idea.text.length - 24) * 0.0065);
+    return Math.max(0.42, Math.min(0.82, cloudSize * 0.0102 - lengthPenalty)).toFixed(3);
   }
 
   function voteFontSize(votes: number) {
@@ -257,26 +257,23 @@
     place-items: center;
     gap: calc(var(--cloud-size) * 0.018);
     left: 8%;
-    top: 18%;
-    width: 50%;
-    height: 48%;
+    top: 15%;
+    width: 62%;
+    height: 58%;
     transform: none;
   }
 
   .idea-text {
-    display: -webkit-box;
+    display: block;
     max-width: 100%;
-    max-height: 3.54em;
-    overflow: hidden;
-    line-clamp: 3;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    max-height: none;
+    overflow: visible;
     font-size: var(--idea-font);
     font-weight: var(--weight-semibold);
-    line-height: 1.18;
+    line-height: 1.12;
     color: #111214 !important;
     overflow-wrap: break-word;
-    text-wrap: balance;
+    text-wrap: pretty;
     text-align: center;
   }
 

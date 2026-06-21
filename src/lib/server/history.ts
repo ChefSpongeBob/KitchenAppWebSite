@@ -368,15 +368,22 @@ export async function loadListHistoryReport(
   db: DB,
   businessId: string,
   domain: ActivityDomain,
-  params: { start?: string | null; end?: string | null; sectionId?: string | null } = {}
+  params: { start?: string | null; end?: string | null; sectionId?: string | null; submittedAt?: string | number | null } = {}
 ) {
   await ensureHistorySchema(db);
   const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 14);
+  const submittedAt = Number(params.submittedAt);
+  const hasSubmittedAt = Number.isFinite(submittedAt) && submittedAt > 0;
   if (domain === 'checklists') {
     const sectionClause = params.sectionId ? `AND a.section_id = ?` : '';
-    const binds = params.sectionId
-      ? [businessId, startDate, endDate, params.sectionId]
-      : [businessId, startDate, endDate];
+    const submittedClause = hasSubmittedAt ? `AND a.occurred_at = ?` : '';
+    const binds = [
+      businessId,
+      startDate,
+      endDate,
+      ...(params.sectionId ? [params.sectionId] : []),
+      ...(hasSubmittedAt ? [submittedAt] : [])
+    ];
 
     const rows = await db
       .prepare(
@@ -403,6 +410,7 @@ export async function loadListHistoryReport(
           AND a.domain = 'checklists'
           AND date(a.occurred_at, 'unixepoch') BETWEEN ? AND ?
           ${sectionClause}
+          ${submittedClause}
         ORDER BY a.occurred_at DESC, section_title_snapshot ASC, a.item_name_snapshot ASC
         LIMIT 1000
         `
@@ -427,9 +435,15 @@ export async function loadListHistoryReport(
   }
 
   const sectionClause = params.sectionId ? `AND b.section_id = ?` : '';
-  const binds = params.sectionId
-    ? [businessId, domain, startDate, endDate, params.sectionId]
-    : [businessId, domain, startDate, endDate];
+  const submittedClause = hasSubmittedAt ? `AND b.submitted_at = ?` : '';
+  const binds = [
+    businessId,
+    domain,
+    startDate,
+    endDate,
+    ...(params.sectionId ? [params.sectionId] : []),
+    ...(hasSubmittedAt ? [submittedAt] : [])
+  ];
 
   const rows = await db
     .prepare(
@@ -477,6 +491,7 @@ export async function loadListHistoryReport(
         AND b.domain = ?
         AND b.business_day BETWEEN ? AND ?
         ${sectionClause}
+        ${submittedClause}
       ORDER BY b.business_day DESC, b.submitted_at DESC, b.section_title_snapshot ASC, i.item_name_snapshot ASC
       LIMIT 1000
       `
@@ -503,10 +518,12 @@ export async function loadListHistoryReport(
 export async function loadScheduleHistoryReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null } = {}
+  params: { start?: string | null; end?: string | null; version?: string | number | null } = {}
 ) {
   await ensureHistorySchema(db);
   const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+  const versionNumber = Number(params.version);
+  const hasVersionFilter = Number.isFinite(versionNumber) && versionNumber > 0;
   const rows = await db
     .prepare(
       `
@@ -529,11 +546,12 @@ export async function loadScheduleHistoryReport(
       LEFT JOIN users u ON u.id = p.published_by
       WHERE p.business_id = ?
         AND p.week_start BETWEEN ? AND ?
+        ${hasVersionFilter ? 'AND p.version_number = ?' : ''}
       ORDER BY p.week_start DESC, p.version_number DESC, s.shift_date ASC, s.start_time ASC
       LIMIT 1500
       `
     )
-    .bind(businessId, startDate, endDate)
+    .bind(businessId, startDate, endDate, ...(hasVersionFilter ? [versionNumber] : []))
     .all<{
       week_start: string;
       version_number: number;

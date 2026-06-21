@@ -14,7 +14,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	const report = await loadWasteReport(db, requireBusinessId(locals), {
 		start: url.searchParams.get('start'),
-		end: url.searchParams.get('end')
+		end: url.searchParams.get('end'),
+		createdAt: url.searchParams.get('created_at')
 	});
 	const header = ['date', 'product', 'amount', 'unit', 'reason', 'notes', 'submitted_by', 'submitted_by_email'];
 	const lines = [

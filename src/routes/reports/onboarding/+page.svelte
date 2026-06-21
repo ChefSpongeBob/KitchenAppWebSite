@@ -1,10 +1,60 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
 
-  export let data;
+  type OnboardingRow = {
+    updated_at: number;
+    package_status: string;
+  };
+
+  export let data: {
+    startDate: string;
+    endDate: string;
+    rows: OnboardingRow[];
+  };
 
   $: csvHref = `/reports/onboarding.csv?start=${data.startDate}&end=${data.endDate}`;
+
+  function monthFromTimestamp(timestamp: number) {
+    return new Date(timestamp * 1000).toISOString().slice(0, 7);
+  }
+
+  function monthBounds(month: string) {
+    const start = `${month}-01`;
+    const endDate = new Date(`${start}T00:00:00`);
+    endDate.setMonth(endDate.getMonth() + 1);
+    endDate.setDate(0);
+    return { start, end: endDate.toISOString().slice(0, 10) };
+  }
+
+  function monthLabel(month: string) {
+    return new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
+  $: entries = Object.values(
+    data.rows.reduce<Record<string, { month: string; count: number; approved: number }>>((months, row) => {
+      const month = monthFromTimestamp(row.updated_at);
+      const entry = months[month] ?? { month, count: 0, approved: 0 };
+      entry.count += 1;
+      if (row.package_status === 'approved') entry.approved += 1;
+      months[month] = entry;
+      return months;
+    }, {})
+  )
+    .sort((a, b) => b.month.localeCompare(a.month))
+    .map((entry): ReportExportEntry => {
+      const range = monthBounds(entry.month);
+      return {
+        title: monthLabel(entry.month),
+        meta: `${entry.count} package${entry.count === 1 ? '' : 's'} · ${entry.approved} approved`,
+        href: `/reports/onboarding.csv?start=${range.start}&end=${range.end}`,
+        icon: 'assignment_ind'
+      };
+    });
 </script>
 
 <Layout>
@@ -12,52 +62,10 @@
 
   <div class="report-toolbar">
     <a href="/reports"><span class="material-icons" aria-hidden="true">arrow_back</span>Reports</a>
-    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>CSV</a>
+    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>Full CSV</a>
   </div>
 
-  <section class="report-table-wrap">
-    {#if data.rows.length}
-      <table class="report-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Status</th>
-            <th>Class</th>
-            <th>Items</th>
-            <th>Sent</th>
-            <th>Approved</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each data.rows as row}
-            <tr>
-              <td>
-                <strong>{row.employee_name}</strong>
-                <span>{row.employee_email}</span>
-              </td>
-              <td>{row.package_status}</td>
-              <td>{row.payroll_classification}</td>
-              <td>
-                <strong>{row.approved_items}/{row.item_count} approved</strong>
-                <span>{row.pending_items} pending, {row.submitted_items} submitted, {row.changes_requested_items} changes</span>
-              </td>
-              <td>{row.sent_at ? new Date(row.sent_at * 1000).toLocaleDateString() : '-'}</td>
-              <td>
-                {#if row.approved_at}
-                  {new Date(row.approved_at * 1000).toLocaleDateString()}
-                  <span>{row.approved_by_name}</span>
-                {:else}
-                  -
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {:else}
-      <p class="empty-state">No onboarding packages yet.</p>
-    {/if}
-  </section>
+  <ReportExportList {entries} empty="No onboarding exports yet." icon="assignment_ind" />
 </Layout>
 
 <style>
@@ -85,45 +93,5 @@
     color: var(--color-text-muted);
     font-size: 1rem;
     line-height: 1;
-  }
-
-  .report-table-wrap {
-    overflow-x: auto;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .report-table {
-    width: 100%;
-    min-width: 820px;
-    border-collapse: collapse;
-  }
-
-  th,
-  td {
-    padding: 0.75rem 0.55rem;
-    border-bottom: 1px solid var(--color-divider);
-    text-align: left;
-    vertical-align: top;
-  }
-
-  th {
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  td span {
-    display: block;
-    margin-top: 0.2rem;
-    color: var(--color-text-muted);
-    font-size: 0.88rem;
-  }
-
-  .empty-state {
-    margin: 0;
-    padding: 1rem 0;
-    color: var(--color-text-muted);
   }
 </style>
