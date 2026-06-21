@@ -51,13 +51,32 @@ type TodayShift = {
   notes: string;
 };
 
-export const load: PageServerLoad = async ({ locals }) => {
+type RowResult<T> = {
+  results?: T[];
+};
+
+async function safeHomeData<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`App dashboard ${label} failed: ${message}`);
+    return fallback;
+  }
+}
+
+function safeRows<T>(promise: Promise<RowResult<T>>, label: string): Promise<RowResult<T>> {
+  return safeHomeData(promise, { results: [] }, label);
+}
+
+export const load: PageServerLoad = async ({ locals, url }) => {
   const db = locals.DB;
   const isAdmin = locals.userRole === 'admin';
+  const guidedRequested = url.searchParams.get('guided') === '1';
   const guidedComplete = db && locals.userId
     ? await isFirstOpenTourComplete(db, locals.userId, 'user_home')
     : true;
-  const guided = !guidedComplete;
+  const guided = guidedRequested && !guidedComplete;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
   const featureAccess = buildFeatureAccess(
     featureModes,
@@ -89,95 +108,130 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   const businessId = requireBusinessId(locals);
-  const reviewEnabledPromise = featureAccess.whiteboard
-    ? hasTable(db, 'whiteboard_review')
-    : Promise.resolve(false);
-  const nodeTablePromise = featureAccess.temps ? hasTable(db, 'sensor_nodes') : Promise.resolve(false);
-  const announcementPromise = featureAccess.announcements
-    ? loadHomepageAnnouncement(db, businessId)
-    : Promise.resolve({ content: '', updatedAt: 0 });
+  const reviewEnabledPromise = safeHomeData(
+    featureAccess.whiteboard ? hasTable(db, 'whiteboard_review') : Promise.resolve(false),
+    false,
+    'whiteboard review status'
+  );
+  const nodeTablePromise = safeHomeData(
+    featureAccess.temps ? hasTable(db, 'sensor_nodes') : Promise.resolve(false),
+    false,
+    'sensor node status'
+  );
+  const announcementPromise = safeHomeData(
+    featureAccess.announcements
+      ? loadHomepageAnnouncement(db, businessId)
+      : Promise.resolve({ content: '', updatedAt: 0 }),
+    { content: '', updatedAt: 0 },
+    'announcement'
+  );
   const announcementEditorPromise =
     featureAccess.announcements && locals.userId
-      ? userCanEditHomepageAnnouncement(
-          db,
-          locals.userId,
-          locals.businessRole ?? locals.userRole,
-          businessId,
-          locals.businessPermissionTemplate,
-          locals.businessCapabilities
+      ? safeHomeData(
+          userCanEditHomepageAnnouncement(
+            db,
+            locals.userId,
+            locals.businessRole ?? locals.userRole,
+            businessId,
+            locals.businessPermissionTemplate,
+            locals.businessCapabilities
+          ),
+          false,
+          'announcement access'
         )
       : Promise.resolve(false);
-  const employeeSpotlightPromise = featureAccess.employee_spotlight
-    ? loadEmployeeSpotlight(db, businessId)
-    : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 });
-  const dailySpecialsPromise = featureAccess.daily_specials ? loadDailySpecials(db, businessId) : Promise.resolve([]);
+  const employeeSpotlightPromise = safeHomeData(
+    featureAccess.employee_spotlight
+      ? loadEmployeeSpotlight(db, businessId)
+      : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 }),
+    { employeeName: '', shoutout: '', updatedAt: 0 },
+    'employee spotlight'
+  );
+  const dailySpecialsPromise = safeHomeData(
+    featureAccess.daily_specials ? loadDailySpecials(db, businessId) : Promise.resolve([]),
+    [],
+    'specials'
+  );
   const userPromise = locals.userId
-    ? db
-        .prepare(`SELECT display_name, email FROM users WHERE id = ? LIMIT 1`)
-        .bind(locals.userId)
-        .first<{ display_name: string | null; email: string | null }>()
+    ? safeHomeData(
+        db
+          .prepare(`SELECT display_name, email FROM users WHERE id = ? LIMIT 1`)
+          .bind(locals.userId)
+          .first<{ display_name: string | null; email: string | null }>(),
+        null,
+        'user greeting'
+      )
     : Promise.resolve(null);
   const todayTasksPromise = featureAccess.todo && locals.userId
-    ? db
-        .prepare(
-          `
-          SELECT
-            t.id,
-            t.title,
-            t.description,
-            ta.user_id AS assigned_to,
-            au.display_name AS assigned_name,
-            au.email AS assigned_email
-          FROM todos t
-          LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
-          LEFT JOIN users au ON au.id = ta.user_id
-          WHERE t.completed_at IS NULL
-            AND (ta.user_id = ? OR ta.user_id IS NULL)
-            AND t.business_id = ?
-          ORDER BY CASE WHEN ta.user_id = ? THEN 0 ELSE 1 END ASC, t.created_at DESC
-          LIMIT 6
-          `
-        )
-        .bind(locals.userId, businessId, locals.userId)
-        .all<HomeTask>()
+    ? safeRows(
+        db
+          .prepare(
+            `
+            SELECT
+              t.id,
+              t.title,
+              t.description,
+              ta.user_id AS assigned_to,
+              au.display_name AS assigned_name,
+              au.email AS assigned_email
+            FROM todos t
+            LEFT JOIN todo_assignments ta ON ta.todo_id = t.id
+            LEFT JOIN users au ON au.id = ta.user_id
+            WHERE t.completed_at IS NULL
+              AND (ta.user_id = ? OR ta.user_id IS NULL)
+              AND t.business_id = ?
+            ORDER BY CASE WHEN ta.user_id = ? THEN 0 ELSE 1 END ASC, t.created_at DESC
+            LIMIT 6
+            `
+          )
+          .bind(locals.userId, businessId, locals.userId)
+          .all<HomeTask>(),
+        'todo preview'
+      )
     : Promise.resolve({ results: [] as HomeTask[] });
   const todaySchedulePromise =
     featureAccess.scheduling && locals.userId && db
-      ? loadTodayShifts(db, locals.userId, undefined, businessId)
+      ? safeHomeData(loadTodayShifts(db, locals.userId, undefined, businessId), [] as TodayShift[], 'today schedule')
       : Promise.resolve([] as TodayShift[]);
   const tempsPromise = featureAccess.temps
-    ? db
-        .prepare(
-          `
-          SELECT sensor_id, temperature, ts
-          FROM temps
-          WHERE business_id = ?
-          ORDER BY ts DESC
-          LIMIT ?
-          `
-        )
-        .bind(businessId, HOMEPAGE_TEMP_LIMIT)
-        .all<TempRow>()
+    ? safeRows(
+        db
+          .prepare(
+            `
+            SELECT sensor_id, temperature, ts
+            FROM temps
+            WHERE business_id = ?
+            ORDER BY ts DESC
+            LIMIT ?
+            `
+          )
+          .bind(businessId, HOMEPAGE_TEMP_LIMIT)
+          .all<TempRow>(),
+        'temperature preview'
+      )
     : Promise.resolve({ results: [] as TempRow[] });
   const menuDocsPromise = featureAccess.menus
-    ? db
-        .prepare(
-          `
-          SELECT id, title, file_url
-          FROM documents
-          WHERE is_active = 1
-            AND business_id = ?
-            AND (
-              LOWER(slug) LIKE 'menu%'
-              OR LOWER(section) = 'menu'
-              OR LOWER(category) = 'menu'
-            )
-          ORDER BY title ASC
-          LIMIT 5
-          `
-        )
-        .bind(businessId)
-        .all<MenuDoc>()
+    ? safeRows(
+        db
+          .prepare(
+            `
+            SELECT id, title, file_url
+            FROM documents
+            WHERE is_active = 1
+              AND business_id = ?
+              AND (
+                LOWER(slug) LIKE 'menu%'
+                OR LOWER(section) = 'menu'
+                OR LOWER(category) = 'menu'
+              )
+            ORDER BY title ASC
+            LIMIT 5
+            `
+          )
+          .bind(businessId)
+          .all<MenuDoc>(),
+        'menu preview'
+      )
     : Promise.resolve({ results: [] as MenuDoc[] });
   const [
     reviewEnabled,
@@ -212,33 +266,36 @@ export const load: PageServerLoad = async ({ locals }) => {
   const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
 
   const topIdeasResult = featureAccess.whiteboard
-    ? reviewEnabled
-      ? await db
-          .prepare(
-            `
-            SELECT p.id, p.content, p.votes
-            FROM whiteboard_posts p
-            LEFT JOIN whiteboard_review r ON r.post_id = p.id
-            WHERE COALESCE(r.status, 'approved') = 'approved'
-              AND p.business_id = ?
-            ORDER BY p.votes DESC, p.created_at DESC
-            LIMIT 3
-            `
-          )
-          .bind(businessId)
-          .all<IdeaRow>()
-      : await db
-          .prepare(
-            `
-            SELECT id, content, votes
-            FROM whiteboard_posts
-            WHERE business_id = ?
-            ORDER BY votes DESC, created_at DESC
-            LIMIT 3
-            `
-          )
-          .bind(businessId)
-          .all<IdeaRow>()
+    ? await safeRows(
+        reviewEnabled
+          ? db
+              .prepare(
+                `
+                SELECT p.id, p.content, p.votes
+                FROM whiteboard_posts p
+                LEFT JOIN whiteboard_review r ON r.post_id = p.id
+                WHERE COALESCE(r.status, 'approved') = 'approved'
+                  AND p.business_id = ?
+                ORDER BY p.votes DESC, p.created_at DESC
+                LIMIT 3
+                `
+              )
+              .bind(businessId)
+              .all<IdeaRow>()
+          : db
+              .prepare(
+                `
+                SELECT id, content, votes
+                FROM whiteboard_posts
+                WHERE business_id = ?
+                ORDER BY votes DESC, created_at DESC
+                LIMIT 3
+                `
+              )
+              .bind(businessId)
+              .all<IdeaRow>(),
+        'whiteboard preview'
+      )
     : { results: [] as IdeaRow[] };
 
   const rows = tempsResult.results ?? [];
@@ -253,10 +310,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   const namesBySensor = new Map<number, string>();
   if (featureAccess.temps && nodeTable) {
-    const nameRows = await db
-      .prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`)
-      .bind(businessId)
-      .all<NodeNameRow>();
+    const nameRows = await safeRows(
+      db.prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`).bind(businessId).all<NodeNameRow>(),
+      'sensor labels'
+    );
     for (const row of nameRows.results ?? []) {
       namesBySensor.set(row.sensor_id, row.name);
     }
