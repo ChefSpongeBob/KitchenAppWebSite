@@ -154,6 +154,24 @@ export const actions: Actions = {
 				return fail(503, { error: 'Sign in is temporarily unavailable. Please try again in a moment.', email });
 			}
 
+			if (locals.userId) {
+				const activeUser = await db
+					.prepare(
+						`
+						SELECT email
+						FROM users
+						WHERE id = ?
+						LIMIT 1
+						`
+					)
+					.bind(locals.userId)
+					.first<{ email: string | null }>();
+
+				if (String(activeUser?.email ?? '').trim().toLowerCase() === email) {
+					throw redirect(303, resolvePostLoginPath());
+				}
+			}
+
 			const turnstile = await validateTurnstileSubmission({
 				env: platform?.env,
 				formData,

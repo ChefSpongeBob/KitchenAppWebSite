@@ -108,6 +108,12 @@
       description: 'This card keeps schedule details and active announcements visible in one place.',
       placement: 'bottom' as const
     },
+    {
+      selector: '[data-guide="sidebar-toggle"]',
+      title: 'Sidebar',
+      description: 'Use the mushroom button to open the full workspace menu, including schedules, lists, tools, and settings.',
+      placement: 'right' as const
+    },
     ...(featureAccess.daily_specials
       ? [{
           selector: '[data-guide="specials-focus"]',
@@ -141,7 +147,7 @@
         }]
       : []),
     {
-      selector: '[data-guide="quick-links"]',
+      selector: '[data-guide="quick-link-grid"]',
       title: 'Quick Navigation',
       description: 'These cards are your fastest path to each core module during a shift.',
       placement: 'top' as const
@@ -260,7 +266,10 @@
 
   async function markGuidedTourComplete() {
     try {
-      await fetch('?/complete_guided_tour', { method: 'POST' });
+      await fetch('/app?/complete_guided_tour', {
+        method: 'POST',
+        body: new FormData()
+      });
     } catch {
       // Best-effort save only; do not block UI close.
     }
@@ -549,7 +558,7 @@
       <p class="section-label">Quick Access</p>
       <small class="section-muted">Core tools</small>
     </div>
-    <div class="quick-link-grid">
+    <div class="quick-link-grid" data-guide="quick-link-grid">
       {#if featureAccess.lists}
         <a href="/lists" class="quick-link" data-guide="quick-lists">
           <span class="material-icons" aria-hidden="true">checklist</span>

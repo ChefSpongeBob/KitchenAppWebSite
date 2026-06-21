@@ -589,11 +589,12 @@ async function loadScheduleAssignableUsersById(db: DB, userIds: string[], busine
   }
 
   const placeholders = requestedUserIds.map(() => '?').join(', ');
+  const departments = await loadScheduleDepartments(db, businessId);
   const [rows, approvalsByUser] = await Promise.all([
     db
       .prepare(
         `
-        SELECT u.id, u.display_name, u.email
+        SELECT u.id, u.display_name, u.email, bu.role
         FROM business_users bu
         JOIN users u ON u.id = bu.user_id
         WHERE bu.business_id = ?
@@ -604,17 +605,22 @@ async function loadScheduleAssignableUsersById(db: DB, userIds: string[], busine
         `
       )
       .bind(businessId ?? '', ...requestedUserIds)
-      .all<{ id: string; display_name: string | null; email: string }>(),
+      .all<{ id: string; display_name: string | null; email: string; role: string | null }>(),
     loadScheduleDepartmentApprovalsByUser(db, requestedUserIds, businessId)
   ]);
 
   const users = new Map<string, ScheduleAssignableUser>();
   for (const row of rows.results ?? []) {
+    const approvedDepartments = approvalsByUser.get(row.id) ?? [];
+    const role = normalizeBusinessRole(row.role);
     users.set(row.id, {
       id: row.id,
       displayName: row.display_name,
       email: row.email,
-      approvedDepartments: approvalsByUser.get(row.id) ?? []
+      approvedDepartments:
+        approvedDepartments.length > 0 || (role !== 'owner' && role !== 'manager')
+          ? approvedDepartments
+          : departments
     });
   }
 
@@ -1812,7 +1818,7 @@ export async function loadScheduleAssignableUsers(db: DB, businessId?: string | 
   const rows = await db
     .prepare(
       `
-      SELECT u.id, u.display_name, u.email
+      SELECT u.id, u.display_name, u.email, bu.role
       FROM business_users bu
       JOIN users u ON u.id = bu.user_id
       WHERE bu.business_id = ?
@@ -1822,20 +1828,27 @@ export async function loadScheduleAssignableUsers(db: DB, businessId?: string | 
       `
     )
     .bind(businessId ?? '')
-    .all<{ id: string; display_name: string | null; email: string }>();
+    .all<{ id: string; display_name: string | null; email: string; role: string | null }>();
 
-  const approvalsByUser = await loadScheduleDepartmentApprovalsByUser(
-    db,
-    (rows.results ?? []).map((row) => row.id),
-    businessId
-  );
+  const userIds = (rows.results ?? []).map((row) => row.id);
+  const [approvalsByUser, departments] = await Promise.all([
+    loadScheduleDepartmentApprovalsByUser(db, userIds, businessId),
+    loadScheduleDepartments(db, businessId)
+  ]);
 
-  return (rows.results ?? []).map((row) => ({
-    id: row.id,
-    displayName: row.display_name,
-    email: row.email,
-    approvedDepartments: approvalsByUser.get(row.id) ?? []
-  }));
+  return (rows.results ?? []).map((row) => {
+    const approvedDepartments = approvalsByUser.get(row.id) ?? [];
+    const role = normalizeBusinessRole(row.role);
+    return {
+      id: row.id,
+      displayName: row.display_name,
+      email: row.email,
+      approvedDepartments:
+        approvedDepartments.length > 0 || (role !== 'owner' && role !== 'manager')
+          ? approvedDepartments
+          : departments
+    };
+  });
 }
 
 export async function loadUserScheduleAvailability(db: DB, userId: string, businessId?: string | null) {

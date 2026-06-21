@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+	import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
 
 	type GuidedStep = {
 		selector: string;
@@ -92,25 +92,27 @@
 		recomputeFrame = requestAnimationFrame(recompute);
 	}
 
-	function scrollStepTargetIntoView() {
-		if (!currentStep) return;
-		const target = document.querySelector<HTMLElement>(currentStep.selector);
+	function scrollStepTargetIntoView(step: GuidedStep | undefined = currentStep) {
+		if (!step) return;
+		const target = document.querySelector<HTMLElement>(step.selector);
 		target?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
 	}
 
-	function nextStep() {
+	async function nextStep() {
 		if (isLastStep) {
 			dispatch('finish');
 			return;
 		}
 		activeIndex += 1;
+		await tick();
 		scrollStepTargetIntoView();
 		scheduleRecompute();
 	}
 
-	function previousStep() {
+	async function previousStep() {
 		if (isFirstStep) return;
 		activeIndex -= 1;
+		await tick();
 		scrollStepTargetIntoView();
 		scheduleRecompute();
 	}

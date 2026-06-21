@@ -101,11 +101,12 @@
     creatorCatalog: CreatorCatalog;
     initialEditorType: EditorType;
     initialListDomain: ListDomain;
+    initialCategoryEditorType: CategoryEditorType;
   };
 
   let editorType: EditorType = data.initialEditorType;
   let listDomain: ListDomain = data.initialListDomain;
-  let categoryEditorType: CategoryEditorType = 'list';
+  let categoryEditorType: CategoryEditorType = data.initialCategoryEditorType;
   let categoryListDomain: CategoryListDomain = 'preplists';
   let feedbackMessage = '';
   let lastAppliedRouteSelection = '';
@@ -121,6 +122,20 @@
     if (domain === 'checklists') return 'Checklists';
     if (domain === 'inventory') return 'Inventory';
     return 'Orders';
+  }
+
+  function categoryCreateHref(kind: 'list' | 'recipe' | 'document') {
+    return kind === 'list'
+      ? '/admin/creator?editor=category'
+      : `/admin/creator?editor=category&type=${kind}`;
+  }
+
+  function editorIcon(kind: 'list' | 'recipe' | 'document' | 'menu' | 'checklist') {
+    if (kind === 'recipe') return 'restaurant_menu';
+    if (kind === 'document') return 'description';
+    if (kind === 'menu') return 'menu_book';
+    if (kind === 'checklist') return 'checklist';
+    return 'list_alt';
   }
 
   const checklistGroupSlug = (slug: string) => slug.replace(/-(opening|midday|closing)$/i, '');
@@ -283,10 +298,11 @@
   $: documentCategories = data.creatorCatalog.documents.filter((category) => normalizeKey(category) !== 'menu');
   $: menuDocuments = data.documents.filter(isMenuDocument);
   $: filteredCategoryListSections = data.sections[categoryListDomain];
-  $: routeSelectionToken = `${data.initialEditorType}:${data.initialListDomain}`;
+  $: routeSelectionToken = `${data.initialEditorType}:${data.initialListDomain}:${data.initialCategoryEditorType}`;
   $: if (routeSelectionToken !== lastAppliedRouteSelection) {
     editorType = data.initialEditorType;
     listDomain = data.initialListDomain;
+    categoryEditorType = data.initialCategoryEditorType;
     lastAppliedRouteSelection = routeSelectionToken;
   }
 
@@ -400,7 +416,10 @@
           </form>
 
           {#if filteredCategoryListSections.length === 0}
-            <p class="empty">No {listDomainLabel(categoryListDomain)} categories yet.</p>
+            <p class="empty empty-action">
+              No {listDomainLabel(categoryListDomain)} categories yet.
+              <a href={categoryCreateHref('list')}>Create a category?</a>
+            </p>
           {:else}
             <div class="stack">
               {#each filteredCategoryListSections as section}
@@ -428,7 +447,10 @@
 
           {@const categories = categoryEditorType === 'recipe' ? data.creatorCatalog.recipes : documentCategories}
           {#if categories.length === 0}
-            <p class="empty">No {categoryEditorType} categories yet.</p>
+            <p class="empty empty-action">
+              No {categoryEditorType} categories yet.
+              <a href={categoryCreateHref(categoryEditorType)}>Create a category?</a>
+            </p>
           {:else}
             <div class="stack">
               {#each categories as category}
@@ -465,13 +487,19 @@
           </form>
 
           {#if checklistCategories.length === 0}
-            <p class="empty">No checklist categories yet.</p>
+            <p class="empty empty-action">
+              No checklist categories yet.
+              <a href={categoryCreateHref('list')}>Create a category?</a>
+            </p>
           {:else}
             <div class="stack">
               {#each checklistCategories as category}
                 <details class="entity">
                   <summary>
-                    <strong>{category.title}</strong>
+                    <span class="summary-title">
+                      <span class="material-icons" aria-hidden="true">{editorIcon('checklist')}</span>
+                      <strong>{category.title}</strong>
+                    </span>
                     <small>{category.sections.length} section{category.sections.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
@@ -586,13 +614,19 @@
           </form>
 
           {#if filteredListSections.length === 0}
-            <p class="empty">No {listDomainLabel(listDomain)} categories yet.</p>
+            <p class="empty empty-action">
+              No {listDomainLabel(listDomain)} categories yet.
+              <a href={categoryCreateHref('list')}>Create a category?</a>
+            </p>
           {:else}
             <div class="stack">
               {#each filteredListSections as section}
                 <details class="entity">
                   <summary>
-                    <strong>{section.title}</strong>
+                    <span class="summary-title">
+                      <span class="material-icons" aria-hidden="true">{editorIcon('list')}</span>
+                      <strong>{section.title}</strong>
+                    </span>
                     <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
@@ -692,14 +726,20 @@
         {/if}
       {:else if editorType === 'recipe'}
           {#if data.creatorCatalog.recipes.length === 0}
-            <p class="empty">No recipe categories yet.</p>
+            <p class="empty empty-action">
+              No recipe categories yet.
+              <a href={categoryCreateHref('recipe')}>Create a category?</a>
+            </p>
           {:else}
             <div class="stack">
               {#each data.creatorCatalog.recipes as category}
                 {@const items = recipesByCategory(category)}
                 <details class="entity">
                   <summary>
-                    <strong>{category}</strong>
+                    <span class="summary-title">
+                      <span class="material-icons" aria-hidden="true">{editorIcon('recipe')}</span>
+                      <strong>{category}</strong>
+                    </span>
                     <small>{items.length} recipe{items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
@@ -726,7 +766,7 @@
                     <details class="add-editor">
                       <summary>Add Recipe</summary>
                       <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
-                        <input name="category" value={category} required />
+                        <input type="hidden" name="category" value={category} />
                         <input name="title" placeholder="Recipe title" required />
                         <textarea name="ingredients" rows="4" placeholder="Ingredients" required></textarea>
                         <textarea name="instructions" rows="6" placeholder="Instructions" required></textarea>
@@ -804,14 +844,20 @@
           {/if}
         {:else if editorType === 'document'}
           {#if documentCategories.length === 0}
-            <p class="empty">No document categories yet.</p>
+            <p class="empty empty-action">
+              No document categories yet.
+              <a href={categoryCreateHref('document')}>Create a category?</a>
+            </p>
           {:else}
             <div class="stack">
               {#each documentCategories as category}
                 {@const items = documentsByCategory(category)}
                 <details class="entity">
                   <summary>
-                    <strong>{category}</strong>
+                    <span class="summary-title">
+                      <span class="material-icons" aria-hidden="true">{editorIcon('document')}</span>
+                      <strong>{category}</strong>
+                    </span>
                     <small>{items.length} document{items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
@@ -926,7 +972,10 @@
               {#each menuDocuments as menu}
                 <details class="entity">
                   <summary>
-                    <strong>{menu.title}</strong>
+                    <span class="summary-title">
+                      <span class="material-icons" aria-hidden="true">{editorIcon('menu')}</span>
+                      <strong>{menu.title}</strong>
+                    </span>
                     <small>{menu.is_active === 1 ? 'Active' : 'Hidden'}</small>
                   </summary>
                   <div class="entity-body">
@@ -1056,6 +1105,37 @@
   .empty {
     color: var(--color-text-muted);
     font-size: 0.74rem;
+  }
+
+  .summary-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .summary-title .material-icons {
+    color: var(--color-text-muted);
+    font-size: 1.05rem;
+    line-height: 1;
+  }
+
+  .empty-action {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0.44rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .empty-action a {
+    color: var(--color-text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--color-divider);
+    font-weight: var(--weight-semibold);
   }
 
   .entity-body {

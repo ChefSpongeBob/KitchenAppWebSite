@@ -1224,12 +1224,13 @@ export async function loadAdminUsers(db: D1, businessId: string) {
         .all<AdminUser>();
 
   const users = result.results ?? [];
-  const [approvalsByUser, capabilityOverrideRows] = await Promise.all([
+  const [approvalsByUser, departments, capabilityOverrideRows] = await Promise.all([
     loadScheduleDepartmentApprovalsByUser(
       db,
       users.map((user) => user.id),
       businessId
     ),
+    loadScheduleDepartments(db, businessId),
     db
       .prepare(
         `
@@ -1253,7 +1254,10 @@ export async function loadAdminUsers(db: D1, businessId: string) {
 
   return users.map((user) => ({
     ...user,
-    approved_departments: approvalsByUser.get(user.id) ?? [],
+    approved_departments:
+      (approvalsByUser.get(user.id) ?? []).length > 0 || !isBusinessAdminRole(user.role)
+        ? approvalsByUser.get(user.id) ?? []
+        : departments,
     capability_overrides: capabilityOverridesByUser.get(user.id) ?? {},
     effective_capabilities: resolveBusinessCapabilities(
       user.role,
@@ -2780,6 +2784,67 @@ async function refreshEmployeeOnboardingPackageStatus(
   }
 }
 
+function profilePayloadForCompletedOnboardingItem(profile: AdminEmployeeProfile, formKey: string) {
+  if (formKey === 'personal_information') {
+    const payload = {
+      legal_name: profile.real_name,
+      preferred_name: '',
+      birthday: profile.birthday,
+      phone: profile.phone,
+      address_line_1: profile.address_line_1,
+      address_line_2: profile.address_line_2,
+      city: profile.city,
+      state: profile.state,
+      postal_code: profile.postal_code
+    };
+    return requireFormFields(payload, ['legal_name', 'birthday', 'phone', 'address_line_1', 'city', 'state', 'postal_code'])
+      ? payload
+      : null;
+  }
+
+  if (formKey === 'emergency_contact') {
+    const payload = {
+      emergency_contact_name: profile.emergency_contact_name,
+      emergency_contact_phone: profile.emergency_contact_phone,
+      emergency_contact_relationship: profile.emergency_contact_relationship
+    };
+    return requireFormFields(payload, [
+      'emergency_contact_name',
+      'emergency_contact_phone',
+      'emergency_contact_relationship'
+    ])
+      ? payload
+      : null;
+  }
+
+  return null;
+}
+
+async function hydrateProfileBackedOnboardingItems(
+  db: D1,
+  userId: string,
+  businessId: string,
+  packageSentAt: number,
+  items: EmployeeOnboardingItem[]
+) {
+  if (!items.some((item) => item.status === 'pending' && (item.form_key === 'personal_information' || item.form_key === 'emergency_contact'))) {
+    return items;
+  }
+
+  const profile = await loadAdminEmployeeProfile(db, userId, businessId);
+  return items.map((item) => {
+    if (item.status !== 'pending') return item;
+    const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key);
+    if (!payload) return item;
+    return {
+      ...item,
+      status: 'submitted' as const,
+      form_payload: JSON.stringify(payload),
+      submitted_at: item.submitted_at ?? packageSentAt
+    };
+  });
+}
+
 export async function loadEmployeeOnboarding(
   db: D1,
   userId: string,
@@ -2860,7 +2925,13 @@ export async function loadEmployeeOnboarding(
     .bind(onboardingPackage.id, businessId)
     .all<EmployeeOnboardingItem>();
 
-  const rawItems = items.results ?? [];
+  const rawItems = await hydrateProfileBackedOnboardingItems(
+    db,
+    userId,
+    businessId,
+    onboardingPackage.sent_at,
+    items.results ?? []
+  );
   const canReadSensitive = await canAccessEmployeeSensitiveData(
     db,
     businessId,

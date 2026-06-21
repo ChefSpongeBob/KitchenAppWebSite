@@ -326,14 +326,17 @@
           <span class="kicker">Schedule Departments</span>
           <div class="department-chips">
             {#each data.departments as department}
+              {@const approved = isDepartmentApproved(data.employee, department)}
               <form method="POST" action="?/toggle_schedule_department" use:enhance={withFeedback}>
                 <input type="hidden" name="user_id" value={data.employee.id} />
                 <input type="hidden" name="department" value={department} />
                 <button
                   type="submit"
                   class="department-chip"
-                  class:department-chip-active={isDepartmentApproved(data.employee, department)}
+                  class:department-chip-active={approved}
+                  aria-pressed={approved}
                 >
+                  <span class="material-icons" aria-hidden="true">{approved ? 'check' : 'add'}</span>
                   {department}
                 </button>
               </form>
@@ -874,11 +877,19 @@
   }
 
   .department-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.34rem;
     width: auto;
     min-height: 2.1rem;
     padding-inline: 0.72rem;
     color: var(--color-text);
     background: color-mix(in srgb, var(--color-surface-alt) 38%, transparent);
+  }
+
+  .department-chip .material-icons {
+    font-size: 0.95rem;
+    line-height: 1;
   }
 
   .status-pill {

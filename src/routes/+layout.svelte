@@ -469,6 +469,7 @@
   <button
     class="hamburger tap"
     class:open={sidebarOpen}
+    data-guide="sidebar-toggle"
     on:click={toggleSidebar}
     aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
   >
@@ -488,7 +489,7 @@
   {/if}
 
   <!-- ===== Sidebar ===== -->
-  <aside class="sidebar" class:open={sidebarOpen} aria-label="Sidebar navigation">
+  <aside class="sidebar" class:open={sidebarOpen} aria-label="Sidebar navigation" data-guide="app-sidebar">
     <div class="sidebar-inner">
       <div class="sidebar-brand">
         {#if data.user?.businessLogoUrl}

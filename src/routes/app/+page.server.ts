@@ -51,14 +51,13 @@ type TodayShift = {
   notes: string;
 };
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   const isAdmin = locals.userRole === 'admin';
-  const guidedQuery = url.searchParams.get('guided') === '1';
-  const guidedAuto = db && locals.userId
-    ? !(await isFirstOpenTourComplete(db, locals.userId, 'user_home'))
-    : false;
-  const guided = guidedQuery || guidedAuto;
+  const guidedComplete = db && locals.userId
+    ? await isFirstOpenTourComplete(db, locals.userId, 'user_home')
+    : true;
+  const guided = !guidedComplete;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
   const featureAccess = buildFeatureAccess(
     featureModes,

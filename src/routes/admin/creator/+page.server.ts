@@ -37,6 +37,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const editorParam = url.searchParams.get('editor')?.trim().toLowerCase() ?? '';
   const domainParam = url.searchParams.get('domain')?.trim().toLowerCase() ?? '';
+  const typeParam = url.searchParams.get('type')?.trim().toLowerCase() ?? '';
 
   const initialEditorType: 'category' | 'list' | 'recipe' | 'document' | 'menu' =
     editorParam === 'category' ||
@@ -51,6 +52,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     domainParam === 'inventory' || domainParam === 'orders' || domainParam === 'preplists' || domainParam === 'checklists'
       ? domainParam
       : 'preplists';
+
+  const initialCategoryEditorType: 'list' | 'recipe' | 'document' =
+    typeParam === 'recipe' || typeParam === 'document' ? typeParam : 'list';
 
   if (!db) {
     return {
@@ -70,7 +74,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         documents: []
       },
       initialEditorType,
-      initialListDomain
+      initialListDomain,
+      initialCategoryEditorType
     };
   }
   const businessId = requireBusinessId(locals);
@@ -83,7 +88,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     loadAdminCreatorCatalog(db, businessId)
   ]);
 
-  return { sections, checklists, recipes, documents, creatorCatalog, initialEditorType, initialListDomain };
+  return {
+    sections,
+    checklists,
+    recipes,
+    documents,
+    creatorCatalog,
+    initialEditorType,
+    initialListDomain,
+    initialCategoryEditorType
+  };
 };
 
 export const actions: Actions = {

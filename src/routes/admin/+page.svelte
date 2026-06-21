@@ -101,7 +101,7 @@
     {
       selector: '[data-guide="admin-command-center"]',
       title: 'Ops Command Center',
-      description: 'This is your live overview of staffing, throughput, and service signals.',
+      description: 'Start here for staffing, task, temperature, and workspace status before opening deeper tools.',
       placement: 'bottom'
     },
     {
@@ -114,30 +114,30 @@
       selector: '[data-guide="admin-charts"]',
       title: 'Trend Charts',
       description: 'Use these charts to spot staffing gaps, task bottlenecks, and temp drift quickly.',
-      placement: 'top'
-    },
-    {
-      selector: '[data-guide="admin-feature-matrix"]',
-      title: 'Feature Matrix',
-      description: 'Every module status appears here so you can confirm what is live right now.',
-      placement: 'top'
-    },
-    {
-      selector: '[data-guide="admin-feature-controls"]',
-      title: 'Feature Controls',
-      description: 'Open App Editor first to enable only the modules this operation needs.',
       placement: 'bottom'
     },
     {
-      selector: '[data-guide="admin-registry"]',
-      title: 'Business Registry',
-      description: 'Complete ownership, legal, and business profile records here.',
+      selector: '[data-guide="admin-feature-matrix"]',
+      title: 'Feature Controls',
+      description: 'Use the matrix and App Editor to decide which modules are live for this business.',
+      placement: 'bottom'
+    },
+    {
+      selector: '[data-guide="admin-creator"]',
+      title: 'Creator Studio',
+      description: 'Build prep lists, checklists, inventory/order lists, recipe categories, recipes, document categories, docs, and menus here.',
       placement: 'top'
+    },
+    {
+      selector: '[data-guide="sidebar-toggle"]',
+      title: 'Manager Menu',
+      description: 'Open the sidebar for scheduling, schedule roles, staff manager, employee onboarding, vendors, sensors, settings, and daily tools.',
+      placement: 'right'
     },
     {
       selector: '[data-guide="admin-reminders"]',
       title: 'Action Queue',
-      description: 'Check pending approvals, whiteboard moderation, and unresolved daily tasks.',
+      description: 'Use this area for reminders and pending work that needs manager attention.',
       placement: 'left'
     }
   ];
@@ -203,7 +203,10 @@
 
   async function markGuidedTourComplete() {
     try {
-      await fetch('?/complete_guided_tour', { method: 'POST' });
+      await fetch('/admin?/complete_guided_tour', {
+        method: 'POST',
+        body: new FormData()
+      });
     } catch {
       // Best-effort save only; do not block UI close.
     }
@@ -558,7 +561,7 @@
       </a>
     </article>
 
-    <article class="panel quick-link-tile">
+    <article class="panel quick-link-tile" data-guide="admin-creator">
       <a href="/admin/creator" class="quick-link">
         <span class="panel-kicker">Builder</span>
         <h2>Creator Studio</h2>

@@ -73,11 +73,10 @@ function dayLabel(dayIso: string) {
 export const load: PageServerLoad = async ({ locals, url }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
-  const guidedQuery = url.searchParams.get('guided') === '1';
-  const guidedAuto = db && locals.userId
-    ? !(await isFirstOpenTourComplete(db, locals.userId, 'admin_dashboard'))
-    : false;
-  const guided = guidedQuery || guidedAuto;
+  const guidedComplete = db && locals.userId
+    ? await isFirstOpenTourComplete(db, locals.userId, 'admin_dashboard')
+    : true;
+  const guided = !guidedComplete;
   const featureModes = locals.featureModes ?? defaultAppFeatureModes;
   const featureAccess = buildFeatureAccess(
     featureModes,

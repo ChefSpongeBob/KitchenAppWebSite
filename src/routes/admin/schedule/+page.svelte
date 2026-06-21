@@ -501,13 +501,29 @@
     gridRenderVersion += 1;
   }
 
-  function prepareWeekPayload() {
-    weekPayload = serializeWeekPayload();
-    teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
+  function writeSchedulePayloadToForm(form: HTMLFormElement | null) {
+    if (!form) return;
+    const payloadInput = form.querySelector<HTMLInputElement>('input[name="payload"]');
+    const teamInput = form.querySelector<HTMLInputElement>('input[name="team_payload"]');
+    if (payloadInput) payloadInput.value = weekPayload;
+    if (teamInput) teamInput.value = teamPayload;
   }
 
-  function preparePublishPayload() {
+  function prepareWeekPayload(event?: SubmitEvent) {
+    weekPayload = serializeWeekPayload();
+    teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
+    writeSchedulePayloadToForm(event?.currentTarget instanceof HTMLFormElement ? event.currentTarget : null);
+  }
+
+  function preparePublishPayload(event?: SubmitEvent | MouseEvent) {
+    const form =
+      event?.currentTarget instanceof HTMLFormElement
+        ? event.currentTarget
+        : event?.currentTarget instanceof HTMLButtonElement
+          ? event.currentTarget.form
+          : null;
     prepareWeekPayload();
+    writeSchedulePayloadToForm(form);
     warnBeforePublish();
   }
 
@@ -1180,8 +1196,8 @@
                   <a href="/admin/users" class="menu-item menu-link">Employees</a>
                     <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate" on:submit={preparePublishPayload}>
                       <input type="hidden" name="week_start" value={data.weekStart} />
-                      <input type="hidden" name="payload" value={serializeWeekPayload()} />
-                      <input type="hidden" name="team_payload" value={JSON.stringify(employeeRows.map((row) => row.userId))} />
+                      <input type="hidden" name="payload" value={weekPayload} />
+                      <input type="hidden" name="team_payload" value={teamPayload} />
                       <button type="submit" class="menu-item menu-item-primary">Publish</button>
                     </form>
                   </div>
@@ -1811,10 +1827,12 @@
               <div class="duplicate-day-chips">
                 {#each data.days as day}
                   {#if day.date !== editorDraft.shiftDate}
+                    {@const selectedDuplicateDay = editorDraft.duplicateDates.includes(day.date)}
                     <button
                       type="button"
                       class="duplicate-day-btn"
-                      class:duplicate-day-btn-active={editorDraft.duplicateDates.includes(day.date)}
+                      class:duplicate-day-btn-active={selectedDuplicateDay}
+                      aria-pressed={selectedDuplicateDay}
                       on:click={() => toggleDraftDuplicateDay(day.date)}
                     >
                       {new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}
@@ -2699,9 +2717,9 @@
 
   .duplicate-day-btn-active {
     border-bottom-color: var(--color-text);
-    background: transparent;
+    background: color-mix(in srgb, var(--color-text) 8%, transparent);
     color: var(--color-text);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent);
+    box-shadow: inset 0 -2px 0 var(--color-text);
     font-weight: var(--weight-semibold);
   }
 
