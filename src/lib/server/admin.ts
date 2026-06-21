@@ -2839,7 +2839,6 @@ async function hydrateProfileBackedOnboardingItems(
     return {
       ...item,
       status: 'submitted' as const,
-      form_payload: JSON.stringify(payload),
       submitted_at: item.submitted_at ?? packageSentAt
     };
   });

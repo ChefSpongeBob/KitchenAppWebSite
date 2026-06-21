@@ -128,6 +128,26 @@
       description: 'Build prep lists, checklists, inventory/order lists, recipe categories, recipes, document categories, docs, and menus here.',
       placement: 'top'
     },
+    ...(data.featureAccess.scheduling
+      ? [{
+          selector: '[data-guide="admin-schedule-builder"]',
+          title: 'Schedule Builder',
+          description: 'Create coverage, assign shifts, publish schedules, and review offers, swaps, time off, and open shifts.',
+          placement: 'top' as const
+        }]
+      : []),
+    {
+      selector: '[data-guide="admin-staff-manager"]',
+      title: 'Staff Manager',
+      description: 'Invite employees, set permissions, manage schedule departments, and review employee records.',
+      placement: 'top'
+    },
+    {
+      selector: '[data-guide="admin-onboarding"]',
+      title: 'Employee Onboarding',
+      description: 'Manage onboarding packets, forms, acknowledgements, and submitted employee documentation.',
+      placement: 'top'
+    },
     {
       selector: '[data-guide="sidebar-toggle"]',
       title: 'Manager Menu',
@@ -565,6 +585,29 @@
       <a href="/admin/creator" class="quick-link">
         <span class="panel-kicker">Builder</span>
         <h2>Creator Studio</h2>
+      </a>
+    </article>
+
+    {#if data.featureAccess.scheduling}
+      <article class="panel quick-link-tile" data-guide="admin-schedule-builder">
+        <a href="/admin/schedule" class="quick-link">
+          <span class="panel-kicker">Scheduling</span>
+          <h2>Schedule Builder</h2>
+        </a>
+      </article>
+    {/if}
+
+    <article class="panel quick-link-tile" data-guide="admin-staff-manager">
+      <a href="/admin/users" class="quick-link">
+        <span class="panel-kicker">People</span>
+        <h2>Staff Manager</h2>
+      </a>
+    </article>
+
+    <article class="panel quick-link-tile" data-guide="admin-onboarding">
+      <a href="/admin/onboarding" class="quick-link">
+        <span class="panel-kicker">Packets</span>
+        <h2>Employee Onboarding</h2>
       </a>
     </article>
 

@@ -337,7 +337,8 @@
                   aria-pressed={approved}
                 >
                   <span class="material-icons" aria-hidden="true">{approved ? 'check' : 'add'}</span>
-                  {department}
+                  <span>{department}</span>
+                  <small>{approved ? 'On' : 'Off'}</small>
                 </button>
               </form>
             {/each}
@@ -856,7 +857,7 @@
   .department-chip.department-chip-active {
     border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border));
     color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: color-mix(in srgb, var(--color-success) 18%, transparent);
+    background: transparent;
   }
 
   .access-state {
@@ -879,17 +880,27 @@
   .department-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.34rem;
+    gap: 0.42rem;
     width: auto;
     min-height: 2.1rem;
-    padding-inline: 0.72rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    padding: 0.32rem 0.15rem;
     color: var(--color-text);
-    background: color-mix(in srgb, var(--color-surface-alt) 38%, transparent);
+    background: transparent;
   }
 
   .department-chip .material-icons {
     font-size: 0.95rem;
     line-height: 1;
+  }
+
+  .department-chip small {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
 
   .status-pill {
