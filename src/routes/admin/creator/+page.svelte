@@ -67,7 +67,7 @@
   type ChecklistCategory = {
     id: string;
     title: string;
-    sections: ChecklistSection[];
+    section: ChecklistSection;
   };
 
   type RecipeRow = {
@@ -138,18 +138,12 @@
     return 'list_alt';
   }
 
-  const checklistGroupSlug = (slug: string) => slug.replace(/-(opening|midday|closing)$/i, '');
   const toTitle = (value: string) =>
     value
       .replace(/[-_]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .replace(/\b\w/g, (char) => char.toUpperCase());
-
-  function checklistSectionLabel(slug: string) {
-    const match = slug.match(/-(opening|midday|closing)$/i);
-    return match ? toTitle(match[1]) : 'Checklist';
-  }
 
   function recipesByCategory(category: string) {
     const key = normalizeKey(category);
@@ -255,12 +249,10 @@
     const draft = reverseAttachmentDraft(targetType, targetId);
     if (draft.domain === 'checklists') {
       const category = checklistCategories.find((entry) => entry.id === draft.category);
-      return (category?.sections ?? []).flatMap((section) =>
-        section.items.map((item) => ({
+      return (category?.section.items ?? []).map((item) => ({
           id: `checklist_item:${item.id}`,
-          title: `${checklistSectionLabel(section.slug)}: ${item.content}`
-        }))
-      );
+          title: item.content
+        }));
     }
 
     const section = data.sections[draft.domain].find((entry) => entry.id === draft.category);
@@ -282,18 +274,11 @@
   ] satisfies ListSection[];
   $: filteredListSections =
     listDomain === 'checklists' ? [] : listSections.filter((section) => section.domain === listDomain);
-  $: checklistGroupMap = data.checklists.reduce((map, section) => {
-    const key = checklistGroupSlug(section.slug);
-    const current = map.get(key) ?? [];
-    current.push(section);
-    map.set(key, current);
-    return map;
-  }, new Map<string, ChecklistSection[]>());
-  $: checklistCategories = Array.from(checklistGroupMap.entries())
-    .map(([id, sections]) => ({
-      id,
-      title: toTitle(id),
-      sections: sections.sort((a, b) => a.title.localeCompare(b.title))
+  $: checklistCategories = data.checklists
+    .map((section) => ({
+      id: section.slug,
+      title: section.title,
+      section
     })) satisfies ChecklistCategory[];
   $: documentCategories = data.creatorCatalog.documents.filter((category) => normalizeKey(category) !== 'menu');
   $: menuDocuments = data.documents.filter(isMenuDocument);
@@ -482,7 +467,6 @@
           <form method="POST" action="?/create_checklist_category" use:enhance={withResetFeedback} class="create-form">
             <input name="title" placeholder="New checklist category" required />
             <input name="description" placeholder="Description" />
-            <input type="hidden" name="create_shift_sections" value="1" />
             <button type="submit">Create Checklist</button>
           </form>
 
@@ -500,7 +484,7 @@
                       <span class="material-icons" aria-hidden="true">{editorIcon('checklist')}</span>
                       <strong>{category.title}</strong>
                     </span>
-                    <small>{category.sections.length} section{category.sections.length === 1 ? '' : 's'}</small>
+                    <small>{category.section.items.length} item{category.section.items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
                     <div class="category-tools">
@@ -516,22 +500,21 @@
                     </div>
 
                     <div class="entity-items">
-                      {#each category.sections as section}
                         <div class="entity-item">
                           <div class="section-head">
-                            <strong>{checklistSectionLabel(section.slug)}</strong>
-                            <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
+                            <strong>{category.title}</strong>
+                            <small>{category.section.items.length} item{category.section.items.length === 1 ? '' : 's'}</small>
                           </div>
                           <form method="POST" action="?/add_checklist_item" use:enhance={withResetFeedback} class="inline-form">
-                            <input type="hidden" name="section_id" value={section.id} />
+                            <input type="hidden" name="section_id" value={category.section.id} />
                             <input name="content" placeholder="New checklist item" required />
                             <button type="submit">Add Item</button>
                           </form>
-                          {#if section.items.length === 0}
+                          {#if category.section.items.length === 0}
                             <p class="empty">No items yet.</p>
                           {:else}
                             <div class="entity-items nested">
-                              {#each section.items as item}
+                              {#each category.section.items as item}
                                 {@const draft = attachmentDraft('checklist_item', item.id)}
                                 <div class="entity-item compact">
                                   <form method="POST" action="?/update_checklist_item" use:enhance={withFeedback} class="inline-form">
@@ -595,7 +578,6 @@
                             </div>
                           {/if}
                         </div>
-                      {/each}
                     </div>
                   </div>
                 </details>

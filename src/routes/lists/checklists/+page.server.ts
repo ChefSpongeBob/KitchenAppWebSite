@@ -6,10 +6,6 @@ type ChecklistSectionRow = {
   title: string;
 };
 
-function normalizeChecklistPrefix(slug: string) {
-  return slug.replace(/-(opening|midday|closing)$/i, '');
-}
-
 function toTitle(value: string) {
   return value
     .replace(/[-_]+/g, ' ')
@@ -35,21 +31,13 @@ export const load: PageServerLoad = async ({ locals }) => {
     .bind(businessId)
     .all<ChecklistSectionRow>();
 
-  const prefixMap = new Map<string, string>();
-  for (const row of rows.results ?? []) {
-    const prefix = normalizeChecklistPrefix(row.slug);
-    if (!prefixMap.has(prefix)) {
-      prefixMap.set(prefix, toTitle(prefix));
-    }
-  }
-
-  const sections = Array.from(prefixMap.entries())
-    .sort((a, b) => a[1].localeCompare(b[1]))
-    .map(([slug, title]) => ({
-      slug,
-      title,
-      href: `/lists/checklists/${encodeURIComponent(slug)}`
-    }));
+  const sections = (rows.results ?? [])
+    .map((row) => ({
+      slug: row.slug,
+      title: row.title || toTitle(row.slug),
+      href: `/lists/checklists/${encodeURIComponent(row.slug)}`
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
 
   return { sections };
 };

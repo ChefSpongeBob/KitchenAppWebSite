@@ -72,6 +72,46 @@
     submitted_at: number | null;
   };
 
+  type EmployeePosPermissions = {
+    pos_external_id: string;
+    can_clock_in: number;
+    can_use_pos: number;
+    can_open_cash_drawer: number;
+    can_refund: number;
+    can_void: number;
+    can_manager_override: number;
+  };
+
+  type EmployeeCertification = {
+    id: string;
+    certification_type: string;
+    title: string;
+    issuer: string;
+    certificate_number: string;
+    issued_at: number | null;
+    expires_at: number | null;
+    status: string;
+  };
+
+  type EmployeeVerificationCheck = {
+    id: string;
+    check_type: string;
+    status: string;
+    provider_reference: string;
+    result_summary: string;
+    requested_at: number | null;
+    completed_at: number | null;
+    reviewed_at: number | null;
+  };
+
+  type EmployeeDocumentAccessAudit = {
+    id: string;
+    action: string;
+    actor_name: string | null;
+    actor_email: string | null;
+    created_at: number;
+  };
+
   export let data: {
     employee: Employee;
     profile: EmployeeProfile;
@@ -79,6 +119,14 @@
       package: EmployeeOnboardingPackage | null;
       items: EmployeeOnboardingItem[];
     };
+    hrPos: {
+      pos: EmployeePosPermissions;
+      certifications: EmployeeCertification[];
+      verificationChecks: EmployeeVerificationCheck[];
+      directHrAccess: boolean;
+      documentAudit: EmployeeDocumentAccessAudit[];
+    } | null;
+    canManageHrPos: boolean;
     departments: ScheduleDepartment[];
     canEditPermissions: boolean;
     canManageManagerAccess: boolean;
@@ -111,6 +159,9 @@
 
   const formatOnboardingStatus = (status: string) =>
     status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+  const formatRecordDate = (value: number | null) =>
+    value ? new Date(value * 1000).toLocaleDateString([], { dateStyle: 'medium' }) : 'Not set';
 
   const formLabelMap: Record<string, string> = {
     legal_name: 'Legal name',
@@ -417,6 +468,140 @@
             </div>
           </form>
         </section>
+
+        {#if data.canManageHrPos && data.hrPos}
+          <section class="workspace-section hr-pos-section">
+            <header class="section-head">
+              <div>
+                <span class="kicker">HR / POS</span>
+                <h2>Access and records</h2>
+              </div>
+              <form method="POST" action="?/toggle_hr_access" use:enhance={withFeedback}>
+                <input type="hidden" name="user_id" value={data.employee.id} />
+                <button type="submit" class="line-action">
+                  {data.hrPos.directHrAccess ? 'Remove HR Access' : 'Grant HR Access'}
+                </button>
+              </form>
+            </header>
+
+            <div class="hr-pos-grid">
+              <form method="POST" action="?/save_pos_permissions" use:enhance={withFeedback} class="record-panel">
+                <input type="hidden" name="user_id" value={data.employee.id} />
+                <header>
+                  <strong>POS</strong>
+                  <span>{data.hrPos.pos.can_use_pos ? 'Enabled' : 'Limited'}</span>
+                </header>
+                <label>
+                  <span>POS ID</span>
+                  <input name="pos_external_id" value={data.hrPos.pos.pos_external_id} placeholder="Optional" />
+                </label>
+                <div class="compact-checks">
+                  <label><input type="checkbox" name="can_clock_in" checked={data.hrPos.pos.can_clock_in === 1} /> Clock in</label>
+                  <label><input type="checkbox" name="can_use_pos" checked={data.hrPos.pos.can_use_pos === 1} /> Use POS</label>
+                  <label><input type="checkbox" name="can_open_cash_drawer" checked={data.hrPos.pos.can_open_cash_drawer === 1} /> Cash drawer</label>
+                  <label><input type="checkbox" name="can_refund" checked={data.hrPos.pos.can_refund === 1} /> Refunds</label>
+                  <label><input type="checkbox" name="can_void" checked={data.hrPos.pos.can_void === 1} /> Voids</label>
+                  <label><input type="checkbox" name="can_manager_override" checked={data.hrPos.pos.can_manager_override === 1} /> Manager override</label>
+                </div>
+                <button type="submit">Save POS</button>
+              </form>
+
+              <section class="record-panel">
+                <header>
+                  <strong>Certifications</strong>
+                  <span>{data.hrPos.certifications.length}</span>
+                </header>
+                <form method="POST" action="?/add_certification" use:enhance={withFeedback} class="mini-form">
+                  <input type="hidden" name="user_id" value={data.employee.id} />
+                  <input name="title" placeholder="Title" required />
+                  <input name="certification_type" placeholder="Type" />
+                  <input name="issuer" placeholder="Issuer" />
+                  <input name="certificate_number" placeholder="Number" />
+                  <input name="issued_at" type="date" />
+                  <input name="expires_at" type="date" />
+                  <select name="status">
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                  <button type="submit">Add</button>
+                </form>
+                <div class="record-list">
+                  {#each data.hrPos.certifications as cert}
+                    <div class="record-row">
+                      <div>
+                        <strong>{cert.title}</strong>
+                        <span>{cert.issuer || cert.certification_type} | {formatRecordDate(cert.expires_at)}</span>
+                      </div>
+                      <form method="POST" action="?/delete_certification" use:enhance={withFeedback}>
+                        <input type="hidden" name="certification_id" value={cert.id} />
+                        <button type="submit" class="danger-link">Delete</button>
+                      </form>
+                    </div>
+                  {:else}
+                    <p class="quiet-note">No certifications.</p>
+                  {/each}
+                </div>
+              </section>
+
+              <section class="record-panel">
+                <header>
+                  <strong>Verification</strong>
+                  <span>{data.hrPos.verificationChecks.length}</span>
+                </header>
+                <form method="POST" action="?/add_verification_check" use:enhance={withFeedback} class="mini-form">
+                  <input type="hidden" name="user_id" value={data.employee.id} />
+                  <input name="check_type" placeholder="Check type" required />
+                  <input name="provider_reference" placeholder="Reference" />
+                  <select name="status">
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                  <input name="result_summary" placeholder="Result" />
+                  <button type="submit">Add</button>
+                </form>
+                <div class="record-list">
+                  {#each data.hrPos.verificationChecks as check}
+                    <form method="POST" action="?/update_verification_check" use:enhance={withFeedback} class="record-row editable-row">
+                      <input type="hidden" name="check_id" value={check.id} />
+                      <div>
+                        <strong>{formatOnboardingStatus(check.check_type)}</strong>
+                        <span>{check.provider_reference || 'No reference'} | {formatRecordDate(check.reviewed_at)}</span>
+                      </div>
+                      <select name="status">
+                        <option value="pending" selected={check.status === 'pending'}>Pending</option>
+                        <option value="approved" selected={check.status === 'approved'}>Approved</option>
+                        <option value="failed" selected={check.status === 'failed'}>Failed</option>
+                      </select>
+                      <input name="result_summary" value={check.result_summary} placeholder="Result" />
+                      <button type="submit">Save</button>
+                    </form>
+                  {:else}
+                    <p class="quiet-note">No checks.</p>
+                  {/each}
+                </div>
+              </section>
+
+              <section class="record-panel">
+                <header>
+                  <strong>Document Audit</strong>
+                  <span>{data.hrPos.documentAudit.length}</span>
+                </header>
+                <div class="record-list">
+                  {#each data.hrPos.documentAudit as entry}
+                    <div class="audit-row">
+                      <strong>{formatOnboardingStatus(entry.action)}</strong>
+                      <span>{entry.actor_name || entry.actor_email || 'System'} | {formatDateTime(entry.created_at)}</span>
+                    </div>
+                  {:else}
+                    <p class="quiet-note">No document access yet.</p>
+                  {/each}
+                </div>
+              </section>
+            </div>
+          </section>
+        {/if}
 
         <section class="workspace-section onboarding-review">
           <header class="section-head">
@@ -788,6 +973,120 @@
     gap: 0.85rem;
   }
 
+  .hr-pos-section {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .hr-pos-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+
+  .record-panel {
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .record-panel header,
+  .record-row,
+  .audit-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  .record-panel header span,
+  .record-row span,
+  .audit-row span,
+  .quiet-note {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
+
+  .compact-checks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.7rem;
+    padding: 0.25rem 0;
+  }
+
+  .compact-checks label {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--color-text);
+    font-size: 0.82rem;
+  }
+
+  .compact-checks input {
+    width: 1rem;
+    min-height: 1rem;
+    accent-color: var(--color-accent);
+  }
+
+  .mini-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .mini-form button,
+  .editable-row button,
+  .line-action {
+    width: auto;
+  }
+
+  .record-list {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .record-row,
+  .audit-row {
+    min-height: 2.45rem;
+    padding: 0.4rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .record-row div,
+  .audit-row {
+    min-width: 0;
+  }
+
+  .record-row strong,
+  .audit-row strong {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
+  .editable-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 8rem minmax(8rem, 0.8fr) auto;
+  }
+
+  .danger-link {
+    min-height: 2rem;
+    width: auto;
+    color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
+    border-bottom-color: color-mix(in srgb, var(--color-error) 44%, var(--color-divider));
+  }
+
+  .line-action {
+    min-height: 2.25rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
+  }
+
   .field-grid {
     display: grid;
     gap: 0.75rem;
@@ -1073,6 +1372,9 @@
   @media (max-width: 860px) {
     .profile-side,
     .employee-metrics,
+    .hr-pos-grid,
+    .mini-form,
+    .editable-row,
     .field-grid.two,
     .field-grid.three,
     .onboarding-summary,

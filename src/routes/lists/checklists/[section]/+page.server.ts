@@ -1,17 +1,6 @@
 import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
-import { requireBusinessId } from '$lib/server/tenant';
-
-type ChecklistSectionRow = {
-  slug: string;
-  title: string;
-};
-
-const SHIFT_ORDER: Record<string, number> = {
-  opening: 0,
-  midday: 1,
-  closing: 2
-};
+import type { Actions, PageServerLoad } from './$types';
+import { createChecklistPage } from '$lib/server/checklists';
 
 function toTitle(value: string) {
   return value
@@ -21,59 +10,31 @@ function toTitle(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function shiftFromSlug(baseSlug: string, slug: string) {
-  const suffix = slug.slice(baseSlug.length).replace(/^-/, '');
-  return suffix || slug;
+function requireSection(value: string | undefined) {
+  if (!value) throw error(404, 'Checklist not found.');
+  return value;
 }
 
-function checklistShiftDescription(baseSlug: string, shiftSlug: string) {
-  return shiftSlug === baseSlug
-    ? `${toTitle(baseSlug)} Checklist`
-    : `${toTitle(baseSlug)} ${toTitle(shiftSlug)} Checklist`;
+function handlersFor(section: string) {
+  return createChecklistPage(section, toTitle(section), {
+    subtitle: '',
+    resetLabel: 'Reset Checklist',
+    defaults: []
+  });
 }
 
-export const load: PageServerLoad = async ({ locals, params }) => {
-  const db = locals.DB;
-  if (!db) return { title: toTitle(params.section), shifts: [] };
+export const load: PageServerLoad = async (event) => {
+  const section = requireSection(event.params.section);
+  return handlersFor(section).load(event);
+};
 
-  const businessId = requireBusinessId(locals);
-  const baseSlug = params.section;
-
-  const rows = await db
-    .prepare(
-      `
-      SELECT slug, title
-      FROM checklist_sections
-      WHERE business_id = ?
-        AND (slug = ? OR slug LIKE ?)
-      ORDER BY slug ASC
-      `
-    )
-    .bind(businessId, baseSlug, `${baseSlug}-%`)
-    .all<ChecklistSectionRow>();
-
-  const sections = rows.results ?? [];
-  if (sections.length === 0) {
-    throw error(404, 'Checklist category not found.');
+export const actions: Actions = {
+  toggle_checked: async (event) => {
+    const section = requireSection(event.params.section);
+    return handlersFor(section).actions.toggle_checked(event);
+  },
+  reset_checklist: async (event) => {
+    const section = requireSection(event.params.section);
+    return handlersFor(section).actions.reset_checklist(event);
   }
-
-  const shifts = sections
-    .map((section) => {
-      const shiftSlug = shiftFromSlug(baseSlug, section.slug);
-      return {
-        href: `/lists/checklists/${encodeURIComponent(baseSlug)}/${encodeURIComponent(shiftSlug)}`,
-        title: toTitle(shiftSlug),
-        description: checklistShiftDescription(baseSlug, shiftSlug)
-      };
-    })
-    .sort((a, b) => {
-      const aKey = a.href.split('/').pop() ?? '';
-      const bKey = b.href.split('/').pop() ?? '';
-      return (SHIFT_ORDER[aKey] ?? 99) - (SHIFT_ORDER[bKey] ?? 99) || a.title.localeCompare(b.title);
-    });
-
-  return {
-    title: toTitle(baseSlug),
-    shifts
-  };
 };

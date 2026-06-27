@@ -35,6 +35,7 @@ import {
   canAccessEmployeeSensitiveData,
   decryptSensitiveJsonPayload,
   encryptSensitiveJsonPayload,
+  HR_SENSITIVE_PERMISSION,
   isSensitiveEncryptionConfigured,
   isSensitiveOnboardingFormKey,
   sensitiveConfigurationFailure,
@@ -1425,6 +1426,175 @@ export async function loadAdminEmployeeProfile(db: D1, userId: string, businessI
     .first<AdminEmployeeProfile>();
 
   return profile ?? emptyEmployeeProfile(userId);
+}
+
+export type EmployeePosPermissions = {
+  pos_external_id: string;
+  can_clock_in: number;
+  can_use_pos: number;
+  can_open_cash_drawer: number;
+  can_refund: number;
+  can_void: number;
+  can_manager_override: number;
+};
+
+export type EmployeeCertification = {
+  id: string;
+  certification_type: string;
+  title: string;
+  issuer: string;
+  certificate_number: string;
+  file_url: string;
+  file_name: string;
+  issued_at: number | null;
+  expires_at: number | null;
+  status: string;
+  reviewed_at: number | null;
+  created_at: number;
+  updated_at: number;
+};
+
+export type EmployeeVerificationCheck = {
+  id: string;
+  check_type: string;
+  status: string;
+  provider_reference: string;
+  result_summary: string;
+  requested_at: number | null;
+  completed_at: number | null;
+  reviewed_at: number | null;
+  created_at: number;
+  updated_at: number;
+};
+
+export type EmployeeDocumentAccessAudit = {
+  id: string;
+  action: string;
+  actor_name: string | null;
+  actor_email: string | null;
+  created_at: number;
+};
+
+function emptyEmployeePosPermissions(): EmployeePosPermissions {
+  return {
+    pos_external_id: '',
+    can_clock_in: 1,
+    can_use_pos: 0,
+    can_open_cash_drawer: 0,
+    can_refund: 0,
+    can_void: 0,
+    can_manager_override: 0
+  };
+}
+
+export async function loadEmployeeHrPosAccess(db: D1, userId: string, businessId = '') {
+  const [pos, certifications, verificationChecks, directHrAccess, documentAudit] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT
+          pos_external_id,
+          can_clock_in,
+          can_use_pos,
+          can_open_cash_drawer,
+          can_refund,
+          can_void,
+          can_manager_override
+        FROM employee_pos_permissions
+        WHERE business_id = ? AND user_id = ?
+        LIMIT 1
+        `
+      )
+      .bind(businessId, userId)
+      .first<EmployeePosPermissions>()
+      .catch(() => null),
+    db
+      .prepare(
+        `
+        SELECT
+          id,
+          certification_type,
+          title,
+          issuer,
+          certificate_number,
+          file_url,
+          file_name,
+          issued_at,
+          expires_at,
+          status,
+          reviewed_at,
+          created_at,
+          updated_at
+        FROM employee_certifications
+        WHERE business_id = ? AND user_id = ?
+        ORDER BY COALESCE(expires_at, updated_at) ASC, updated_at DESC
+        `
+      )
+      .bind(businessId, userId)
+      .all<EmployeeCertification>()
+      .catch(() => ({ results: [] as EmployeeCertification[] })),
+    db
+      .prepare(
+        `
+        SELECT
+          id,
+          check_type,
+          status,
+          provider_reference,
+          result_summary,
+          requested_at,
+          completed_at,
+          reviewed_at,
+          created_at,
+          updated_at
+        FROM employee_verification_checks
+        WHERE business_id = ? AND user_id = ?
+        ORDER BY updated_at DESC
+        `
+      )
+      .bind(businessId, userId)
+      .all<EmployeeVerificationCheck>()
+      .catch(() => ({ results: [] as EmployeeVerificationCheck[] })),
+    db
+      .prepare(
+        `
+        SELECT is_enabled
+        FROM employee_role_permissions
+        WHERE business_id = ? AND user_id = ? AND permission_key = ?
+        LIMIT 1
+        `
+      )
+      .bind(businessId, userId, HR_SENSITIVE_PERMISSION)
+      .first<{ is_enabled: number }>()
+      .catch(() => null),
+    db
+      .prepare(
+        `
+        SELECT
+          audit.id,
+          audit.action,
+          actor.display_name AS actor_name,
+          actor.email AS actor_email,
+          audit.created_at
+        FROM employee_document_access_audit audit
+        LEFT JOIN users actor ON actor.id = audit.actor_user_id
+        WHERE audit.business_id = ? AND audit.user_id = ?
+        ORDER BY audit.created_at DESC
+        LIMIT 12
+        `
+      )
+      .bind(businessId, userId)
+      .all<EmployeeDocumentAccessAudit>()
+      .catch(() => ({ results: [] as EmployeeDocumentAccessAudit[] }))
+  ]);
+
+  return {
+    pos: pos ?? emptyEmployeePosPermissions(),
+    certifications: certifications.results ?? [],
+    verificationChecks: verificationChecks.results ?? [],
+    directHrAccess: directHrAccess?.is_enabled === 1,
+    documentAudit: documentAudit.results ?? []
+  };
 }
 
 export async function loadPendingEmployeeProfileEditRequest(db: D1, userId: string, businessId = '') {
@@ -3949,7 +4119,6 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
   const title = String(formData.get('title') ?? '').trim();
   const requestedSlug = String(formData.get('slug') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
-  const createShiftSections = String(formData.get('create_shift_sections') ?? '1') === '1';
   const baseSlug = normalizeSlug(requestedSlug || title);
 
   if (!title) return fail(400, { error: 'Checklist category title is required.' });
@@ -3961,13 +4130,7 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
     return fail(503, { error: 'Checklist tables are not available yet.' });
   }
 
-  const sections = createShiftSections
-    ? [
-        { slug: `${baseSlug}-opening`, title: checklistSectionTitle(title, 'Opening') },
-        { slug: `${baseSlug}-midday`, title: checklistSectionTitle(title, 'Mid Day') },
-        { slug: `${baseSlug}-closing`, title: checklistSectionTitle(title, 'Closing') }
-      ]
-    : [{ slug: baseSlug, title: checklistSectionTitle(title) }];
+  const sections = [{ slug: baseSlug, title: checklistSectionTitle(title) }];
 
   for (const section of sections) {
     const existing = await db
@@ -4002,19 +4165,13 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
   return { success: true };
 }
 
-function checklistSuffixFromSlug(baseSlug: string, slug: string) {
-  if (slug === baseSlug) return '';
-  const suffix = slug.slice(baseSlug.length).replace(/^-/, '');
-  return suffix ? `-${suffix}` : '';
-}
-
 function checklistCategoryBaseTitle(title: string) {
   return title.trim().replace(/\s+checklist$/i, '').trim() || title.trim();
 }
 
-function checklistSectionTitle(title: string, shiftLabel = '') {
+function checklistSectionTitle(title: string) {
   const baseTitle = checklistCategoryBaseTitle(title);
-  return shiftLabel ? `${baseTitle} ${shiftLabel} Checklist` : `${baseTitle} Checklist`;
+  return `${baseTitle} Checklist`;
 }
 
 export async function updateChecklistCategory(request: Request, locals: App.Locals) {
@@ -4042,12 +4199,11 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
       `
       SELECT id, slug
       FROM checklist_sections
-      WHERE business_id = ?
-        AND (slug = ? OR slug LIKE ?)
+      WHERE business_id = ? AND slug = ?
       ORDER BY slug ASC
       `
     )
-    .bind(businessId, previousBaseSlug, `${previousBaseSlug}-%`)
+    .bind(businessId, previousBaseSlug)
     .all<{ id: string; slug: string }>();
 
   const currentSections = sections.results ?? [];
@@ -4056,30 +4212,23 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
   }
 
   const currentIds = new Set(currentSections.map((section) => section.id));
-  const nextSlugs = currentSections.map((section) => `${nextBaseSlug}${checklistSuffixFromSlug(previousBaseSlug, section.slug)}`);
-  for (const nextSlug of nextSlugs) {
-    const conflict = await db
-      .prepare(
-        `
-        SELECT id
-        FROM checklist_sections
-        WHERE business_id = ? AND slug = ?
-        LIMIT 1
-        `
-      )
-      .bind(businessId, nextSlug)
-      .first<{ id: string }>();
-    if (conflict && !currentIds.has(conflict.id)) {
-      return fail(400, { error: `Checklist section slug "${nextSlug}" already exists.` });
-    }
+  const conflict = await db
+    .prepare(
+      `
+      SELECT id
+      FROM checklist_sections
+      WHERE business_id = ? AND slug = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, nextBaseSlug)
+    .first<{ id: string }>();
+  if (conflict && !currentIds.has(conflict.id)) {
+    return fail(400, { error: `Checklist section slug "${nextBaseSlug}" already exists.` });
   }
 
   const now = Math.floor(Date.now() / 1000);
   for (const section of currentSections) {
-    const suffix = checklistSuffixFromSlug(previousBaseSlug, section.slug);
-    const nextSlug = `${nextBaseSlug}${suffix}`;
-    const suffixLabel = suffix ? suffix.slice(1).replace(/\b\w/g, (letter) => letter.toUpperCase()) : '';
-    const sectionTitle = checklistSectionTitle(nextTitle, suffixLabel);
     await db
       .prepare(
         `
@@ -4088,7 +4237,7 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
         WHERE id = ? AND business_id = ?
         `
       )
-      .bind(nextSlug, sectionTitle, description || null, now, section.id, businessId)
+      .bind(nextBaseSlug, checklistSectionTitle(nextTitle), description || null, now, section.id, businessId)
       .run();
   }
 
@@ -4111,11 +4260,10 @@ export async function deleteChecklistCategory(request: Request, locals: App.Loca
       `
       SELECT id
       FROM checklist_sections
-      WHERE business_id = ?
-        AND (slug = ? OR slug LIKE ?)
+      WHERE business_id = ? AND slug = ?
       `
     )
-    .bind(businessId, baseSlug, `${baseSlug}-%`)
+    .bind(businessId, baseSlug)
     .all<{ id: string }>();
 
   const sectionIds = (sections.results ?? []).map((section) => section.id);
@@ -5564,6 +5712,355 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
   return { success: true };
 }
 
+async function canManageEmployeeHrPos(db: D1, locals: App.Locals, businessId: string, targetUserId: string) {
+  if (canManageUserPermissions(locals)) return true;
+  return canAccessEmployeeSensitiveData(
+    db,
+    businessId,
+    locals.userId,
+    locals.businessRole,
+    targetUserId,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
+  );
+}
+
+function checkboxValue(formData: FormData, key: string, fallback = 0) {
+  if (!formData.has(key)) return fallback;
+  const value = String(formData.get(key) ?? '').trim().toLowerCase();
+  return value === '1' || value === 'on' || value === 'true' ? 1 : 0;
+}
+
+function dateToUnixSeconds(value: FormDataEntryValue | null) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const time = Date.parse(`${text}T00:00:00Z`);
+  return Number.isFinite(time) ? Math.floor(time / 1000) : null;
+}
+
+function normalizeRecordStatus(value: FormDataEntryValue | null) {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (['pending', 'active', 'approved', 'needs_review', 'expired', 'failed', 'complete', 'completed'].includes(normalized)) {
+    return normalized === 'completed' ? 'complete' : normalized;
+  }
+  return 'pending';
+}
+
+export async function saveEmployeePosPermissions(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
+  if (!(await canManageEmployeeHrPos(db, locals, businessId, userId))) {
+    return fail(403, { error: 'HR access required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const posExternalId = String(formData.get('pos_external_id') ?? '').trim().slice(0, 120);
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_pos_permissions (
+        business_id,
+        user_id,
+        pos_external_id,
+        can_clock_in,
+        can_use_pos,
+        can_open_cash_drawer,
+        can_refund,
+        can_void,
+        can_manager_override,
+        updated_at,
+        updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, user_id) DO UPDATE SET
+        pos_external_id = excluded.pos_external_id,
+        can_clock_in = excluded.can_clock_in,
+        can_use_pos = excluded.can_use_pos,
+        can_open_cash_drawer = excluded.can_open_cash_drawer,
+        can_refund = excluded.can_refund,
+        can_void = excluded.can_void,
+        can_manager_override = excluded.can_manager_override,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(
+      businessId,
+      userId,
+      posExternalId,
+      checkboxValue(formData, 'can_clock_in'),
+      checkboxValue(formData, 'can_use_pos'),
+      checkboxValue(formData, 'can_open_cash_drawer'),
+      checkboxValue(formData, 'can_refund'),
+      checkboxValue(formData, 'can_void'),
+      checkboxValue(formData, 'can_manager_override'),
+      now,
+      locals.userId ?? null
+    )
+    .run();
+
+  await writeAuditLog(db, {
+    action: 'employee_pos_permissions_updated',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
+  return { success: true, message: 'POS access saved.' };
+}
+
+export async function toggleEmployeeHrAccess(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId) return fail(400, { error: 'Missing user id.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT is_enabled
+      FROM employee_role_permissions
+      WHERE business_id = ? AND user_id = ? AND permission_key = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId, HR_SENSITIVE_PERMISSION)
+    .first<{ is_enabled: number }>();
+  const nextValue = existing?.is_enabled === 1 ? 0 : 1;
+  const now = Math.floor(Date.now() / 1000);
+
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_role_permissions (
+        business_id, user_id, permission_key, is_enabled, granted_by, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, user_id, permission_key) DO UPDATE SET
+        is_enabled = excluded.is_enabled,
+        granted_by = excluded.granted_by,
+        updated_at = excluded.updated_at
+      `
+    )
+    .bind(businessId, userId, HR_SENSITIVE_PERMISSION, nextValue, locals.userId ?? null, now)
+    .run();
+
+  await writeAuditLog(db, {
+    action: nextValue ? 'employee_hr_access_granted' : 'employee_hr_access_removed',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId
+  });
+
+  return { success: true, message: nextValue ? 'HR access granted.' : 'HR access removed.' };
+}
+
+export async function addEmployeeCertification(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  const title = String(formData.get('title') ?? '').trim().slice(0, 160);
+  if (!userId || !title) return fail(400, { error: 'Certification title is required.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
+  if (!(await canManageEmployeeHrPos(db, locals, businessId, userId))) {
+    return fail(403, { error: 'HR access required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_certifications (
+        id,
+        business_id,
+        user_id,
+        certification_type,
+        title,
+        issuer,
+        certificate_number,
+        issued_at,
+        expires_at,
+        status,
+        reviewed_at,
+        reviewed_by,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    )
+    .bind(
+      crypto.randomUUID(),
+      businessId,
+      userId,
+      String(formData.get('certification_type') ?? 'general').trim().slice(0, 80) || 'general',
+      title,
+      String(formData.get('issuer') ?? '').trim().slice(0, 160),
+      String(formData.get('certificate_number') ?? '').trim().slice(0, 120),
+      dateToUnixSeconds(formData.get('issued_at')),
+      dateToUnixSeconds(formData.get('expires_at')),
+      normalizeRecordStatus(formData.get('status')),
+      now,
+      locals.userId ?? null,
+      now,
+      now
+    )
+    .run();
+
+  return { success: true, message: 'Certification added.' };
+}
+
+export async function deleteEmployeeCertification(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const certificationId = String(formData.get('certification_id') ?? '').trim();
+  if (!certificationId) return fail(400, { error: 'Missing certification.' });
+
+  const row = await db
+    .prepare(`SELECT user_id FROM employee_certifications WHERE id = ? AND business_id = ? LIMIT 1`)
+    .bind(certificationId, businessId)
+    .first<{ user_id: string }>();
+  if (!row) return fail(404, { error: 'Certification not found.' });
+  if (!(await canManageEmployeeHrPos(db, locals, businessId, row.user_id))) {
+    return fail(403, { error: 'HR access required.' });
+  }
+
+  await db.prepare(`DELETE FROM employee_certifications WHERE id = ? AND business_id = ?`).bind(certificationId, businessId).run();
+  return { success: true, message: 'Certification removed.' };
+}
+
+export async function addEmployeeVerificationCheck(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  const checkType = String(formData.get('check_type') ?? '').trim().slice(0, 100);
+  if (!userId || !checkType) return fail(400, { error: 'Check type is required.' });
+  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found in this business.' });
+  }
+  if (!(await canManageEmployeeHrPos(db, locals, businessId, userId))) {
+    return fail(403, { error: 'HR access required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_verification_checks (
+        id,
+        business_id,
+        user_id,
+        check_type,
+        status,
+        provider_reference,
+        result_summary,
+        requested_at,
+        completed_at,
+        reviewed_at,
+        reviewed_by,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    )
+    .bind(
+      crypto.randomUUID(),
+      businessId,
+      userId,
+      checkType,
+      normalizeRecordStatus(formData.get('status')),
+      String(formData.get('provider_reference') ?? '').trim().slice(0, 160),
+      String(formData.get('result_summary') ?? '').trim().slice(0, 500),
+      now,
+      null,
+      now,
+      locals.userId ?? null,
+      now,
+      now
+    )
+    .run();
+
+  return { success: true, message: 'Verification added.' };
+}
+
+export async function updateEmployeeVerificationCheck(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const checkId = String(formData.get('check_id') ?? '').trim();
+  const status = normalizeRecordStatus(formData.get('status'));
+  if (!checkId) return fail(400, { error: 'Missing verification check.' });
+
+  const row = await db
+    .prepare(`SELECT user_id FROM employee_verification_checks WHERE id = ? AND business_id = ? LIMIT 1`)
+    .bind(checkId, businessId)
+    .first<{ user_id: string }>();
+  if (!row) return fail(404, { error: 'Verification check not found.' });
+  if (!(await canManageEmployeeHrPos(db, locals, businessId, row.user_id))) {
+    return fail(403, { error: 'HR access required.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      UPDATE employee_verification_checks
+      SET status = ?,
+          result_summary = ?,
+          completed_at = CASE WHEN ? IN ('approved', 'complete', 'failed') THEN COALESCE(completed_at, ?) ELSE completed_at END,
+          reviewed_at = ?,
+          reviewed_by = ?,
+          updated_at = ?
+      WHERE id = ? AND business_id = ?
+      `
+    )
+    .bind(
+      status,
+      String(formData.get('result_summary') ?? '').trim().slice(0, 500),
+      status,
+      now,
+      now,
+      locals.userId ?? null,
+      now,
+      checkId,
+      businessId
+    )
+    .run();
+
+  return { success: true, message: 'Verification updated.' };
+}
+
 export async function saveEmployeeProfile(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -6249,6 +6746,44 @@ export async function createUserInvite(
     )
     .run();
 
+  const selectedPacketItemIds = new Set(
+    formData
+      .getAll('packet_item_ids')
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean)
+  );
+  if (onboardingRequired === 1 && selectedPacketItemIds.size > 0) {
+    const selectedTemplateItems = (await loadEmployeeOnboardingTemplate(db, businessId)).filter(
+      (item) => item.is_active === 1 && selectedPacketItemIds.has(item.id)
+    );
+    const requirementStatements: Array<ReturnType<D1['prepare']>> = [];
+    for (const item of selectedTemplateItems) {
+      const requirementId = await ensureEmployeeComplianceRequirement(
+        db,
+        businessId,
+        classifyOnboardingComplianceItem(item),
+        locals.userId ?? null,
+        now
+      );
+      requirementStatements.push(
+        db
+          .prepare(
+            `
+            INSERT OR IGNORE INTO employee_onboarding_invite_requirements (
+              business_id,
+              invite_id,
+              requirement_id,
+              created_at
+            )
+            VALUES (?, ?, ?, ?)
+            `
+          )
+          .bind(businessId, inviteId, requirementId, now)
+      );
+    }
+    if (requirementStatements.length > 0) await db.batch(requirementStatements);
+  }
+
   await writeAuditLog(db, {
     action: 'invite_created',
     request,
@@ -6263,7 +6798,8 @@ export async function createUserInvite(
       jobTitle: Boolean(jobTitle),
       department: Boolean(department),
       departmentCount: scheduleDepartments.length,
-      startDate: Boolean(startDate)
+      startDate: Boolean(startDate),
+      packetRequirementCount: selectedPacketItemIds.size
     }
   });
 

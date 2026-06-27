@@ -12,6 +12,7 @@
     department: ScheduleDepartment;
     roleName: string;
     sortOrder: number;
+    isDefault?: boolean;
   };
 
   export let data: {
@@ -97,10 +98,14 @@
             {#each rolesForDepartment(department) as role}
               <div class="role-row">
                 <span>{role.roleName}</span>
-                <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
-                  <input type="hidden" name="role_id" value={role.id} />
-                  <button type="submit" class="danger-btn">Delete</button>
-                </form>
+                {#if role.isDefault}
+                  <small>Built in</small>
+                {:else}
+                  <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
+                    <input type="hidden" name="role_id" value={role.id} />
+                    <button type="submit" class="danger-btn">Delete</button>
+                  </form>
+                {/if}
               </div>
             {/each}
           </div>
@@ -224,6 +229,11 @@
     gap: 0.75rem;
     padding: 0.55rem 0;
     border-top: 1px solid var(--color-divider);
+  }
+
+  .role-row small {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
   }
 
   input,

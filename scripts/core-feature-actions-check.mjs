@@ -71,7 +71,7 @@ for (const [domain, path] of [
   );
 }
 
-expect('src/routes/lists/checklists/[section]/[shift]/+page.server.ts', 'checklists support section shift actions', (source) =>
+expect('src/routes/lists/checklists/[section]/+page.server.ts', 'checklists support flat checklist actions', (source) =>
   includesAll(source, ['createChecklistPage', 'export const actions', 'toggle_checked', 'reset_checklist'])
 );
 

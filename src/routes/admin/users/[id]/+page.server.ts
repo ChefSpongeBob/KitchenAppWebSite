@@ -2,15 +2,22 @@ import type { Actions, PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import {
   approveEmployeeOnboardingItem,
+  addEmployeeCertification,
+  addEmployeeVerificationCheck,
+  deleteEmployeeCertification,
   deleteUser,
   loadEmployeeOnboarding,
+  loadEmployeeHrPosAccess,
   loadAdminEmployeeProfile,
   loadAdminUsers,
   requestEmployeeOnboardingChanges,
   requireAdmin,
   saveEmployeeProfile,
+  saveEmployeePosPermissions,
   sendEmployeeOnboardingPackage,
+  toggleEmployeeHrAccess,
   toggleScheduleDepartmentApproval,
+  updateEmployeeVerificationCheck,
   updateUserBusinessPermissions,
   updateUserCapabilityOverrides
 } from '$lib/server/admin';
@@ -53,6 +60,15 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
     locals.businessCapabilities
   );
   const profile = await loadAdminEmployeeProfile(db, employee.id, locals.businessId);
+  const canManageHrPos =
+    canReadSensitiveProfile ||
+    hasBusinessCapability(
+      locals.businessRole,
+      locals.businessPermissionTemplate,
+      'manage_permissions',
+      locals.businessCapabilities
+    );
+  const hrPos = canManageHrPos ? await loadEmployeeHrPosAccess(db, employee.id, locals.businessId) : null;
   const actorIsOwner = normalizeBusinessRole(locals.businessRole) === 'owner';
   const targetRole = normalizeBusinessRole(employee.role);
   const canEditPermissions =
@@ -90,6 +106,8 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
           emergency_contact_relationship: ''
         },
     onboarding,
+    hrPos,
+    canManageHrPos,
     departments: await loadScheduleDepartments(db, locals.businessId),
     canEditPermissions,
     canManageManagerAccess: actorIsOwner,
@@ -107,6 +125,12 @@ export const actions: Actions = {
   update_capabilities: ({ request, locals }) => updateUserCapabilityOverrides(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),
   save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals),
+  save_pos_permissions: ({ request, locals }) => saveEmployeePosPermissions(request, locals),
+  toggle_hr_access: ({ request, locals }) => toggleEmployeeHrAccess(request, locals),
+  add_certification: ({ request, locals }) => addEmployeeCertification(request, locals),
+  delete_certification: ({ request, locals }) => deleteEmployeeCertification(request, locals),
+  add_verification_check: ({ request, locals }) => addEmployeeVerificationCheck(request, locals),
+  update_verification_check: ({ request, locals }) => updateEmployeeVerificationCheck(request, locals),
   send_onboarding_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
   approve_onboarding_item: ({ request, locals }) => approveEmployeeOnboardingItem(request, locals),
   request_onboarding_changes: ({ request, locals }) => requestEmployeeOnboardingChanges(request, locals)

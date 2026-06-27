@@ -250,6 +250,19 @@
                   {/each}
                 {/if}
               </fieldset>
+              <fieldset class="department-checks">
+                <legend>Packet Forms</legend>
+                {#if data.templateItems.filter((item) => item.is_active === 1).length === 0}
+                  <p>Standard packet</p>
+                {:else}
+                  {#each data.templateItems.filter((item) => item.is_active === 1) as item}
+                    <label>
+                      <input type="checkbox" name="packet_item_ids" value={item.id} />
+                      <span>{item.title}</span>
+                    </label>
+                  {/each}
+                {/if}
+              </fieldset>
             </div>
           </details>
           <button type="submit">Invite</button>
