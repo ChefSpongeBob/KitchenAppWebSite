@@ -67,6 +67,14 @@ export async function hashPassword(password: string): Promise<string> {
 	return `${PASSWORD_SCHEME}$${PASSWORD_ITERATIONS}$${saltHex}$${hashHex}`;
 }
 
+async function tryUpgradePasswordHash(password: string): Promise<string | undefined> {
+	try {
+		return await hashPassword(password);
+	} catch {
+		return undefined;
+	}
+}
+
 export async function verifyPassword(password: string, storedHash: string): Promise<{
 	valid: boolean;
 	needsRehash: boolean;
@@ -86,10 +94,11 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 			const valid = timingSafeEqual(actual, expected);
 			if (!valid) return { valid: false, needsRehash: false };
 			const needsRehash = iterations < PASSWORD_ITERATIONS;
+			const upgradedHash = needsRehash ? await tryUpgradePasswordHash(password) : undefined;
 			return {
 				valid: true,
-				needsRehash,
-				upgradedHash: needsRehash ? await hashPassword(password) : undefined
+				needsRehash: Boolean(upgradedHash),
+				upgradedHash
 			};
 		} catch {
 			return { valid: false, needsRehash: false };
@@ -103,7 +112,7 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 	return {
 		valid: true,
 		needsRehash: true,
-		upgradedHash: await hashPassword(password)
+		upgradedHash: await tryUpgradePasswordHash(password)
 	};
 }
 
