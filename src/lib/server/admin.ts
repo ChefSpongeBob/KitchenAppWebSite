@@ -3963,11 +3963,11 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
 
   const sections = createShiftSections
     ? [
-        { slug: `${baseSlug}-opening`, title: `${title} Opening Checklist` },
-        { slug: `${baseSlug}-midday`, title: `${title} Mid Day Checklist` },
-        { slug: `${baseSlug}-closing`, title: `${title} Closing Checklist` }
+        { slug: `${baseSlug}-opening`, title: checklistSectionTitle(title, 'Opening') },
+        { slug: `${baseSlug}-midday`, title: checklistSectionTitle(title, 'Mid Day') },
+        { slug: `${baseSlug}-closing`, title: checklistSectionTitle(title, 'Closing') }
       ]
-    : [{ slug: baseSlug, title: `${title} Checklist` }];
+    : [{ slug: baseSlug, title: checklistSectionTitle(title) }];
 
   for (const section of sections) {
     const existing = await db
@@ -4006,6 +4006,15 @@ function checklistSuffixFromSlug(baseSlug: string, slug: string) {
   if (slug === baseSlug) return '';
   const suffix = slug.slice(baseSlug.length).replace(/^-/, '');
   return suffix ? `-${suffix}` : '';
+}
+
+function checklistCategoryBaseTitle(title: string) {
+  return title.trim().replace(/\s+checklist$/i, '').trim() || title.trim();
+}
+
+function checklistSectionTitle(title: string, shiftLabel = '') {
+  const baseTitle = checklistCategoryBaseTitle(title);
+  return shiftLabel ? `${baseTitle} ${shiftLabel} Checklist` : `${baseTitle} Checklist`;
 }
 
 export async function updateChecklistCategory(request: Request, locals: App.Locals) {
@@ -4070,7 +4079,7 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
     const suffix = checklistSuffixFromSlug(previousBaseSlug, section.slug);
     const nextSlug = `${nextBaseSlug}${suffix}`;
     const suffixLabel = suffix ? suffix.slice(1).replace(/\b\w/g, (letter) => letter.toUpperCase()) : '';
-    const sectionTitle = suffixLabel ? `${nextTitle} ${suffixLabel} Checklist` : `${nextTitle} Checklist`;
+    const sectionTitle = checklistSectionTitle(nextTitle, suffixLabel);
     await db
       .prepare(
         `

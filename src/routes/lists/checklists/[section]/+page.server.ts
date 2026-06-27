@@ -26,6 +26,12 @@ function shiftFromSlug(baseSlug: string, slug: string) {
   return suffix || slug;
 }
 
+function checklistShiftDescription(baseSlug: string, shiftSlug: string) {
+  return shiftSlug === baseSlug
+    ? `${toTitle(baseSlug)} Checklist`
+    : `${toTitle(baseSlug)} ${toTitle(shiftSlug)} Checklist`;
+}
+
 export const load: PageServerLoad = async ({ locals, params }) => {
   const db = locals.DB;
   if (!db) return { title: toTitle(params.section), shifts: [] };
@@ -57,7 +63,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
       return {
         href: `/lists/checklists/${encodeURIComponent(baseSlug)}/${encodeURIComponent(shiftSlug)}`,
         title: toTitle(shiftSlug),
-        description: section.title
+        description: checklistShiftDescription(baseSlug, shiftSlug)
       };
     })
     .sort((a, b) => {

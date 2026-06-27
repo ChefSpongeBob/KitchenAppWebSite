@@ -41,6 +41,31 @@ async function hasRoleColumn(db: App.Platform['env']['DB']) {
 	return hasColumn(db, 'users', 'role');
 }
 
+async function resolvePrimaryBusinessIdForUser(db: App.Platform['env']['DB'], userId: string) {
+	const row = await db
+		.prepare(
+			`
+			SELECT business_id
+			FROM business_users
+			WHERE user_id = ?
+			  AND COALESCE(is_active, 1) = 1
+			ORDER BY
+				CASE role
+					WHEN 'owner' THEN 0
+					WHEN 'manager' THEN 1
+					WHEN 'admin' THEN 1
+					ELSE 2
+				END,
+				created_at DESC
+			LIMIT 1
+			`
+		)
+		.bind(userId)
+		.first<{ business_id: string | null }>();
+
+	return row?.business_id ?? null;
+}
+
 function setSessionCookies(
 	cookies: Parameters<Actions['default']>[0]['cookies'],
 	request: Request,
@@ -271,10 +296,12 @@ export const actions: Actions = {
 				return fail(400, { error: GENERIC_LOGIN_ERROR, email });
 			}
 			if (hasIsActive && user.is_active !== 1) {
+				const auditBusinessId = await resolvePrimaryBusinessIdForUser(db, user.id);
 				await writeAuditLogSafe(db, {
 					action: 'login_blocked_inactive_user',
 					request,
 					getClientAddress,
+					businessId: auditBusinessId,
 					targetUserId: user.id,
 					email
 				});
@@ -283,10 +310,12 @@ export const actions: Actions = {
 
 			const passwordCheck = await verifyPassword(password, user.password_hash);
 			if (!passwordCheck.valid) {
+				const auditBusinessId = await resolvePrimaryBusinessIdForUser(db, user.id);
 				await writeAuditLogSafe(db, {
 					action: 'login_failed_bad_password',
 					request,
 					getClientAddress,
+					businessId: auditBusinessId,
 					targetUserId: user.id,
 					email
 				});

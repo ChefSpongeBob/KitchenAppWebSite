@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   for (const row of rows.results ?? []) {
     const prefix = normalizeChecklistPrefix(row.slug);
     if (!prefixMap.has(prefix)) {
-      prefixMap.set(prefix, row.title || toTitle(prefix));
+      prefixMap.set(prefix, toTitle(prefix));
     }
   }
 
