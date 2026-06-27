@@ -1398,10 +1398,11 @@ export async function loadScheduleWeek(
       FROM schedule_shifts s
       JOIN users u ON u.id = s.user_id
       WHERE s.week_id = ? AND s.business_id = ?
+        AND s.shift_date >= ? AND s.shift_date <= ?
       ORDER BY s.shift_date ASC, s.start_time ASC, s.sort_order ASC, COALESCE(u.display_name, u.email) ASC
       `
     )
-    .bind(week.id, businessId)
+    .bind(week.id, businessId, week.week_start, addDays(week.week_start, 6))
     .all<{
       id: string;
       week_id: string;
