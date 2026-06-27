@@ -2829,7 +2829,8 @@ async function hydrateProfileBackedOnboardingItems(
   userId: string,
   businessId: string,
   packageSentAt: number,
-  items: EmployeeOnboardingItem[]
+  items: EmployeeOnboardingItem[],
+  packageId?: string
 ) {
   if (!items.some((item) => item.status === 'pending' && (item.form_key === 'personal_information' || item.form_key === 'emergency_contact'))) {
     return items;
@@ -2848,17 +2849,65 @@ async function hydrateProfileBackedOnboardingItems(
     .bind(userId)
     .first<{ display_name: string | null; email: string | null }>();
   const fallbackLegalName = String(user?.display_name || user?.email || '').trim();
+  const now = Math.floor(Date.now() / 1000);
+  const completedItems: EmployeeOnboardingItem[] = [];
 
-  return items.map((item) => {
+  const hydrated = items.map((item) => {
     if (item.status !== 'pending') return item;
     const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key, fallbackLegalName);
     if (!payload) return item;
-    return {
+    const updated = {
       ...item,
       status: 'submitted' as const,
+      form_payload: item.form_payload || JSON.stringify({ protected_record: 'Profile record' }),
       submitted_at: item.submitted_at ?? packageSentAt
     };
+    completedItems.push(updated);
+    return updated;
   });
+
+  if (packageId && completedItems.length > 0) {
+    await db.batch(
+      completedItems.map((item) =>
+        db
+          .prepare(
+            `
+            UPDATE employee_onboarding_items
+            SET status = 'submitted',
+              form_payload = CASE WHEN COALESCE(form_payload, '') = '' THEN ? ELSE form_payload END,
+              submitted_at = COALESCE(submitted_at, ?),
+              reviewed_at = NULL,
+              reviewed_by = NULL,
+              manager_note = ''
+            WHERE id = ? AND package_id = ? AND business_id = ? AND status = 'pending'
+            `
+          )
+          .bind(item.form_payload || JSON.stringify({ protected_record: 'Profile record' }), item.submitted_at ?? now, item.id, packageId, businessId)
+      )
+    );
+
+    for (const item of completedItems) {
+      await upsertComplianceDocumentForOnboardingItem(
+        db,
+        {
+          ...item,
+          status: 'submitted',
+          file_url: item.file_url ?? '',
+          file_name: item.file_name ?? '',
+          signed_name: item.signed_name ?? '',
+          submitted_at: item.submitted_at ?? now,
+          reviewed_at: null,
+          reviewed_by: null
+        },
+        userId,
+        now
+      );
+    }
+
+    await refreshEmployeeOnboardingPackageStatus(db, packageId, businessId);
+  }
+
+  return hydrated;
 }
 
 export async function loadEmployeeOnboarding(
@@ -2875,6 +2924,23 @@ export async function loadEmployeeOnboarding(
   } = {}
 ): Promise<EmployeeOnboardingState> {
   await ensureEmployeeOnboardingTables(db);
+  await ensureBusinessSchema(db);
+
+  const membership = await db
+    .prepare(
+      `
+      SELECT role, COALESCE(is_active, 1) AS is_active
+      FROM business_users
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ role: string | null; is_active: number }>();
+
+  if (membership?.is_active === 1 && normalizeBusinessRole(membership.role) === 'owner') {
+    return { package: null, items: [] };
+  }
 
   const onboardingPackage = await db
     .prepare(
@@ -2946,7 +3012,8 @@ export async function loadEmployeeOnboarding(
     userId,
     businessId,
     onboardingPackage.sent_at,
-    items.results ?? []
+    items.results ?? [],
+    onboardingPackage.id
   );
   const canReadSensitive = await canAccessEmployeeSensitiveData(
     db,
@@ -3002,6 +3069,41 @@ async function createEmployeeOnboardingPackageForUser(
   }
 ) {
   await ensureEmployeeOnboardingTables(db);
+  await ensureBusinessSchema(db);
+
+  const membership = await db
+    .prepare(
+      `
+      SELECT role, COALESCE(is_active, 1) AS is_active
+      FROM business_users
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(options.businessId, options.userId)
+    .first<{ role: string | null; is_active: number }>();
+
+  if (membership && normalizeBusinessRole(membership.role) === 'owner') {
+    const now = Math.floor(Date.now() / 1000);
+    await db
+      .prepare(
+        `
+        UPDATE employee_employment_records
+        SET employment_status = CASE
+            WHEN employment_status = 'terminated' THEN employment_status
+            ELSE 'active'
+          END,
+          employment_type = 'owner',
+          onboarding_package_id = NULL,
+          updated_at = ?,
+          updated_by = COALESCE(?, updated_by)
+        WHERE business_id = ? AND user_id = ?
+        `
+      )
+      .bind(now, options.createdBy ?? null, options.businessId, options.userId)
+      .run();
+    return { created: false, packageId: null, status: 'not_required' as const };
+  }
 
   const existingActive = await db
     .prepare(
@@ -3139,10 +3241,17 @@ async function createEmployeeOnboardingPackageForUser(
       ON CONFLICT(business_id, user_id) DO UPDATE SET
         employment_status = CASE
           WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
+          WHEN employee_employment_records.employment_type = 'owner' THEN 'active'
           ELSE 'onboarding'
         END,
-        employment_type = excluded.employment_type,
-        onboarding_package_id = excluded.onboarding_package_id,
+        employment_type = CASE
+          WHEN employee_employment_records.employment_type = 'owner' THEN employee_employment_records.employment_type
+          ELSE excluded.employment_type
+        END,
+        onboarding_package_id = CASE
+          WHEN employee_employment_records.employment_type = 'owner' THEN employee_employment_records.onboarding_package_id
+          ELSE excluded.onboarding_package_id
+        END,
         updated_at = excluded.updated_at,
         updated_by = excluded.updated_by
       `
@@ -3201,6 +3310,26 @@ export async function ensureEmployeeOnboardingRequirement(
   const employmentType = String(employment?.employment_type ?? '').trim().toLowerCase();
   const businessRole = normalizeBusinessRole(membership.role);
   if (employmentType === 'contractor' || employmentType === 'owner' || businessRole === 'owner') {
+    if (businessRole === 'owner' && employmentType !== 'owner') {
+      const now = Math.floor(Date.now() / 1000);
+      await db
+        .prepare(
+          `
+          UPDATE employee_employment_records
+          SET employment_status = CASE
+              WHEN employment_status = 'terminated' THEN employment_status
+              ELSE 'active'
+            END,
+            employment_type = 'owner',
+            onboarding_package_id = NULL,
+            updated_at = ?,
+            updated_by = COALESCE(?, updated_by)
+          WHERE business_id = ? AND user_id = ?
+          `
+        )
+        .bind(now, createdBy ?? null, businessId, userId)
+        .run();
+    }
     return { required: false, approved: true, status: 'not_required' as const };
   }
 
@@ -3341,6 +3470,7 @@ export async function loadEmployeeOnboardingDashboard(
 
   return users
     .filter((user) => {
+      if (normalizeBusinessRole(user.role) === 'owner') return false;
       const employmentType = employmentTypeByUser.get(user.id) ?? '';
       if (employmentType === 'contractor') return false;
       if (latestPackageByUser.has(user.id)) return true;
@@ -5566,6 +5696,10 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
 
   if (!membership || membership.is_active !== 1) {
     return fail(400, { error: 'Employee must be active before onboarding.' });
+  }
+
+  if (normalizeBusinessRole(membership.role) === 'owner') {
+    return fail(400, { error: 'Owners do not need employee onboarding packets.' });
   }
 
   if (payrollClassification === 'contractor') {
