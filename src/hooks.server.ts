@@ -347,8 +347,27 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 
 		const requestedBusinessId = event.cookies.get(ACTIVE_BUSINESS_COOKIE) ?? null;
+		const existingBusinessContext = await getUserBusinessContext(
+			db,
+			session.found_user_id,
+			requestedBusinessId
+		);
+		if (!existingBusinessContext && !dev) {
+			logOperationalEvent({
+				level: 'error',
+				event: 'session_business_missing',
+				request: event.request,
+				userId: session.found_user_id,
+				sessionId: session.id,
+				route: pathname,
+				status: 401
+			});
+			clearSessionCookies(event);
+			if (isPrivateRoute) throw redirect(303, '/login?error=workspace');
+			return resolvePublicOrAuthRoute();
+		}
 		const businessContext =
-			(await getUserBusinessContext(db, session.found_user_id, requestedBusinessId)) ??
+			existingBusinessContext ??
 			(await bootstrapBusinessForUser(db, session.found_user_id, session.user_role, null));
 		await ensureTenantSchema(db);
 

@@ -166,8 +166,18 @@ expect('src/lib/server/admin.ts', 'admin schema repair helpers are skipped on pr
   !source.includes("'' AS details")
 );
 
-expect('src/routes/api/temps/+server.ts', 'temp index repair is skipped on production API paths', (source) =>
-  source.includes("import { dev } from '$app/environment'") && source.includes('tempsIndexesEnsured = true')
+expect('src/routes/api/temps/+server.ts', 'temperature API relies on migration-owned indexes', (source) =>
+  !source.includes('CREATE INDEX') &&
+  !source.includes('ensureTempsIndexes') &&
+  source.includes('MAX_TEMP_QUERY_LIMIT = 500')
+);
+
+expect('migrations/0017_performance_indexes.sql', 'temperature timestamp index is migration-owned', (source) =>
+  source.includes('idx_temps_ts_desc')
+);
+
+expect('migrations/0043_temps_sensor_ts_index.sql', 'temperature sensor timestamp index is migration-owned', (source) =>
+  source.includes('idx_temps_sensor_ts_desc')
 );
 
 expect('src/routes/api/temps/+server.ts', 'temperature API payloads are capped for polling', (source) =>
@@ -180,6 +190,13 @@ expect('src/routes/app/+page.server.ts', 'homepage temperature sample stays boun
   source.includes('const HOMEPAGE_TEMP_LIMIT = 240')
 );
 
+expect('src/routes/app/+page.server.ts', 'homepage preview queries run in the initial parallel batch', (source) =>
+  source.includes('const topIdeasPromise =') &&
+  source.includes('const sensorNamesPromise =') &&
+  source.includes('topIdeasPromise,') &&
+  source.includes('sensorNamesPromise')
+);
+
 expect('src/lib/client/polling.ts', 'shared polling is visibility aware with backoff and in-flight protection', (source) =>
   source.includes("document.visibilityState === 'visible'") &&
   source.includes('currentIntervalMs = Math.min') &&
@@ -190,7 +207,8 @@ expect('src/lib/client/polling.ts', 'shared polling is visibility aware with bac
 expect('src/routes/app/+page.svelte', 'homepage polling uses the shared visibility-aware helper', (source) =>
   source.includes('startVisiblePolling') &&
   source.includes('intervalMs: 90000') &&
-  source.includes('jitterMs: 10000')
+  source.includes('jitterMs: 10000') &&
+  source.includes('featureAccess.temps || featureAccess.whiteboard')
 );
 
 expect('src/routes/temper/+page.svelte', 'temperature page polling uses the shared visibility-aware helper', (source) =>

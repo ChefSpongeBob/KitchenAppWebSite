@@ -3,6 +3,7 @@ import { dev } from '$app/environment';
 type D1 = App.Platform['env']['DB'];
 
 const TENANT_TABLES = [
+  'account_audit_logs',
   'todos',
   'todo_assignments',
   'todo_completion_log',
@@ -21,6 +22,7 @@ const TENANT_TABLES = [
   'list_submission_items',
   'list_item_activity_events',
   'announcements',
+  'announcement_editors',
   'employee_spotlight',
   'admin_reminders',
   'daily_specials',
@@ -50,11 +52,25 @@ const TENANT_TABLES = [
   'user_schedule_availability',
   'user_schedule_time_off_requests',
   'creator_category_registry',
+  'business_invites',
+  'business_lifecycle_snapshots',
+  'business_users',
+  'employee_certifications',
+  'employee_compliance_documents',
+  'employee_compliance_requirements',
+  'employee_document_access_audit',
+  'employee_employment_records',
+  'employee_onboarding_invite_requirements',
   'employee_profiles',
   'employee_profile_edit_requests',
   'employee_onboarding_packages',
   'employee_onboarding_items',
   'employee_onboarding_template_items',
+  'employee_pos_permissions',
+  'employee_role_permissions',
+  'employee_sensitive_record_audit',
+  'employee_sensitive_record_vault',
+  'employee_verification_checks',
   'business_trials',
   'store_billing_placeholders',
   'business_store_entitlements',
@@ -64,7 +80,9 @@ const TENANT_TABLES = [
   'push_notification_devices',
   'legal_agreements',
   'app_feature_flags_business',
-  'iot_devices'
+  'iot_devices',
+  'trial_identity_claims',
+  'waste_logs'
 ];
 
 let tenantSchemaEnsured = false;

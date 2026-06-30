@@ -1,4 +1,3 @@
-import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { cleanupExpiredTemps } from '$lib/server/retention';
 import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
@@ -25,20 +24,7 @@ type RawTempRow = {
 const DEFAULT_TEMP_QUERY_LIMIT = 240;
 const MAX_TEMP_QUERY_LIMIT = 500;
 const MAX_TEMP_BATCH_SIZE = 200;
-let tempsIndexesEnsured = false;
-
-async function ensureTempsIndexes(db: App.Platform['env']['DB']) {
-  if (!dev) {
-    tempsIndexesEnsured = true;
-    return;
-  }
-  if (tempsIndexesEnsured) return;
-  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_temps_ts_desc ON temps(ts DESC)`).run();
-  await db
-    .prepare(`CREATE INDEX IF NOT EXISTS idx_temps_sensor_ts_desc ON temps(sensor_id, ts DESC)`)
-    .run();
-  tempsIndexesEnsured = true;
-}
+const TENANT_TEMP_CACHE_CONTROL = 'private, max-age=10, stale-while-revalidate=20';
 
 function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
   const serialRaw =
@@ -94,7 +80,6 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
-  await ensureTempsIndexes(db);
   await ensureTenantSchema(db);
   const businessId = String(locals.businessId ?? '').trim();
   if (!businessId) {
@@ -122,7 +107,7 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
       .bind(sensorId, businessId, limit)
       .all<TempRow>();
     return json(result.results ?? [], {
-      headers: { 'cache-control': 'public, max-age=10, s-maxage=10, stale-while-revalidate=20' }
+      headers: { 'cache-control': TENANT_TEMP_CACHE_CONTROL }
     });
   }
 
@@ -140,7 +125,7 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
     .all<TempRow>();
 
   return json(result.results ?? [], {
-    headers: { 'cache-control': 'public, max-age=10, s-maxage=10, stale-while-revalidate=20' }
+    headers: { 'cache-control': TENANT_TEMP_CACHE_CONTROL }
   });
 };
 
@@ -149,7 +134,6 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
-  await ensureTempsIndexes(db);
   await ensureTenantSchema(db);
   const device = await authenticateIoTDevice(db, request, 'sensor_gateway');
   if (!device) {

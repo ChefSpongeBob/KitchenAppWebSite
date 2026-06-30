@@ -24,6 +24,7 @@ import {
   writeAuditLog
 } from '$lib/server/security';
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 async function getUsersColumns(db: App.Platform['env']['DB']) {
   return getTableColumns(db, 'users');
@@ -38,6 +39,10 @@ function resolveActiveTab(requestedTab: string | null, shouldShowOnboarding: boo
 function resolveSessionToken(cookies: Parameters<PageServerLoad>[0]['cookies']) {
   const primaryCookie = getSessionCookieName();
   return cookies.get(primaryCookie) ?? cookies.get('session_id') ?? cookies.get('session_id_pwa') ?? null;
+}
+
+function profileText(formData: FormData, key: string, maxLength: number) {
+  return normalizeFormText(formData, key, { maxLength });
 }
 
 export const load: PageServerLoad = async ({ locals, url, cookies, platform }) => {
@@ -149,8 +154,8 @@ export const actions: Actions = {
     await ensureEmployeeProfilesTable(db);
 
     const formData = await request.formData();
-    const username = String(formData.get('username') ?? '').trim();
-    const realName = String(formData.get('real_name') ?? '').trim();
+    const username = profileText(formData, 'username', 120);
+    const realName = profileText(formData, 'real_name', 120);
 
     if (!username) return fail(400, { error: 'Username is required.' });
 
@@ -380,16 +385,16 @@ export const actions: Actions = {
         businessId,
         locals.userId,
         currentProfile.real_name,
-        String(formData.get('phone') ?? '').trim(),
+        profileText(formData, 'phone', 48),
         currentProfile.birthday,
-        String(formData.get('address_line_1') ?? '').trim(),
-        String(formData.get('address_line_2') ?? '').trim(),
-        String(formData.get('city') ?? '').trim(),
-        String(formData.get('state') ?? '').trim(),
-        String(formData.get('postal_code') ?? '').trim(),
-        String(formData.get('emergency_contact_name') ?? '').trim(),
-        String(formData.get('emergency_contact_phone') ?? '').trim(),
-        String(formData.get('emergency_contact_relationship') ?? '').trim(),
+        profileText(formData, 'address_line_1', 120),
+        profileText(formData, 'address_line_2', 120),
+        profileText(formData, 'city', 80),
+        profileText(formData, 'state', 80),
+        profileText(formData, 'postal_code', 24),
+        profileText(formData, 'emergency_contact_name', 120),
+        profileText(formData, 'emergency_contact_phone', 48),
+        profileText(formData, 'emergency_contact_relationship', 80),
         now,
         locals.userId
       )

@@ -45,6 +45,18 @@ function dynamicPrepareFindings(root) {
   return findings;
 }
 
+function sourcePatternFindings(root, patterns) {
+  const findings = [];
+  const files = walkFiles(root, (path) => /\.(ts|js|svelte|html)$/.test(path));
+  for (const file of files) {
+    const source = read(file);
+    for (const pattern of patterns) {
+      if (pattern.regex.test(source)) findings.push({ file, label: pattern.label });
+    }
+  }
+  return findings;
+}
+
 function isAllowedRouteDynamicSql(finding) {
   if (finding.file === 'src/routes/settings/+page.server.ts') {
     return (
@@ -220,6 +232,52 @@ expect('src/routes/settings/+page.server.ts', 'settings dynamic user updates use
   source.includes("assignments.push('email_normalized = ?')") &&
   source.includes("assignments.push('updated_at = ?')")
 );
+
+expect('src/lib/server/inputSanitizer.ts', 'stored plain-text input strips control and spoofing characters before persistence', (source) =>
+  source.includes('normalizePlainTextInput') &&
+  source.includes('BIDI_CONTROL_CHARACTERS') &&
+  source.includes('CONTROL_CHARACTERS_EXCEPT') &&
+  source.includes("normalize('NFC')")
+);
+
+expect('src/routes/api/whiteboard/+server.ts', 'whiteboard stored ideas use plain-text normalization', (source) =>
+  source.includes("normalizePlainTextInput(String(payload.content ?? ''), { maxLength: 240 })")
+);
+
+expect('src/lib/server/admin.ts', 'admin creator stored text uses shared plain-text normalization helpers', (source) =>
+  source.includes("import { normalizeFormText, normalizePlainTextInput } from '$lib/server/inputSanitizer'") &&
+  source.includes('function formMultilineString') &&
+  source.includes("normalizeFormText(f, 'ingredients'") &&
+  source.includes("formMultilineString(formData, 'content', 2000)")
+);
+
+expect('src/routes/announcements/+page.server.ts', 'announcement editor stores normalized multiline text', (source) =>
+  source.includes("normalizeFormText(formData, 'content', { maxLength: 2000, multiline: true })")
+);
+
+expect('src/routes/tools/waste/+page.server.ts', 'waste tracker stores normalized plain text', (source) =>
+  source.includes("normalizeFormText(form, key, { maxLength })")
+);
+
+expect('src/lib/server/vendors.ts', 'vendor editor stores normalized plain text and validates website protocols', (source) =>
+  source.includes("normalizeFormText(formData, key, { maxLength })") &&
+  source.includes("parsed.protocol !== 'http:' && parsed.protocol !== 'https:'")
+);
+
+const dangerousHtmlSinks = sourcePatternFindings('src', [
+  { label: 'raw Svelte HTML rendering', regex: /\{@html\b/ },
+  { label: 'direct innerHTML assignment', regex: /\.innerHTML\s*=/ },
+  { label: 'direct outerHTML assignment', regex: /\.outerHTML\s*=/ },
+  { label: 'insertAdjacentHTML usage', regex: /\.insertAdjacentHTML\s*\(/ },
+  { label: 'javascript URL literal', regex: /javascript:/i },
+  { label: 'eval execution', regex: /\beval\s*\(/ },
+  { label: 'Function constructor execution', regex: /\bnew\s+Function\s*\(/ }
+]);
+checks.push({
+  ok: dangerousHtmlSinks.length === 0,
+  label: 'app source has no raw HTML sinks or eval-style script execution',
+  detail: dangerousHtmlSinks.map((finding) => `${finding.file} (${finding.label})`).join(', ') || 'src'
+});
 
 const unexpectedRouteSql = dynamicPrepareFindings('src/routes').filter(
   (finding) => !isAllowedRouteDynamicSql(finding)

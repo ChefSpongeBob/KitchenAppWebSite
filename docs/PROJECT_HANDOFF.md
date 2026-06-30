@@ -65,6 +65,7 @@ npm.cmd run test:tenant-authority
 npm.cmd run test:authorization-capabilities
 npm.cmd run test:operational-events
 npm.cmd run test:tenant-isolation
+npm.cmd run test:db-governance
 npm.cmd run test:iot-device-auth
 npm.cmd run test:media-access
 npm.cmd run test:production-schema

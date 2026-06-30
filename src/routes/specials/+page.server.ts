@@ -8,6 +8,7 @@ import {
   userCanEditDailySpecials
 } from '$lib/server/dailySpecials';
 import { ensureTenantSchema } from '$lib/server/tenant';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.userId) {
@@ -62,10 +63,7 @@ export const actions: Actions = {
     const now = Math.floor(Date.now() / 1000);
 
     for (const category of dailySpecialCategories) {
-      const content = String(formData.get(category) ?? '').trim();
-      if (content.length > 1000) {
-        return fail(400, { error: 'Daily special is too long.' });
-      }
+      const content = normalizeFormText(formData, category, { maxLength: 1000, multiline: true });
       const storageCategory = getDailySpecialStorageCategory(category, locals.businessId);
       await db
         .prepare(

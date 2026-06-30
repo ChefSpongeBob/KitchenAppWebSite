@@ -6,6 +6,7 @@ import {
   userCanEditHomepageAnnouncement
 } from '$lib/server/announcements';
 import { ensureTenantSchema } from '$lib/server/tenant';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.userId) {
@@ -58,10 +59,7 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const content = String(formData.get('content') ?? '').trim();
-    if (content.length > 2000) {
-      return fail(400, { error: 'Announcement is too long.' });
-    }
+    const content = normalizeFormText(formData, 'content', { maxLength: 2000, multiline: true });
     await saveHomepageAnnouncement(db, locals.businessId, locals.userId, content);
 
     return { success: true };

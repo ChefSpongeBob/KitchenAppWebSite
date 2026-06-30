@@ -2,11 +2,10 @@ import { fail, redirect, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { requireBusinessId } from '$lib/server/tenant';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 function textValue(form: FormData, key: string, maxLength: number) {
-	return String(form.get(key) ?? '')
-		.trim()
-		.slice(0, maxLength);
+	return normalizeFormText(form, key, { maxLength });
 }
 
 export const load: PageServerLoad = async ({ locals }) => {

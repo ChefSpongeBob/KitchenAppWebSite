@@ -60,6 +60,7 @@ import {
   type ItemAttachment
 } from '$lib/server/itemAttachments';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { normalizeFormText, normalizePlainTextInput } from '$lib/server/inputSanitizer';
 
 type D1 = App.Platform['env']['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -2283,7 +2284,11 @@ function normalizeOnboardingFormKey(value: string, itemType: EmployeeOnboardingI
 }
 
 function formString(formData: FormData, key: string, maxLength = 180) {
-  return String(formData.get(key) ?? '').trim().slice(0, maxLength);
+  return normalizeFormText(formData, key, { maxLength });
+}
+
+function formMultilineString(formData: FormData, key: string, maxLength = 1000) {
+  return normalizeFormText(formData, key, { maxLength, multiline: true });
 }
 
 function requireFormFields(fields: Record<string, string>, required: string[]) {
@@ -2613,8 +2618,8 @@ export async function createEmployeeOnboardingTemplateItem(request: Request, loc
   const formData = await request.formData();
   const itemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
   const formKey = normalizeOnboardingFormKey(String(formData.get('form_key') ?? '').trim(), itemType ?? 'acknowledgement');
-  const title = String(formData.get('title') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
+  const title = formString(formData, 'title', 160);
+  const description = formMultilineString(formData, 'description', 1000);
   const sortOrder = Number(formData.get('sort_order') ?? 0);
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
@@ -2783,8 +2788,8 @@ export async function updateEmployeeOnboardingTemplateItem(request: Request, loc
   const id = String(formData.get('id') ?? '').trim();
   const itemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
   const formKey = normalizeOnboardingFormKey(String(formData.get('form_key') ?? '').trim(), itemType ?? 'acknowledgement');
-  const title = String(formData.get('title') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
+  const title = formString(formData, 'title', 160);
+  const description = formMultilineString(formData, 'description', 1000);
   const sortOrder = Number(formData.get('sort_order') ?? 0);
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
   const existingUrl = String(formData.get('existing_source_file_url') ?? '').trim();
@@ -3948,11 +3953,11 @@ export async function createListSection(request: Request, locals: App.Locals) {
 
   const formData = await request.formData();
   const domain = String(formData.get('domain') ?? '').trim().toLowerCase();
-  const title = String(formData.get('title') ?? '').trim();
+  const title = formString(formData, 'title', 120);
   const requestedSlug = String(formData.get('slug') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
-  const firstItem = String(formData.get('first_item') ?? '').trim();
-  const firstDetails = String(formData.get('first_details') ?? '').trim();
+  const description = formMultilineString(formData, 'description', 400);
+  const firstItem = formString(formData, 'first_item', 160);
+  const firstDetails = formMultilineString(formData, 'first_details', 500);
   const firstParCountRaw = Number(formData.get('first_par_count') ?? 0);
   const slug = normalizeSlug(requestedSlug || title);
 
@@ -4061,8 +4066,8 @@ export async function updateListSection(request: Request, locals: App.Locals) {
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '').trim();
-  const title = String(formData.get('title') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
+  const title = formString(formData, 'title', 120);
+  const description = formMultilineString(formData, 'description', 400);
 
   if (!sectionId) return fail(400, { error: 'Missing section id.' });
   if (!title) return fail(400, { error: 'Section title is required.' });
@@ -4116,9 +4121,9 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
   await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
-  const title = String(formData.get('title') ?? '').trim();
+  const title = formString(formData, 'title', 120);
   const requestedSlug = String(formData.get('slug') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
+  const description = formMultilineString(formData, 'description', 400);
   const baseSlug = normalizeSlug(requestedSlug || title);
 
   if (!title) return fail(400, { error: 'Checklist category title is required.' });
@@ -4183,9 +4188,9 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
 
   const formData = await request.formData();
   const previousBaseSlug = normalizeSlug(String(formData.get('base_slug') ?? ''));
-  const nextTitle = String(formData.get('title') ?? '').trim();
+  const nextTitle = formString(formData, 'title', 120);
   const nextBaseSlug = normalizeSlug(String(formData.get('next_slug') ?? nextTitle));
-  const description = String(formData.get('description') ?? '').trim();
+  const description = formMultilineString(formData, 'description', 400);
 
   if (!previousBaseSlug || !nextTitle) {
     return fail(400, { error: 'Checklist category title is required.' });
@@ -4296,8 +4301,8 @@ export async function addListItem(request: Request, locals: App.Locals) {
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '');
-  const content = String(formData.get('content') ?? '').trim();
-  const details = String(formData.get('details') ?? '').trim();
+  const content = formMultilineString(formData, 'content', 500);
+  const details = formMultilineString(formData, 'details', 500);
   const parCount = Number(formData.get('par_count') ?? 0);
   if (!sectionId || !content || !Number.isFinite(parCount) || parCount < 0) {
     return fail(400, { error: 'Invalid list item input.' });
@@ -4365,8 +4370,8 @@ export async function updateListItem(request: Request, locals: App.Locals) {
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
-  const content = String(formData.get('content') ?? '').trim();
-  const details = String(formData.get('details') ?? '').trim();
+  const content = formMultilineString(formData, 'content', 500);
+  const details = formMultilineString(formData, 'details', 500);
   const parCount = Number(formData.get('par_count') ?? 0);
   if (!id || !content || !Number.isFinite(parCount) || parCount < 0) {
     return fail(400, { error: 'Invalid update input.' });
@@ -4415,7 +4420,7 @@ export async function addChecklistItem(request: Request, locals: App.Locals) {
 
   const formData = await request.formData();
   const sectionId = String(formData.get('section_id') ?? '');
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formString(formData, 'content', 180);
   if (!sectionId || !content) {
     return fail(400, { error: 'Invalid checklist item input.' });
   }
@@ -4463,7 +4468,7 @@ export async function updateChecklistItem(request: Request, locals: App.Locals) 
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '');
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formString(formData, 'content', 180);
   if (!id || !content) {
     return fail(400, { error: 'Invalid checklist update input.' });
   }
@@ -4500,12 +4505,15 @@ export async function createRecipe(request: Request, locals: App.Locals) {
   await ensureTenantSchema(db);
 
   const f = await request.formData();
-  const title = String(f.get('title') ?? '').trim();
+  const title = normalizeFormText(f, 'title', { maxLength: 160 });
   const category = normalizeCategoryName(String(f.get('category') ?? ''));
-  const ingredients = String(f.get('ingredients') ?? '').trim();
-  const materialsNeeded = String(f.get('materials_needed') ?? f.get('procedure') ?? '').trim();
-  const instruction = String(f.get('instruction') ?? '').trim();
-  const fallbackInstructions = String(f.get('instructions') ?? '').trim();
+  const ingredients = normalizeFormText(f, 'ingredients', { maxLength: 4000, multiline: true });
+  const materialsNeeded = normalizePlainTextInput(f.get('materials_needed') ?? f.get('procedure'), {
+    maxLength: 3000,
+    multiline: true
+  });
+  const instruction = normalizeFormText(f, 'instruction', { maxLength: 6000, multiline: true });
+  const fallbackInstructions = normalizeFormText(f, 'instructions', { maxLength: 9000, multiline: true });
 
   const instructions = materialsNeeded && instruction
     ? `Materials needed:\n${materialsNeeded}\n\nInstruction:\n${instruction}`
@@ -4546,12 +4554,15 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
 
   const f = await request.formData();
   const id = Number(f.get('id'));
-  const title = String(f.get('title') ?? '').trim();
+  const title = normalizeFormText(f, 'title', { maxLength: 160 });
   const category = normalizeCategoryName(String(f.get('category') ?? ''));
-  const ingredients = String(f.get('ingredients') ?? '').trim();
-  const materialsNeeded = String(f.get('materials_needed') ?? f.get('procedure') ?? '').trim();
-  const instruction = String(f.get('instruction') ?? '').trim();
-  const fallbackInstructions = String(f.get('instructions') ?? '').trim();
+  const ingredients = normalizeFormText(f, 'ingredients', { maxLength: 4000, multiline: true });
+  const materialsNeeded = normalizePlainTextInput(f.get('materials_needed') ?? f.get('procedure'), {
+    maxLength: 3000,
+    multiline: true
+  });
+  const instruction = normalizeFormText(f, 'instruction', { maxLength: 6000, multiline: true });
+  const fallbackInstructions = normalizeFormText(f, 'instructions', { maxLength: 9000, multiline: true });
 
   const instructions =
     materialsNeeded && instruction
@@ -4611,8 +4622,8 @@ export async function createTodo(request: Request, locals: App.Locals) {
   await ensureTenantSchema(db);
 
   const formData = await request.formData();
-  const title = String(formData.get('title') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
+  const title = formString(formData, 'title', 160);
+  const description = formMultilineString(formData, 'description', 600);
   const assignedTo = String(formData.get('assigned_to') ?? '').trim();
   if (!title) return fail(400, { error: 'Todo title is required.' });
 
@@ -4670,7 +4681,7 @@ export async function createAdminReminder(request: Request, locals: App.Locals) 
   await ensureTenantSchema(db);
 
   const formData = await request.formData();
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formString(formData, 'content', 180);
   if (!content) return fail(400, { error: 'Reminder is required.' });
 
   const now = Math.floor(Date.now() / 1000);
@@ -4696,7 +4707,7 @@ export async function updateAdminReminder(request: Request, locals: App.Locals) 
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '').trim();
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formString(formData, 'content', 180);
   if (!id || !content) return fail(400, { error: 'Reminder is required.' });
 
   await db
@@ -4861,12 +4872,12 @@ export async function createDocument(request: Request, locals: App.Locals) {
   const formData = await request.formData();
   const rawSlug = String(formData.get('slug') ?? '');
   const customSlug = String(formData.get('slug_custom') ?? '');
-  const title = String(formData.get('title') ?? '').trim();
-  const section = String(formData.get('section') ?? 'Docs').trim();
-  const category = String(formData.get('category') ?? 'General').trim();
+  const title = formString(formData, 'title', 180);
+  const section = formString(formData, 'section', 80) || 'Docs';
+  const category = formString(formData, 'category', 120) || 'General';
   const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
   const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formMultilineString(formData, 'content', 2000);
   let fileUrl = String(formData.get('file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
@@ -4929,12 +4940,12 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '').trim();
   const rawSlug = String(formData.get('slug') ?? '');
   const customSlug = String(formData.get('slug_custom') ?? '');
-  const title = String(formData.get('title') ?? '').trim();
-  const section = String(formData.get('section') ?? 'Docs').trim();
-  const category = String(formData.get('category') ?? 'General').trim();
+  const title = formString(formData, 'title', 180);
+  const section = formString(formData, 'section', 80) || 'Docs';
+  const category = formString(formData, 'category', 120) || 'General';
   const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
   const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formMultilineString(formData, 'content', 2000);
   let fileUrl = String(formData.get('file_url') ?? '').trim();
   const existingFileUrl = String(formData.get('existing_file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
@@ -5021,7 +5032,7 @@ export async function saveAnnouncement(request: Request, locals: App.Locals) {
   await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
-  const content = String(formData.get('content') ?? '').trim();
+  const content = formMultilineString(formData, 'content', 2000);
   await saveHomepageAnnouncement(db, businessId, locals.userId, content);
 
   return { success: true };
@@ -5037,8 +5048,8 @@ export async function saveEmployeeSpotlight(request: Request, locals: App.Locals
   await ensureTenantSchema(db, true);
 
   const formData = await request.formData();
-  const employeeName = String(formData.get('employee_name') ?? '').trim();
-  const shoutout = String(formData.get('shoutout') ?? '').trim();
+  const employeeName = formString(formData, 'employee_name', 120);
+  const shoutout = formMultilineString(formData, 'shoutout', 500);
   const now = Math.floor(Date.now() / 1000);
 
   await db
@@ -5879,7 +5890,7 @@ export async function addEmployeeCertification(request: Request, locals: App.Loc
   const businessId = requireBusinessId(locals);
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
-  const title = String(formData.get('title') ?? '').trim().slice(0, 160);
+  const title = formString(formData, 'title', 160);
   if (!userId || !title) return fail(400, { error: 'Certification title is required.' });
   if (!(await userBelongsToBusiness(db, userId, businessId))) {
     return fail(404, { error: 'Employee not found in this business.' });
@@ -5915,10 +5926,10 @@ export async function addEmployeeCertification(request: Request, locals: App.Loc
       crypto.randomUUID(),
       businessId,
       userId,
-      String(formData.get('certification_type') ?? 'general').trim().slice(0, 80) || 'general',
+      formString(formData, 'certification_type', 80) || 'general',
       title,
-      String(formData.get('issuer') ?? '').trim().slice(0, 160),
-      String(formData.get('certificate_number') ?? '').trim().slice(0, 120),
+      formString(formData, 'issuer', 160),
+      formString(formData, 'certificate_number', 120),
       dateToUnixSeconds(formData.get('issued_at')),
       dateToUnixSeconds(formData.get('expires_at')),
       normalizeRecordStatus(formData.get('status')),
@@ -5961,7 +5972,7 @@ export async function addEmployeeVerificationCheck(request: Request, locals: App
   const businessId = requireBusinessId(locals);
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
-  const checkType = String(formData.get('check_type') ?? '').trim().slice(0, 100);
+  const checkType = formString(formData, 'check_type', 100);
   if (!userId || !checkType) return fail(400, { error: 'Check type is required.' });
   if (!(await userBelongsToBusiness(db, userId, businessId))) {
     return fail(404, { error: 'Employee not found in this business.' });
@@ -5998,8 +6009,8 @@ export async function addEmployeeVerificationCheck(request: Request, locals: App
       userId,
       checkType,
       normalizeRecordStatus(formData.get('status')),
-      String(formData.get('provider_reference') ?? '').trim().slice(0, 160),
-      String(formData.get('result_summary') ?? '').trim().slice(0, 500),
+      formString(formData, 'provider_reference', 160),
+      formMultilineString(formData, 'result_summary', 500),
       now,
       null,
       now,
@@ -6047,7 +6058,7 @@ export async function updateEmployeeVerificationCheck(request: Request, locals: 
     )
     .bind(
       status,
-      String(formData.get('result_summary') ?? '').trim().slice(0, 500),
+      formMultilineString(formData, 'result_summary', 500),
       status,
       now,
       now,
@@ -6093,17 +6104,17 @@ export async function saveEmployeeProfile(request: Request, locals: App.Locals) 
   if (!target) return fail(404, { error: 'Employee not found.' });
 
   const profile = {
-    real_name: String(formData.get('real_name') ?? '').trim(),
-    phone: String(formData.get('phone') ?? '').trim(),
+    real_name: formString(formData, 'real_name', 120),
+    phone: formString(formData, 'phone', 48),
     birthday: String(formData.get('birthday') ?? '').trim(),
-    address_line_1: String(formData.get('address_line_1') ?? '').trim(),
-    address_line_2: String(formData.get('address_line_2') ?? '').trim(),
-    city: String(formData.get('city') ?? '').trim(),
-    state: String(formData.get('state') ?? '').trim(),
-    postal_code: String(formData.get('postal_code') ?? '').trim(),
-    emergency_contact_name: String(formData.get('emergency_contact_name') ?? '').trim(),
-    emergency_contact_phone: String(formData.get('emergency_contact_phone') ?? '').trim(),
-    emergency_contact_relationship: String(formData.get('emergency_contact_relationship') ?? '').trim()
+    address_line_1: formString(formData, 'address_line_1', 120),
+    address_line_2: formString(formData, 'address_line_2', 120),
+    city: formString(formData, 'city', 80),
+    state: formString(formData, 'state', 80),
+    postal_code: formString(formData, 'postal_code', 24),
+    emergency_contact_name: formString(formData, 'emergency_contact_name', 120),
+    emergency_contact_phone: formString(formData, 'emergency_contact_phone', 48),
+    emergency_contact_relationship: formString(formData, 'emergency_contact_relationship', 80)
   };
 
   if (profile.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(profile.birthday)) {
@@ -6631,8 +6642,8 @@ export async function createUserInvite(
       ? defaultPermissionTemplateForRole(accessType)
       : requestedPermissionTemplate;
   const employmentType = String(formData.get('employment_type') ?? 'employee') === 'contractor' ? 'contractor' : 'employee';
-  const jobTitle = String(formData.get('job_title') ?? '').trim().slice(0, 120);
-  const primaryDepartment = String(formData.get('primary_schedule_department') ?? '').trim().slice(0, 120);
+  const jobTitle = formString(formData, 'job_title', 120);
+  const primaryDepartment = formString(formData, 'primary_schedule_department', 120);
   const allowedDepartments = await loadScheduleDepartments(db, businessId);
   const scheduleDepartments = Array.from(
     new Set(

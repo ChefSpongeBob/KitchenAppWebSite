@@ -1,6 +1,7 @@
 import { fail, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { checkRateLimit, getRequestIpAddress, hashedAuditValue } from '$lib/server/security';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 export const actions: Actions = {
 	default: async ({ request, locals, getClientAddress }) => {
@@ -10,10 +11,10 @@ export const actions: Actions = {
 		try {
 			const db = locals.DB;
 			const formData = await request.formData();
-			email = String(formData.get('email') ?? '').trim().toLowerCase();
-			workspaceName = String(formData.get('workspace_name') ?? '').trim();
+			email = normalizeFormText(formData, 'email', { maxLength: 180 }).toLowerCase();
+			workspaceName = normalizeFormText(formData, 'workspace_name', { maxLength: 160 });
 			const requestScope = String(formData.get('request_scope') ?? 'user').trim();
-			const details = String(formData.get('details') ?? '').trim();
+			const details = normalizeFormText(formData, 'details', { maxLength: 1000, multiline: true });
 
 			if (!db) return fail(503, { error: 'Deletion requests are temporarily unavailable.', email, workspaceName });
 			if (!email || !email.includes('@')) {

@@ -296,22 +296,24 @@
   onMount(() => {
     updateTime();
     const clock = setInterval(updateTime, 30000);
-    const stopPolling = startVisiblePolling(
-      async () => {
-        const jobs: Promise<unknown>[] = [];
-        if (featureAccess.temps) jobs.push(refreshTemps());
-        if (featureAccess.whiteboard) jobs.push(refreshIdeas());
-        if (jobs.length === 0) return;
-        await Promise.all(jobs);
-      },
-      {
-        intervalMs: 90000,
-        maxIntervalMs: 5 * 60 * 1000,
-        runImmediately: false,
-        refreshOnVisible: true,
-        jitterMs: 10000
-      }
-    );
+    const stopPolling =
+      featureAccess.temps || featureAccess.whiteboard
+        ? startVisiblePolling(
+            async () => {
+              const jobs: Promise<unknown>[] = [];
+              if (featureAccess.temps) jobs.push(refreshTemps());
+              if (featureAccess.whiteboard) jobs.push(refreshIdeas());
+              await Promise.all(jobs);
+            },
+            {
+              intervalMs: 90000,
+              maxIntervalMs: 5 * 60 * 1000,
+              runImmediately: false,
+              refreshOnVisible: true,
+              jitterMs: 10000
+            }
+          )
+        : () => {};
     return () => {
       clearInterval(clock);
       stopPolling();

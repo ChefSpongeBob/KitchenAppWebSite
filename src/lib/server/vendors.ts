@@ -2,6 +2,7 @@ import { dev } from '$app/environment';
 import { fail } from '@sveltejs/kit';
 import { requireAdmin } from '$lib/server/admin';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 type DB = App.Platform['env']['DB'];
 
@@ -62,7 +63,7 @@ async function ensureVendorSchema(db: DB) {
 }
 
 function optionalString(formData: FormData, key: string, maxLength: number) {
-  return String(formData.get(key) ?? '').trim().slice(0, maxLength);
+  return normalizeFormText(formData, key, { maxLength });
 }
 
 function normalizeWebsite(raw: string) {

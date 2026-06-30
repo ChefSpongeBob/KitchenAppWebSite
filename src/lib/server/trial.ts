@@ -132,6 +132,23 @@ async function tableColumns(db: D1, tableName: string) {
 	return new Set((rows.results ?? []).map((row) => row.name));
 }
 
+async function tableExists(db: D1, tableName: string) {
+	if (!safeTableName(tableName)) return false;
+	const row = await db
+		.prepare(
+			`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name = ?
+      LIMIT 1
+    `
+		)
+		.bind(tableName)
+		.first<{ name: string }>();
+	return Boolean(row?.name);
+}
+
 async function businessUserIds(db: D1, businessId: string) {
 	const rows = await db
 		.prepare(
@@ -162,6 +179,33 @@ async function deleteByBusinessIdAcrossTables(db: D1, businessId: string) {
 	}
 }
 
+async function deleteNonstandardTenantReferences(db: D1, businessId: string) {
+	if ((await tableExists(db, 'account_deletion_requests'))) {
+		const columns = await tableColumns(db, 'account_deletion_requests');
+		if (columns.has('requester_business_id')) {
+			await db
+				.prepare(`DELETE FROM account_deletion_requests WHERE requester_business_id = ?`)
+				.bind(businessId)
+				.run();
+		}
+	}
+
+	if ((await tableExists(db, 'iot_device_inventory'))) {
+		const columns = await tableColumns(db, 'iot_device_inventory');
+		if (columns.has('claimed_business_id')) {
+			const assignments: string[] = ['claimed_business_id = NULL'];
+			if (columns.has('claimed_iot_device_id')) assignments.push('claimed_iot_device_id = NULL');
+			if (columns.has('claim_status')) assignments.push("claim_status = 'available'");
+			if (columns.has('updated_at')) assignments.push('updated_at = ?');
+			const binds = columns.has('updated_at') ? [Math.floor(Date.now() / 1000), businessId] : [businessId];
+			await db
+				.prepare(`UPDATE iot_device_inventory SET ${assignments.join(', ')} WHERE claimed_business_id = ?`)
+				.bind(...binds)
+				.run();
+		}
+	}
+}
+
 async function deleteUserScopedData(db: D1, userId: string) {
 	const excluded = new Set(['users', 'business_users', 'trial_denials']);
 	const tables = await listTables(db);
@@ -176,6 +220,7 @@ async function deleteUserScopedData(db: D1, userId: string) {
 async function purgeBusinessWorkspaceData(db: D1, businessId: string) {
 	const userIds = await businessUserIds(db, businessId);
 	await deleteByBusinessIdAcrossTables(db, businessId);
+	await deleteNonstandardTenantReferences(db, businessId);
 	await db.prepare(`DELETE FROM businesses WHERE id = ?`).bind(businessId).run();
 
 	for (const userId of userIds) {

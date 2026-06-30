@@ -1,55 +1,16 @@
-import { dev } from '$app/environment';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { ensureTenantSchema } from '$lib/server/tenant';
+import { normalizePlainTextInput } from '$lib/server/inputSanitizer';
 
 type WhiteboardRow = {
   id: string;
   content: string;
   votes: number;
 };
-let whiteboardVotesSchemaEnsured = false;
+const TENANT_WHITEBOARD_CACHE_CONTROL = 'private, max-age=15, stale-while-revalidate=30';
 
 function scopedBusinessId(locals: App.Locals) {
   return String(locals.businessId ?? '').trim();
-}
-
-async function hasReviewTable(db: App.Platform['env']['DB']) {
-  if (!dev) return true;
-  const table = await db
-    .prepare(
-      `
-      SELECT name
-      FROM sqlite_master
-      WHERE type = 'table' AND name = 'whiteboard_review'
-      LIMIT 1
-      `
-    )
-    .first<{ name: string }>();
-  return Boolean(table);
-}
-
-async function ensureWhiteboardVotesTable(db: App.Platform['env']['DB']) {
-  if (!dev) {
-    whiteboardVotesSchemaEnsured = true;
-    return;
-  }
-
-  if (whiteboardVotesSchemaEnsured) return;
-  await db
-    .prepare(
-      `
-      CREATE TABLE IF NOT EXISTS whiteboard_votes (
-        post_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        PRIMARY KEY (post_id, user_id),
-        FOREIGN KEY (post_id) REFERENCES whiteboard_posts(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-      `
-    )
-    .run();
-  whiteboardVotesSchemaEnsured = true;
 }
 
 export const GET: RequestHandler = async ({ platform, url, locals }) => {
@@ -63,9 +24,7 @@ export const GET: RequestHandler = async ({ platform, url, locals }) => {
     ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
     : 100;
 
-  const reviewEnabled = await hasReviewTable(db);
-  const result = reviewEnabled
-    ? await db
+  const result = await db
         .prepare(
           `
           SELECT p.id, p.content, p.votes
@@ -78,22 +37,10 @@ export const GET: RequestHandler = async ({ platform, url, locals }) => {
         `
         )
         .bind(businessId, limit)
-        .all<WhiteboardRow>()
-    : await db
-        .prepare(
-          `
-          SELECT id, content, votes
-          FROM whiteboard_posts
-          WHERE business_id = ?
-          ORDER BY votes DESC, created_at DESC
-          LIMIT ?
-        `
-        )
-        .bind(businessId, limit)
         .all<WhiteboardRow>();
 
   return json(result.results ?? [], {
-    headers: { 'cache-control': 'public, max-age=15, s-maxage=15, stale-while-revalidate=30' }
+    headers: { 'cache-control': TENANT_WHITEBOARD_CACHE_CONTROL }
   });
 };
 
@@ -118,9 +65,6 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
     if (!locals.userId) {
       return json({ error: 'Login required to vote.' }, { status: 401 });
     }
-
-    await ensureWhiteboardVotesTable(db);
-    await ensureTenantSchema(db, true);
 
     const id = String(payload.id ?? '');
     if (!id) return json({ error: 'Missing id' }, { status: 400 });
@@ -192,9 +136,8 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
     if (!locals.userId) {
       return json({ error: 'Login required.' }, { status: 401 });
     }
-    const content = String(payload.content ?? '').trim();
+    const content = normalizePlainTextInput(String(payload.content ?? ''), { maxLength: 240 });
     if (!content) return json({ error: 'Missing content' }, { status: 400 });
-    if (content.length > 240) return json({ error: 'Idea is too long.' }, { status: 400 });
 
     const now = Math.floor(Date.now() / 1000);
     const id = crypto.randomUUID();
@@ -209,19 +152,16 @@ export const POST: RequestHandler = async ({ platform, request, locals }) => {
       .bind(id, content, locals.userRole === 'admin' ? 1 : 0, locals.userId ?? null, now, now, businessId)
       .run();
 
-    const reviewEnabled = await hasReviewTable(db);
-    if (reviewEnabled) {
-      const status = locals.userRole === 'admin' ? 'approved' : 'pending';
-      await db
-        .prepare(
-          `
-          INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
-          VALUES (?, ?, ?, ?, ?)
+    const status = locals.userRole === 'admin' ? 'approved' : 'pending';
+    await db
+      .prepare(
         `
-        )
-        .bind(id, status, locals.userRole === 'admin' ? locals.userId ?? null : null, now, businessId)
-        .run();
-    }
+        INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
+        VALUES (?, ?, ?, ?, ?)
+      `
+      )
+      .bind(id, status, locals.userRole === 'admin' ? locals.userId ?? null : null, now, businessId)
+      .run();
 
     return json({
       id,

@@ -405,9 +405,37 @@ export const actions: Actions = {
 					.run();
 			}
 
-			const businessContext = await getUserBusinessContext(db, user.id);
+			let businessContext = await getUserBusinessContext(db, user.id);
 			if (!businessContext) {
-				await bootstrapBusinessForUser(db, user.id, user.role ?? null, user.display_name ?? user.email);
+				if (!dev) {
+					await db
+						.prepare(
+							`
+							UPDATE sessions
+							SET revoked_at = ?
+							WHERE id = ?
+							`
+						)
+						.bind(now, sessionId)
+						.run();
+					await writeAuditLogSafe(db, {
+						action: 'login_workspace_missing',
+						request,
+						getClientAddress,
+						targetUserId: user.id,
+						email
+					});
+					return fail(403, {
+						error: 'No active workspace is connected to this account. Contact the business owner or support.',
+						email
+					});
+				}
+				businessContext = await bootstrapBusinessForUser(
+					db,
+					user.id,
+					user.role ?? null,
+					user.display_name ?? user.email
+				);
 			}
 
 			await Promise.all([

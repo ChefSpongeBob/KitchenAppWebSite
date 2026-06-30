@@ -14,9 +14,9 @@ const productionColumnAssumptions = new Map<string, string[]>([
       'email_normalized',
       'password_hash',
       'display_name',
-      'username',
       'role',
       'is_active',
+      'email_verified_at',
       'created_at',
       'updated_at'
     ]
@@ -33,6 +33,7 @@ const productionColumnAssumptions = new Map<string, string[]>([
       'welcome_tour_variant',
       'user_home_tour_completed_at',
       'admin_tour_completed_at',
+      'push_updates',
       'updated_at'
     ]
   ]

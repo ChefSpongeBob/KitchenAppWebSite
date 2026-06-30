@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 
 const checks = [];
 
@@ -13,6 +13,30 @@ function expect(path, label, predicate) {
   }
   const source = read(path);
   checks.push({ ok: Boolean(predicate(source)), label, detail: path });
+}
+
+function expectNoRouteSchemaMutation() {
+  const routeRoot = 'src/routes';
+  const blocked = /\b(CREATE\s+TABLE|ALTER\s+TABLE|CREATE\s+INDEX|DROP\s+INDEX|PRAGMA\s+table_info)\b/i;
+  const hits = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.(ts|js|svelte)$/.test(entry.name)) continue;
+      const source = read(full);
+      if (blocked.test(source)) hits.push(full);
+    }
+  };
+  walk(routeRoot);
+  checks.push({
+    ok: hits.length === 0,
+    label: 'route request handlers do not mutate or probe schema',
+    detail: hits.length ? hits.join(', ') : routeRoot
+  });
 }
 
 expect('src/lib/server/schemaGuard.ts', 'production D1 schema guard exists', (source) =>
@@ -45,6 +69,8 @@ expect('docs/PROJECT_HANDOFF.md', 'deploy playbook includes schema verification'
   source.includes('npm run test:production-schema') &&
   source.includes('npm run schema:readiness:prod')
 );
+
+expectNoRouteSchemaMutation();
 
 const failed = checks.filter((check) => !check.ok);
 for (const check of checks) {

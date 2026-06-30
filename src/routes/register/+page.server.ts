@@ -27,6 +27,7 @@ import { checkRateLimit, writeAuditLog, writeAuditLogSafe } from '$lib/server/se
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/server/permissions';
 import { sendSignupConfirmationEmail } from '$lib/server/email';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
@@ -107,6 +108,11 @@ async function hasRoleColumn(db: App.Platform['env']['DB']) {
 	return hasColumn(db, 'users', 'role');
 }
 
+async function cleanupPartialRegisteredUser(db: App.Platform['env']['DB'], userId: string) {
+	await db.prepare(`DELETE FROM user_preferences WHERE user_id = ?`).bind(userId).run();
+	await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+}
+
 async function createRegistrationSession({
 	db,
 	cookies,
@@ -170,27 +176,8 @@ async function createRegistrationSession({
 	cookies.delete('session_id_pwa', { path: '/' });
 }
 
-async function ensureUserInvitesTable(db: App.Platform['env']['DB']) {
-	if (!dev) return;
-
-	await db.prepare(`
-		CREATE TABLE IF NOT EXISTS user_invites (
-			id TEXT PRIMARY KEY,
-			email TEXT NOT NULL,
-			email_normalized TEXT NOT NULL,
-			invite_code TEXT NOT NULL UNIQUE,
-			invited_by TEXT,
-			created_at INTEGER NOT NULL,
-			expires_at INTEGER,
-			used_at INTEGER,
-			used_by_user_id TEXT,
-			revoked_at INTEGER
-		)
-	`).run();
-}
-
 function toOptionalString(form: FormData, key: string, maxLength: number) {
-	return String(form.get(key) ?? '').trim().slice(0, maxLength);
+	return normalizeFormText(form, key, { maxLength });
 }
 
 function looksLikeEmail(value: string) {
@@ -228,7 +215,7 @@ export const actions: Actions = {
 			registerPhase = 'read_form';
 			const formData = await request.formData();
 
-			const displayName = String(formData.get('display_name') || '').trim();
+			const displayName = normalizeFormText(formData, 'display_name', { maxLength: 120 });
 			const ownerTitle = toOptionalString(formData, 'owner_title', 120);
 			const email = String(formData.get('email') || '').trim().toLowerCase();
 			registerEmail = email;
@@ -240,7 +227,7 @@ export const actions: Actions = {
 				.trim()
 				.toUpperCase();
 			const inviteCode = inviteCodeFromForm || inviteCodeFromUrl;
-			const businessName = String(formData.get('business_name') || '').trim();
+			const businessName = normalizeFormText(formData, 'business_name', { maxLength: 120 });
 			const requestedBusinessSlug = String(formData.get('business_slug') || '').trim();
 			const planTierRaw = String(formData.get('plan_tier') || 'starter').trim().toLowerCase();
 			const planTier = PLAN_TIER_MAP[planTierRaw] ?? 'starter';
@@ -364,7 +351,6 @@ export const actions: Actions = {
 			const buyNowRequested = !inviteCode && purchaseMode === 'buy_now';
 
 			registerPhase = 'schema';
-			await ensureUserInvitesTable(db);
 			await ensureBusinessSchema(db);
 
 			registerPhase = 'rate_limit';
@@ -686,16 +672,25 @@ export const actions: Actions = {
 
 			registerPhase = inviteCode ? 'accept_invite' : 'create_business';
 			if (businessInvite) {
-				await db
+				const inviteClaim = await db
 					.prepare(
 						`
 				UPDATE business_invites
 				SET used_at = ?, used_by_user_id = ?
 				WHERE id = ?
+				  AND business_id = ?
+				  AND email_normalized = ?
+				  AND used_at IS NULL
+				  AND revoked_at IS NULL
+				  AND (expires_at IS NULL OR expires_at >= ?)
 			`
 					)
-					.bind(now, userId, businessInvite.id)
+					.bind(now, userId, businessInvite.id, businessInvite.business_id, email, now)
 					.run();
+				if (Number(inviteClaim.meta?.changes ?? 0) !== 1) {
+					await cleanupPartialRegisteredUser(db, userId);
+					return registerFailure(400, 'Invite code is invalid or has already been used.', 'security', submittedValues);
+				}
 				await db
 					.prepare(
 						`
@@ -793,16 +788,24 @@ export const actions: Actions = {
 				}
 				resolvedBusinessId = businessInvite.business_id;
 			} else if (invite) {
-				await db
+				const legacyInviteClaim = await db
 					.prepare(
 						`
 				UPDATE user_invites
 				SET used_at = ?, used_by_user_id = ?
 				WHERE id = ?
+				  AND email_normalized = ?
+				  AND used_at IS NULL
+				  AND revoked_at IS NULL
+				  AND (expires_at IS NULL OR expires_at >= ?)
 			`
 				)
-					.bind(now, userId, invite.id)
+					.bind(now, userId, invite.id, email, now)
 					.run();
+				if (Number(legacyInviteClaim.meta?.changes ?? 0) !== 1) {
+					await cleanupPartialRegisteredUser(db, userId);
+					return registerFailure(400, 'Invite code is invalid or has already been used.', 'security', submittedValues);
+				}
 
 				if (invite.invited_by) {
 					const inviterBusiness = await db

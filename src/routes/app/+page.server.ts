@@ -2,7 +2,6 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { buildFeatureAccess, defaultAppFeatureModes } from '$lib/features/appFeatures';
 import { loadHomepageAnnouncement, userCanEditHomepageAnnouncement } from '$lib/server/announcements';
-import { hasTable } from '$lib/server/dbSchema';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 import { loadTodayShifts } from '$lib/server/schedules';
@@ -108,16 +107,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }
 
   const businessId = requireBusinessId(locals);
-  const reviewEnabledPromise = safeHomeData(
-    featureAccess.whiteboard ? hasTable(db, 'whiteboard_review') : Promise.resolve(false),
-    false,
-    'whiteboard review status'
-  );
-  const nodeTablePromise = safeHomeData(
-    featureAccess.temps ? hasTable(db, 'sensor_nodes') : Promise.resolve(false),
-    false,
-    'sensor node status'
-  );
   const announcementPromise = safeHomeData(
     featureAccess.announcements
       ? loadHomepageAnnouncement(db, businessId)
@@ -237,9 +226,32 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         'menu preview'
       )
     : Promise.resolve({ results: [] as MenuDoc[] });
+  const topIdeasPromise = featureAccess.whiteboard
+    ? safeRows(
+        db
+          .prepare(
+            `
+            SELECT p.id, p.content, p.votes
+            FROM whiteboard_posts p
+            LEFT JOIN whiteboard_review r ON r.post_id = p.id
+            WHERE COALESCE(r.status, 'approved') = 'approved'
+              AND p.business_id = ?
+            ORDER BY p.votes DESC, p.created_at DESC
+            LIMIT 3
+            `
+          )
+          .bind(businessId)
+          .all<IdeaRow>(),
+        'whiteboard preview'
+      )
+    : Promise.resolve({ results: [] as IdeaRow[] });
+  const sensorNamesPromise = featureAccess.temps
+    ? safeRows(
+        db.prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`).bind(businessId).all<NodeNameRow>(),
+        'sensor labels'
+      )
+    : Promise.resolve({ results: [] as NodeNameRow[] });
   const [
-    reviewEnabled,
-    nodeTable,
     announcement,
     canEditAnnouncement,
     employeeSpotlight,
@@ -248,10 +260,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     taskResult,
     todaySchedule,
     tempsResult,
-    menuDocsResult
+    menuDocsResult,
+    topIdeasResult,
+    sensorNamesResult
   ] = await Promise.all([
-    reviewEnabledPromise,
-    nodeTablePromise,
     announcementPromise,
     announcementEditorPromise,
     employeeSpotlightPromise,
@@ -260,7 +272,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     todayTasksPromise,
     todaySchedulePromise,
     tempsPromise,
-    menuDocsPromise
+    menuDocsPromise,
+    topIdeasPromise,
+    sensorNamesPromise
   ]);
 
   const userName = user?.display_name || user?.email || 'Team';
@@ -268,39 +282,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const assignedCount = todayTasks.filter((task) => task.assigned_to === locals.userId).length;
   const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
-
-  const topIdeasResult = featureAccess.whiteboard
-    ? await safeRows(
-        reviewEnabled
-          ? db
-              .prepare(
-                `
-                SELECT p.id, p.content, p.votes
-                FROM whiteboard_posts p
-                LEFT JOIN whiteboard_review r ON r.post_id = p.id
-                WHERE COALESCE(r.status, 'approved') = 'approved'
-                  AND p.business_id = ?
-                ORDER BY p.votes DESC, p.created_at DESC
-                LIMIT 3
-                `
-              )
-              .bind(businessId)
-              .all<IdeaRow>()
-          : db
-              .prepare(
-                `
-                SELECT id, content, votes
-                FROM whiteboard_posts
-                WHERE business_id = ?
-                ORDER BY votes DESC, created_at DESC
-                LIMIT 3
-                `
-              )
-              .bind(businessId)
-              .all<IdeaRow>(),
-        'whiteboard preview'
-      )
-    : { results: [] as IdeaRow[] };
 
   const rows = tempsResult.results ?? [];
   const latestBySensor = new Map<number, TempRow>();
@@ -313,14 +294,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const nodeTemps = Array.from(latestBySensor.values()).sort((a, b) => a.sensor_id - b.sensor_id);
 
   const namesBySensor = new Map<number, string>();
-  if (featureAccess.temps && nodeTable) {
-    const nameRows = await safeRows(
-      db.prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`).bind(businessId).all<NodeNameRow>(),
-      'sensor labels'
-    );
-    for (const row of nameRows.results ?? []) {
-      namesBySensor.set(row.sensor_id, row.name);
-    }
+  for (const row of sensorNamesResult.results ?? []) {
+    namesBySensor.set(row.sensor_id, row.name);
   }
 
   const bucketAverages = new Map<number, { sum: number; count: number }>();

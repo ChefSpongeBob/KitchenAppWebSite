@@ -9,6 +9,7 @@ import {
 import { requireAdmin } from '$lib/server/admin';
 import { loadAppFeatureModes, saveAppFeatureModes } from '$lib/server/appFeatures';
 import { ensureBusinessSchema } from '$lib/server/business';
+import { normalizeFormText } from '$lib/server/inputSanitizer';
 
 const BRAND_MEDIA_PREFIX = '/api/documents/media/';
 
@@ -54,7 +55,7 @@ function isAllowedLogoUpload(contentType: string, extension: string) {
 }
 
 function toOptionalString(formData: FormData, key: string, maxLength: number) {
-  return String(formData.get(key) ?? '').trim().slice(0, maxLength);
+  return normalizeFormText(formData, key, { maxLength });
 }
 
 function looksLikeEmail(value: string) {

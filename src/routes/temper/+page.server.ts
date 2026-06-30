@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { requireBusinessId } from '$lib/server/tenant';
 
 type NodeNameRow = {
   sensor_id: number;
@@ -10,20 +10,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { nodeNames: [] };
   const businessId = requireBusinessId(locals);
-
-  const table = await db
-    .prepare(
-      `
-      SELECT name
-      FROM sqlite_master
-      WHERE type = 'table' AND name = 'sensor_nodes'
-      LIMIT 1
-      `
-    )
-    .first<{ name: string }>();
-
-  if (!table) return { nodeNames: [] };
-  await ensureTenantSchema(db, true);
 
   const result = await db
     .prepare(
