@@ -1683,7 +1683,7 @@
     box-shadow: none !important;
     color: var(--color-text-soft) !important;
     padding: 0.28rem 0.18rem !important;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1.2;
     transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
   }
@@ -1696,10 +1696,16 @@
   }
 
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).active),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).selected),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).filter-active),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).duplicate-day-btn-active),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).department-chip-active),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).autofill-preferred),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle)[aria-pressed='true']) {
     border-bottom-color: var(--color-text) !important;
     background: transparent !important;
     color: var(--color-text) !important;
+    font-weight: var(--weight-bold) !important;
   }
 
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger),
@@ -1747,7 +1753,7 @@
     box-shadow: none !important;
     color: var(--color-text-soft) !important;
     padding: 0.28rem 0.18rem !important;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1.2;
     text-decoration: none;
     transition: border-color 150ms ease, color 150ms ease;
@@ -1765,7 +1771,7 @@
     box-shadow: none !important;
     color: var(--color-text-soft) !important;
     padding: 0.28rem 0.18rem !important;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1.2;
     text-decoration: none;
   }
@@ -1877,6 +1883,11 @@
   .app-shell:not(.marketing-app) :global(.menu-list button:hover) {
     border-bottom-color: var(--color-text) !important;
     background: transparent !important;
+  }
+
+  .app-shell:not(.marketing-app) :global(.menu-list button.active) {
+    color: var(--color-text) !important;
+    font-weight: var(--weight-bold) !important;
   }
 
   @media (max-width: 760px) {

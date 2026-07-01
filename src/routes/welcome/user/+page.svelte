@@ -474,12 +474,13 @@
 	}
 
 	button.primary {
-		padding: 0.56rem 0.88rem;
+		padding: 0.34rem 0.14rem;
 		border-radius: 0;
-		border: 1px solid #111214;
-		color: #ffffff;
+		border: 0;
+		border-bottom: 1px solid #111214;
+		color: #111214;
 		font-weight: 700;
-		background: #111214;
+		background: transparent;
 	}
 
 	.tour-footer {
@@ -496,17 +497,20 @@
 	}
 
 	.nav-btn {
-		padding: 0.58rem 0.9rem;
+		padding: 0.34rem 0.14rem;
 		border-radius: 0;
-		border: 1px solid rgba(17, 18, 20, 0.18);
-		background: rgba(255, 255, 255, 0.82);
+		border: 0;
+		border-bottom: 1px solid rgba(17, 18, 20, 0.18);
+		background: transparent;
 		color: #111214;
-		font-weight: 600;
+		font-weight: 400;
 	}
 
 	.nav-btn.primary {
-		background: #111214;
-		color: #ffffff;
+		background: transparent;
+		border-bottom-color: #111214;
+		color: #111214;
+		font-weight: 700;
 	}
 
 	.nav-btn:disabled {

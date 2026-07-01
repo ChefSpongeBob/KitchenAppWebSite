@@ -273,12 +273,18 @@
 	button {
 		border-radius: 0;
 		font-size: 0.75rem;
-		font-weight: 600;
-		padding: 0.42rem 0.62rem;
-		border: 1px solid var(--color-border);
+		font-weight: var(--weight-regular);
+		padding: 0.28rem 0.14rem;
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
 		background: transparent;
 		color: var(--color-text);
 		cursor: pointer;
+	}
+
+	button:not(.quiet) {
+		border-bottom-color: var(--color-text);
+		font-weight: var(--weight-bold);
 	}
 
 	button.quiet {

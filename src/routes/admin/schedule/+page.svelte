@@ -2160,7 +2160,7 @@
     text-decoration: none;
     box-shadow: none;
     font-size: 0.74rem;
-    font-weight: 500;
+    font-weight: var(--weight-regular);
     line-height: 1.25;
     text-align: left;
     font-family: inherit;
@@ -2172,7 +2172,8 @@
 
   .menu-item:hover,
   .menu-item:focus-visible {
-    background: color-mix(in srgb, var(--color-surface-alt) 54%, transparent);
+    background: transparent;
+    border-bottom-color: var(--color-text);
     outline: none;
     transform: none;
   }
@@ -2600,6 +2601,7 @@
   .menu-item.autofill-preferred {
     background: transparent;
     color: color-mix(in srgb, var(--color-success) 76%, var(--color-text));
+    font-weight: var(--weight-bold);
   }
 
   .shift-editor-dock {
@@ -2715,14 +2717,15 @@
     min-height: 1.95rem;
     padding: 0.35rem 0.58rem;
     border-radius: 0;
+    font-weight: var(--weight-regular);
   }
 
   .duplicate-day-btn-active {
     border-bottom-color: var(--color-text);
-    background: color-mix(in srgb, var(--color-text) 8%, transparent);
+    background: transparent;
     color: var(--color-text);
-    box-shadow: inset 0 -2px 0 var(--color-text);
-    font-weight: var(--weight-semibold);
+    box-shadow: none;
+    font-weight: var(--weight-bold);
   }
 
   .shift-warning {

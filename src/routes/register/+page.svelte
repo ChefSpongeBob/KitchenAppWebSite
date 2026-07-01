@@ -1427,14 +1427,15 @@
 	}
 
 	button.primary {
-		background: #111214;
+		background: transparent;
 	}
 
 	button.primary {
-		padding: 0.56rem 0.88rem;
+		padding: 0.34rem 0.14rem;
 		border-radius: 0;
-		border: 1px solid #111214;
-		color: #ffffff;
+		border: 0;
+		border-bottom: 1px solid #111214;
+		color: #111214;
 		font-weight: 700;
 	}
 
@@ -1537,9 +1538,10 @@
 
 	button.primary {
 		border-radius: 0;
-		border-color: #111214;
-		background: #111214;
-		color: #ffffff;
+		border: 0;
+		border-bottom: 1px solid #111214;
+		background: transparent;
+		color: #111214;
 	}
 
 	.tier-card strong,
