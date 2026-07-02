@@ -40,3 +40,7 @@ android/app/google-services.json
 
 # Local database backups
 .db-backups/
+
+# Firmware secrets and generated factory manifests
+firmware/**/include/crimini_iot_config.h
+firmware/**/generated/
