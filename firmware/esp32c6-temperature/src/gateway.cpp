@@ -1,4 +1,4 @@
-﻿#include <Arduino.h>
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -152,7 +152,7 @@ static bool postReadings() {
   if (WiFi.status() != WL_CONNECTED && !connectWifi()) return false;
 
   const size_t tlsLength = strlen(CRIMINI_TLS_ROOT_CA_PEM);
-#ifndef CRIMINI_ALLOW_INSECURE_TLS_FOR_LAB
+#ifndef CRIMINI_ALLOW_INSECURE_TLS_FOR_CONTROLLED_VALIDATION
   if (tlsLength == 0) {
     Serial.println("TLS root CA missing; refusing HTTPS post.");
     return false;
@@ -160,7 +160,7 @@ static bool postReadings() {
 #endif
 
   WiFiClientSecure client;
-#ifdef CRIMINI_ALLOW_INSECURE_TLS_FOR_LAB
+#ifdef CRIMINI_ALLOW_INSECURE_TLS_FOR_CONTROLLED_VALIDATION
   if (tlsLength == 0) client.setInsecure(); else client.setCACert(CRIMINI_TLS_ROOT_CA_PEM);
 #else
   client.setCACert(CRIMINI_TLS_ROOT_CA_PEM);

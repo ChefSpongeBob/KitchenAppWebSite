@@ -21,7 +21,7 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - Do not run remote DB commands unless explicitly approved.
 - Preserve business/tenant scoping on every page, action, upload, and endpoint.
 - Manager authority comes from business membership role, not global user role.
-- Every feature must be real: no fake routes, hardcoded data, or UI-only plumbing.
+- Every feature must be real: no false routes, hardcoded data, or UI-only plumbing.
 
 ## Core Wiring
 
@@ -153,8 +153,8 @@ Before entering information for three real restaurants, complete this gate in or
 5. Create or confirm a D1 backup/export before loading real tenant data.
 6. Run production schema readiness against the exact Pages environment being tested: `npm.cmd run schema:readiness:prod`.
 7. Run production smoke against the exact Pages environment being tested: `npm.cmd run smoke:prod`.
-8. Create at least two fake businesses first and run the Final Multi-Tenant Test Notes below against fake data.
-9. Only after fake tenants pass, create the three restaurant tenants and enter real restaurant information.
+8. Create at least two private validation businesses first and run the Final Multi-Tenant Test Notes below against controlled validation data.
+9. Only after private validation tenants pass, create the three restaurant tenants and enter real restaurant information.
 
 If any gate item fails, stop real data entry and fix/debug before continuing.
 
@@ -192,9 +192,9 @@ These are not code blockers found by the current static suite, but they must be 
 
 ## Code/Debugging Queue Before Three Real Restaurants
 
-Current status: no known code blocker was found by the completion-list audit. The next code/debugging work should be driven by failed validation from the fake-tenant test gate.
+Current status: no known code blocker was found by the completion-list audit. The next code/debugging work should be driven by failed validation from the private-validation-tenant test gate.
 
-If the fake-tenant gate exposes failures, fix them before adding real restaurant data, especially in these high-risk areas:
+If the private-validation-tenant gate exposes failures, fix them before adding real restaurant data, especially in these high-risk areas:
 
 - Cross-tenant data isolation between businesses with similar employee names, departments, list names, and schedules.
 - Invite/onboarding flows for owner, manager, employee, consultant, and contractor accounts.
@@ -237,8 +237,8 @@ If the fake-tenant gate exposes failures, fix them before adding real restaurant
 - Phase 17 incident/security pass: in Cloudflare, configure notifications or log monitoring for `schema_readiness_failed`, `tenant_access_denied`, `billing_conversion_failed`, `billing_cancel_failed`, media access denials, device auth failures, temperature alert failures, notification delivery failures, repeated 500s, and deployment failures. Run one D1 export/restore drill in a non-production target and one rollback drill from a known-good deployment before public launch.
 - Phase 18 UI/accessibility pass: manually walk app, admin, auth, onboarding, billing, schedule, reports, tools, docs, menus, and marketing routes in light/dark mode and mobile/desktop. Confirm no legacy page-header subtitles, old rounded floating-card styling, low-contrast controls, clipped footer/sidebar layouts, missing focus states, or verbose helper copy remain.
 - Phase 19 native release pass: after JDK/JAVA_HOME and Android signing values are configured, run `npm.cmd run native:prereq`, `npm.cmd run android:release:check`, `npm.cmd run build`, `npm.cmd run cap:sync`, Android release build, and iOS archive/TestFlight build. Confirm login/session persistence, store billing bridge, push opt-in/token refresh, external links, PDFs, uploaded menus/docs, and account deletion on real devices.
-- Phase 20 Apple pass: create the App Store Connect app record for `com.nexusnorthsystems.crimini`; add subscription products `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`; set privacy policy URL `/privacy`, support URL `/support`, and account deletion URL `/account-deletion`; upload screenshots and metadata; provide a full demo account and review notes; upload TestFlight build; test purchase, restore, cancellation, renewal, refund/revoke, login/session persistence, PDFs/uploads, push opt-in, and account deletion on real iOS.
-- Phase 21 Google Play pass: create the Play Console app record for `com.nexusnorthsystems.crimini`; add subscription products `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`; set privacy policy URL `/privacy`, support URL `/support`, and account deletion URL `/account-deletion`; complete App Content, Data safety, target audience, ads, content rating, and sign-in details; upload screenshots and metadata; provide a full demo account and review notes; upload an Android App Bundle to internal testing; test purchase, restore, cancellation, renewal, refund/revoke, login/session persistence, PDFs/uploads, push opt-in, and account deletion on real Android.
+- Phase 20 Apple pass: create the App Store Connect app record for `com.nexusnorthsystems.crimini`; add subscription products `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`; set privacy policy URL `/privacy`, support URL `/support`, and account deletion URL `/account-deletion`; upload screenshots and metadata; provide a full review account and review notes; upload TestFlight build; test purchase, restore, cancellation, renewal, refund/revoke, login/session persistence, PDFs/uploads, push opt-in, and account deletion on real iOS.
+- Phase 21 Google Play pass: create the Play Console app record for `com.nexusnorthsystems.crimini`; add subscription products `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`; set privacy policy URL `/privacy`, support URL `/support`, and account deletion URL `/account-deletion`; complete App Content, Data safety, target audience, ads, content rating, and sign-in details; upload screenshots and metadata; provide a full review account and review notes; upload an Android App Bundle to internal testing; test purchase, restore, cancellation, renewal, refund/revoke, login/session persistence, PDFs/uploads, push opt-in, and account deletion on real Android.
 - Phase 22 legal/business pass: before public launch, have qualified legal/payroll guidance review `/privacy`, `/terms`, `/billing-terms`, `/account-deletion`, employee onboarding forms, I-9/W-4/state form flow, trial/billing wording, cancellation/refund wording, device monitoring language, and data retention language. Activate `support@criminiops.com` receiving/forwarding, confirm store Data safety/privacy answers match actual app behavior, and keep the public site offline until trademark/LLC timing is safe.
 
 ## Launch Completion List
@@ -248,7 +248,7 @@ This is the only active completion checklist. Work it in order and do not create
 Status legend:
 
 - `Validated`: local code, schema, route, and static guards pass.
-- `Manual Gate`: code exists, but it must be proven with fake tenants, real services, hardware, native builds, or store sandboxes before real/customer production use.
+- `Manual Gate`: code exists, but it must be proven with private validation tenants, real services, hardware, native builds, or store sandboxes before real/customer production use.
 - `External`: requires Cloudflare dashboard, store consoles, legal/payroll review, hardware, DNS/domain, or native-device setup.
 - `Debug If Failed`: no current known code blocker, but failed manual validation becomes the next code/debug task before real restaurant data continues.
 
@@ -258,7 +258,7 @@ Status legend:
 
 2. Operational event and notification foundation - Validated / Manual Gate
 - `2. Operational event and notification foundation` is implemented as business-scoped operational events with delivery state, dedupe, failure tracking, and internal-token processing.
-- Manual Gate: process operational events with fake tenants and confirm emails/events route only to intended users.
+- Manual Gate: process operational events with private validation tenants and confirm emails/events route only to intended users.
 - Debug If Failed: incorrect recipient targeting, duplicate events, missing event writes, or cross-business notifications.
 
 3. Email system completion - Validated / Manual Gate
@@ -280,12 +280,12 @@ Status legend:
 
 6. Scheduling workflow completion - Validated / Manual Gate
 - Code foundation is validated for employee departments, roles, availability, time off, templates, drafts, autosave, publish, labor warnings, open shifts, shift offers, approvals, and My Schedule.
-- Manual Gate: run schedule tests with fake tenants, many employees, department-scoped managers, autosave, publish-with-unsaved-changes, templates, labor targets, open shifts, shift offers, approvals, time off, My Schedule, event processing, and tenant isolation.
+- Manual Gate: run schedule tests with private validation tenants, many employees, department-scoped managers, autosave, publish-with-unsaved-changes, templates, labor targets, open shifts, shift offers, approvals, time off, My Schedule, event processing, and tenant isolation.
 - Debug If Failed: draft loss, publish mismatch, wrong manager scope, employee visibility errors, or schedule report/history gaps.
 
 7. Lists, completion history, and alerts - Validated / Manual Gate
 - Code foundation is validated for checklist/prep/inventory/order lists, item save/edit/delete, item attachments, two-week prep history, list reports, CSV safety, and tenant scoping.
-- Manual Gate: create, edit, delete, submit, and export list data with multiple fake employees and businesses.
+- Manual Gate: create, edit, delete, submit, and export list data with multiple validation employees and businesses.
 - Debug If Failed: missing executor/submitter, stale UI after save, attachment opening issues, completion alert routing, or cross-tenant list rows.
 
 8. Reports and exports completion - Validated / Manual Gate
@@ -301,7 +301,7 @@ Status legend:
 
 10. Invite, employee onboarding, and HR completion - Validated / Manual Gate / Legal Review
 - Code foundation is validated for owner, manager, employee, consultant, and contractor invite paths; employee invite flow from email link to onboarding to login; packet requirements; encrypted sensitive vault; audited reads; and onboarding reports.
-- Manual Gate: Phase 10 invite/onboarding pass with fake employees, packet submission, review, changes requested, approval, HR-sensitive media, and admin review routes.
+- Manual Gate: Phase 10 invite/onboarding pass with validation employees, packet submission, review, changes requested, approval, HR-sensitive media, and admin review routes.
 - Legal Gate: contractors do not receive employee tax onboarding packets, but I-9/W-4/state form procedures still need qualified legal or payroll guidance.
 - Debug If Failed: wrong invite role path, business/pricing appearing on employee invite, packet misassignment, media access leak, or HR audit gaps.
 
@@ -311,7 +311,7 @@ Status legend:
 
 12. Core feature action test - Validated / Manual Gate
 - `12. Core feature action test` is guarded for lists, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, food cost, safety reference, waste tracker, waste reports, and business registry.
-- Phase 12 core action pass: create, edit, delete, and view real data in fake tenants before real restaurant entry.
+- Phase 12 core action pass: create, edit, delete, and view real data in private validation tenants before real restaurant entry.
 - Debug If Failed: save/delete failure, stale UI, wrong sidebar visibility, permission mismatch, or cross-tenant data.
 
 13. Camera feature shelving - Validated / Deferred
@@ -331,7 +331,7 @@ Status legend:
 
 16. Performance, scale, and reliability - Validated / Manual Gate
 - Scale/performance static checks pass: bounded polling, bounded cleanup, bounded temperature payloads, business-first indexes, private media streaming, and route payload trimming.
-- Manual Gate: run load-style fake tenant tests for schedules, reports, list submissions, temp ingest, temp polling, concurrent tenants, and user switching on Cloudflare.
+- Manual Gate: run load-style private validation tenant tests for schedules, reports, list submissions, temp ingest, temp polling, concurrent tenants, and user switching on Cloudflare.
 - Debug If Failed: worker resource warnings, slow route, heavy polling, unbounded D1 writes, or oversized route payload.
 
 17. Observability, backup, and incident readiness - Validated / External
@@ -351,12 +351,12 @@ Status legend:
 
 20. Apple App Store readiness - Validated Code / External
 - `20. Apple App Store readiness` code checks pass for bundle ID, public URLs, billing page, and readiness guards.
-- External Gate: App Store Connect app record, IAP subscription products, screenshots, metadata, TestFlight, privacy disclosures, demo account, and review notes.
+- External Gate: App Store Connect app record, IAP subscription products, screenshots, metadata, TestFlight, privacy disclosures, review account, and review notes.
 - Debug If Failed: IAP product mismatch, restore failure, privacy URL issue, native billing bridge issue, or Apple review blocker.
 
 21. Google Play Store readiness - Validated Code / External
 - `21. Google Play Store readiness` code checks pass for Android identity, Play Billing dependency, support/privacy/account deletion URLs, Google Play Console notification wiring, data safety references, internal testing readiness, `crimini.plan.small.monthly`, and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` expectations.
-- External Gate: Play Console app record, subscription products, Data safety, content rating, screenshots, metadata, internal testing track, demo account, and review notes.
+- External Gate: Play Console app record, subscription products, Data safety, content rating, screenshots, metadata, internal testing track, review account, and review notes.
 - Debug If Failed: Play Billing product mismatch, notification verification failure, restore issue, or Android runtime issue.
 
 22. Legal, public site, and business readiness - Validated Routes / External
@@ -367,8 +367,8 @@ Status legend:
 23. Production smoke and multi-tenant validation - Next Required Gate
 - Deploy to the intended Cloudflare Pages environment after the public/domain hold is handled or use the current Pages preview URL for private testing.
 - Run `npm.cmd run schema:readiness:prod` and `npm.cmd run smoke:prod`.
-- Run the Final Multi-Tenant Test Notes with fake tenants first.
-- If fake tenants pass, enter the three restaurant tenants.
+- Run the Final Multi-Tenant Test Notes with private validation tenants first.
+- If private validation tenants pass, enter the three restaurant tenants.
 - Debug If Failed: fix the failing system before adding more real data.
 
 24. Store internal testing - External / Manual Gate
@@ -384,4 +384,3 @@ Status legend:
 - Deploy the final Cloudflare build.
 - Submit Apple and Google builds.
 - Keep backup, incident, and rollback plans ready.
-

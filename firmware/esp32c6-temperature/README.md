@@ -1,4 +1,4 @@
-﻿# Crimini ESP32-C6 Temperature Firmware
+# Crimini ESP32-C6 Temperature Firmware
 
 Contained firmware workspace for Crimini temperature gateways and radio sensor nodes.
 
