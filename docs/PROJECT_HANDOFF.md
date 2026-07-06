@@ -49,7 +49,8 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY`.
 - Optional private testing gate: set `PRIVATE_TEST_GATE_ENABLED=true` and `PRIVATE_TEST_ACCESS_CODE` on the private Pages environment while the public site is withheld. Remove or set `PRIVATE_TEST_GATE_ENABLED=false` before public launch.
 - Login Turnstile is enabled automatically when both Turnstile secrets are present; local/dev remains open when they are absent.
-- Cloudflare edge security before public launch: enable Managed WAF rules, OWASP managed rules where available, and rate limits/challenges for `/login`, `/register`, `/forgot-password`, `/account-deletion`, and public API abuse paths. Keep billing webhooks, smoke/schema readiness, temperature ingest, and camera ingest token/device-auth protected at the app layer.
+- Cloudflare edge security before public launch: enable Managed WAF rules, OWASP managed rules where available, and rate limits/challenges for `/login`, `/register`, `/forgot-password`, `/account-deletion`, and public API abuse paths. Do not challenge token/device-auth service paths: billing webhooks, smoke/schema readiness, temperature ingest, camera ingest, and operational-event processing.
+- Browser hardening is split by response type: dynamic app responses are handled in `src/hooks.server.ts`; static/edge responses are covered by root `_headers`.
 
 ## Validation Gates
 
@@ -241,6 +242,7 @@ This is the only active completion list. Work it in order and do not create scat
 
 14. Cloudflare edge security and observability
 - Enable Managed WAF, OWASP rules where available, auth-route rate limits/challenges, alerting, and log monitoring.
+- Keep service endpoints token/device-auth protected instead of challenge-gated: billing webhooks, internal smoke/schema readiness, temperature ingest, camera ingest, and operational-event processing.
 - Watch `schema_readiness_failed`, `tenant_access_denied`, `billing_conversion_failed`, `billing_cancel_failed`, repeated 500s, media denials, device auth failures, notification failures, and deployment failures.
 - Run one D1 export/restore drill in a non-production target and one rollback drill from a known-good deployment.
 

@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const hooksPath = 'src/hooks.server.ts';
 const source = existsSync(hooksPath) ? readFileSync(hooksPath, 'utf8') : '';
+const staticHeadersPath = '_headers';
+const staticHeaders = existsSync(staticHeadersPath) ? readFileSync(staticHeadersPath, 'utf8') : '';
 
 const checks = [
 	['security header helper exists', source.includes('function applySecurityHeaders')],
@@ -22,7 +24,16 @@ const checks = [
 	[
 		'public routes receive security headers',
 		source.includes('applySecurityHeaders(await resolve(event))')
-	]
+	],
+	['Cloudflare Pages static header file exists', staticHeaders.length > 0],
+	['static responses get nosniff', staticHeaders.includes('X-Content-Type-Options: nosniff')],
+	['static responses deny framing', staticHeaders.includes('X-Frame-Options: DENY')],
+	['static responses set referrer policy', staticHeaders.includes('Referrer-Policy: strict-origin-when-cross-origin')],
+	['static responses set permissions policy', staticHeaders.includes('Permissions-Policy: camera=(self), geolocation=(), microphone=(), payment=(self)')],
+	['static responses isolate opener', staticHeaders.includes('Cross-Origin-Opener-Policy: same-origin')],
+	['static responses disable legacy cross-domain policy files', staticHeaders.includes('X-Permitted-Cross-Domain-Policies: none')],
+	['static responses disable legacy download opening', staticHeaders.includes('X-Download-Options: noopen')],
+	['static responses set HSTS', staticHeaders.includes('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok);
