@@ -30,7 +30,12 @@ expect('migrations/0086_temperature_gateway_nodes.sql', 'temperature gateway/nod
   source.includes("device_type IN ('sensor_gateway', 'sensor_node')") &&
   source.includes('CREATE TABLE IF NOT EXISTS temperature_sensor_nodes') &&
   source.includes('gateway_device_id TEXT NOT NULL') &&
-  source.includes('UNIQUE (node_serial)')
+    source.includes('UNIQUE (node_serial)')
+);
+
+expect('migrations/0093_temperature_humidity.sql', 'temperature humidity migration stores AHT20 humidity', (source) =>
+  source.includes('ALTER TABLE temps ADD COLUMN humidity_pct REAL') &&
+  source.includes('ALTER TABLE temperature_sensor_nodes ADD COLUMN humidity_pct REAL')
 );
 
 expect('src/lib/server/temperatureDeviceProvisioning.ts', 'temperature provisioning claims gateways and assigns radio nodes', (source) =>
@@ -53,6 +58,7 @@ expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates 
 expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rules after saving readings', (source) =>
   source.includes('evaluateTemperatureReadings') &&
   source.includes('TemperatureReading') &&
+  source.includes('humidity_pct') &&
   source.includes("authenticateIoTDevice(db, request, 'sensor_gateway')") &&
   source.includes('resolveGatewayNodeReading') &&
   source.includes('MAX_TEMP_BATCH_SIZE') &&
@@ -108,7 +114,7 @@ expect('package.json', 'static suite includes temperature monitoring check', (so
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 5 temperature pass', (source) =>
-  source.includes('Temperature hardware model now targets ESP32-C6 sensor nodes') &&
+  source.includes('Temperature hardware model now targets ESP32-C6 TNY AHT20/BMP280 sensor nodes') &&
   source.includes('Phase 5 hardware pass') &&
   source.includes('Phase 5 remaining needs') &&
   source.includes('sensor ingest')

@@ -92,7 +92,13 @@ const backfilledTenantTables = new Set<string>();
 
 export type TenantSchemaIssue = {
   table: string;
-  issue: 'missing_table' | 'missing_business_id';
+  issue: 'missing_table' | 'missing_business_id' | 'missing_required_column';
+  column?: string;
+};
+
+const REQUIRED_TABLE_COLUMNS: Record<string, string[]> = {
+  temps: ['humidity_pct'],
+  temperature_sensor_nodes: ['humidity_pct']
 };
 
 function safeIdentifier(value: string) {
@@ -178,6 +184,11 @@ export async function verifyTenantSchema(db: D1) {
     }
     if (!(await hasColumn(db, table, 'business_id'))) {
       issues.push({ table, issue: 'missing_business_id' });
+    }
+    for (const column of REQUIRED_TABLE_COLUMNS[table] ?? []) {
+      if (!(await hasColumn(db, table, column))) {
+        issues.push({ table, issue: 'missing_required_column', column });
+      }
     }
   }
 

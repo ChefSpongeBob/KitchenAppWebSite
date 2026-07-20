@@ -39,6 +39,7 @@
     isActive: number;
     lastSeenAt: number | null;
     batteryMv: number | null;
+    humidityPct: number | null;
     rssi: number | null;
     revokedAt: number | null;
     createdAt: number;
@@ -296,6 +297,9 @@
                     Battery {node.batteryMv}mV
                   {:else}
                     Battery no data
+                  {/if}
+                  {#if node.humidityPct !== null}
+                    | Humidity {node.humidityPct.toFixed(0)}%
                   {/if}
                   {#if node.rssi}
                     | Signal {node.rssi}dBm

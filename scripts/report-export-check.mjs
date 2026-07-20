@@ -70,9 +70,9 @@ expect('src/routes/reports/+page.svelte', 'reports landing links to Phase 8 expo
   ['/reports/requests', '/reports/temperature', '/reports/onboarding', '/reports/waste'].every((href) => source.includes(href))
 );
 
-expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 8 reports/export phase', (source) =>
-  source.includes('`8. Reports/export foundation`') &&
-  source.includes('Reports and exports completion')
+expect('docs/PROJECT_HANDOFF.md', 'handoff tracks reports/export launch work', (source) =>
+  source.includes('8. Reports and exports') &&
+  source.includes('spreadsheet-safe CSVs')
 );
 
 const failed = checks.filter((check) => !check.ok);

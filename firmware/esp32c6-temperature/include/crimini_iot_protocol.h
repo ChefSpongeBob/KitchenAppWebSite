@@ -7,7 +7,7 @@
 #include <mbedtls/md.h>
 
 static constexpr uint16_t CRIMINI_PACKET_MAGIC = 0x4352;
-static constexpr uint8_t CRIMINI_PACKET_VERSION = 1;
+static constexpr uint8_t CRIMINI_PACKET_VERSION = 2;
 static constexpr uint8_t CRIMINI_PACKET_TYPE_TEMP = 1;
 static constexpr size_t CRIMINI_HMAC_SIZE = 32;
 static constexpr size_t CRIMINI_SERIAL_SIZE = 32;
@@ -20,9 +20,10 @@ struct __attribute__((packed)) CriminiTempPacket {
   uint32_t uptimeSeconds;
   char nodeSerial[CRIMINI_SERIAL_SIZE];
   int32_t tempCentiF;
+  uint16_t humidityCentiPct;
   uint16_t batteryMv;
   int8_t packetRssi;
-  uint8_t reserved[7];
+  uint8_t reserved[5];
   uint8_t hmac[CRIMINI_HMAC_SIZE];
 };
 

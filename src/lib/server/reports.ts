@@ -33,6 +33,7 @@ export type TemperatureReportRow = {
   event_date: string;
   event_time: number;
   temperature: number | null;
+  humidity_pct: number | null;
   event_type: string;
   status: string;
   threshold: number | null;
@@ -48,6 +49,9 @@ export type TemperatureHourlyAverageReportRow = {
   avg_temperature: number;
   min_temperature: number;
   max_temperature: number;
+  avg_humidity_pct: number | null;
+  min_humidity_pct: number | null;
+  max_humidity_pct: number | null;
   reading_count: number;
 };
 
@@ -234,6 +238,7 @@ export async function loadTemperatureReport(
         date(t.ts, 'unixepoch') AS event_date,
         t.ts AS event_time,
         t.temperature,
+        t.humidity_pct,
         '' AS event_type,
         '' AS status,
         NULL AS threshold,
@@ -262,6 +267,7 @@ export async function loadTemperatureReport(
         date(a.last_seen_at, 'unixepoch') AS event_date,
         a.last_seen_at AS event_time,
         a.temperature,
+        NULL AS humidity_pct,
         a.event_type,
         a.status,
         a.threshold,
@@ -307,6 +313,9 @@ export async function loadTemperatureHourlyAverageReport(
         ROUND(AVG(t.temperature), 2) AS avg_temperature,
         ROUND(MIN(t.temperature), 2) AS min_temperature,
         ROUND(MAX(t.temperature), 2) AS max_temperature,
+        ROUND(AVG(t.humidity_pct), 2) AS avg_humidity_pct,
+        ROUND(MIN(t.humidity_pct), 2) AS min_humidity_pct,
+        ROUND(MAX(t.humidity_pct), 2) AS max_humidity_pct,
         COUNT(*) AS reading_count
       FROM temps t
       LEFT JOIN sensor_nodes sn

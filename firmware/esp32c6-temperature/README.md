@@ -1,6 +1,6 @@
 # Crimini ESP32-C6 Temperature Firmware
 
-Contained firmware workspace for Crimini temperature gateways and radio sensor nodes.
+Contained firmware workspace for Crimini temperature gateways and ESP32-C6 TNY AHT20/BMP280 radio sensor nodes.
 
 Flow:
 1. Generate factory serials and SQL:
@@ -11,7 +11,8 @@ Flow:
 5. Build either `gateway` or `sensor-node` with PlatformIO.
 
 Notes:
-- Sensor nodes send ESP-NOW packets only to the configured gateway MAC.
+- Sensor nodes read AHT20 temperature/humidity, then send ESP-NOW packets only to the configured gateway MAC.
+- BMP280 is initialized for board validation, but pressure is not transmitted or stored.
 - Packets are HMAC-SHA256 signed with per-node secrets.
 - Gateway posts batches to `/api/temps` using the app's gateway device credentials.
-- Keep TX power, antenna, channel, and enclosure aligned with the certified module design and final FCC testing.
+- Keep TX power, antenna, channel, enclosure, and shipped module choice aligned with the certified module design and final FCC testing.

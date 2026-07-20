@@ -46,6 +46,7 @@ type TemperatureSensorNodeRow = {
   is_active: number;
   last_seen_at: number | null;
   battery_mv: number | null;
+  humidity_pct: number | null;
   rssi: number | null;
   revoked_at: number | null;
   created_at: number;
@@ -66,6 +67,7 @@ export type TemperatureSensorNode = {
   isActive: number;
   lastSeenAt: number | null;
   batteryMv: number | null;
+  humidityPct: number | null;
   rssi: number | null;
   revokedAt: number | null;
   createdAt: number;
@@ -103,11 +105,22 @@ function mapTemperatureSensorNode(row: TemperatureSensorNodeRow): TemperatureSen
     isActive: row.is_active,
     lastSeenAt: row.last_seen_at,
     batteryMv: row.battery_mv,
+    humidityPct: row.humidity_pct,
     rssi: row.rssi,
     revokedAt: row.revoked_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+async function ensureOptionalColumn(db: D1, tableName: string, columnName: string, definition: string) {
+  try {
+    await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (message.includes('duplicate column name') || message.includes('already exists')) return;
+    throw error;
+  }
 }
 
 export async function ensureTemperatureDeviceProvisioningSchema(db: D1) {
@@ -161,6 +174,7 @@ export async function ensureTemperatureDeviceProvisioningSchema(db: D1) {
         is_active INTEGER NOT NULL DEFAULT 1,
         last_seen_at INTEGER,
         battery_mv INTEGER,
+        humidity_pct REAL,
         rssi INTEGER,
         revoked_at INTEGER,
         created_by TEXT,
@@ -175,6 +189,8 @@ export async function ensureTemperatureDeviceProvisioningSchema(db: D1) {
       `
     )
     .run();
+
+  await ensureOptionalColumn(db, 'temperature_sensor_nodes', 'humidity_pct', 'REAL');
 
   await db
     .prepare(`CREATE INDEX IF NOT EXISTS idx_temp_sensor_nodes_business_active ON temperature_sensor_nodes(business_id, is_active, gateway_device_id)`)
@@ -242,6 +258,7 @@ export async function loadTemperatureSensorNodes(db: D1, businessId: string) {
         tsn.is_active,
         tsn.last_seen_at,
         tsn.battery_mv,
+        tsn.humidity_pct,
         tsn.rssi,
         tsn.revoked_at,
         tsn.created_at,
@@ -541,6 +558,7 @@ export async function resolveGatewayNodeReading(
     gatewayDeviceId: string;
     nodeSerial: string;
     temperature: number;
+    humidityPct?: number | null;
     ts: number;
     batteryMv?: number | null;
     rssi?: number | null;
@@ -573,6 +591,7 @@ export async function resolveGatewayNodeReading(
       UPDATE temperature_sensor_nodes
       SET last_seen_at = ?,
           battery_mv = COALESCE(?, battery_mv),
+          humidity_pct = COALESCE(?, humidity_pct),
           rssi = COALESCE(?, rssi),
           updated_at = ?
       WHERE business_id = ?
@@ -583,6 +602,7 @@ export async function resolveGatewayNodeReading(
     .bind(
       input.ts,
       input.batteryMv ?? null,
+      input.humidityPct ?? null,
       input.rssi ?? null,
       Math.floor(Date.now() / 1000),
       input.businessId,
@@ -594,6 +614,7 @@ export async function resolveGatewayNodeReading(
   return {
     sensor_id: node.sensor_id,
     temperature: input.temperature,
+    humidity_pct: input.humidityPct ?? null,
     ts: input.ts
   };
 }

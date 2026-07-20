@@ -1949,6 +1949,7 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `is_active` INTEGER (NOT NULL, DEFAULT 1)
   - `last_seen_at` INTEGER
   - `battery_mv` INTEGER
+  - `humidity_pct` REAL
   - `rssi` INTEGER
   - `revoked_at` INTEGER
   - `created_by` TEXT
@@ -1990,6 +1991,7 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `id` INTEGER (PK)
   - `sensor_id` INTEGER (NOT NULL)
   - `temperature` REAL (NOT NULL)
+  - `humidity_pct` REAL
   - `ts` INTEGER (NOT NULL)
   - `business_id` TEXT
 

@@ -236,7 +236,7 @@ expect('src/routes/api/camera/upload/+server.ts', 'camera uploads have hard size
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'scale readiness notes exist', (source) =>
-  source.includes('Scale/performance static checks pass') && source.includes('Next Phase List')
+  source.includes('Scale/performance static checks pass') && source.includes('Remaining Launch Work')
 );
 
 const failed = checks.filter((check) => !check.ok);

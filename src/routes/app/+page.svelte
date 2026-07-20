@@ -18,7 +18,7 @@
     assigned_email: string | null;
   };
   type Idea = { text: string; votes: number };
-  type NodeTemp = { sensorId: number; nodeName: string | null; temperature: number; ts: number };
+  type NodeTemp = { sensorId: number; nodeName: string | null; temperature: number; humidityPct: number | null; ts: number };
   type MenuDoc = { id: string; title: string; file_url: string | null };
   type DailySpecial = {
     category: string;
@@ -201,8 +201,8 @@
     return `${Math.floor(diff / 3600)}h ago`;
   }
 
-  function buildTempState(rows: Array<{ sensor_id: number; temperature: number; ts: number }>) {
-    const latestBySensor = new Map<number, { sensor_id: number; temperature: number; ts: number }>();
+  function buildTempState(rows: Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>) {
+    const latestBySensor = new Map<number, { sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>();
     for (const row of rows) {
       if (!latestBySensor.has(row.sensor_id)) {
         latestBySensor.set(row.sensor_id, row);
@@ -216,6 +216,7 @@
         sensorId: row.sensor_id,
         nodeName: namesBySensor.get(row.sensor_id) ?? null,
         temperature: row.temperature,
+        humidityPct: row.humidity_pct ?? null,
         ts: row.ts
       }));
 
@@ -238,7 +239,7 @@
   async function refreshTemps() {
     const response = await fetch(`/api/temps?limit=${HOMEPAGE_TEMP_LIMIT}`);
     if (!response.ok) return;
-    const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; ts: number }>;
+    const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>;
     if (!rows?.length) return;
     buildTempState(rows);
   }
@@ -489,7 +490,12 @@
           {#each nodeTemps as node}
             <div class="node-pill" class:warn={node.temperature >= TEMP_WARNING_THRESHOLD}>
               <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
-              <span>{node.temperature.toFixed(1)}F</span>
+              <span>
+                {node.temperature.toFixed(1)}F
+                {#if node.humidityPct !== null}
+                  / {node.humidityPct.toFixed(0)}%
+                {/if}
+              </span>
             </div>
           {/each}
         {/if}

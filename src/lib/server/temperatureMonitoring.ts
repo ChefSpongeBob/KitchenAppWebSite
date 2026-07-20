@@ -9,6 +9,7 @@ export type TemperatureAlertStatus = 'active' | 'acknowledged' | 'recovered';
 export type TemperatureReading = {
   sensor_id: number;
   temperature: number;
+  humidity_pct: number | null;
   ts: number;
 };
 
@@ -498,6 +499,7 @@ export async function evaluateTemperatureReadings(
         payload: {
           sensorId: reading.sensor_id,
           temperature: reading.temperature,
+          humidityPct: reading.humidity_pct,
           threshold,
           readingTs: reading.ts
         }

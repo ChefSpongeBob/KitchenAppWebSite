@@ -113,7 +113,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Store release checks pass for current code wiring.
 - Cloudflare readiness checks pass against current config.
 - Security headers and observability checks pass.
-- Temperature hardware model now targets ESP32-C6 sensor nodes that radio to a claimed gateway; only the gateway authenticates to Cloudflare, and customer setup is serial-based.
+- Temperature hardware model now targets ESP32-C6 TNY AHT20/BMP280 sensor nodes that radio to a claimed gateway; only the gateway authenticates to Cloudflare, customer setup is serial-based, and humidity is stored with readings while pressure is ignored.
 
 ## Store Billing
 
@@ -172,7 +172,7 @@ These areas are validated by current scripts/builds and do not have known code b
 - Employee invite/onboarding/HR code foundation: invite role paths, packet requirements, sensitive vault encryption, HR-sensitive permission checks, audited reads, onboarding reports, and private media.
 - Email code foundation: branded transactional helper, Resend integration, invite/approval/password reset/onboarding/operational email event wiring, idempotency, and delivery failure logging.
 - Native push foundation: Capacitor plugin, token storage/revoke endpoints, user preferences, and native client registration plumbing.
-- Temperature monitoring code foundation: gateway/node serial model, device auth, tenant-scoped ingest, thresholds, alert events, stale processor endpoint, acknowledgements, history/report wiring, and bounded ingest.
+- Temperature monitoring code foundation: gateway/node serial model, device auth, tenant-scoped temperature/humidity ingest, thresholds, alert events, stale processor endpoint, acknowledgements, history/report wiring, and bounded ingest.
 - Billing/store lifecycle code foundation: native purchase submission, pending entitlements, Apple/Google verification paths, token-gated webhooks, entitlement reconciliation, launch pricing, and deferred camera products.
 - Camera shelving: launch navigation and purchase paths hide cameras; backend remains beta-gated for post-launch work.
 - Cloudflare readiness: Pages config, D1/R2 bindings, schema guard, Node version, package lock, no old copied-app Cloudflare bindings, and deploy readiness checks.
@@ -205,6 +205,8 @@ This is the only active completion list. Work it in order and do not create scat
 - Provision gateway and sensor-node serials into `iot_device_inventory`.
 - Claim a gateway in `/admin/sensors`, assign sensor nodes, ingest gateway-authenticated readings, and confirm wrong tenant, wrong gateway, unassigned, and revoked readings are rejected.
 - Tune thresholds by sensor type and verify high, low, stale, offline, recovery, dashboard, polling, and report behavior.
+- Phase 5 hardware pass: ESP32-C6 TNY node firmware uses AHT20 temperature/humidity, initializes BMP280 without storing pressure, and sends sensor ingest through the claimed gateway.
+- Phase 5 remaining needs: flash real boards, validate battery draw, radio range, enclosure performance, final FCC/module compliance, and live sensor ingest under private tenant testing.
 
 6. Scheduling validation
 - Test owners, managers, department-scoped managers, shift leads, consultants, contractors, and staff.

@@ -10,12 +10,14 @@ import { evaluateTemperatureReadings, type TemperatureReading } from '$lib/serve
 type TempRow = {
   sensor_id: number;
   temperature: number;
+  humidity_pct: number | null;
   ts: number;
 };
 
 type RawTempRow = {
   node_serial: string | null;
   temperature: number;
+  humidity_pct: number | null;
   ts: number;
   battery_mv: number | null;
   rssi: number | null;
@@ -35,12 +37,14 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
     input.device_serial ??
     input.deviceSerial;
   const tempRaw = input.temperature ?? input.temp;
+  const humidityRaw = input.humidity_pct ?? input.humidityPct ?? input.humidity ?? input.relative_humidity;
   const tsRaw = input.ts ?? input.timestamp ?? Math.floor(Date.now() / 1000);
   const batteryRaw = input.battery_mv ?? input.batteryMv ?? input.battery;
   const rssiRaw = input.rssi ?? input.signal;
 
   const node_serial = normalizeDeviceSerial(String(serialRaw ?? ''));
   const temperature = Number(tempRaw);
+  const humidity_pct = Number(humidityRaw);
   const ts = Number(tsRaw);
   const battery_mv = Number(batteryRaw);
   const rssi = Number(rssiRaw);
@@ -52,6 +56,7 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
   return {
     node_serial,
     temperature,
+    humidity_pct: Number.isFinite(humidity_pct) && humidity_pct >= 0 && humidity_pct <= 100 ? humidity_pct : null,
     ts,
     battery_mv: Number.isFinite(battery_mv) ? battery_mv : null,
     rssi: Number.isFinite(rssi) ? rssi : null
@@ -69,6 +74,7 @@ async function resolveReadingSensor(
     gatewayDeviceId,
     nodeSerial: row.node_serial ?? '',
     temperature: row.temperature,
+    humidityPct: row.humidity_pct,
     ts: row.ts,
     batteryMv: row.battery_mv,
     rssi: row.rssi
@@ -97,7 +103,7 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
     const result = await db
       .prepare(
         `
-        SELECT sensor_id, temperature, ts
+        SELECT sensor_id, temperature, humidity_pct, ts
         FROM temps
         WHERE sensor_id = ? AND business_id = ?
         ORDER BY ts DESC
@@ -114,7 +120,7 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
   const result = await db
     .prepare(
       `
-      SELECT sensor_id, temperature, ts
+      SELECT sensor_id, temperature, humidity_pct, ts
       FROM temps
       WHERE business_id = ?
       ORDER BY ts DESC
@@ -194,11 +200,11 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
     db
       .prepare(
         `
-        INSERT INTO temps (sensor_id, temperature, ts, business_id)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO temps (sensor_id, temperature, humidity_pct, ts, business_id)
+        VALUES (?, ?, ?, ?, ?)
       `
       )
-      .bind(row.sensor_id, row.temperature, row.ts, businessId)
+      .bind(row.sensor_id, row.temperature, row.humidity_pct ?? null, row.ts, businessId)
   );
 
   await db.batch(statements);
@@ -221,7 +227,8 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
       dedupeKey: guardKey,
       payload: {
         inserted: items.length,
-        sensors: items.map((item) => item.sensor_id)
+        sensors: items.map((item) => item.sensor_id),
+        humidity: items.some((item) => item.humidity_pct !== null)
       }
     },
     request

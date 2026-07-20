@@ -14,6 +14,7 @@
   };
 
   let latest: Record<number, number> = {};
+  let humidity: Record<number, number> = {};
   let lastSeen: Record<number, number> = {};
   let seenSensorIds: number[] = [];
   const TEMP_WARNING_THRESHOLD = 42;
@@ -34,6 +35,7 @@
       const responseData = await res.json();
 
       const latestMap: Record<number, number> = {};
+      const humidityMap: Record<number, number> = {};
       const seen: Record<number, number> = {};
       const seenIds = new Set<number>();
 
@@ -48,12 +50,18 @@
           latestMap[sensor] = temp;
         }
 
+        const humidityPct = Number(row.humidity_pct);
+        if (Number.isFinite(humidityPct) && humidityPct >= 0 && humidityPct <= 100 && humidityMap[sensor] === undefined) {
+          humidityMap[sensor] = humidityPct;
+        }
+
         if (seen[sensor] === undefined) {
           seen[sensor] = tsMs;
         }
       }
 
       latest = latestMap;
+      humidity = humidityMap;
       lastSeen = seen;
       seenSensorIds = Array.from(seenIds).sort((a, b) => a - b);
     } catch (err) {
@@ -164,6 +172,9 @@
 
         {#if latest[node] !== undefined}
           <div class="temp">{latest[node]}F</div>
+          {#if humidity[node] !== undefined}
+            <small class="humidity">Humidity: {humidity[node].toFixed(0)}%</small>
+          {/if}
           <small class="seen">Last update: {formatTime(lastSeen[node])}</small>
         {:else}
           <div class="temp offline">--</div>
@@ -346,6 +357,14 @@
     margin-top: 6px;
     font-size: 0.75rem;
     color: var(--color-text-muted);
+  }
+
+  .humidity {
+    display: block;
+    margin-top: 4px;
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
   }
 
   .offline {

@@ -34,9 +34,12 @@
 // Gateway MAC address printed by the gateway on boot. Program this into nodes.
 #define CRIMINI_GATEWAY_MAC { 0x24, 0x6f, 0x28, 0x00, 0x00, 0x00 }
 
-// Temperature input. DS18B20 is the default intended probe for cooler/freezer use.
-#define CRIMINI_USE_DS18B20 1
-#define CRIMINI_DS18B20_PIN 2
+// AHT20/BMP280 board wiring. Humidity and temperature come from AHT20.
+// BMP280 is initialized for board health validation, but pressure is not sent to the app.
+#define CRIMINI_I2C_SDA_PIN 6
+#define CRIMINI_I2C_SCL_PIN 7
+#define CRIMINI_AHT20_ADDRESS 0x38
+#define CRIMINI_BMP280_ADDRESS 0x77
 
 // Optional battery divider ADC. Leave disabled for USB-powered validation nodes.
 // #define CRIMINI_BATTERY_ADC_PIN 3

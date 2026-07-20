@@ -16,7 +16,19 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     start: url.searchParams.get('start'),
     end: url.searchParams.get('end')
   });
-  const header = ['date', 'hour', 'sensor_id', 'sensor_name', 'avg_temperature', 'min_temperature', 'max_temperature', 'reading_count'];
+  const header = [
+    'date',
+    'hour',
+    'sensor_id',
+    'sensor_name',
+    'avg_temperature',
+    'min_temperature',
+    'max_temperature',
+    'avg_humidity_pct',
+    'min_humidity_pct',
+    'max_humidity_pct',
+    'reading_count'
+  ];
   const lines = [
     header.join(','),
     ...report.rows.map((row) =>
@@ -28,6 +40,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         row.avg_temperature,
         row.min_temperature,
         row.max_temperature,
+        row.avg_humidity_pct ?? '',
+        row.min_humidity_pct ?? '',
+        row.max_humidity_pct ?? '',
         row.reading_count
       ]
         .map(csvEscape)

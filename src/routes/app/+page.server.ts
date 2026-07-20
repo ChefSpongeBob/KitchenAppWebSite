@@ -26,6 +26,7 @@ type IdeaRow = {
 type TempRow = {
   sensor_id: number;
   temperature: number;
+  humidity_pct: number | null;
   ts: number;
 };
 
@@ -191,7 +192,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         db
           .prepare(
             `
-            SELECT sensor_id, temperature, ts
+            SELECT sensor_id, temperature, humidity_pct, ts
             FROM temps
             WHERE business_id = ?
             ORDER BY ts DESC
@@ -330,6 +331,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       sensorId: r.sensor_id,
       nodeName: namesBySensor.get(r.sensor_id) ?? null,
       temperature: r.temperature,
+      humidityPct: r.humidity_pct,
       ts: r.ts
     })),
     tempSeries: { avg },

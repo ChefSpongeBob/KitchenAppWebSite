@@ -17,6 +17,7 @@
 struct QueuedReading {
   char nodeSerial[CRIMINI_SERIAL_SIZE];
   float temperatureF;
+  float humidityPct;
   uint16_t batteryMv;
   int8_t rssi;
   uint32_t receivedAt;
@@ -87,6 +88,7 @@ static void queueReading(const CriminiTempPacket& packet, int8_t rssi) {
   QueuedReading& row = readingQueue[readingCount++];
   criminiCopySerial(row.nodeSerial, packet.nodeSerial);
   row.temperatureF = static_cast<float>(packet.tempCentiF) / 100.0f;
+  row.humidityPct = static_cast<float>(packet.humidityCentiPct) / 100.0f;
   row.batteryMv = packet.batteryMv;
   row.rssi = rssi;
   row.receivedAt = static_cast<uint32_t>(time(nullptr));
@@ -109,7 +111,7 @@ static void onEspNowReceive(const esp_now_recv_info_t* info, const uint8_t* data
 
   const int8_t rssi = info && info->rx_ctrl ? static_cast<int8_t>(info->rx_ctrl->rssi) : 0;
   queueReading(packet, rssi);
-  Serial.printf("Queued %s %.2fF rssi %d (%u queued)\n", packet.nodeSerial, packet.tempCentiF / 100.0f, rssi, static_cast<unsigned>(readingCount));
+  Serial.printf("Queued %s %.2fF %.1f%% rssi %d (%u queued)\n", packet.nodeSerial, packet.tempCentiF / 100.0f, packet.humidityCentiPct / 100.0f, rssi, static_cast<unsigned>(readingCount));
 }
 
 static bool initEspNow() {
@@ -135,6 +137,8 @@ static String buildJsonPayload() {
     body += jsonEscape(readingQueue[i].nodeSerial);
     body += "\",\"temperature\":";
     body += String(readingQueue[i].temperatureF, 2);
+    body += ",\"humidity_pct\":";
+    body += String(readingQueue[i].humidityPct, 1);
     body += ",\"ts\":";
     body += String(readingQueue[i].receivedAt);
     body += ",\"battery_mv\":";
