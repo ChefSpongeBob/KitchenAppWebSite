@@ -91,11 +91,12 @@ expect('src/routes/billing/+page.svelte', 'billing page links legal subscription
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'phase 22 tracks remaining legal and business readiness work', (source) =>
-  source.includes('22. Legal, public site, and business readiness') &&
-  source.includes('privacy policy') &&
+  source.includes('16. Legal, public site, and business readiness') &&
+  /privacy/i.test(source) &&
   source.includes('billing terms') &&
   source.includes('support contact') &&
-  source.includes('qualified legal or payroll guidance')
+  source.includes('qualified review') &&
+  source.includes('Legal/payroll review is still required')
 );
 
 const failed = checks.filter((check) => !check.ok);

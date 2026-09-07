@@ -43,4 +43,5 @@ android/app/google-services.json
 
 # Firmware secrets and generated factory manifests
 firmware/**/include/crimini_iot_config.h
+firmware/**/main/crimini_config.h
 firmware/**/generated/

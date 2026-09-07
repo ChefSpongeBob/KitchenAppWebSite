@@ -39,6 +39,21 @@ expect('ios/App/App/Info.plist', 'iOS display name is Crimini', (source) =>
 expectExists('src/routes/privacy/+page.svelte', 'privacy policy URL route exists');
 expectExists('src/routes/support/+page.svelte', 'support URL route exists');
 expectExists('src/routes/account-deletion/+page.svelte', 'account deletion URL route exists');
+expectExists('ios/App/App/PrivacyInfo.xcprivacy', 'iOS privacy manifest exists');
+
+expect('ios/App/App.xcodeproj/project.pbxproj', 'iOS privacy manifest is bundled in app resources', (source) =>
+  source.includes('PrivacyInfo.xcprivacy in Resources')
+);
+
+expect('ios/App/App/PrivacyInfo.xcprivacy', 'iOS privacy manifest declares app data collection without tracking', (source) =>
+  source.includes('NSPrivacyTracking') &&
+  source.includes('<false/>') &&
+  source.includes('NSPrivacyCollectedDataTypes') &&
+  source.includes('NSPrivacyCollectedDataTypeEmailAddress') &&
+  source.includes('NSPrivacyCollectedDataTypeSensitiveInfo') &&
+  source.includes('NSPrivacyCollectedDataTypeOtherFinancialInfo') &&
+  source.includes('NSPrivacyCollectedDataTypePurposeAppFunctionality')
+);
 
 expect('src/routes/+layout.svelte', 'public footer links Apple review URLs', (source) =>
   source.includes('href="/support"') &&
@@ -58,7 +73,8 @@ expect('src/routes/billing/+page.svelte', 'billing page shows subscription purch
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'Apple phase tracks App Store manual requirements', (source) =>
-  source.includes('20. Apple App Store readiness') &&
+  source.includes('13. Store submissions') &&
+  source.includes('Apple: app record') &&
   source.includes('App Store Connect') &&
   source.includes('TestFlight') &&
   source.includes('privacy disclosures')

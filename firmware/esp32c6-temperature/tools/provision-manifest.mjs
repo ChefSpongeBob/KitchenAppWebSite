@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
@@ -13,8 +13,9 @@ const args = Object.fromEntries(
 const prefix = String(args.prefix || 'crimini').toLowerCase().replace(/[^a-z0-9-]/g, '-');
 const gatewayCount = Math.max(1, Number(args.gateways || 1));
 const nodesPerGateway = Math.max(1, Number(args.nodes || 4));
-const hardwareGateway = String(args.gatewayHardware || 'esp32c6-gateway');
-const hardwareNode = String(args.nodeHardware || 'esp32c6-tny-aht20-bmp280-node');
+const radioProtocol = String(args.radioProtocol || 'ieee802154-star');
+const hardwareGateway = String(args.gatewayHardware || 'esp32c6-802154-wifi-gateway');
+const hardwareNode = String(args.nodeHardware || 'esp32c6fh4-aht20-bmp280-node');
 const firmwareVersion = String(args.firmware || '0.1.0');
 const outputDir = String(args.out || 'firmware/esp32c6-temperature/generated');
 const now = Math.floor(Date.now() / 1000);
@@ -79,7 +80,7 @@ for (let gatewayIndex = 1; gatewayIndex <= gatewayCount; gatewayIndex += 1) {
     sql.push('');
   }
 
-  configs.push({ gatewaySerial, gatewayKey, knownNodes });
+  configs.push({ gatewaySerial, gatewayKey, radioProtocol, knownNodes });
 }
 
 writeFileSync(join(outputDir, 'iot_inventory.sql'), `${sql.join('\n')}\n`);
@@ -91,6 +92,12 @@ for (const [index, config] of configs.entries()) {
     .join(',\n');
   const header = `// Generated secrets. Do not commit.\n#pragma once\n\n#define CRIMINI_GATEWAY_SERIAL "${config.gatewaySerial}"\n#define CRIMINI_GATEWAY_DEVICE_KEY "${config.gatewayKey}"\n\nstatic const CriminiKnownNode CRIMINI_KNOWN_NODES[] = {\n${nodeList}\n};\n`;
   writeFileSync(join(outputDir, `gateway-${index + 1}-secrets.h`), header);
+
+  const idfNodeList = config.knownNodes
+    .map((node) => `  { "${node.serial}", "${node.secret}" }`)
+    .join(',\n');
+  const idfHeader = `// Generated ESP-IDF secrets. Do not commit.\n#pragma once\n\n#define CRIMINI_GATEWAY_SERIAL "${config.gatewaySerial}"\n#define CRIMINI_GATEWAY_DEVICE_KEY "${config.gatewayKey}"\n\nstatic const crimini_known_node_t CRIMINI_KNOWN_NODES[] = {\n${idfNodeList}\n};\n`;
+  writeFileSync(join(outputDir, `gateway-${index + 1}-idf-secrets.h`), idfHeader);
 
   for (const node of config.knownNodes) {
     const nodeHeader = `// Generated secrets. Do not commit.\n#pragma once\n\n#define CRIMINI_NODE_SERIAL "${node.serial}"\n#define CRIMINI_NODE_SHARED_SECRET "${node.secret}"\n`;

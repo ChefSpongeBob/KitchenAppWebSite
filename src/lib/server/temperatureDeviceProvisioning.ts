@@ -48,6 +48,9 @@ type TemperatureSensorNodeRow = {
   battery_mv: number | null;
   humidity_pct: number | null;
   rssi: number | null;
+  packet_sequence: number | null;
+  wake_nonce: string | null;
+  lqi: number | null;
   revoked_at: number | null;
   created_at: number;
   updated_at: number;
@@ -69,6 +72,9 @@ export type TemperatureSensorNode = {
   batteryMv: number | null;
   humidityPct: number | null;
   rssi: number | null;
+  packetSequence: number | null;
+  wakeNonce: string | null;
+  lqi: number | null;
   revokedAt: number | null;
   createdAt: number;
   updatedAt: number;
@@ -107,6 +113,9 @@ function mapTemperatureSensorNode(row: TemperatureSensorNodeRow): TemperatureSen
     batteryMv: row.battery_mv,
     humidityPct: row.humidity_pct,
     rssi: row.rssi,
+    packetSequence: row.packet_sequence,
+    wakeNonce: row.wake_nonce,
+    lqi: row.lqi,
     revokedAt: row.revoked_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -176,6 +185,9 @@ export async function ensureTemperatureDeviceProvisioningSchema(db: D1) {
         battery_mv INTEGER,
         humidity_pct REAL,
         rssi INTEGER,
+        packet_sequence INTEGER,
+        wake_nonce TEXT,
+        lqi INTEGER,
         revoked_at INTEGER,
         created_by TEXT,
         created_at INTEGER NOT NULL,
@@ -191,6 +203,9 @@ export async function ensureTemperatureDeviceProvisioningSchema(db: D1) {
     .run();
 
   await ensureOptionalColumn(db, 'temperature_sensor_nodes', 'humidity_pct', 'REAL');
+  await ensureOptionalColumn(db, 'temperature_sensor_nodes', 'packet_sequence', 'INTEGER');
+  await ensureOptionalColumn(db, 'temperature_sensor_nodes', 'wake_nonce', 'TEXT');
+  await ensureOptionalColumn(db, 'temperature_sensor_nodes', 'lqi', 'INTEGER');
 
   await db
     .prepare(`CREATE INDEX IF NOT EXISTS idx_temp_sensor_nodes_business_active ON temperature_sensor_nodes(business_id, is_active, gateway_device_id)`)
@@ -260,6 +275,9 @@ export async function loadTemperatureSensorNodes(db: D1, businessId: string) {
         tsn.battery_mv,
         tsn.humidity_pct,
         tsn.rssi,
+        tsn.packet_sequence,
+        tsn.wake_nonce,
+        tsn.lqi,
         tsn.revoked_at,
         tsn.created_at,
         tsn.updated_at
@@ -436,9 +454,10 @@ export async function claimTemperatureSensorNode(
       INSERT INTO temperature_sensor_nodes (
         id, business_id, gateway_device_id, node_serial, sensor_id, display_name,
         hardware_model, firmware_version, is_active, last_seen_at, battery_mv, rssi,
+        packet_sequence, wake_nonce, lqi,
         revoked_at, created_by, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, NULL, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?)
       ON CONFLICT(node_serial) DO UPDATE SET
         gateway_device_id = excluded.gateway_device_id,
         display_name = excluded.display_name,
@@ -559,6 +578,9 @@ export async function resolveGatewayNodeReading(
     nodeSerial: string;
     temperature: number;
     humidityPct?: number | null;
+    packetSequence?: number | null;
+    wakeNonce?: string | null;
+    lqi?: number | null;
     ts: number;
     batteryMv?: number | null;
     rssi?: number | null;
@@ -593,6 +615,9 @@ export async function resolveGatewayNodeReading(
           battery_mv = COALESCE(?, battery_mv),
           humidity_pct = COALESCE(?, humidity_pct),
           rssi = COALESCE(?, rssi),
+          packet_sequence = COALESCE(?, packet_sequence),
+          wake_nonce = COALESCE(?, wake_nonce),
+          lqi = COALESCE(?, lqi),
           updated_at = ?
       WHERE business_id = ?
         AND gateway_device_id = ?
@@ -604,6 +629,9 @@ export async function resolveGatewayNodeReading(
       input.batteryMv ?? null,
       input.humidityPct ?? null,
       input.rssi ?? null,
+      input.packetSequence ?? null,
+      input.wakeNonce ?? null,
+      input.lqi ?? null,
       Math.floor(Date.now() / 1000),
       input.businessId,
       input.gatewayDeviceId,
@@ -615,6 +643,9 @@ export async function resolveGatewayNodeReading(
     sensor_id: node.sensor_id,
     temperature: input.temperature,
     humidity_pct: input.humidityPct ?? null,
+    packet_sequence: input.packetSequence ?? null,
+    wake_nonce: input.wakeNonce ?? null,
+    lqi: input.lqi ?? null,
     ts: input.ts
   };
 }

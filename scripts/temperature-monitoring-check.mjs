@@ -38,12 +38,24 @@ expect('migrations/0093_temperature_humidity.sql', 'temperature humidity migrati
   source.includes('ALTER TABLE temperature_sensor_nodes ADD COLUMN humidity_pct REAL')
 );
 
+expect('migrations/0094_temperature_radio_metadata.sql', 'temperature radio migration stores packet metadata', (source) =>
+  source.includes('ALTER TABLE temps ADD COLUMN packet_sequence INTEGER') &&
+  source.includes('ALTER TABLE temps ADD COLUMN wake_nonce TEXT') &&
+  source.includes('ALTER TABLE temps ADD COLUMN lqi INTEGER') &&
+  source.includes('ALTER TABLE temperature_sensor_nodes ADD COLUMN packet_sequence INTEGER') &&
+  source.includes('ALTER TABLE temperature_sensor_nodes ADD COLUMN wake_nonce TEXT') &&
+  source.includes('ALTER TABLE temperature_sensor_nodes ADD COLUMN lqi INTEGER')
+);
+
 expect('src/lib/server/temperatureDeviceProvisioning.ts', 'temperature provisioning claims gateways and assigns radio nodes', (source) =>
   source.includes('claimTemperatureGateway') &&
   source.includes('claimTemperatureSensorNode') &&
   source.includes('resolveGatewayNodeReading') &&
   source.includes('iot_device_inventory') &&
-  source.includes('temperature_sensor_nodes')
+  source.includes('temperature_sensor_nodes') &&
+  source.includes('packetSequence') &&
+  source.includes('wakeNonce') &&
+  source.includes('lqi')
 );
 
 expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds, stale state, acknowledgement, and recovery', (source) =>
@@ -59,6 +71,9 @@ expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rule
   source.includes('evaluateTemperatureReadings') &&
   source.includes('TemperatureReading') &&
   source.includes('humidity_pct') &&
+  source.includes('packet_sequence') &&
+  source.includes('wake_nonce') &&
+  source.includes('lqi') &&
   source.includes("authenticateIoTDevice(db, request, 'sensor_gateway')") &&
   source.includes('resolveGatewayNodeReading') &&
   source.includes('MAX_TEMP_BATCH_SIZE') &&
@@ -114,7 +129,7 @@ expect('package.json', 'static suite includes temperature monitoring check', (so
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 5 temperature pass', (source) =>
-  source.includes('Temperature hardware model now targets ESP32-C6 TNY AHT20/BMP280 sensor nodes') &&
+  source.includes('Temperature hardware model now targets ESP32-C6FH4 AHT20/BMP280 sensor nodes') &&
   source.includes('Phase 5 hardware pass') &&
   source.includes('Phase 5 remaining needs') &&
   source.includes('sensor ingest')

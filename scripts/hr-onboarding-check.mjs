@@ -142,9 +142,10 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'Phase 10 manual testing notes are tracked', (source) =>
-  source.includes('Phase 10 invite/onboarding pass') &&
-  source.includes('employee invite flow from email link to onboarding to login') &&
-  source.includes('contractors do not receive employee tax onboarding packets')
+  source.includes('9. Invite, onboarding, and HR') &&
+  source.includes('Test owner, manager, employee, consultant, and contractor invite flows') &&
+  source.includes('employee/manager invite registration skips business pricing') &&
+  source.includes('Legal/payroll review is still required')
 );
 
 const failed = checks.filter((check) => !check.ok);

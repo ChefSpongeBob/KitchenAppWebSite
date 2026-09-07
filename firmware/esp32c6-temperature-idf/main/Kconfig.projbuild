@@ -1,0 +1,14 @@
+menu "Crimini Temperature Firmware"
+
+choice CRIMINI_FIRMWARE_ROLE
+  prompt "Firmware role"
+  default CRIMINI_FIRMWARE_ROLE_GATEWAY
+
+  config CRIMINI_FIRMWARE_ROLE_GATEWAY
+    bool "Temperature gateway"
+
+  config CRIMINI_FIRMWARE_ROLE_SENSOR_NODE
+    bool "Battery sensor node"
+endchoice
+
+endmenu

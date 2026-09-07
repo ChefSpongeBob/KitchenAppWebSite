@@ -1951,6 +1951,9 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `battery_mv` INTEGER
   - `humidity_pct` REAL
   - `rssi` INTEGER
+  - `packet_sequence` INTEGER
+  - `wake_nonce` TEXT
+  - `lqi` INTEGER
   - `revoked_at` INTEGER
   - `created_by` TEXT
   - `created_at` INTEGER (NOT NULL)
@@ -1992,6 +1995,9 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `sensor_id` INTEGER (NOT NULL)
   - `temperature` REAL (NOT NULL)
   - `humidity_pct` REAL
+  - `packet_sequence` INTEGER
+  - `wake_nonce` TEXT
+  - `lqi` INTEGER
   - `ts` INTEGER (NOT NULL)
   - `business_id` TEXT
 

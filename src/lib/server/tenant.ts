@@ -97,8 +97,8 @@ export type TenantSchemaIssue = {
 };
 
 const REQUIRED_TABLE_COLUMNS: Record<string, string[]> = {
-  temps: ['humidity_pct'],
-  temperature_sensor_nodes: ['humidity_pct']
+  temps: ['humidity_pct', 'packet_sequence', 'wake_nonce', 'lqi'],
+  temperature_sensor_nodes: ['humidity_pct', 'packet_sequence', 'wake_nonce', 'lqi']
 };
 
 function safeIdentifier(value: string) {

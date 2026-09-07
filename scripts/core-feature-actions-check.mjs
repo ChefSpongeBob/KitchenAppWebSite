@@ -272,8 +272,9 @@ expect('src/lib/assets/navigation.ts', 'sidebar groups all kitchen tools under T
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 12 manual core feature test needs', (source) =>
-  source.includes('12. Core feature action test') &&
-  source.includes('Phase 12 core action pass')
+  source.includes('7. Lists, docs, menus, recipes, and tools') &&
+  source.includes('Create, edit, delete, submit, upload, replace, attach, and export real data') &&
+  source.includes('Confirm feature hiding, permissions, immediate UI updates, CSV safety, and tenant scoping')
 );
 
 const failed = checks.filter((check) => !check.ok);

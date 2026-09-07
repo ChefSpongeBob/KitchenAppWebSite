@@ -10,6 +10,9 @@ export type TemperatureReading = {
   sensor_id: number;
   temperature: number;
   humidity_pct: number | null;
+  packet_sequence?: number | null;
+  wake_nonce?: string | null;
+  lqi?: number | null;
   ts: number;
 };
 
@@ -480,7 +483,12 @@ export async function evaluateTemperatureReadings(
       temperature: reading.temperature,
       threshold,
       readingTs: reading.ts,
-      metadata: { deviceId: input.deviceId }
+      metadata: {
+        deviceId: input.deviceId,
+        packetSequence: reading.packet_sequence ?? null,
+        wakeNonce: reading.wake_nonce ?? null,
+        lqi: reading.lqi ?? null
+      }
     });
 
     if (!shouldNotify) continue;
@@ -500,6 +508,9 @@ export async function evaluateTemperatureReadings(
           sensorId: reading.sensor_id,
           temperature: reading.temperature,
           humidityPct: reading.humidity_pct,
+          packetSequence: reading.packet_sequence ?? null,
+          wakeNonce: reading.wake_nonce ?? null,
+          lqi: reading.lqi ?? null,
           threshold,
           readingTs: reading.ts
         }

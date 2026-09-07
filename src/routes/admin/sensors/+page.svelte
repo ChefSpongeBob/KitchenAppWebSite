@@ -41,6 +41,9 @@
     batteryMv: number | null;
     humidityPct: number | null;
     rssi: number | null;
+    packetSequence: number | null;
+    wakeNonce: string | null;
+    lqi: number | null;
     revokedAt: number | null;
     createdAt: number;
     updatedAt: number;
@@ -206,7 +209,7 @@
         <span class="material-icons" aria-hidden="true">add_circle</span>
         <div>
           <h2>Register Sensor Node</h2>
-          <p>Gateway, serial number, and name.</p>
+          <p>Serial number and name.</p>
         </div>
       </summary>
 
@@ -303,6 +306,12 @@
                   {/if}
                   {#if node.rssi}
                     | Signal {node.rssi}dBm
+                  {/if}
+                  {#if node.lqi !== null}
+                    | LQI {node.lqi}
+                  {/if}
+                  {#if node.packetSequence !== null}
+                    | Seq {node.packetSequence}
                   {/if}
                 </small>
               </div>

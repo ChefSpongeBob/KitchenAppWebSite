@@ -78,10 +78,10 @@ expect('src/routes/api/internal/operational-events/process/+server.ts', 'email d
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 3 email status', (source) =>
-  source.includes('`3. Email system completion`') &&
-  source.includes('Email system completion') &&
+  source.includes('3. Email and operational events') &&
+  source.includes('Verify Resend delivery for invites') &&
   source.includes('RESEND_API_KEY') &&
-  source.includes('Run deferred Phase 3 real email flow tests')
+  source.includes('Process operational events and confirm recipients are correct')
 );
 
 const failed = checks.filter((check) => !check.ok);

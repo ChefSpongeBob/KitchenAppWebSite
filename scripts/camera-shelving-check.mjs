@@ -74,7 +74,7 @@ expect('src/routes/pricing/+page.svelte', 'pricing frames camera monitoring as p
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks camera shelving phase', (source) =>
-  source.includes('13. Camera feature shelving') &&
+  source.includes('Camera shelving remains complete') &&
   source.includes('Camera monitoring products are deferred post-launch')
 );
 

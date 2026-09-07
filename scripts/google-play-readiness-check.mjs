@@ -97,9 +97,10 @@ expect('src/routes/api/billing/google-play-notifications/+server.ts', 'Google Pl
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'Google Play phase tracks Play Console manual requirements', (source) =>
-  source.includes('21. Google Play Store readiness') &&
-  source.includes('Google Play Console') &&
-  source.includes('data safety') &&
+  source.includes('13. Store submissions') &&
+  source.includes('Google Play: app record') &&
+  source.includes('Google Play') &&
+  /Data Safety|data safety/.test(source) &&
   source.includes('internal testing') &&
   source.includes('crimini.plan.small.monthly') &&
   source.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON')
