@@ -142,10 +142,13 @@ expect('src/routes/register/+page.server.ts', 'signup abuse is rate limited befo
   );
 });
 
-expect('src/routes/register/+page.server.ts', 'new business signup starts in explicit lifecycle state', (source) =>
-  source.includes("const initialBusinessStatus = purchaseMode === 'buy_now' ? 'pending_payment' : 'trialing'") &&
-  source.includes('statusOverride: purchaseMode ===') &&
-  !source.includes("VALUES (?, ?, ?, ?, 'active'")
+expect('src/routes/register/+page.server.ts', 'new business signup starts pending payment unless activated by store billing', (source) =>
+  source.includes("const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')") &&
+  source.includes('Trial signup is not available right now') &&
+  source.includes("const initialBusinessStatus = 'pending_payment'") &&
+  source.includes("statusOverride: 'pending_payment'") &&
+  !source.includes("VALUES (?, ?, ?, ?, 'active'") &&
+  !source.includes("const initialBusinessStatus = purchaseMode === 'buy_now' ? 'pending_payment' : 'trialing'")
 );
 
 expect('src/lib/server/trial.ts', 'free-trial reuse is blocked by identity claims and denials', (source) =>

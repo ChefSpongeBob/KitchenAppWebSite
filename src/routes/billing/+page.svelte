@@ -18,7 +18,7 @@
 		};
 		trial: {
 			mode:
-				| 'grandfathered'
+				| 'missing_billing'
 				| 'trialing'
 				| 'active'
 				| 'expired'
@@ -82,10 +82,6 @@
 	let selectedProductId = '';
 	let purchaseStatus = '';
 	let purchaseBusy = false;
-
-	const trialEndsText = data.trial.trialEndsAt
-		? new Date(data.trial.trialEndsAt * 1000).toLocaleDateString()
-		: 'N/A';
 
 	$: availableProducts = data.storeProducts.filter(
 		(product) =>
@@ -182,7 +178,7 @@
 
 	onMount(() => {
 		try {
-			const storageKey = 'sknns_trial_fingerprint_v1';
+			const storageKey = 'crimini_signup_fingerprint_v1';
 			clientFingerprint = window.localStorage.getItem(storageKey) ?? '';
 		} catch {
 			clientFingerprint = '';
@@ -206,13 +202,11 @@
 </script>
 
 <Layout>
-	<PageHeader title="Billing & Trial" />
+	<PageHeader title="Billing" />
 
 	<section class="billing-shell">
 		<article class="panel">
 			<h2>{data.business.name}</h2>
-			<p class="muted">Trial status: {data.trial.mode}</p>
-			<p class="muted">Trial end: {trialEndsText}</p>
 			<p class="notice">Billing provider: app stores.</p>
 			{#if data.storeStatus === 'queued'}
 				<p class="notice">Store activation queued.</p>
@@ -297,9 +291,9 @@
 			</article>
 
 			<article class="panel danger">
-				<h3>Cancel Trial Workspace</h3>
+				<h3>Cancel Workspace Setup</h3>
 				<p>
-					This permanently removes workspace data and marks this identity as no-trial for future signup.
+					This permanently removes workspace data before activation.
 				</p>
 				<form method="POST" action="?/cancel">
 					<input type="hidden" name="client_fingerprint" value={clientFingerprint} />

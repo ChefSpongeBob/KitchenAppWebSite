@@ -276,8 +276,7 @@ export async function sendSignupConfirmationEmail({
   ownerName,
   ownerTitle,
   businessName,
-  planTier,
-  purchaseMode
+  planTier
 }: {
   env?: EmailEnv | null;
   origin: string;
@@ -286,7 +285,6 @@ export async function sendSignupConfirmationEmail({
   ownerTitle?: string | null;
   businessName: string;
   planTier: string;
-  purchaseMode: 'trial' | 'buy_now';
 }) {
   const baseUrl = getAppBaseUrl(origin, env);
   const loginUrl = `${baseUrl}/login`;
@@ -300,10 +298,7 @@ export async function sendSignupConfirmationEmail({
   const safePlanPrice = escapeHtml(plan.price);
   const safePlanFeatures = escapeHtml(plan.features);
   const safeLoginUrl = escapeHtml(loginUrl);
-  const billingText =
-    purchaseMode === 'buy_now'
-      ? 'Billing activation continues through the app store setup path.'
-      : 'Your one month trial is ready. Billing can be activated from the app when you are ready.';
+  const billingText = 'Billing activation continues through the app store setup path.';
 
   return sendTransactionalEmail({
     env,

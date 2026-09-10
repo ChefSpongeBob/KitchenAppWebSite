@@ -3,7 +3,7 @@ import { sha256Hex } from '$lib/server/auth';
 
 type D1 = App.Platform['env']['DB'];
 
-const ONE_MONTH_SECONDS = 60 * 60 * 24 * 30;
+const SEVEN_DAYS_SECONDS = 60 * 60 * 24 * 7;
 const TABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 let trialSchemaEnsured = false;
@@ -34,7 +34,7 @@ export type TrialEligibility = {
 
 export type BusinessTrialAccess = {
 	mode:
-		| 'grandfathered'
+		| 'missing_billing'
 		| 'trialing'
 		| 'active'
 		| 'expired'
@@ -737,7 +737,7 @@ export async function initializeBusinessTrial(
 	const now = args.now ?? Math.floor(Date.now() / 1000);
 	const status: TrialStatus =
 		args.statusOverride ?? (args.eligible ? 'trialing' : 'expired');
-	const trialEndsAt = status === 'trialing' ? now + ONE_MONTH_SECONDS : now;
+	const trialEndsAt = status === 'trialing' ? now + SEVEN_DAYS_SECONDS : now;
 	const businessStatus =
 		status === 'trialing'
 			? 'trialing'
@@ -823,12 +823,12 @@ export async function getBusinessTrialAccess(
 
 	if (!trial) {
 		return {
-			mode: 'grandfathered',
-			allowApp: true,
+			mode: dev ? 'trialing' : 'missing_billing',
+			allowApp: dev,
 			shouldPurge: false,
 			trialEndsAt: null,
 			secondsRemaining: null,
-			denialReason: null
+			denialReason: dev ? null : 'missing_billing_record'
 		};
 	}
 

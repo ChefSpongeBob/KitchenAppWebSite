@@ -15,11 +15,9 @@ import {
 	recordLegalAgreementAcceptance
 } from '$lib/server/legal';
 import {
-	createTrialDenialRecord,
-	evaluateTrialEligibility,
+	getBusinessTrialAccess,
 	getRequestIpAddress,
-	initializeBusinessTrial,
-	type TrialEligibility
+	initializeBusinessTrial
 } from '$lib/server/trial';
 import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { validateNewPassword } from '$lib/server/passwordReset';
@@ -257,7 +255,7 @@ export const actions: Actions = {
 			const emergencyContactRelationship = toOptionalString(formData, 'emergency_contact_relationship', 80);
 			const wantsEmailUpdates = String(formData.get('email_updates') || '0') === '1';
 			const clientFingerprint = String(formData.get('client_fingerprint') || '').trim();
-			const purchaseModeRaw = String(formData.get('purchase_mode') || 'trial')
+			const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')
 				.trim()
 				.toLowerCase();
 			const purchaseMode = purchaseModeRaw === 'buy_now' ? 'buy_now' : 'trial';
@@ -332,6 +330,12 @@ export const actions: Actions = {
 			}
 			if (!inviteCode && !liabilityAgreementAccepted) {
 				return registerFailure(400, 'You must accept the liability agreement to continue.', 'purchase', submittedValues);
+			}
+			if (!inviteCode && purchaseMode !== 'buy_now') {
+				return registerFailure(403, 'Trial signup is not available right now. Choose purchase to continue.', 'purchase', {
+					...submittedValues,
+					purchaseMode: 'buy_now'
+				});
 			}
 			if (!inviteCode && liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
 				return registerFailure(400, 'Please refresh and accept the latest liability agreement.', 'purchase', submittedValues);
@@ -414,32 +418,7 @@ export const actions: Actions = {
 			}
 
 			const now = Math.floor(Date.now() / 1000);
-			registerPhase = 'trial_eligibility';
-			let trialEligibility: TrialEligibility = { eligible: true, reason: null };
-			if (!inviteCode && purchaseMode !== 'buy_now') {
-				trialEligibility = await evaluateTrialEligibility(db, {
-					emailNormalized: email,
-					businessName,
-					clientFingerprint,
-					ipAddress: getRequestIpAddress(request),
-					userAgent: request.headers.get('user-agent') ?? ''
-				});
-				if (!trialEligibility.eligible) {
-					await createTrialDenialRecord(
-						db,
-						{
-							emailNormalized: email,
-							businessName,
-							clientFingerprint,
-							ipAddress: getRequestIpAddress(request),
-							userAgent: request.headers.get('user-agent') ?? ''
-						},
-						'abuse',
-						trialEligibility.reason ?? 'trial_reuse'
-					);
-					return registerFailure(400, 'Free trial unavailable. Choose purchase to continue.', 'purchase', submittedValues);
-				}
-			}
+			registerPhase = 'invite_lookup';
 
 			let businessInvite:
 				| {
@@ -531,6 +510,15 @@ export const actions: Actions = {
 
 					if (businessInvite.expires_at !== null && businessInvite.expires_at < now) {
 						return registerFailure(400, 'Invite code has expired.', 'security', submittedValues);
+					}
+
+					const invitedBusinessAccess = await getBusinessTrialAccess(
+						db,
+						businessInvite.business_id,
+						now
+					);
+					if (invitedBusinessAccess.mode !== 'active' || !invitedBusinessAccess.allowApp) {
+						return registerFailure(403, 'This workspace is not active yet.', 'security', submittedValues);
 					}
 				} else {
 					invite = await db
@@ -815,7 +803,7 @@ export const actions: Actions = {
 					FROM business_users bu
 					JOIN businesses b ON b.id = bu.business_id
 					WHERE bu.user_id = ?
-					  AND COALESCE(b.status, 'active') IN ('active', 'trialing')
+					  AND COALESCE(b.status, 'pending_payment') = 'active'
 					ORDER BY
 					  CASE bu.role
 					    WHEN 'owner' THEN 0
@@ -834,6 +822,15 @@ export const actions: Actions = {
 						.bind(invite.invited_by)
 						.first<{ business_id: string }>();
 					if (inviterBusiness?.business_id) {
+						const invitedBusinessAccess = await getBusinessTrialAccess(
+							db,
+							inviterBusiness.business_id,
+							now
+						);
+						if (invitedBusinessAccess.mode !== 'active' || !invitedBusinessAccess.allowApp) {
+							await cleanupPartialRegisteredUser(db, userId);
+							return registerFailure(403, 'This workspace is not active yet.', 'security', submittedValues);
+						}
 						await db
 							.prepare(
 								`
@@ -849,7 +846,7 @@ export const actions: Actions = {
 			} else {
 				const businessId = crypto.randomUUID();
 				const businessSlug = await reserveBusinessSlug(db, requestedBusinessSlug || businessName);
-				const initialBusinessStatus = purchaseMode === 'buy_now' ? 'pending_payment' : 'trialing';
+				const initialBusinessStatus = 'pending_payment';
 				await db
 					.prepare(
 						`
@@ -947,9 +944,9 @@ export const actions: Actions = {
 				await initializeBusinessTrial(db, {
 					businessId,
 					ownerUserId: userId,
-					eligible: purchaseMode === 'buy_now' ? true : trialEligibility.eligible,
-					denialReason: purchaseMode === 'buy_now' ? null : trialEligibility.reason,
-					statusOverride: purchaseMode === 'buy_now' ? 'pending_payment' : null,
+					eligible: true,
+					denialReason: null,
+					statusOverride: 'pending_payment',
 					identity: {
 						emailNormalized: email,
 						businessName,
@@ -1064,8 +1061,7 @@ export const actions: Actions = {
 					ownerName: displayName,
 					ownerTitle: ownerTitle || 'Owner',
 					businessName,
-					planTier,
-					purchaseMode
+					planTier
 				});
 				if (!emailResult.sent && !emailResult.skipped) {
 					console.warn('Signup confirmation email was not sent:', emailResult.reason ?? 'unknown error');

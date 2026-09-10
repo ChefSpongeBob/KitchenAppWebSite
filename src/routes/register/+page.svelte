@@ -71,7 +71,7 @@
 		addressState: string;
 		addressPostalCode: string;
 		addressCountry: string;
-		purchaseMode: 'trial' | 'buy_now';
+		purchaseMode: 'buy_now';
 		storeBillingPreference: 'both' | 'google_play' | 'app_store';
 		liabilityAgreementAccepted: boolean;
 	};
@@ -318,7 +318,7 @@
 	let confirmPassword = '';
 	let emailUpdates = formValues.emailUpdates ?? true;
 	let clientFingerprint = '';
-	let purchaseMode: 'trial' | 'buy_now' = formValues.purchaseMode ?? 'trial';
+	let purchaseMode: 'buy_now' = 'buy_now';
 	let storeBillingPreference: 'both' | 'google_play' | 'app_store' = formValues.storeBillingPreference ?? 'both';
 	let liabilityAgreementAccepted = formValues.liabilityAgreementAccepted ?? false;
 	$: basePlanPrice = planTier === 'large' ? 90 : planTier === 'medium' ? 65 : 30;
@@ -342,7 +342,7 @@
 
 	onMount(() => {
 		try {
-			const storageKey = 'sknns_trial_fingerprint_v1';
+			const storageKey = 'crimini_signup_fingerprint_v1';
 			const existing = window.localStorage.getItem(storageKey);
 			if (existing && existing.trim()) {
 				clientFingerprint = existing.trim().slice(0, 200);
@@ -740,26 +740,10 @@
 							</div>
 
 							<div class="purchase-mode-grid">
-								<button
-									type="button"
-									class="purchase-mode-card"
-									class:active={purchaseMode === 'trial'}
-									aria-pressed={purchaseMode === 'trial'}
-									on:click={() => (purchaseMode = 'trial')}
-								>
-									<strong>Start free trial</strong>
-									<span>One month trial, upgrade any time.</span>
-								</button>
-								<button
-									type="button"
-									class="purchase-mode-card"
-									class:active={purchaseMode === 'buy_now'}
-									aria-pressed={purchaseMode === 'buy_now'}
-									on:click={() => (purchaseMode = 'buy_now')}
-								>
+								<div class="purchase-mode-card active">
 									<strong>Purchase now</strong>
 									<span>Continue with app-store billing activation after account creation.</span>
-								</button>
+								</div>
 							</div>
 
 							<div class="store-pref-grid" role="radiogroup" aria-label="Store billing preference">

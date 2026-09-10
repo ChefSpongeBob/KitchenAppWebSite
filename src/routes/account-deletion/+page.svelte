@@ -74,8 +74,7 @@
 			<h2>What May Be Retained</h2>
 			<p>
 				Some records may be retained for security, fraud prevention, legal, tax, billing, abuse
-				prevention, or compliance reasons. Trial-abuse prevention records may remain so a canceled or
-				expired free trial cannot be restarted under the same identity.
+				prevention, or compliance reasons.
 			</p>
 		</div>
 

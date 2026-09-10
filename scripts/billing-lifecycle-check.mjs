@@ -53,10 +53,13 @@ expect('src/lib/server/business.ts', 'workspace lookup accepts lifecycle states 
   source.includes("IN ('active', 'trialing', 'past_due', 'pending_payment')")
 );
 
-expect('src/routes/register/+page.server.ts', 'trial reuse is denied before account creation', (source) =>
-  source.includes('createTrialDenialRecord') &&
-  source.includes('Free trial unavailable') &&
-  source.includes('identity: {')
+expect('src/routes/register/+page.server.ts', 'public trial signup is disabled before account creation', (source) =>
+  source.includes("const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')") &&
+  source.includes('Trial signup is not available right now') &&
+  source.includes("const initialBusinessStatus = 'pending_payment'") &&
+  source.includes("statusOverride: 'pending_payment'") &&
+  !source.includes('createTrialDenialRecord') &&
+  !source.includes('Free trial unavailable')
 );
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness includes lifecycle tables', (source) =>

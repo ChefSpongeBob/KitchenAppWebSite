@@ -260,7 +260,7 @@
 			Crimini starts with the owner creating a business workspace, then moves through setup, onboarding, scheduling, and daily service.
 		</p>
 		<div class="head-actions">
-			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Free Trial</a>
+			<a href="/register#onboarding-slideshow" class="btn btn-primary">Create Workspace</a>
 			<a href="/features" class="btn">See Features</a>
 		</div>
 	</section>
