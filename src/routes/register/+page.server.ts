@@ -182,6 +182,20 @@ function looksLikeEmail(value: string) {
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isPublicSignupEnabled(env: App.Platform['env'] | undefined) {
+	return env?.PUBLIC_SIGNUP_ENABLED?.trim().toLowerCase() === 'true';
+}
+
+function isOwnerSignupAllowlisted(env: App.Platform['env'] | undefined, email: string) {
+	const normalizedEmail = email.trim().toLowerCase();
+	if (!normalizedEmail) return false;
+	const values = String(env?.OWNER_SIGNUP_ALLOWLIST ?? '')
+		.split(',')
+		.map((value) => value.trim().toLowerCase())
+		.filter(Boolean);
+	return values.includes(normalizedEmail);
+}
+
 function normalizeWebsite(raw: string) {
 	if (!raw) return '';
 	const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
@@ -336,6 +350,9 @@ export const actions: Actions = {
 					...submittedValues,
 					purchaseMode: 'buy_now'
 				});
+			}
+			if (!inviteCode && !dev && !isPublicSignupEnabled(platform?.env) && !isOwnerSignupAllowlisted(platform?.env, email)) {
+				return registerFailure(403, 'Public signup is not available right now.', 'security', submittedValues);
 			}
 			if (!inviteCode && liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
 				return registerFailure(400, 'Please refresh and accept the latest liability agreement.', 'purchase', submittedValues);

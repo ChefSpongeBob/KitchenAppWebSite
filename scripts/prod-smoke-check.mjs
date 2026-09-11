@@ -2,7 +2,6 @@ const baseUrl = process.env.SMOKE_BASE_URL?.trim() || process.env.APP_BASE_URL?.
 const email = process.env.SMOKE_EMAIL?.trim() || '';
 const password = process.env.SMOKE_PASSWORD?.trim() || '';
 const internalToken = process.env.SMOKE_INTERNAL_TOKEN?.trim() || '';
-const privateTestAccessCode = process.env.PRIVATE_TEST_ACCESS_CODE?.trim() || '';
 const runAdminChecks = (process.env.SMOKE_ADMIN ?? '').trim() === '1';
 
 if (!baseUrl) {
@@ -103,33 +102,6 @@ async function assertGetOk(path, label) {
   return false;
 }
 
-async function unlockPrivateTestGate() {
-  if (!privateTestAccessCode) return;
-
-  const accessPage = await request('/test-access');
-  if (accessPage.status === 303 || accessPage.status === 302) {
-    logPass('Private test gate not enabled for this environment');
-    return;
-  }
-  if (accessPage.status < 200 || accessPage.status >= 300) {
-    logFail(`Private test access page expected 2xx or redirect, got ${accessPage.status}`);
-    return;
-  }
-
-  const body = new URLSearchParams({ accessCode: privateTestAccessCode, next: '/' }).toString();
-  const accessResponse = await request('/test-access', {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', origin },
-    body
-  });
-
-  if (accessResponse.status >= 200 && accessResponse.status < 400) {
-    logPass(`Private test gate unlocked (${accessResponse.status})`);
-  } else {
-    logFail(`Private test gate unlock expected <400, got ${accessResponse.status}`);
-  }
-}
-
 async function assertSchemaReady() {
   if (!internalToken) return;
   const response = await request('/api/internal/schema-readiness', {
@@ -145,8 +117,6 @@ async function assertSchemaReady() {
 }
 
 async function main() {
-  await unlockPrivateTestGate();
-
   for (const [path, label] of publicRoutes) {
     await assertGetOk(path, label);
   }

@@ -2020,7 +2020,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/hooks.server.ts` [reference]
   - `src/lib/assets/navigation.ts` [reference]
   - `src/lib/features/appFeatures.ts` [reference]
-  - `src/lib/server/privateTestGate.ts` [reference]
   - `src/lib/server/reports.ts` [select]
   - `src/lib/server/retention.ts` [delete, select]
   - `src/lib/server/temperatureMonitoring.ts` [select]

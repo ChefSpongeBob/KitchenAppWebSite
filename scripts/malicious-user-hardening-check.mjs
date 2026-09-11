@@ -132,15 +132,23 @@ expect('src/routes/login/+page.server.ts', 'login validates Turnstile before acc
 });
 
 expect('src/routes/register/+page.server.ts', 'signup abuse is rate limited before creating accounts', (source) => {
-  const rateLimitIndex = source.indexOf("action: 'signup_ip'");
-  const createUserIndex = source.indexOf('const userId = crypto.randomUUID()');
+	const rateLimitIndex = source.indexOf("action: 'signup_ip'");
+	const createUserIndex = source.indexOf('const userId = crypto.randomUUID()');
   return (
     rateLimitIndex !== -1 &&
     createUserIndex !== -1 &&
     rateLimitIndex < createUserIndex &&
     source.includes("action: 'signup_email'")
-  );
+	);
 });
+
+expect('src/routes/register/+page.server.ts', 'public owner signup is closed unless explicitly enabled or allowlisted', (source) =>
+  source.includes('PUBLIC_SIGNUP_ENABLED') &&
+  source.includes('OWNER_SIGNUP_ALLOWLIST') &&
+  source.includes('isPublicSignupEnabled(platform?.env)') &&
+  source.includes('isOwnerSignupAllowlisted(platform?.env, email)') &&
+  source.includes('Public signup is not available right now.')
+);
 
 expect('src/routes/register/+page.server.ts', 'new business signup starts pending payment unless activated by store billing', (source) =>
   source.includes("const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')") &&

@@ -21,6 +21,8 @@
 		}
 	],
 	"vars": {
-		"APP_BASE_URL": "https://criminiops.com"
+		"APP_BASE_URL": "https://criminiops.com",
+		"PUBLIC_SIGNUP_ENABLED": "false",
+		"OWNER_SIGNUP_ALLOWLIST": "spongebobchefpants@gmail.com"
 	}
 }

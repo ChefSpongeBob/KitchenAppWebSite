@@ -30,8 +30,8 @@ declare global {
 				BILLING_WEBHOOK_TOKEN?: string;
 				TURNSTILE_SITE_KEY?: string;
 				TURNSTILE_SECRET_KEY?: string;
-				PRIVATE_TEST_GATE_ENABLED?: string;
-				PRIVATE_TEST_ACCESS_CODE?: string;
+				PUBLIC_SIGNUP_ENABLED?: string;
+				OWNER_SIGNUP_ALLOWLIST?: string;
 			};
 		}
 

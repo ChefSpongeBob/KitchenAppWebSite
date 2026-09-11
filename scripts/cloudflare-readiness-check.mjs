@@ -38,6 +38,8 @@ if (wrangler) {
   expect('DOC_MEDIA R2 binding is configured', docMedia?.bucket_name === 'crimini-doc-media');
   expect('CAMERA_MEDIA R2 binding is configured', cameraMedia?.bucket_name === 'crimini-camera-media');
   expect('APP_BASE_URL points to production domain', wrangler.vars?.APP_BASE_URL === 'https://criminiops.com');
+  expect('Public signup is closed for private testing', wrangler.vars?.PUBLIC_SIGNUP_ENABLED === 'false');
+  expect('Owner signup allowlist is configured for controlled testing', typeof wrangler.vars?.OWNER_SIGNUP_ALLOWLIST === 'string' && wrangler.vars.OWNER_SIGNUP_ALLOWLIST.includes('@'));
   expect('No old copied Cloudflare resources are bound in wrangler config', !/kitchensoftware|kitchen-camera-media|"database_name":"kitchen"/i.test(wranglerSource));
 }
 
@@ -63,6 +65,9 @@ const hooks = read('src/hooks.server.ts');
 expect('Schema guard is enabled around Cloudflare DB', hooks.includes('wrapProductionSchemaGuard'));
 expect('Public billing webhook routes are allowed', hooks.includes('/api/billing/app-store-notifications') && hooks.includes('/api/billing/google-play-notifications'));
 
+const appTypes = read('src/app.d.ts');
+expect('Cloudflare env supports signup allowlist lock', appTypes.includes('PUBLIC_SIGNUP_ENABLED') && appTypes.includes('OWNER_SIGNUP_ALLOWLIST'));
+
 const readinessEndpoint = read('src/routes/api/internal/schema-readiness/+server.ts');
 expect('Schema readiness checks store products', readinessEndpoint.includes('store_products'));
 expect('Schema readiness checks account deletion requests', readinessEndpoint.includes('account_deletion_requests'));
@@ -79,6 +84,7 @@ const storeDoc = read('docs/PROJECT_HANDOFF.md');
 expect('Store billing doc lists Cloudflare billing secrets', storeDoc.includes('APP_STORE_PRIVATE_KEY') && storeDoc.includes('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'));
 expect('Cloudflare handoff lists Turnstile secrets', storeDoc.includes('TURNSTILE_SITE_KEY') && storeDoc.includes('TURNSTILE_SECRET_KEY'));
 expect('Cloudflare handoff lists edge WAF and auth route rate limits', storeDoc.includes('Managed WAF rules') && storeDoc.includes('/login') && storeDoc.includes('/register') && storeDoc.includes('/forgot-password'));
+expect('Cloudflare handoff documents signup allowlist testing lock', storeDoc.includes('OWNER_SIGNUP_ALLOWLIST') && storeDoc.includes('PUBLIC_SIGNUP_ENABLED=false'));
 
 const playbook = read('docs/PROJECT_HANDOFF.md');
 expect('Deploy playbook references DB binding, not old kitchen binding', playbook.includes('d1 execute DB --remote') && !playbook.includes('d1 execute kitchen --remote'));
