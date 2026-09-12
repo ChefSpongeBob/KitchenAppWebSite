@@ -67,15 +67,25 @@ export const POST = async ({ request, cookies, locals, platform }) => {
 
   if (payload.selfTestPassword) {
     const password = String(payload.password ?? '');
-    const hash = await hashPassword(password);
-    const passwordCheck = await verifyPassword(password, hash);
-    return json({
-      ok: true,
-      passwordValid: passwordCheck.valid,
-      needsRehash: passwordCheck.needsRehash,
-      hashScheme: hash.split('$')[0],
-      hashParts: hash.split('$').length
-    });
+    try {
+      const hash = await hashPassword(password);
+      const passwordCheck = await verifyPassword(password, hash);
+      return json({
+        ok: true,
+        passwordValid: passwordCheck.valid,
+        needsRehash: passwordCheck.needsRehash,
+        hashScheme: hash.split('$')[0],
+        hashParts: hash.split('$').length
+      });
+    } catch (error) {
+      return json(
+        {
+          ok: false,
+          error: error instanceof Error ? error.name : 'PasswordSelfTestError'
+        },
+        { status: 500 }
+      );
+    }
   }
 
   const requestedEmail =
@@ -91,16 +101,28 @@ export const POST = async ({ request, cookies, locals, platform }) => {
 
   if (payload.verifyPasswordOnly) {
     const password = String(payload.password ?? '');
-    const passwordCheck = user.password_hash
-      ? await verifyPassword(password, user.password_hash)
-      : { valid: false, needsRehash: false };
-    return json({
-      ok: true,
-      userId: user.id,
-      role: user.role ?? 'user',
-      passwordValid: passwordCheck.valid,
-      needsRehash: passwordCheck.needsRehash
-    });
+    try {
+      const passwordCheck = user.password_hash
+        ? await verifyPassword(password, user.password_hash)
+        : { valid: false, needsRehash: false };
+      return json({
+        ok: true,
+        userId: user.id,
+        role: user.role ?? 'user',
+        passwordValid: passwordCheck.valid,
+        needsRehash: passwordCheck.needsRehash
+      });
+    } catch (error) {
+      return json(
+        {
+          ok: false,
+          userId: user.id,
+          role: user.role ?? 'user',
+          error: error instanceof Error ? error.name : 'PasswordVerifyError'
+        },
+        { status: 500 }
+      );
+    }
   }
 
   const now = Math.floor(Date.now() / 1000);
