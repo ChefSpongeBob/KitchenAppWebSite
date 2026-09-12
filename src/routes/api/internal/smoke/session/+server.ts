@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { hashSessionToken, verifyPassword } from '$lib/server/auth';
+import { hashPassword, hashSessionToken, verifyPassword } from '$lib/server/auth';
 import {
   getSessionCookieDeleteOptions,
   getSessionCookieName,
@@ -58,11 +58,24 @@ export const POST = async ({ request, cookies, locals, platform }) => {
     return json({ error: 'Database unavailable.' }, { status: 503 });
   }
 
-  let payload: { email?: string; password?: string; verifyPasswordOnly?: boolean } = {};
+  let payload: { email?: string; password?: string; verifyPasswordOnly?: boolean; selfTestPassword?: boolean } = {};
   try {
-    payload = (await request.json()) as { email?: string };
+    payload = (await request.json()) as typeof payload;
   } catch {
     payload = {};
+  }
+
+  if (payload.selfTestPassword) {
+    const password = String(payload.password ?? '');
+    const hash = await hashPassword(password);
+    const passwordCheck = await verifyPassword(password, hash);
+    return json({
+      ok: true,
+      passwordValid: passwordCheck.valid,
+      needsRehash: passwordCheck.needsRehash,
+      hashScheme: hash.split('$')[0],
+      hashParts: hash.split('$').length
+    });
   }
 
   const requestedEmail =
