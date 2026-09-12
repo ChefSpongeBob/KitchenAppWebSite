@@ -20,6 +20,12 @@ function fromHex(hex: string): Uint8Array {
 	return bytes;
 }
 
+function toExactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	const buffer = new ArrayBuffer(bytes.byteLength);
+	new Uint8Array(buffer).set(bytes);
+	return buffer;
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
 	if (a.length !== b.length) return false;
 	let diff = 0;
@@ -34,9 +40,11 @@ async function pbkdf2Hex(
 	saltHex: string,
 	iterations: number
 ): Promise<string> {
+	const passwordBytes = new TextEncoder().encode(password);
+	const saltBytes = fromHex(saltHex);
 	const key = await crypto.subtle.importKey(
 		'raw',
-		new TextEncoder().encode(password),
+		toExactArrayBuffer(passwordBytes),
 		'PBKDF2',
 		false,
 		['deriveBits']
@@ -45,7 +53,7 @@ async function pbkdf2Hex(
 		{
 			name: 'PBKDF2',
 			hash: 'SHA-256',
-			salt: fromHex(saltHex) as unknown as BufferSource,
+			salt: toExactArrayBuffer(saltBytes),
 			iterations
 		},
 		key,
