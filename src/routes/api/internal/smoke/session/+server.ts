@@ -109,6 +109,7 @@ export const POST = async ({ request, cookies, locals, platform }) => {
         ok: true,
         userId: user.id,
         role: user.role ?? 'user',
+        passwordLength: password.length,
         passwordValid: passwordCheck.valid,
         needsRehash: passwordCheck.needsRehash
       });

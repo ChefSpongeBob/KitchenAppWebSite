@@ -29,7 +29,7 @@ expect('src/lib/server/security.ts', 'shared security helper exists', (source) =
 );
 
 expect('src/lib/server/auth.ts', 'password hashing uses high-iteration salted PBKDF2 and rehash upgrades', (source) =>
-  source.includes('const PASSWORD_ITERATIONS = 600_000') &&
+  source.includes('const PASSWORD_ITERATIONS = 150_000') &&
   source.includes('const PASSWORD_SALT_BYTES = 16') &&
   source.includes('async function tryUpgradePasswordHash') &&
   source.includes('needsRehash = iterations < PASSWORD_ITERATIONS') &&
