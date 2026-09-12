@@ -1,3 +1,6 @@
+import { Buffer } from 'node:buffer';
+import { pbkdf2 as nodePbkdf2 } from 'node:crypto';
+
 const PASSWORD_SCHEME = 'pbkdf2_sha256';
 const MIN_PBKDF2_ITERATIONS = 100_000;
 const PASSWORD_ITERATIONS = 600_000;
@@ -20,12 +23,6 @@ function fromHex(hex: string): Uint8Array {
 	return bytes;
 }
 
-function toExactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const buffer = new ArrayBuffer(bytes.byteLength);
-	new Uint8Array(buffer).set(bytes);
-	return buffer;
-}
-
 function timingSafeEqual(a: string, b: string): boolean {
 	if (a.length !== b.length) return false;
 	let diff = 0;
@@ -40,26 +37,22 @@ async function pbkdf2Hex(
 	saltHex: string,
 	iterations: number
 ): Promise<string> {
-	const passwordBytes = new TextEncoder().encode(password);
-	const saltBytes = fromHex(saltHex);
-	const key = await crypto.subtle.importKey(
-		'raw',
-		toExactArrayBuffer(passwordBytes),
-		'PBKDF2',
-		false,
-		['deriveBits']
-	);
-	const bits = await crypto.subtle.deriveBits(
-		{
-			name: 'PBKDF2',
-			hash: 'SHA-256',
-			salt: toExactArrayBuffer(saltBytes),
-			iterations
-		},
-		key,
-		PASSWORD_KEY_BYTES * 8
-	);
-	return toHex(new Uint8Array(bits));
+	return await new Promise((resolve, reject) => {
+		nodePbkdf2(
+			password,
+			Buffer.from(fromHex(saltHex)),
+			iterations,
+			PASSWORD_KEY_BYTES,
+			'sha256',
+			(error, derivedKey) => {
+				if (error) {
+					reject(error);
+					return;
+				}
+				resolve(derivedKey.toString('hex'));
+			}
+		);
+	});
 }
 
 export async function sha256Hex(input: string): Promise<string> {
