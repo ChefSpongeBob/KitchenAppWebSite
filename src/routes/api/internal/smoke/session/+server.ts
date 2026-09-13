@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { hashPassword, hashSessionToken, verifyPassword } from '$lib/server/auth';
+import { hashSessionToken } from '$lib/server/auth';
 import {
   getSessionCookieDeleteOptions,
   getSessionCookieName,
@@ -33,10 +33,10 @@ function readEnvValue(platform: App.Platform | undefined, key: string) {
   return nodeProcess?.env?.[key]?.trim() ?? '';
 }
 
-async function findUserByEmail(db: App.Platform['env']['DB'], emailRaw: string, includePasswordHash = false) {
+async function findUserByEmail(db: App.Platform['env']['DB'], emailRaw: string) {
   const email = emailRaw.trim().toLowerCase();
   const hasNormalized = await hasColumn(db, 'users', 'email_normalized');
-  const columns = includePasswordHash ? 'id, role, is_active, password_hash' : 'id, role, is_active';
+  const columns = 'id, role, is_active';
   const sql = hasNormalized
     ? `SELECT ${columns} FROM users WHERE email_normalized = ? LIMIT 1`
     : `SELECT ${columns} FROM users WHERE lower(email) = ? LIMIT 1`;
@@ -58,34 +58,11 @@ export const POST = async ({ request, cookies, locals, platform }) => {
     return json({ error: 'Database unavailable.' }, { status: 503 });
   }
 
-  let payload: { email?: string; password?: string; verifyPasswordOnly?: boolean; selfTestPassword?: boolean } = {};
+  let payload: { email?: string } = {};
   try {
     payload = (await request.json()) as typeof payload;
   } catch {
     payload = {};
-  }
-
-  if (payload.selfTestPassword) {
-    const password = String(payload.password ?? '');
-    try {
-      const hash = await hashPassword(password);
-      const passwordCheck = await verifyPassword(password, hash);
-      return json({
-        ok: true,
-        passwordValid: passwordCheck.valid,
-        needsRehash: passwordCheck.needsRehash,
-        hashScheme: hash.split('$')[0],
-        hashParts: hash.split('$').length
-      });
-    } catch (error) {
-      return json(
-        {
-          ok: false,
-          error: error instanceof Error ? error.name : 'PasswordSelfTestError'
-        },
-        { status: 500 }
-      );
-    }
   }
 
   const requestedEmail =
@@ -94,36 +71,9 @@ export const POST = async ({ request, cookies, locals, platform }) => {
     return json({ error: 'Missing email.' }, { status: 400 });
   }
 
-  const user = await findUserByEmail(db, requestedEmail, Boolean(payload.verifyPasswordOnly));
+  const user = await findUserByEmail(db, requestedEmail);
   if (!user || (user.is_active ?? 1) !== 1) {
     return json({ error: 'Active user not found.' }, { status: 404 });
-  }
-
-  if (payload.verifyPasswordOnly) {
-    const password = String(payload.password ?? '');
-    try {
-      const passwordCheck = user.password_hash
-        ? await verifyPassword(password, user.password_hash)
-        : { valid: false, needsRehash: false };
-      return json({
-        ok: true,
-        userId: user.id,
-        role: user.role ?? 'user',
-        passwordLength: password.length,
-        passwordValid: passwordCheck.valid,
-        needsRehash: passwordCheck.needsRehash
-      });
-    } catch (error) {
-      return json(
-        {
-          ok: false,
-          userId: user.id,
-          role: user.role ?? 'user',
-          error: error instanceof Error ? error.name : 'PasswordVerifyError'
-        },
-        { status: 500 }
-      );
-    }
   }
 
   const now = Math.floor(Date.now() / 1000);

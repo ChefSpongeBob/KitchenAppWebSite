@@ -46,7 +46,7 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - R2 bindings: `DOC_MEDIA`, `CAMERA_MEDIA`
 - R2 buckets: `crimini-doc-media`, `crimini-camera-media`
 - Production base URL: `APP_BASE_URL=https://criminiops.com`
-- Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY`.
+- Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `PASSWORD_PEPPER`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY`.
 - Private testing lock: keep marketing public, set `PUBLIC_SIGNUP_ENABLED=false`, and set `OWNER_SIGNUP_ALLOWLIST` to comma-separated owner test emails. Public tenant creation stays closed unless explicitly enabled or allowlisted; invited users can still register through valid active-tenant invites.
 - Login Turnstile is enabled automatically when both Turnstile secrets are present; local/dev remains open when they are absent.
 - Cloudflare edge security before public launch: enable Managed WAF rules, OWASP managed rules where available, and rate limits/challenges for `/login`, `/register`, `/forgot-password`, `/account-deletion`, and public API abuse paths. Do not challenge token/device-auth service paths: billing webhooks, smoke/schema readiness, temperature ingest, camera ingest, and operational-event processing.
@@ -150,7 +150,7 @@ Before entering information for three real restaurants, complete this gate in or
 1. Run local/static validation: `npm.cmd run test:static`.
 2. Confirm repo is pushed and Cloudflare deployment passed for the same commit you intend to test.
 3. Enable private signup protection on the target environment with `PUBLIC_SIGNUP_ENABLED=false` and `OWNER_SIGNUP_ALLOWLIST` set to approved owner test emails.
-4. Confirm Cloudflare bindings/secrets on the target environment: `DB`, `DOC_MEDIA`, `CAMERA_MEDIA`, `APP_BASE_URL`, `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO_EMAIL`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `PUBLIC_SIGNUP_ENABLED`, and `OWNER_SIGNUP_ALLOWLIST`.
+4. Confirm Cloudflare bindings/secrets on the target environment: `DB`, `DOC_MEDIA`, `CAMERA_MEDIA`, `APP_BASE_URL`, `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `PASSWORD_PEPPER`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO_EMAIL`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `PUBLIC_SIGNUP_ENABLED`, and `OWNER_SIGNUP_ALLOWLIST`.
 5. Create or confirm a D1 backup/export before loading real tenant data.
 6. Run production schema readiness against the exact Pages environment being tested: `npm.cmd run schema:readiness:prod`.
 7. Run production smoke against the exact Pages environment being tested: `npm.cmd run smoke:prod`.
@@ -184,7 +184,7 @@ This is the only active completion list. Work it in order and do not create scat
 
 1. Cloudflare private validation setup
 - Enable private test protection on the target Pages environment.
-- Confirm `DB`, `DOC_MEDIA`, `CAMERA_MEDIA`, `APP_BASE_URL`, `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, Resend secrets, billing secrets, Turnstile secrets, and private test gate secrets.
+- Confirm `DB`, `DOC_MEDIA`, `CAMERA_MEDIA`, `APP_BASE_URL`, `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `PASSWORD_PEPPER`, Resend secrets, billing secrets, and Turnstile secrets.
 - Export D1 before loading real tenant data.
 - Run `npm.cmd run schema:readiness:prod` and `npm.cmd run smoke:prod` against the exact deployment being tested.
 

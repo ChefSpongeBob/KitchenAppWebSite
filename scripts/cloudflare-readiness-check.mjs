@@ -67,6 +67,7 @@ expect('Public billing webhook routes are allowed', hooks.includes('/api/billing
 
 const appTypes = read('src/app.d.ts');
 expect('Cloudflare env supports signup allowlist lock', appTypes.includes('PUBLIC_SIGNUP_ENABLED') && appTypes.includes('OWNER_SIGNUP_ALLOWLIST'));
+expect('Cloudflare env supports password pepper secret', appTypes.includes('PASSWORD_PEPPER'));
 
 const readinessEndpoint = read('src/routes/api/internal/schema-readiness/+server.ts');
 expect('Schema readiness checks store products', readinessEndpoint.includes('store_products'));
@@ -90,6 +91,7 @@ const playbook = read('docs/PROJECT_HANDOFF.md');
 expect('Deploy playbook references DB binding, not old kitchen binding', playbook.includes('d1 execute DB --remote') && !playbook.includes('d1 execute kitchen --remote'));
 expect('Deploy playbook includes Cloudflare readiness check', playbook.includes('npm run test:cloudflare-readiness'));
 expect('Deploy playbook lists sensitive encryption secret', playbook.includes('SENSITIVE_DATA_KEY'));
+expect('Deploy playbook lists password pepper secret', playbook.includes('PASSWORD_PEPPER'));
 
 const gitignore = read('.gitignore');
 expect('Local database backup folder is ignored', gitignore.includes('.db-backups/'));

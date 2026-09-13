@@ -32,6 +32,7 @@ declare global {
 				TURNSTILE_SECRET_KEY?: string;
 				PUBLIC_SIGNUP_ENABLED?: string;
 				OWNER_SIGNUP_ALLOWLIST?: string;
+				PASSWORD_PEPPER?: string;
 			};
 		}
 

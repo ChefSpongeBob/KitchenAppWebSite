@@ -28,8 +28,10 @@ expect('src/lib/server/security.ts', 'shared security helper exists', (source) =
   source.includes('hashedAuditValue')
 );
 
-expect('src/lib/server/auth.ts', 'password hashing uses high-iteration salted PBKDF2 and rehash upgrades', (source) =>
-  source.includes('const PASSWORD_ITERATIONS = 150_000') &&
+expect('src/lib/server/auth.ts', 'password hashing uses Cloudflare-safe salted peppered PBKDF2 and rehash upgrades', (source) =>
+  source.includes("const PASSWORD_SCHEME = 'pbkdf2_sha256_peppered'") &&
+  source.includes('const PASSWORD_ITERATIONS = 100_000') &&
+  source.includes('PASSWORD_PEPPER') &&
   source.includes('const PASSWORD_SALT_BYTES = 16') &&
   source.includes('async function tryUpgradePasswordHash') &&
   source.includes('needsRehash = iterations < PASSWORD_ITERATIONS') &&

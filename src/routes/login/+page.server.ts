@@ -308,7 +308,7 @@ export const actions: Actions = {
 				return fail(403, { error: 'Your account is not active yet. Contact your workspace admin for access.', email });
 			}
 
-			const passwordCheck = await verifyPassword(password, user.password_hash);
+			const passwordCheck = await verifyPassword(password, user.password_hash, platform?.env);
 			if (!passwordCheck.valid) {
 				const auditBusinessId = await resolvePrimaryBusinessIdForUser(db, user.id);
 				await writeAuditLogSafe(db, {

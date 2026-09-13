@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ request, params, locals, getClientAddress }) => {
+  default: async ({ request, params, locals, platform, getClientAddress }) => {
     try {
       const db = locals.DB;
       if (!db) {
@@ -57,7 +57,7 @@ export const actions: Actions = {
       }
 
       const now = Math.floor(Date.now() / 1000);
-      const passwordHash = await hashPassword(password);
+      const passwordHash = await hashPassword(password, platform?.env);
 
       await db.batch([
         db

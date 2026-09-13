@@ -1,9 +1,14 @@
-const PASSWORD_SCHEME = 'pbkdf2_sha256';
+const PASSWORD_SCHEME = 'pbkdf2_sha256_peppered';
+const LEGACY_PASSWORD_SCHEME = 'pbkdf2_sha256';
 const MIN_PBKDF2_ITERATIONS = 100_000;
-const PASSWORD_ITERATIONS = 150_000;
-const MAX_PBKDF2_ITERATIONS = 1_200_000;
+const PASSWORD_ITERATIONS = 100_000;
+const MAX_PBKDF2_ITERATIONS = 100_000;
+const MAX_LEGACY_PBKDF2_ITERATIONS = 1_200_000;
 const PASSWORD_KEY_BYTES = 32;
 const PASSWORD_SALT_BYTES = 16;
+const LOCAL_DEV_PASSWORD_PEPPER = 'crimini-local-development-password-pepper';
+
+type PasswordEnv = Partial<Pick<App.Platform['env'], 'PASSWORD_PEPPER'>>;
 
 function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes)
@@ -26,6 +31,22 @@ function toExactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	return buffer;
 }
 
+function nodeEnvValue(key: string) {
+	const nodeProcess = (
+		globalThis as typeof globalThis & {
+			process?: { env?: Record<string, string | undefined> };
+		}
+	).process;
+	return nodeProcess?.env?.[key]?.trim() ?? '';
+}
+
+function passwordPepper(env?: PasswordEnv) {
+	const configured = env?.PASSWORD_PEPPER?.trim() || nodeEnvValue('PASSWORD_PEPPER');
+	if (configured) return configured;
+	if (nodeEnvValue('NODE_ENV') !== 'production') return LOCAL_DEV_PASSWORD_PEPPER;
+	throw new Error('PASSWORD_PEPPER is required.');
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
 	if (a.length !== b.length) return false;
 	let diff = 0;
@@ -38,9 +59,11 @@ function timingSafeEqual(a: string, b: string): boolean {
 async function pbkdf2Hex(
 	password: string,
 	saltHex: string,
-	iterations: number
+	iterations: number,
+	pepper?: string
 ): Promise<string> {
-	const passwordBytes = new TextEncoder().encode(password);
+	const passwordMaterial = pepper ? `${password}\u0000${pepper}` : password;
+	const passwordBytes = new TextEncoder().encode(passwordMaterial);
 	const saltBytes = fromHex(saltHex);
 	const key = await crypto.subtle.importKey(
 		'raw',
@@ -68,22 +91,25 @@ export async function sha256Hex(input: string): Promise<string> {
 	return toHex(new Uint8Array(digest));
 }
 
-export async function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string, env?: PasswordEnv): Promise<string> {
 	const salt = crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
 	const saltHex = toHex(salt);
-	const hashHex = await pbkdf2Hex(password, saltHex, PASSWORD_ITERATIONS);
+	const hashHex = await pbkdf2Hex(password, saltHex, PASSWORD_ITERATIONS, passwordPepper(env));
 	return `${PASSWORD_SCHEME}$${PASSWORD_ITERATIONS}$${saltHex}$${hashHex}`;
 }
 
-async function tryUpgradePasswordHash(password: string): Promise<string | undefined> {
+async function tryUpgradePasswordHash(
+	password: string,
+	env?: PasswordEnv
+): Promise<string | undefined> {
 	try {
-		return await hashPassword(password);
+		return await hashPassword(password, env);
 	} catch {
 		return undefined;
 	}
 }
 
-export async function verifyPassword(password: string, storedHash: string): Promise<{
+export async function verifyPassword(password: string, storedHash: string, env?: PasswordEnv): Promise<{
 	valid: boolean;
 	needsRehash: boolean;
 	upgradedHash?: string;
@@ -98,11 +124,39 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 			return { valid: false, needsRehash: false };
 		}
 		try {
-			const actual = await pbkdf2Hex(password, saltHex, iterations);
+			const actual = await pbkdf2Hex(password, saltHex, iterations, passwordPepper(env));
 			const valid = timingSafeEqual(actual, expected);
 			if (!valid) return { valid: false, needsRehash: false };
 			const needsRehash = iterations < PASSWORD_ITERATIONS;
-			const upgradedHash = needsRehash ? await tryUpgradePasswordHash(password) : undefined;
+			const upgradedHash = needsRehash ? await tryUpgradePasswordHash(password, env) : undefined;
+			return {
+				valid: true,
+				needsRehash: Boolean(upgradedHash),
+				upgradedHash
+			};
+		} catch {
+			return { valid: false, needsRehash: false };
+		}
+	}
+
+	if (storedHash.startsWith(`${LEGACY_PASSWORD_SCHEME}$`)) {
+		const parts = storedHash.split('$');
+		if (parts.length !== 4) return { valid: false, needsRehash: false };
+		const iterations = Number(parts[1]);
+		const saltHex = parts[2];
+		const expected = parts[3];
+		if (
+			!Number.isFinite(iterations) ||
+			iterations < MIN_PBKDF2_ITERATIONS ||
+			iterations > MAX_LEGACY_PBKDF2_ITERATIONS
+		) {
+			return { valid: false, needsRehash: false };
+		}
+		try {
+			const actual = await pbkdf2Hex(password, saltHex, iterations);
+			const valid = timingSafeEqual(actual, expected);
+			if (!valid) return { valid: false, needsRehash: false };
+			const upgradedHash = await tryUpgradePasswordHash(password, env);
 			return {
 				valid: true,
 				needsRehash: Boolean(upgradedHash),
@@ -120,7 +174,7 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 	return {
 		valid: true,
 		needsRehash: true,
-		upgradedHash: await tryUpgradePasswordHash(password)
+		upgradedHash: await tryUpgradePasswordHash(password, env)
 	};
 }
 

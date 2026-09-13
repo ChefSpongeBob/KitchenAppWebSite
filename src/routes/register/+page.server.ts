@@ -573,7 +573,7 @@ export const actions: Actions = {
 
 			registerPhase = 'password_hash';
 			const userId = crypto.randomUUID();
-			const passwordHash = await hashPassword(password);
+			const passwordHash = await hashPassword(password, platform?.env);
 			let resolvedBusinessId: string | null = null;
 
 			registerPhase = 'create_user';
