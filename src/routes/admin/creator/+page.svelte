@@ -487,29 +487,16 @@
                     <small>{category.section.items.length} item{category.section.items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
-                    <div class="category-tools">
-                      <form method="POST" action="?/update_checklist_category" use:enhance={withFeedback} class="inline-form">
-                        <input type="hidden" name="base_slug" value={category.id} />
-                        <input name="title" value={category.title} required />
-                        <button type="submit">Rename Category</button>
-                      </form>
-                      <form method="POST" action="?/delete_checklist_category" use:enhance={withFeedback}>
-                        <input type="hidden" name="base_slug" value={category.id} />
-                        <button type="submit" class="danger">Delete Category</button>
-                      </form>
-                    </div>
-
                     <div class="entity-items">
                         <div class="entity-item">
-                          <div class="section-head">
-                            <strong>{category.title}</strong>
-                            <small>{category.section.items.length} item{category.section.items.length === 1 ? '' : 's'}</small>
+                          <div class="item-composer">
+                            <h4><span class="material-icons" aria-hidden="true">add</span>Add item</h4>
+                            <form method="POST" action="?/add_checklist_item" use:enhance={withResetFeedback} class="item-composer-form">
+                              <input type="hidden" name="section_id" value={category.section.id} />
+                              <input name="content" aria-label="Checklist item name" placeholder="Item name" required />
+                              <button type="submit">Add Item</button>
+                            </form>
                           </div>
-                          <form method="POST" action="?/add_checklist_item" use:enhance={withResetFeedback} class="inline-form">
-                            <input type="hidden" name="section_id" value={category.section.id} />
-                            <input name="content" placeholder="New checklist item" required />
-                            <button type="submit">Add Item</button>
-                          </form>
                           {#if category.section.items.length === 0}
                             <p class="empty">No items yet.</p>
                           {:else}
@@ -579,6 +566,20 @@
                           {/if}
                         </div>
                     </div>
+                    <details class="category-settings">
+                      <summary>Category settings</summary>
+                      <div class="category-tools">
+                        <form method="POST" action="?/update_checklist_category" use:enhance={withFeedback} class="inline-form">
+                          <input type="hidden" name="base_slug" value={category.id} />
+                          <input name="title" value={category.title} required />
+                          <button type="submit">Rename Category</button>
+                        </form>
+                        <form method="POST" action="?/delete_checklist_category" use:enhance={withFeedback}>
+                          <input type="hidden" name="base_slug" value={category.id} />
+                          <button type="submit" class="danger">Delete Category</button>
+                        </form>
+                      </div>
+                    </details>
                   </div>
                 </details>
               {/each}
@@ -612,24 +613,16 @@
                     <small>{section.items.length} item{section.items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
-                    <form method="POST" action="?/update_list_section" use:enhance={withFeedback} class="inline-form">
-                      <input type="hidden" name="section_id" value={section.id} />
-                      <input name="title" value={section.title} required />
-                      <input name="description" value={section.description} placeholder="Description" />
-                      <button type="submit">Save Category</button>
-                    </form>
-                    <form method="POST" action="?/delete_list_section" use:enhance={withFeedback}>
-                      <input type="hidden" name="section_id" value={section.id} />
-                      <button type="submit" class="danger">Delete Category</button>
-                    </form>
-
-                    <form method="POST" action="?/add_list_item" use:enhance={withResetFeedback} class="inline-form">
-                      <input type="hidden" name="section_id" value={section.id} />
-                      <input name="content" placeholder="New item" required />
-                      <input name="details" placeholder="Optional details" />
-                      <input name="par_count" type="number" min="0" step="0.1" value="0" />
-                      <button type="submit">Add Item</button>
-                    </form>
+                    <div class="item-composer">
+                      <h4><span class="material-icons" aria-hidden="true">add</span>Add item</h4>
+                      <form method="POST" action="?/add_list_item" use:enhance={withResetFeedback} class="item-composer-form">
+                        <input type="hidden" name="section_id" value={section.id} />
+                        <input name="content" aria-label="List item name" placeholder="Item name" required />
+                        <input name="details" aria-label="Item details" placeholder="Details (optional)" />
+                        <input name="par_count" aria-label="Par count" type="number" min="0" step="0.1" value="0" />
+                        <button type="submit">Add Item</button>
+                      </form>
+                    </div>
 
                     <div class="entity-items">
                       {#if section.items.length === 0}
@@ -700,6 +693,21 @@
                         {/each}
                       {/if}
                     </div>
+                    <details class="category-settings">
+                      <summary>Category settings</summary>
+                      <div class="category-tools">
+                        <form method="POST" action="?/update_list_section" use:enhance={withFeedback} class="inline-form">
+                          <input type="hidden" name="section_id" value={section.id} />
+                          <input name="title" value={section.title} required />
+                          <input name="description" value={section.description} placeholder="Description" />
+                          <button type="submit">Save Category</button>
+                        </form>
+                        <form method="POST" action="?/delete_list_section" use:enhance={withFeedback}>
+                          <input type="hidden" name="section_id" value={section.id} />
+                          <button type="submit" class="danger">Delete Category</button>
+                        </form>
+                      </div>
+                    </details>
                   </div>
                 </details>
               {/each}
@@ -1159,6 +1167,67 @@
     gap: 0.55rem;
   }
 
+  .item-composer {
+    display: grid;
+    gap: 0.48rem;
+    padding: 0.72rem 0 0.85rem;
+    border-top: 1px solid var(--color-text);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .item-composer h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+    color: var(--color-text);
+    font-size: 0.86rem;
+  }
+
+  .item-composer h4 .material-icons {
+    font-size: 1.1rem;
+  }
+
+  .item-composer-form {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: end;
+  }
+
+  .item-composer-form input[name='content'] {
+    grid-column: 1 / -1;
+    border-bottom-color: var(--color-text);
+    font-size: 0.9rem;
+  }
+
+  .item-composer-form button {
+    border-bottom-color: var(--color-text);
+    font-weight: var(--weight-semibold);
+  }
+
+  .category-settings {
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .category-settings > summary {
+    width: fit-content;
+    cursor: pointer;
+    list-style: none;
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .category-settings > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .category-settings .category-tools {
+    margin-top: 0.55rem;
+  }
+
   .entity-items {
     display: grid;
     gap: 0.4rem;
@@ -1246,13 +1315,6 @@
     font-size: 0.72rem;
   }
 
-  .section-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.6rem;
-    align-items: center;
-  }
-
   .category-tools {
     display: flex;
     flex-wrap: wrap;
@@ -1335,6 +1397,10 @@
     }
 
     .create-form {
+      grid-template-columns: 1fr;
+    }
+
+    .item-composer-form {
       grid-template-columns: 1fr;
     }
   }
