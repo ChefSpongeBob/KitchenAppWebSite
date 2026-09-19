@@ -374,6 +374,15 @@ export function normalizeSlug(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
+function listSlugFromTitle(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 function normalizeCategoryName(value: string) {
   return value.trim().replace(/\s+/g, ' ');
 }
@@ -3959,15 +3968,13 @@ export async function createListSection(request: Request, locals: App.Locals) {
   const firstItem = formString(formData, 'first_item', 160);
   const firstDetails = formMultilineString(formData, 'first_details', 500);
   const firstParCountRaw = Number(formData.get('first_par_count') ?? 0);
-  const slug = normalizeSlug(requestedSlug || title);
+  const slug = listSlugFromTitle(requestedSlug || title);
 
   if (domain !== 'preplists' && domain !== 'inventory' && domain !== 'orders') {
     return fail(400, { error: 'Invalid list type.' });
   }
   if (!title) return fail(400, { error: 'Section title is required.' });
-  if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
-    return fail(400, { error: 'Section slug can only use letters, numbers, and hyphens.' });
-  }
+  if (!slug) return fail(400, { error: 'Include letters or numbers in the list name.' });
   if (firstItem && (!Number.isFinite(firstParCountRaw) || firstParCountRaw < 0)) {
     return fail(400, { error: 'First item par count must be a valid non-negative number.' });
   }
@@ -3984,7 +3991,7 @@ export async function createListSection(request: Request, locals: App.Locals) {
     .bind(domain, slug, businessId)
     .first<{ id: string }>();
   if (existing) {
-    return fail(400, { error: `A ${domain} section already exists with slug "${slug}".` });
+    return fail(400, { error: 'A list with this name already exists.' });
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -4124,12 +4131,10 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
   const title = formString(formData, 'title', 120);
   const requestedSlug = String(formData.get('slug') ?? '').trim();
   const description = formMultilineString(formData, 'description', 400);
-  const baseSlug = normalizeSlug(requestedSlug || title);
+  const baseSlug = listSlugFromTitle(requestedSlug || title);
 
   if (!title) return fail(400, { error: 'Checklist category title is required.' });
-  if (!baseSlug || !/^[a-z0-9-]+$/.test(baseSlug)) {
-    return fail(400, { error: 'Checklist category slug can only use letters, numbers, and hyphens.' });
-  }
+  if (!baseSlug) return fail(400, { error: 'Include letters or numbers in the checklist name.' });
 
   if (!(await tableExists(db, 'checklist_sections')) || !(await tableExists(db, 'checklist_items'))) {
     return fail(503, { error: 'Checklist tables are not available yet.' });
@@ -4150,7 +4155,7 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
       .bind(section.slug, businessId)
       .first<{ id: string }>();
     if (existing) {
-      return fail(400, { error: `Checklist section slug "${section.slug}" already exists.` });
+      return fail(400, { error: 'A checklist with this name already exists.' });
     }
   }
 
@@ -4189,15 +4194,13 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
   const formData = await request.formData();
   const previousBaseSlug = normalizeSlug(String(formData.get('base_slug') ?? ''));
   const nextTitle = formString(formData, 'title', 120);
-  const nextBaseSlug = normalizeSlug(String(formData.get('next_slug') ?? nextTitle));
+  const nextBaseSlug = listSlugFromTitle(String(formData.get('next_slug') ?? nextTitle));
   const description = formMultilineString(formData, 'description', 400);
 
   if (!previousBaseSlug || !nextTitle) {
     return fail(400, { error: 'Checklist category title is required.' });
   }
-  if (!nextBaseSlug || !/^[a-z0-9-]+$/.test(nextBaseSlug)) {
-    return fail(400, { error: 'Checklist category slug can only use letters, numbers, and hyphens.' });
-  }
+  if (!nextBaseSlug) return fail(400, { error: 'Include letters or numbers in the checklist name.' });
 
   const sections = await db
     .prepare(
@@ -4229,7 +4232,7 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
     .bind(businessId, nextBaseSlug)
     .first<{ id: string }>();
   if (conflict && !currentIds.has(conflict.id)) {
-    return fail(400, { error: `Checklist section slug "${nextBaseSlug}" already exists.` });
+    return fail(400, { error: 'A checklist with this name already exists.' });
   }
 
   const now = Math.floor(Date.now() / 1000);
