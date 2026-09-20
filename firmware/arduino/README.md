@@ -6,8 +6,8 @@ Open `CriminiTemperature/CriminiTemperature.ino` in Arduino IDE. Use the Espress
 
 1. Run `node firmware/arduino/tools/provision-manifest.mjs --gateways=1 --nodes=4` from the repo root. Keep `firmware/arduino/generated/` private. The script assigns random unique serials and keys; it will not register hardware by itself.
 2. Apply `generated/iot_inventory.sql` to the intended D1 database. Check that the inserted inventory rows are correct before claiming devices in the app.
-3. For each sensor, copy its generated `sensor-*-*.h` to the sketch folder as `CriminiLocalConfig.h`. Set the actual TNY v1.1 SDA/SCL GPIOs. Set the optional sensor-power and battery-divider pins only if wired. Upload that sketch to that one sensor.
-4. Copy the gateway's generated `gateway-*.h` to the sketch folder as `CriminiLocalConfig.h`. Fill Wi-Fi and the current trusted root CA PEM. Upload to the gateway. The generated known-node table must contain the matching sensor serials and secrets.
+3. For each sensor, copy its generated `sensor-*-*.h` to the sketch folder as `CriminiLocalConfig.h`. TNY v1.1 wiring is VDD to 3.3V, GND to G, SDA to GPIO18, and SCL to GPIO19. Set the optional battery-divider pin only if wired. Upload that sketch to that one sensor.
+4. Copy the gateway's generated `gateway-*.h` to the sketch folder as `CriminiLocalConfig.h`. The current gateway uses the same ESP32-C6 board. Fill Wi-Fi and the current trusted root CA PEM, then upload. The generated known-node table must contain the matching sensor serials and secrets. A future ESP32-C6-WROOM-1U gateway requires antenna and RF validation, not a guessed firmware change.
 5. In the app, register the gateway serial and its nodes with their assigned serials. The gateway authenticates to `/api/temps`; nodes never receive Wi-Fi or cloud credentials.
 
 For an IDE compile check before provisioning, copy `CriminiLocalConfig.example.h` to `CriminiLocalConfig.h`. Its empty identity and pin values deliberately disable transmission. `CriminiLocalConfig.h` and `generated/` are git-ignored.

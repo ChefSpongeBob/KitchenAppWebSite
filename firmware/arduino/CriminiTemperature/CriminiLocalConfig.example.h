@@ -12,10 +12,10 @@
 #define CRIMINI_GATEWAY_SHORT_ADDR 0x0001
 #define CRIMINI_NODE_SHORT_ADDR 0x1001
 
-// Set these to the GPIO numbers actually wired on the TNY v1.1 board.
-#define CRIMINI_I2C_SDA_GPIO -1
-#define CRIMINI_I2C_SCL_GPIO -1
-#define CRIMINI_SENSOR_POWER_GPIO -1  // -1 if sensors are always powered.
+// TNY v1.1 wiring: sensor VDD to 3.3V, GND to G, SDA to GPIO18, SCL to GPIO19.
+#define CRIMINI_I2C_SDA_GPIO 18
+#define CRIMINI_I2C_SCL_GPIO 19
+#define CRIMINI_SENSOR_POWER_GPIO -1  // Sensor VDD is always powered from 3.3V.
 #define CRIMINI_AHT20_ADDRESS 0x38
 #define CRIMINI_BMP280_ADDRESS 0x77
 
