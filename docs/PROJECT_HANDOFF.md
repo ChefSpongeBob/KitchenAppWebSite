@@ -205,7 +205,7 @@ This is the only active completion list. Work it in order and do not create scat
 - Provision gateway and sensor-node serials into `iot_device_inventory`.
 - Claim a gateway in `/admin/sensors`, assign sensor nodes, ingest gateway-authenticated readings, and confirm wrong tenant, wrong gateway, unassigned, and revoked readings are rejected.
 - Tune thresholds by sensor type and verify high, low, stale, offline, recovery, dashboard, polling, and report behavior.
-- Phase 5 hardware pass: backend/provisioning now expects ESP32-C6FH4 nodes to send AHT20 temperature/humidity plus packet sequence, wake nonce, battery, RSSI/LQI diagnostics through the claimed gateway; the checked-in ESP-NOW firmware remains prototype reference until the raw IEEE 802.15.4 gateway/node firmware is written.
+- Phase 5 hardware pass: `firmware/arduino/CriminiTemperature/` contains the Arduino IDE node and gateway roles for raw IEEE 802.15.4. The node sends AHT20 temperature/humidity, packet sequence, wake nonce, and optional battery data; the gateway adds RSSI/LQI and posts authenticated batches. Both roles compile with the installed ESP32 Arduino core 3.3.10; real-board validation remains open.
 - Phase 5 remaining needs: flash real boards, validate battery draw, radio range, enclosure performance, final FCC/module compliance, and live sensor ingest under private tenant testing.
 
 6. Scheduling validation

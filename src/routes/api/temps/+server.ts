@@ -186,11 +186,14 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   const rawReadings = rawItems
     .map((entry) => normalizeReading((entry ?? {}) as Record<string, unknown>))
     .filter((entry): entry is RawTempRow => entry !== null);
+  if (rawReadings.length !== rawItems.length) {
+    return json({ error: 'Invalid reading in batch.' }, { status: 400 });
+  }
   const resolved = await Promise.all(rawReadings.map((entry) => resolveReadingSensor(db, businessId, device.id, entry)));
   const items = resolved.filter((entry): entry is TempRow => entry !== null);
 
-  if (items.length === 0) {
-    return json({ error: 'No valid readings supplied' }, { status: 400 });
+  if (items.length === 0 || items.length !== rawReadings.length) {
+    return json({ error: 'Reading batch includes an unregistered or unavailable sensor.' }, { status: 400 });
   }
 
   const sensorSignature = items
@@ -210,11 +213,9 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   if (!allowed) {
     return json(
       {
-        inserted: 0,
-        skipped: true,
-        message: 'Duplicate temp batch ignored.'
+        error: 'Reading batch is being retried too quickly.'
       },
-      { status: 202 }
+      { status: 429, headers: { 'Retry-After': '60' } }
     );
   }
 
@@ -222,7 +223,7 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
     db
       .prepare(
         `
-        INSERT INTO temps (sensor_id, temperature, humidity_pct, packet_sequence, wake_nonce, lqi, ts, business_id)
+        INSERT OR IGNORE INTO temps (sensor_id, temperature, humidity_pct, packet_sequence, wake_nonce, lqi, ts, business_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `
       )
@@ -238,14 +239,15 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
       )
   );
 
-  await db.batch(statements);
-  await evaluateTemperatureReadings(db, {
+  const results = await db.batch(statements);
+  const insertedRows = items.filter((_, index) => (results[index]?.meta?.changes ?? 0) > 0);
+  if (insertedRows.length > 0) await evaluateTemperatureReadings(db, {
     businessId,
     deviceId: device.externalDeviceId,
-    readings: items,
+    readings: insertedRows,
     request
   });
-  await recordOperationalEventBestEffort(
+  if (insertedRows.length > 0) await recordOperationalEventBestEffort(
     db,
     {
       businessId,
@@ -257,18 +259,18 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
       title: 'Temperature readings received',
       dedupeKey: guardKey,
       payload: {
-        inserted: items.length,
-        sensors: items.map((item) => item.sensor_id),
-        humidity: items.some((item) => item.humidity_pct !== null),
+        inserted: insertedRows.length,
+        sensors: insertedRows.map((item) => item.sensor_id),
+        humidity: insertedRows.some((item) => item.humidity_pct !== null),
         radio: {
           protocol: 'ieee802154',
-          packetMetadata: items.some((item) => item.packet_sequence !== null || item.wake_nonce !== null),
-          linkQuality: items.some((item) => item.lqi !== null)
+          packetMetadata: insertedRows.some((item) => item.packet_sequence !== null || item.wake_nonce !== null),
+          linkQuality: insertedRows.some((item) => item.lqi !== null)
         }
       }
     },
     request
   );
   await cleanupExpiredTemps(db);
-  return json({ inserted: items.length }, { status: 201 });
+  return json({ accepted: items.length, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
 };

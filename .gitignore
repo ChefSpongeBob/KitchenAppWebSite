@@ -45,3 +45,5 @@ android/app/google-services.json
 firmware/**/include/crimini_iot_config.h
 firmware/**/main/crimini_config.h
 firmware/**/generated/
+firmware/arduino/CriminiTemperature/CriminiLocalConfig.h
+firmware/arduino/generated/
