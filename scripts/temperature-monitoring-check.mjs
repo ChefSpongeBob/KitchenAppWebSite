@@ -58,6 +58,20 @@ expect('src/lib/server/temperatureDeviceProvisioning.ts', 'temperature provision
   source.includes('lqi')
 );
 
+expect('src/lib/server/temperatureDeviceProvisioning.ts', 'node registration needs only a unique serial and tenant gateway', (source) =>
+  !source.includes("loadInventory(db, nodeSerial, 'sensor_node')") &&
+  source.includes('WHERE temperature_sensor_nodes.business_id = excluded.business_id')
+);
+
+expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'standalone node reads AHT20 and deep sleeps', (source) =>
+  source.includes('NODE_SERIAL') && source.includes('readAht20') && source.includes('esp_deep_sleep_start')
+);
+
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'standalone gateway verifies TLS and authenticates uploads', (source) =>
+  source.includes('FACTORY_GATEWAY_CREDENTIAL') && source.includes('esp_crt_bundle_attach') &&
+  source.includes('"x-device-key"') && !source.includes('setInsecure')
+);
+
 expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds, stale state, acknowledgement, and recovery', (source) =>
   source.includes('evaluateTemperatureReadings') &&
   source.includes('processTemperatureStaleAlerts') &&
@@ -129,7 +143,7 @@ expect('package.json', 'static suite includes temperature monitoring check', (so
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 5 temperature pass', (source) =>
-  source.includes('Temperature hardware model now targets ESP32-C6FH4 AHT20/BMP280 sensor nodes') &&
+  source.includes('Temperature hardware uses separate Arduino sketches') &&
   source.includes('Phase 5 hardware pass') &&
   source.includes('Phase 5 remaining needs') &&
   source.includes('sensor ingest')

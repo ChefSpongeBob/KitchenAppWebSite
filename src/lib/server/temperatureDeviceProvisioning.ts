@@ -306,6 +306,9 @@ export async function claimTemperatureGateway(
   const serial = normalizeDeviceSerial(input.serial);
   const displayName = input.displayName.trim();
   if (!serial) throw new Error('Gateway serial is required.');
+  if (input.serial.trim().toLowerCase() !== serial || serial.length >= 32) {
+    throw new Error('Use a gateway serial of up to 31 letters, numbers, hyphens, or underscores.');
+  }
   if (!displayName) throw new Error('Name is required.');
 
   const now = Math.floor(Date.now() / 1000);
@@ -405,6 +408,9 @@ export async function claimTemperatureSensorNode(
   const nodeSerial = normalizeDeviceSerial(input.nodeSerial);
   const displayName = input.displayName.trim();
   if (!nodeSerial) throw new Error('Sensor serial is required.');
+  if (input.nodeSerial.trim().toLowerCase() !== nodeSerial || nodeSerial.length >= 32) {
+    throw new Error('Use a sensor serial of up to 31 letters, numbers, hyphens, or underscores.');
+  }
   if (!displayName) throw new Error('Name is required.');
 
   const gateway = await db
@@ -424,15 +430,13 @@ export async function claimTemperatureSensorNode(
     .first<{ id: string }>();
   if (!gateway) throw new Error('Choose an active gateway.');
 
-  const inventory = await loadInventory(db, nodeSerial, 'sensor_node');
-  if (!inventory) throw new Error('Sensor serial is not in device inventory.');
-  if (inventory.claim_status === 'revoked') throw new Error('Sensor serial is not available.');
-  if (inventory.claimed_business_id && inventory.claimed_business_id !== input.businessId) {
-    throw new Error('Sensor serial is already assigned.');
-  }
-
   const now = Math.floor(Date.now() / 1000);
   const sensorId = sensorNodeIdFromSerial(nodeSerial);
+  const collision = await db
+    .prepare(`SELECT node_serial FROM temperature_sensor_nodes WHERE sensor_id = ? AND node_serial <> ? LIMIT 1`)
+    .bind(sensorId, nodeSerial)
+    .first<{ node_serial: string }>();
+  if (collision) throw new Error('This sensor serial conflicts with an existing sensor. Choose a different serial.');
   const existing = await db
     .prepare(
       `
@@ -448,7 +452,7 @@ export async function claimTemperatureSensorNode(
   if (existing && existing.business_id !== input.businessId) throw new Error('Sensor serial is already assigned.');
   const nodeId = existing?.id ?? crypto.randomUUID();
 
-  await db
+  const saved = await db
     .prepare(
       `
       INSERT INTO temperature_sensor_nodes (
@@ -466,6 +470,7 @@ export async function claimTemperatureSensorNode(
         is_active = 1,
         revoked_at = NULL,
         updated_at = excluded.updated_at
+      WHERE temperature_sensor_nodes.business_id = excluded.business_id
       `
     )
     .bind(
@@ -475,13 +480,14 @@ export async function claimTemperatureSensorNode(
       nodeSerial,
       sensorId,
       displayName,
-      inventory.hardware_model,
-      inventory.firmware_version,
+      'esp32c6fh4-aht20-bmp280-node',
+      '1.0.0',
       input.createdBy ?? null,
       now,
       now
     )
     .run();
+  if ((saved.meta?.changes ?? 0) !== 1) throw new Error('Sensor serial is already assigned.');
 
   await db
     .prepare(
@@ -505,21 +511,6 @@ export async function claimTemperatureSensorNode(
       `
     )
     .bind(sensorId, displayName, now, input.businessId)
-    .run();
-
-  await db
-    .prepare(
-      `
-      UPDATE iot_device_inventory
-      SET claim_status = 'claimed',
-          claimed_business_id = ?,
-          claimed_iot_device_id = ?,
-          claimed_at = COALESCE(claimed_at, ?),
-          updated_at = ?
-      WHERE serial = ?
-      `
-    )
-    .bind(input.businessId, input.gatewayDeviceId, now, now, nodeSerial)
     .run();
 
   return { id: nodeId, nodeSerial, sensorId };
@@ -554,20 +545,6 @@ export async function revokeTemperatureSensorNode(db: D1, businessId: string, no
     .bind(now, now, nodeId, businessId)
     .run();
 
-  await db
-    .prepare(
-      `
-      UPDATE iot_device_inventory
-      SET claim_status = 'available',
-          claimed_business_id = NULL,
-          claimed_iot_device_id = NULL,
-          claimed_at = NULL,
-          updated_at = ?
-      WHERE serial = ?
-      `
-    )
-    .bind(now, node.node_serial)
-    .run();
 }
 
 export async function resolveGatewayNodeReading(
