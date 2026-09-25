@@ -67,9 +67,40 @@ expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'standalone node 
   source.includes('NODE_SERIAL') && source.includes('readAht20') && source.includes('esp_deep_sleep_start')
 );
 
+expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node signs version 2 radio packets with a separate factory secret', (source) =>
+  source.includes('packet.version = 2') &&
+  source.includes('RADIO_SECRET') &&
+  source.includes('mbedtls_md_hmac') &&
+  source.includes('signPacket(packet)') &&
+  source.includes('advanceSequence()') &&
+  source.includes('storage.putUInt("next_seq"') &&
+  source.includes('SLEEP_SECONDS = 300')
+);
+
+expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node configuration accepts full serials and derives a radio address', (source) =>
+  source.includes('const char NODE_SERIAL[] = ""') &&
+  source.includes('const char RADIO_SECRET[] = ""') &&
+  source.includes('radioAddressFromSerial()') &&
+  !source.includes('NODE_ADDRESS =')
+);
+
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'standalone gateway verifies TLS and authenticates uploads', (source) =>
   source.includes('FACTORY_GATEWAY_CREDENTIAL') && source.includes('esp_crt_bundle_attach') &&
   source.includes('"x-device-key"') && !source.includes('setInsecure')
+);
+
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway verifies radio packets before deduplication and upload', (source) =>
+  source.includes('packet.version == 2') &&
+  source.includes('mbedtls_md_hmac') &&
+  source.includes('verifyPacket(packet) && !seenRecently(packet)') &&
+  source.includes('RETRY_INTERVAL_MS = 60000')
+);
+
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gateway selects the external antenna before listening', (source) =>
+  source.includes('#ifndef ARDUINO_XIAO_ESP32C6') &&
+  source.includes('digitalWrite(WIFI_ENABLE, LOW)') &&
+  source.includes('digitalWrite(WIFI_ANT_CONFIG, HIGH)') &&
+  source.indexOf('digitalWrite(WIFI_ANT_CONFIG, HIGH)') < source.indexOf('esp_ieee802154_enable()')
 );
 
 expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds, stale state, acknowledgement, and recovery', (source) =>
@@ -94,6 +125,32 @@ expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rule
   source.includes("'Too many readings supplied.'") &&
   source.includes('eventType:') &&
   source.includes('temperature.reading_batch.received')
+);
+
+expect('src/routes/api/temps/+server.ts', 'temp ingest does not discard valid rows alongside unregistered nodes or refresh replayed nodes', (source) =>
+  source.includes('const rejected = rawReadings.length - items.length') &&
+  source.includes('accepted: items.length, rejected, inserted: insertedRows.length') &&
+  source.includes('packet_sequence < ?') &&
+  source.indexOf('const insertedRows =') < source.indexOf('UPDATE temperature_sensor_nodes')
+);
+
+expect('scripts/provision-temperature-gateway.mjs', 'factory provisioning stores a chosen gateway credential hash without generating a secret', (source) =>
+  source.includes("process.env.CRIMINI_GATEWAY_CREDENTIAL") &&
+  source.includes("createHash('sha256')") &&
+  source.includes('keyHash.slice(0, 12)') &&
+  source.includes('INSERT INTO iot_device_inventory') &&
+  source.includes("claim_status = 'available'") &&
+  !source.includes('randomBytes')
+);
+
+expect('package.json', 'gateway provisioning is available as an explicit operations command', (source) =>
+  source.includes('ops:provision-temp-gateway') &&
+  source.includes('provision-temperature-gateway.mjs')
+);
+
+expect('src/lib/server/temperatureDeviceProvisioning.ts', 'node ingest rejects sequences at or below the last accepted reading', (source) =>
+  source.includes('SELECT sensor_id, packet_sequence') &&
+  source.includes('input.packetSequence <= node.packet_sequence')
 );
 
 expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves alert rules', (source) =>

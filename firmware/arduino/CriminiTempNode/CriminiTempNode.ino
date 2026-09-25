@@ -1,10 +1,14 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <Preferences.h>
 #include <esp_ieee802154.h>
 #include <esp_sleep.h>
+#include <mbedtls/md.h>
 
 // Set this serial before uploading each sensor.
 const char NODE_SERIAL[] = "";
+// Factory-set per gateway kit. Put the same value in its gateway sketch; never use the cloud credential here.
+const char RADIO_SECRET[] = "";
 
 constexpr int SDA_PIN = 18;
 constexpr int SCL_PIN = 19;
@@ -12,9 +16,9 @@ constexpr uint8_t AHT20_ADDRESS = 0x38;
 constexpr uint8_t RADIO_CHANNEL = 20;
 constexpr uint16_t RADIO_PAN = 0xC110;
 constexpr uint16_t GATEWAY_ADDRESS = 0x0001;
-constexpr uint16_t NODE_ADDRESS = 0x1001;
 constexpr uint32_t SLEEP_SECONDS = 300;
 constexpr uint8_t SEND_COUNT = 3;
+constexpr size_t AUTH_TAG_SIZE = 16;
 
 struct __attribute__((packed)) TemperaturePacket {
   uint16_t marker;
@@ -24,9 +28,13 @@ struct __attribute__((packed)) TemperaturePacket {
   char serial[32];
   int32_t temperatureHundredthsF;
   uint16_t humidityHundredths;
+  uint8_t authTag[AUTH_TAG_SIZE];
 };
 
+static_assert(sizeof(TemperaturePacket) + 11 <= 127, "Radio packet exceeds IEEE 802.15.4 frame size");
+
 RTC_DATA_ATTR uint32_t sequenceNumber = 0;
+RTC_DATA_ATTR uint32_t reservedThrough = 0;
 volatile bool transmitFinished = false;
 
 extern "C" void IRAM_ATTR esp_ieee802154_transmit_done(
@@ -77,6 +85,50 @@ bool validSerial() {
   return true;
 }
 
+uint16_t radioAddressFromSerial() {
+  uint32_t hash = 2166136261UL;
+  for (size_t i = 0; NODE_SERIAL[i] != '\0'; ++i) {
+    hash ^= static_cast<uint8_t>(NODE_SERIAL[i]);
+    hash *= 16777619UL;
+  }
+  // 0x0000, the gateway's 0x0001, and 0xffff are reserved here.
+  return static_cast<uint16_t>(2 + (hash % 65532UL));
+}
+
+bool signPacket(TemperaturePacket& packet) {
+  const mbedtls_md_info_t* sha256 = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  uint8_t digest[32] = {};
+  if (!sha256 || mbedtls_md_hmac(sha256,
+      reinterpret_cast<const uint8_t*>(RADIO_SECRET), strlen(RADIO_SECRET),
+      reinterpret_cast<const uint8_t*>(&packet), offsetof(TemperaturePacket, authTag), digest) != 0) return false;
+  memcpy(packet.authTag, digest, AUTH_TAG_SIZE);
+  memset(digest, 0, sizeof(digest));
+  return true;
+}
+
+bool advanceSequence() {
+  if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER) {
+    sequenceNumber = 0;
+    reservedThrough = 0;
+  }
+  if (sequenceNumber < reservedThrough) {
+    ++sequenceNumber;
+    return true;
+  }
+
+  // Reserve 256 readings in flash; normal deep-sleep wakes use only RTC memory.
+  Preferences storage;
+  if (!storage.begin("crimini", false)) return false;
+  const uint32_t next = storage.getUInt("next_seq", 1);
+  const bool valid = next > 0 && next <= UINT32_MAX - 256;
+  const bool saved = valid && storage.putUInt("next_seq", next + 256) == sizeof(uint32_t);
+  storage.end();
+  if (!saved) return false;
+  sequenceNumber = next;
+  reservedThrough = next + 255;
+  return true;
+}
+
 void sleepNow() {
   Wire.end();
   esp_sleep_enable_timer_wakeup(uint64_t(SLEEP_SECONDS + esp_random() % 21) * 1000000ULL);
@@ -87,8 +139,8 @@ void sleepNow() {
 void setup() {
   Serial.begin(115200);
   delay(100);
-  if (!validSerial()) {
-    Serial.println("Set a valid NODE_SERIAL before uploading.");
+  if (!validSerial() || strlen(RADIO_SECRET) < 16) {
+    Serial.println("Set NODE_SERIAL and the factory RADIO_SECRET before uploading.");
     sleepNow();
   }
 
@@ -99,21 +151,29 @@ void setup() {
     Serial.println("AHT20 read failed.");
     sleepNow();
   }
+  if (!advanceSequence()) {
+    Serial.println("Could not reserve packet sequence; reading not sent.");
+    sleepNow();
+  }
 
   TemperaturePacket packet = {};
   packet.marker = 0x4352;
-  packet.version = 1;
-  packet.sequence = ++sequenceNumber;
+  packet.version = 2;
+  packet.sequence = sequenceNumber;
   packet.wakeNonce = esp_random();
   strncpy(packet.serial, NODE_SERIAL, sizeof(packet.serial) - 1);
   packet.temperatureHundredthsF = lroundf(temperatureF * 100.0f);
   packet.humidityHundredths = lroundf(humidity * 100.0f);
+  if (!signPacket(packet)) {
+    Serial.println("Radio packet signing failed.");
+    sleepNow();
+  }
 
   esp_ieee802154_enable();
   esp_ieee802154_set_channel(RADIO_CHANNEL);
   esp_ieee802154_set_txpower(0);
   esp_ieee802154_set_panid(RADIO_PAN);
-  esp_ieee802154_set_short_address(NODE_ADDRESS);
+  esp_ieee802154_set_short_address(radioAddressFromSerial());
   esp_ieee802154_set_rx_when_idle(false);
 
   for (uint8_t attempt = 0; attempt < SEND_COUNT; ++attempt) {
@@ -129,8 +189,9 @@ void setup() {
     frame[5] = RADIO_PAN >> 8;
     frame[6] = GATEWAY_ADDRESS & 0xFF;
     frame[7] = GATEWAY_ADDRESS >> 8;
-    frame[8] = NODE_ADDRESS & 0xFF;
-    frame[9] = NODE_ADDRESS >> 8;
+    const uint16_t nodeAddress = radioAddressFromSerial();
+    frame[8] = nodeAddress & 0xFF;
+    frame[9] = nodeAddress >> 8;
     memcpy(frame + 1 + headerSize, &packet, sizeof(packet));
 
     transmitFinished = false;

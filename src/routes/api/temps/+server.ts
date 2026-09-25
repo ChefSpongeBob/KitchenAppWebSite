@@ -9,11 +9,14 @@ import { evaluateTemperatureReadings, type TemperatureReading } from '$lib/serve
 
 type TempRow = {
   sensor_id: number;
+  node_serial?: string;
   temperature: number;
   humidity_pct: number | null;
   packet_sequence: number | null;
   wake_nonce: string | null;
   lqi: number | null;
+  battery_mv?: number | null;
+  rssi?: number | null;
   ts: number;
 };
 
@@ -61,7 +64,8 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
   const wake_nonce = String(nonceRaw ?? '').trim().slice(0, 64);
   const lqi = Number(lqiRaw);
 
-  if (!node_serial || !Number.isFinite(temperature) || !Number.isFinite(ts)) {
+  if (!node_serial || !Number.isFinite(temperature) || !Number.isFinite(ts) ||
+      !Number.isInteger(packet_sequence) || packet_sequence <= 0 || !wake_nonce) {
     return null;
   }
 
@@ -191,10 +195,8 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   }
   const resolved = await Promise.all(rawReadings.map((entry) => resolveReadingSensor(db, businessId, device.id, entry)));
   const items = resolved.filter((entry): entry is TempRow => entry !== null);
-
-  if (items.length === 0 || items.length !== rawReadings.length) {
-    return json({ error: 'Reading batch includes an unregistered or unavailable sensor.' }, { status: 400 });
-  }
+  const rejected = rawReadings.length - items.length;
+  if (items.length === 0) return json({ accepted: 0, rejected, inserted: 0 });
 
   const sensorSignature = items
     .map((row) => row.sensor_id)
@@ -241,6 +243,35 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
 
   const results = await db.batch(statements);
   const insertedRows = items.filter((_, index) => (results[index]?.meta?.changes ?? 0) > 0);
+  if (insertedRows.length > 0) {
+    const now = Math.floor(Date.now() / 1000);
+    await db.batch(insertedRows.map((row) => db.prepare(`
+      UPDATE temperature_sensor_nodes
+      SET last_seen_at = ?,
+          battery_mv = COALESCE(?, battery_mv),
+          humidity_pct = COALESCE(?, humidity_pct),
+          rssi = COALESCE(?, rssi),
+          packet_sequence = COALESCE(?, packet_sequence),
+          wake_nonce = COALESCE(?, wake_nonce),
+          lqi = COALESCE(?, lqi),
+          updated_at = ?
+      WHERE business_id = ? AND gateway_device_id = ? AND node_serial = ?
+        AND (packet_sequence IS NULL OR packet_sequence < ?)
+    `).bind(
+      now,
+      row.battery_mv ?? null,
+      row.humidity_pct,
+      row.rssi ?? null,
+      row.packet_sequence,
+      row.wake_nonce,
+      row.lqi,
+      now,
+      businessId,
+      device.id,
+      row.node_serial ?? '',
+      row.packet_sequence
+    )));
+  }
   if (insertedRows.length > 0) await evaluateTemperatureReadings(db, {
     businessId,
     deviceId: device.externalDeviceId,
@@ -272,5 +303,5 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
     request
   );
   await cleanupExpiredTemps(db);
-  return json({ accepted: items.length, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
+  return json({ accepted: items.length, rejected, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
 };

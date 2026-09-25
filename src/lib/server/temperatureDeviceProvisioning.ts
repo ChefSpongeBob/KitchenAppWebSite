@@ -570,7 +570,7 @@ export async function resolveGatewayNodeReading(
   const node = await db
     .prepare(
       `
-      SELECT sensor_id
+      SELECT sensor_id, packet_sequence
       FROM temperature_sensor_nodes
       WHERE business_id = ?
         AND gateway_device_id = ?
@@ -581,48 +581,21 @@ export async function resolveGatewayNodeReading(
       `
     )
     .bind(input.businessId, input.gatewayDeviceId, nodeSerial)
-    .first<{ sensor_id: number }>();
+    .first<{ sensor_id: number; packet_sequence: number | null }>();
   if (!node) return null;
-
-  await db
-    .prepare(
-      `
-      UPDATE temperature_sensor_nodes
-      SET last_seen_at = ?,
-          battery_mv = COALESCE(?, battery_mv),
-          humidity_pct = COALESCE(?, humidity_pct),
-          rssi = COALESCE(?, rssi),
-          packet_sequence = COALESCE(?, packet_sequence),
-          wake_nonce = COALESCE(?, wake_nonce),
-          lqi = COALESCE(?, lqi),
-          updated_at = ?
-      WHERE business_id = ?
-        AND gateway_device_id = ?
-        AND node_serial = ?
-      `
-    )
-    .bind(
-      input.ts,
-      input.batteryMv ?? null,
-      input.humidityPct ?? null,
-      input.rssi ?? null,
-      input.packetSequence ?? null,
-      input.wakeNonce ?? null,
-      input.lqi ?? null,
-      Math.floor(Date.now() / 1000),
-      input.businessId,
-      input.gatewayDeviceId,
-      nodeSerial
-    )
-    .run();
+  if (input.packetSequence == null ||
+      (node.packet_sequence !== null && input.packetSequence <= node.packet_sequence)) return null;
 
   return {
     sensor_id: node.sensor_id,
+    node_serial: nodeSerial,
     temperature: input.temperature,
     humidity_pct: input.humidityPct ?? null,
     packet_sequence: input.packetSequence ?? null,
     wake_nonce: input.wakeNonce ?? null,
     lqi: input.lqi ?? null,
+    battery_mv: input.batteryMv ?? null,
+    rssi: input.rssi ?? null,
     ts: input.ts
   };
 }

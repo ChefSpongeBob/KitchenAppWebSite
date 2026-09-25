@@ -4,11 +4,17 @@
 #include <esp_http_client.h>
 #include <esp_ieee802154.h>
 #include <freertos/queue.h>
+#include <mbedtls/md.h>
 #include <time.h>
+
+#ifndef ARDUINO_XIAO_ESP32C6
+#error "Select XIAO_ESP32C6 in Arduino IDE for this gateway."
+#endif
 
 // Set these before uploading the gateway.
 const char GATEWAY_SERIAL[] = "";
 const char FACTORY_GATEWAY_CREDENTIAL[] = "";
+const char RADIO_SECRET[] = "";
 const char WIFI_NAME[] = "";
 const char WIFI_PASSWORD[] = "";
 const char API_URL[] = "https://criminiops.com/api/temps";
@@ -16,7 +22,11 @@ const char API_URL[] = "https://criminiops.com/api/temps";
 constexpr uint8_t RADIO_CHANNEL = 20;
 constexpr uint16_t RADIO_PAN = 0xC110;
 constexpr uint16_t GATEWAY_ADDRESS = 0x0001;
-constexpr size_t QUEUE_SIZE = 24;
+constexpr size_t QUEUE_SIZE = 64;
+constexpr size_t AUTH_TAG_SIZE = 16;
+constexpr size_t RECENT_PACKET_COUNT = 128;
+constexpr uint32_t UPLOAD_INTERVAL_MS = 10000;
+constexpr uint32_t RETRY_INTERVAL_MS = 60000;
 
 struct RadioFrame {
   uint8_t bytes[128];
@@ -33,6 +43,15 @@ struct __attribute__((packed)) TemperaturePacket {
   char serial[32];
   int32_t temperatureHundredthsF;
   uint16_t humidityHundredths;
+  uint8_t authTag[AUTH_TAG_SIZE];
+};
+
+static_assert(sizeof(TemperaturePacket) + 11 <= 127, "Radio packet exceeds IEEE 802.15.4 frame size");
+
+struct RecentPacket {
+  char serial[32];
+  uint32_t sequence;
+  uint32_t wakeNonce;
 };
 
 struct QueuedReading {
@@ -45,7 +64,11 @@ struct QueuedReading {
 QueuedReading readings[QUEUE_SIZE] = {};
 size_t readingCount = 0;
 uint32_t lastUpload = 0;
+uint32_t uploadInterval = UPLOAD_INTERVAL_MS;
 QueueHandle_t receivedFrames = nullptr;
+RecentPacket recentPackets[RECENT_PACKET_COUNT] = {};
+size_t recentPacketCount = 0;
+size_t nextRecentPacket = 0;
 
 bool validSerial(const char* serial) {
   const size_t length = strnlen(serial, 32);
@@ -57,12 +80,30 @@ bool validSerial(const char* serial) {
   return true;
 }
 
-bool duplicateReading(const TemperaturePacket& packet) {
-  for (size_t i = 0; i < readingCount; ++i) {
-    if (readings[i].packet.sequence == packet.sequence &&
-        readings[i].packet.wakeNonce == packet.wakeNonce &&
-        strcmp(readings[i].packet.serial, packet.serial) == 0) return true;
+bool verifyPacket(const TemperaturePacket& packet) {
+  const mbedtls_md_info_t* sha256 = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  uint8_t digest[32] = {};
+  if (!sha256 || mbedtls_md_hmac(sha256,
+      reinterpret_cast<const uint8_t*>(RADIO_SECRET), strlen(RADIO_SECRET),
+      reinterpret_cast<const uint8_t*>(&packet), offsetof(TemperaturePacket, authTag), digest) != 0) return false;
+  uint8_t difference = 0;
+  for (size_t i = 0; i < AUTH_TAG_SIZE; ++i) difference |= digest[i] ^ packet.authTag[i];
+  memset(digest, 0, sizeof(digest));
+  return difference == 0;
+}
+
+bool seenRecently(const TemperaturePacket& packet) {
+  for (size_t i = 0; i < recentPacketCount; ++i) {
+    if (recentPackets[i].sequence == packet.sequence &&
+        recentPackets[i].wakeNonce == packet.wakeNonce &&
+        strcmp(recentPackets[i].serial, packet.serial) == 0) return true;
   }
+  RecentPacket& recent = recentPackets[nextRecentPacket];
+  memcpy(recent.serial, packet.serial, sizeof(recent.serial));
+  recent.sequence = packet.sequence;
+  recent.wakeNonce = packet.wakeNonce;
+  nextRecentPacket = (nextRecentPacket + 1) % RECENT_PACKET_COUNT;
+  if (recentPacketCount < RECENT_PACKET_COUNT) ++recentPacketCount;
   return false;
 }
 
@@ -89,8 +130,9 @@ void receiveReading(const RadioFrame& incoming) {
       incoming.bytes[6] == (GATEWAY_ADDRESS & 0xFF) && incoming.bytes[7] == (GATEWAY_ADDRESS >> 8)) {
     TemperaturePacket packet = {};
     memcpy(&packet, incoming.bytes + 1 + headerSize, sizeof(packet));
-    if (packet.marker == 0x4352 && packet.version == 1 &&
-        packet.humidityHundredths <= 10000 && validSerial(packet.serial) && !duplicateReading(packet)) {
+    if (packet.marker == 0x4352 && packet.version == 2 &&
+        packet.humidityHundredths <= 10000 && validSerial(packet.serial) &&
+        verifyPacket(packet) && !seenRecently(packet)) {
       readings[readingCount++] = {
         packet,
         incoming.rssi,
@@ -106,7 +148,7 @@ bool connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
   const uint32_t started = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - started < 15000) delay(100);
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 7000) delay(100);
   if (WiFi.status() != WL_CONNECTED) return false;
   if (time(nullptr) < 1700000000) {
     configTime(0, 0, "time.cloudflare.com", "pool.ntp.org");
@@ -148,8 +190,8 @@ esp_err_t onHttpEvent(esp_http_client_event_t* event) {
   return ESP_OK;
 }
 
-void uploadReadings() {
-  if (!readingCount) return;
+bool uploadReadings() {
+  if (!readingCount) return true;
   esp_ieee802154_sleep();
 
   bool uploaded = false;
@@ -171,10 +213,13 @@ void uploadReadings() {
       esp_http_client_set_post_field(request, body.c_str(), body.length());
       const esp_err_t result = esp_http_client_perform(request);
       const int status = result == ESP_OK ? esp_http_client_get_status_code(request) : 0;
-      const int field = response.indexOf("\"accepted\":");
-      const int accepted = field >= 0 ? response.substring(field + 11).toInt() : -1;
-      uploaded = (status == 200 || status == 201) && accepted == static_cast<int>(readingCount);
-      Serial.printf("Crimini upload: HTTP %d, accepted %d/%u\n", status, accepted,
+      const int acceptedField = response.indexOf("\"accepted\":");
+      const int rejectedField = response.indexOf("\"rejected\":");
+      const int accepted = acceptedField >= 0 ? response.substring(acceptedField + 11).toInt() : -1;
+      const int rejected = rejectedField >= 0 ? response.substring(rejectedField + 11).toInt() : -1;
+      uploaded = (status == 200 || status == 201) && accepted >= 0 && rejected >= 0 &&
+                 accepted + rejected == static_cast<int>(readingCount);
+      Serial.printf("Crimini upload: HTTP %d, accepted %d, rejected %d/%u\n", status, accepted, rejected,
                     static_cast<unsigned>(readingCount));
       esp_http_client_cleanup(request);
     }
@@ -183,16 +228,25 @@ void uploadReadings() {
   WiFi.mode(WIFI_OFF);
   if (uploaded) readingCount = 0;
   esp_ieee802154_receive();
+  return uploaded;
 }
 
 void setup() {
   Serial.begin(115200);
   delay(100);
   if (!validSerial(GATEWAY_SERIAL) || strlen(FACTORY_GATEWAY_CREDENTIAL) < 32 ||
+      strlen(RADIO_SECRET) < 16 ||
       !WIFI_NAME[0] || !WIFI_PASSWORD[0]) {
     Serial.println("Complete gateway factory setup before uploading.");
     return;
   }
+  // XIAO ESP32C6 defaults to its ceramic antenna; route both radios to the external connector.
+  pinMode(WIFI_ENABLE, OUTPUT);
+  digitalWrite(WIFI_ENABLE, LOW);
+  delay(100);
+  pinMode(WIFI_ANT_CONFIG, OUTPUT);
+  digitalWrite(WIFI_ANT_CONFIG, HIGH);
+
   receivedFrames = xQueueCreate(16, sizeof(RadioFrame));
   if (!receivedFrames) return;
   esp_ieee802154_enable();
@@ -212,8 +266,9 @@ void loop() {
     receiveReading(incoming);
     esp_ieee802154_receive();
   }
-  if (readingCount && (readingCount == QUEUE_SIZE || millis() - lastUpload >= 10000)) {
-    uploadReadings();
+  if (readingCount && (millis() - lastUpload >= uploadInterval ||
+      (readingCount == QUEUE_SIZE && uploadInterval == UPLOAD_INTERVAL_MS))) {
+    uploadInterval = uploadReadings() ? UPLOAD_INTERVAL_MS : RETRY_INTERVAL_MS;
     lastUpload = millis();
   }
   delay(20);
