@@ -1,6 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -35,18 +34,22 @@ function usage(exitCode = 1) {
   process.exit(exitCode);
 }
 
-function loadCloudflareToken() {
-  if (process.env.CLOUDFLARE_API_TOKEN) return;
+function loadLocalEnvValue(name) {
   for (const file of ['.dev.vars', '.env.production.local']) {
     if (!existsSync(file)) continue;
     for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
       if (/^\s*#/.test(line) || !line.includes('=')) continue;
       const [rawKey, ...rest] = line.split('=');
-      if (rawKey.trim() !== 'CLOUDFLARE_API_TOKEN') continue;
-      process.env.CLOUDFLARE_API_TOKEN = rest.join('=').trim().replace(/^['"]|['"]$/g, '');
-      return;
+      if (rawKey.trim() === name) return rest.join('=').trim().replace(/^['"]|['"]$/g, '');
     }
   }
+  return '';
+}
+
+function loadCloudflareToken() {
+  if (process.env.CLOUDFLARE_API_TOKEN) return;
+  const token = loadLocalEnvValue('CLOUDFLARE_API_TOKEN');
+  if (token) process.env.CLOUDFLARE_API_TOKEN = token;
 }
 
 function sqlString(value) {
@@ -58,7 +61,9 @@ if (flags.has('help') || flags.has('h')) usage(0);
 const useRemote = flags.has('remote');
 const useLocal = flags.has('local');
 const serial = String(args.get('serial') ?? '').trim();
-const credential = String(process.env.CRIMINI_GATEWAY_CREDENTIAL ?? '');
+const credential = String(
+  process.env.CRIMINI_GATEWAY_CREDENTIAL || loadLocalEnvValue('CRIMINI_GATEWAY_CREDENTIAL')
+);
 const hardwareModel = String(args.get('hardware') ?? 'seeed-xiao-esp32c6').trim();
 const firmwareVersion = String(args.get('firmware') ?? '2.0.0').trim();
 const confirm = String(args.get('confirm') ?? '');
@@ -84,31 +89,50 @@ if (useRemote && !process.env.CLOUDFLARE_API_TOKEN) {
 const keyHash = createHash('sha256').update(credential, 'utf8').digest('hex');
 const keyPrefix = keyHash.slice(0, 12);
 const now = Math.floor(Date.now() / 1000);
+const target = useRemote ? '--remote' : '--local';
+const wrangler = join(process.cwd(), 'node_modules', 'wrangler', 'bin', 'wrangler.js');
 
-const sql = `
-BEGIN TRANSACTION;
+function runWrangler(command, capture = false) {
+  return spawnSync(
+    process.execPath,
+    [wrangler, 'd1', 'execute', 'crimini-production', target, '--command', command, ...(capture ? ['--json'] : [])],
+    {
+      stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+      encoding: capture ? 'utf8' : undefined,
+      shell: false,
+      env: process.env
+    }
+  );
+}
 
-CREATE TEMP TABLE _gateway_provision_guard (
-  allowed INTEGER NOT NULL CHECK (allowed = 1)
-);
+function queryOne(command) {
+  const result = runWrangler(command, true);
+  if (result.status !== 0) {
+    if (result.stderr) console.error(result.stderr.trim());
+    throw new Error('Production D1 query failed.');
+  }
+  const payload = JSON.parse(result.stdout || '[]');
+  return payload?.[0]?.results?.[0] ?? null;
+}
 
-INSERT INTO _gateway_provision_guard (allowed)
-SELECT CASE
-  WHEN NOT EXISTS (
-    SELECT 1 FROM iot_device_inventory WHERE serial = ${sqlString(serial)}
-  ) THEN 1
-  WHEN EXISTS (
-    SELECT 1
-    FROM iot_device_inventory
-    WHERE serial = ${sqlString(serial)}
-      AND device_type = 'sensor_gateway'
-      AND claim_status = 'available'
-      AND claimed_business_id IS NULL
-      AND claimed_iot_device_id IS NULL
-  ) THEN 1
-  ELSE 0
-END;
+const before = queryOne(`
+  SELECT serial, device_type, claim_status, claimed_business_id, claimed_iot_device_id
+  FROM iot_device_inventory
+  WHERE serial = ${sqlString(serial)}
+  LIMIT 1
+`);
 
+if (before && (
+  before.device_type !== 'sensor_gateway' ||
+  before.claim_status !== 'available' ||
+  before.claimed_business_id ||
+  before.claimed_iot_device_id
+)) {
+  console.error('Gateway provisioning refused because this serial is already claimed, revoked, or assigned to another device type.');
+  process.exit(1);
+}
+
+const mutation = `
 INSERT INTO iot_device_inventory (
   serial, device_type, hardware_model, firmware_version,
   key_hash, key_prefix, claim_status,
@@ -129,34 +153,29 @@ ON CONFLICT(serial) DO UPDATE SET
 WHERE iot_device_inventory.device_type = 'sensor_gateway'
   AND iot_device_inventory.claim_status = 'available'
   AND iot_device_inventory.claimed_business_id IS NULL
-  AND iot_device_inventory.claimed_iot_device_id IS NULL;
-
-SELECT serial, device_type, hardware_model, firmware_version, key_prefix, claim_status
-FROM iot_device_inventory
-WHERE serial = ${sqlString(serial)};
-
-COMMIT;
+  AND iot_device_inventory.claimed_iot_device_id IS NULL
 `;
 
-const file = join(tmpdir(), `crimini-provision-gateway-${randomUUID()}.sql`);
-writeFileSync(file, sql, { mode: 0o600 });
-
-const wrangler = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(
-  wrangler,
-  ['wrangler', 'd1', 'execute', 'crimini-production', useRemote ? '--remote' : '--local', `--file=${file}`],
-  { stdio: 'inherit', shell: false, env: process.env }
-);
-
-try {
-  unlinkSync(file);
-} catch {
-  // The temporary file contains only the credential hash, but still remove it whenever possible.
-}
-
+const result = runWrangler(mutation);
 if (result.status !== 0) {
+  if (result.error) console.error(result.error.message);
   console.error('Gateway provisioning failed. Claimed and revoked serials cannot be overwritten.');
   process.exit(result.status ?? 1);
+}
+
+const saved = queryOne(`
+  SELECT serial, device_type, hardware_model, firmware_version, key_hash, key_prefix,
+         claim_status, claimed_business_id, claimed_iot_device_id
+  FROM iot_device_inventory
+  WHERE serial = ${sqlString(serial)}
+  LIMIT 1
+`);
+
+if (!saved || saved.device_type !== 'sensor_gateway' || saved.claim_status !== 'available' ||
+    saved.claimed_business_id || saved.claimed_iot_device_id ||
+    saved.key_hash !== keyHash || saved.key_prefix !== keyPrefix) {
+  console.error('Gateway provisioning verification failed; the saved inventory record does not match.');
+  process.exit(1);
 }
 
 console.log(`Gateway ${serial} is available for serial-only registration in the app.`);

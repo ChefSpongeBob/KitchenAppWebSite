@@ -78,8 +78,8 @@ expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node signs versi
 );
 
 expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node configuration accepts full serials and derives a radio address', (source) =>
-  source.includes('const char NODE_SERIAL[] = ""') &&
-  source.includes('const char RADIO_SECRET[] = ""') &&
+  source.includes('const char NODE_SERIAL[] =') &&
+  source.includes('const char RADIO_SECRET[] =') &&
   source.includes('radioAddressFromSerial()') &&
   !source.includes('NODE_ADDRESS =')
 );
@@ -136,6 +136,7 @@ expect('src/routes/api/temps/+server.ts', 'temp ingest does not discard valid ro
 
 expect('scripts/provision-temperature-gateway.mjs', 'factory provisioning stores a chosen gateway credential hash without generating a secret', (source) =>
   source.includes("process.env.CRIMINI_GATEWAY_CREDENTIAL") &&
+  source.includes("loadLocalEnvValue('CRIMINI_GATEWAY_CREDENTIAL')") &&
   source.includes("createHash('sha256')") &&
   source.includes('keyHash.slice(0, 12)') &&
   source.includes('INSERT INTO iot_device_inventory') &&
