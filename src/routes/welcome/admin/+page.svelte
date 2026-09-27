@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { fade, fly } from 'svelte/transition';
 
 	export let data: {
@@ -225,10 +226,10 @@
 
 	{#if activeIndex === slides.length - 1}
 		<div class="setup-zone finish-zone">
-			<form method="POST" action="?/complete">
+			<form method="POST" action="?/complete" use:enhance>
 				<button type="submit" class="primary">Enter Admin</button>
 			</form>
-			<form method="POST" action="?/setup_forms">
+			<form method="POST" action="?/setup_forms" use:enhance>
 				<button type="submit" class="secondary">Set Up Employee Forms</button>
 			</form>
 		</div>

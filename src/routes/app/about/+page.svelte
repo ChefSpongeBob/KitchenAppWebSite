@@ -1,9 +1,11 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type Doc = { title: string; content: string | null; file_url: string | null; category: string };
   export let data: { doc: Doc | null };
+  $: documentFileUrl = nativeServerUrl(data.doc?.file_url);
 </script>
 
 <Layout>
@@ -23,13 +25,13 @@
           <p class="copy muted">No text summary has been added yet.</p>
         {/if}
         {#if data.doc.file_url}
-          <a href={data.doc.file_url} target="_blank" rel="noreferrer" class="doc-link">Open document</a>
+          <a href={documentFileUrl} target="_blank" rel="noreferrer" class="doc-link">Open document</a>
         {/if}
       </div>
 
       {#if data.doc.file_url}
         <div class="doc-preview">
-          <PdfPageStack src={data.doc.file_url} title={data.doc.title} />
+          <PdfPageStack src={documentFileUrl} title={data.doc.title} />
         </div>
       {/if}
     </section>

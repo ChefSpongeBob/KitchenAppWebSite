@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import { onMount } from 'svelte';
@@ -280,7 +281,7 @@
 					</nav>
 				</div>
 				{#if data.localMode}
-					<form method="POST" action="?/convert" class="dev-convert">
+					<form method="POST" action="?/convert" class="dev-convert" use:enhance>
 						<input type="hidden" name="plan_tier" value={selectedPlan} />
 						<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
 						<input type="hidden" name="addon_camera_monitoring" value="0" />
@@ -295,7 +296,7 @@
 				<p>
 					This permanently removes workspace data before activation.
 				</p>
-				<form method="POST" action="?/cancel">
+				<form method="POST" action="?/cancel" use:enhance>
 					<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
 					<button type="submit" class="danger-btn">Cancel And Delete Workspace</button>
 				</form>

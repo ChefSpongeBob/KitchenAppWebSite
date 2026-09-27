@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type TemperatureRow = {
     event_date: string;
@@ -15,7 +16,7 @@
     rows: TemperatureRow[];
   };
 
-  $: csvHref = `/reports/temperature.csv?start=${data.startDate}&end=${data.endDate}`;
+  $: csvHref = nativeServerUrl(`/reports/temperature.csv?start=${data.startDate}&end=${data.endDate}`);
 
   function formatDate(dateIso: string) {
     return new Date(`${dateIso}T00:00:00`).toLocaleDateString('en-US', {

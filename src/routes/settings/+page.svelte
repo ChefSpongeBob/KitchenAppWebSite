@@ -799,7 +799,7 @@
             </div>
           {/each}
         </section>
-      <form method="POST" action="/logout" class="logout-form">
+      <form method="POST" action="/logout" class="logout-form" use:enhance>
         <button class="logout-btn" type="submit">Logout</button>
       </form>
 

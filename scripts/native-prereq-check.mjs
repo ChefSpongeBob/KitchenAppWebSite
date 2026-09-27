@@ -33,9 +33,18 @@ if (!capacitor) {
 	config.appName === 'Crimini'
 		? pass('Capacitor app name is Crimini')
 		: fail('Capacitor app name is Crimini', `Found ${config.appName}`);
-	config.server?.url === 'https://criminiops.com'
-		? pass('Native shell points to production domain')
-		: fail('Native shell points to production domain', `Found ${config.server?.url ?? 'missing'}`);
+	config.webDir === 'mobile-dist'
+		? pass('Native UI is packaged from mobile-dist')
+		: fail('Native UI is packaged from mobile-dist', `Found ${config.webDir ?? 'missing'}`);
+	!config.server?.url
+		? pass('Native startup is independent of a remote server.url')
+		: fail('Native startup is independent of a remote server.url', `Found ${config.server.url}`);
+	config.server?.cleartext === false && config.android?.allowMixedContent === false
+		? pass('Native cleartext and mixed content are disabled')
+		: fail('Native cleartext and mixed content are disabled');
+	config.plugins?.CapacitorCookies?.enabled === true && config.plugins?.CapacitorHttp?.enabled === true
+		? pass('Native cookie and HTTP plugins are enabled')
+		: fail('Native cookie and HTTP plugins are enabled');
 	config.android?.webContentsDebuggingEnabled === false
 		? pass('Android WebView debugging is disabled')
 		: fail('Android WebView debugging is disabled');

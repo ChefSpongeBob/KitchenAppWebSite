@@ -3,6 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
   import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type Doc = {
     title: string;
@@ -13,6 +14,7 @@
   };
 
   export let data: { doc: Doc };
+  $: documentFileUrl = nativeServerUrl(data.doc.file_url);
 
   function isPdf(url: string | null) {
     return Boolean(url && url.toLowerCase().endsWith('.pdf'));
@@ -40,11 +42,11 @@
 
     {#if data.doc.file_url}
       <div class="doc-actions">
-        <a href={data.doc.file_url} target="_blank" rel="noreferrer">
+        <a href={documentFileUrl} target="_blank" rel="noreferrer">
           <span class="material-icons" aria-hidden="true">open_in_new</span>
           Open file
         </a>
-        <a href={data.doc.file_url} download>
+        <a href={documentFileUrl} download>
           <span class="material-icons" aria-hidden="true">download</span>
           Download
         </a>
@@ -52,9 +54,9 @@
 
       <div class="file-stage">
         {#if isPdf(data.doc.file_url)}
-          <PdfPageStack src={data.doc.file_url} title={data.doc.title} />
+          <PdfPageStack src={documentFileUrl} title={data.doc.title} />
         {:else}
-          <img src={data.doc.file_url} alt={data.doc.title} loading="lazy" />
+          <img src={documentFileUrl} alt={data.doc.title} loading="lazy" />
         {/if}
       </div>
     {:else if !data.doc.content}

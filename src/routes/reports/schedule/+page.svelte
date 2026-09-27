@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type ScheduleHistoryRow = {
     week_start: string;
@@ -20,7 +21,7 @@
     rows: ScheduleHistoryRow[];
   };
 
-  $: csvHref = `/reports/schedule.csv?start=${data.startDate}&end=${data.endDate}`;
+  $: csvHref = nativeServerUrl(`/reports/schedule.csv?start=${data.startDate}&end=${data.endDate}`);
   $: publishedWeeks = Object.values(
     data.rows.reduce<Record<string, PublishedWeek>>((weeks, row) => {
       const key = row.week_start;

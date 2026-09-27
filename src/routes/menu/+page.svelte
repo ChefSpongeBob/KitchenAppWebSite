@@ -3,6 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
   import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type MenuDoc = {
     id: string;
@@ -15,6 +16,7 @@
   export let data: { menuDocs?: MenuDoc[] };
   const menuDocs = data.menuDocs ?? [];
   let activeMenu: MenuDoc | null = menuDocs[0] ?? null;
+  $: activeFileUrl = nativeServerUrl(activeMenu?.file_url);
 
   function isPdf(url: string | null) {
     return Boolean(url && url.toLowerCase().endsWith('.pdf'));
@@ -46,7 +48,7 @@
           <header>
             <h2>{activeMenu.title}</h2>
             {#if activeMenu.file_url}
-              <a href={activeMenu.file_url} target="_blank" rel="noreferrer">Open file</a>
+              <a href={activeFileUrl} target="_blank" rel="noreferrer">Open file</a>
             {/if}
           </header>
 
@@ -57,9 +59,9 @@
           {#if activeMenu.file_url}
             <div class="document-stage">
               {#if isPdf(activeMenu.file_url)}
-                <PdfPageStack src={activeMenu.file_url} title={activeMenu.title} />
+                <PdfPageStack src={activeFileUrl} title={activeMenu.title} />
               {:else}
-                <img src={activeMenu.file_url} alt={activeMenu.title} loading="lazy" />
+                <img src={activeFileUrl} alt={activeMenu.title} loading="lazy" />
               {/if}
             </div>
           {:else}

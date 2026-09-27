@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type OnboardingRow = {
     updated_at: number;
@@ -14,7 +15,7 @@
     rows: OnboardingRow[];
   };
 
-  $: csvHref = `/reports/onboarding.csv?start=${data.startDate}&end=${data.endDate}`;
+  $: csvHref = nativeServerUrl(`/reports/onboarding.csv?start=${data.startDate}&end=${data.endDate}`);
 
   function monthFromTimestamp(timestamp: number) {
     return new Date(timestamp * 1000).toISOString().slice(0, 7);

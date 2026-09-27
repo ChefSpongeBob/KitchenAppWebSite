@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type RequestRow = {
     request_date: string;
@@ -15,7 +16,7 @@
     rows: RequestRow[];
   };
 
-  $: csvHref = `/reports/requests.csv?start=${data.startDate}&end=${data.endDate}`;
+  $: csvHref = nativeServerUrl(`/reports/requests.csv?start=${data.startDate}&end=${data.endDate}`);
 
   function monthKey(dateIso: string) {
     return dateIso.slice(0, 7);

@@ -1,19 +1,25 @@
 {
   "appId": "com.nexusnorthsystems.crimini",
   "appName": "Crimini",
-  "webDir": "build",
+  "webDir": "mobile-dist",
   "loggingBehavior": "none",
   "appendUserAgent": " CriminiNative/1.0 Capacitor",
   "zoomEnabled": false,
   "initialFocus": true,
-  "backgroundColor": "#121315",
+  "backgroundColor": "#ffffff",
   "server": {
-    "url": "https://criminiops.com",
-    "cleartext": false,
-    "allowNavigation": [
-      "criminiops.com",
-      "www.criminiops.com"
-    ]
+    "hostname": "localhost",
+    "iosScheme": "capacitor",
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "plugins": {
+    "CapacitorCookies": {
+      "enabled": true
+    },
+    "CapacitorHttp": {
+      "enabled": true
+    }
   },
   "ios": {
     "contentInset": "always",

@@ -18,12 +18,17 @@ function expectExists(path, label) {
   checks.push({ ok: existsSync(resolve(root, path)), label, detail: path });
 }
 
-expect('capacitor.config.json', 'Capacitor uses final app id and production domain', (source) =>
-  source.includes('"appId": "com.nexusnorthsystems.crimini"') &&
-  source.includes('"appName": "Crimini"') &&
-  source.includes('"url": "https://criminiops.com"') &&
-  source.includes('"cleartext": false')
-);
+expect('capacitor.config.json', 'Capacitor packages the final secure iOS app shell', (source) => {
+  const config = JSON.parse(source);
+  return config.appId === 'com.nexusnorthsystems.crimini' &&
+    config.appName === 'Crimini' &&
+    config.webDir === 'mobile-dist' &&
+    !config.server?.url &&
+    config.server?.iosScheme === 'capacitor' &&
+    config.server?.cleartext === false &&
+    config.plugins?.CapacitorCookies?.enabled === true &&
+    config.plugins?.CapacitorHttp?.enabled === true;
+});
 
 expect('ios/App/App.xcodeproj/project.pbxproj', 'iOS bundle id and versions are set', (source) =>
   source.includes('PRODUCT_BUNDLE_IDENTIFIER = com.nexusnorthsystems.crimini;') &&

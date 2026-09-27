@@ -39,9 +39,22 @@ if (!capacitorRaw) {
     ? pass('Android webContentsDebuggingEnabled is false')
     : fail('Android webContentsDebuggingEnabled should be false for release')) && ok;
 
-  ok = (typeof config?.server?.url === 'string' && config.server.url.startsWith('https://')
-    ? pass('Capacitor server.url uses https')
-    : fail('Capacitor server.url should be a valid https URL')) && ok;
+  ok = (config.webDir === 'mobile-dist'
+    ? pass('Capacitor packages the native UI from mobile-dist')
+    : fail(`Capacitor webDir should be "mobile-dist" (found "${config.webDir}")`)) && ok;
+
+  ok = (!config?.server?.url
+    ? pass('Native startup does not depend on a remote server.url')
+    : fail('Capacitor server.url must be absent from production builds')) && ok;
+
+  ok = (config?.server?.cleartext === false && config?.android?.allowMixedContent === false
+    ? pass('Native shell rejects cleartext and mixed content')
+    : fail('Native shell should reject cleartext and mixed content')) && ok;
+
+  ok = (config?.plugins?.CapacitorCookies?.enabled === true &&
+    config?.plugins?.CapacitorHttp?.enabled === true
+    ? pass('Native cookies and HTTP transport are enabled')
+    : fail('CapacitorCookies and CapacitorHttp should be enabled')) && ok;
 }
 
 const infoPlist = readText(infoPlistPath);

@@ -9,6 +9,8 @@
 </script>
 
 <script lang="ts">
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+
   export let entries: ReportExportEntry[] = [];
   export let empty = 'No report exports yet.';
   export let icon = 'description';
@@ -28,7 +30,7 @@
             {/if}
           </div>
         </div>
-        <a href={entry.href}><span class="material-icons" aria-hidden="true">download</span>Download</a>
+        <a href={nativeServerUrl(entry.href)}><span class="material-icons" aria-hidden="true">download</span>Download</a>
       </article>
     {/each}
   {:else}

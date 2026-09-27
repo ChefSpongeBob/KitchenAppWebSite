@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { building, dev } from '$app/environment';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { hashSessionToken } from '$lib/server/auth';
 import { canRoleAccessFeature, resolveFeatureKeyForUrl } from '$lib/features/appFeatures';
@@ -23,7 +23,8 @@ import { loadEmployeeOnboardingAccessStatus } from '$lib/server/admin';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName,
-	getSessionCookieOptions
+	getSessionCookieOptions,
+	isNativeAppRequest
 } from '$lib/server/authCookies';
 import { effectiveAppRoleFromBusinessRole } from '$lib/server/permissions';
 import { hasBusinessCapability } from '$lib/server/permissions';
@@ -50,14 +51,23 @@ function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
 function isTrustedStateChangingRequest(request: Request, requestUrl: URL) {
 	const method = request.method.toUpperCase();
 	if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+	const nativeRequest = isNativeAppRequest(request);
+	const isNativeOrigin = (value: string) =>
+		value === 'capacitor://localhost' || value === 'https://localhost';
 
 	const origin = request.headers.get('origin');
-	if (origin) return origin === requestUrl.origin;
+	if (origin) {
+		return origin === requestUrl.origin || (nativeRequest && isNativeOrigin(origin));
+	}
 
 	const referer = request.headers.get('referer');
 	if (referer) {
 		try {
-			return new URL(referer).origin === requestUrl.origin;
+			const refererOrigin = new URL(referer).origin;
+			return (
+				refererOrigin === requestUrl.origin ||
+				(nativeRequest && isNativeOrigin(refererOrigin))
+			);
 		} catch {
 			return false;
 		}
@@ -119,6 +129,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA;
 
 	const { pathname } = event.url;
+	if (building && pathname === '/[fallback]') {
+		return applySecurityHeaders(await resolve(event));
+	}
 	const isAuthRoute =
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||

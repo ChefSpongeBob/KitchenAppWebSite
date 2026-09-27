@@ -9,6 +9,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"build:native": "node ./scripts/build-native.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -43,10 +44,11 @@
 		"db:migrate:camera:remote": "npx wrangler d1 execute crimini-production --remote --file=./migrations/0018_camera.sql",
 		"cap:add:ios": "npx cap add ios",
 		"cap:add:android": "npx cap add android",
-		"cap:sync": "npx cap sync",
+		"cap:sync": "node ./scripts/sync-capacitor.mjs",
 		"cap:copy": "npx cap copy",
 		"cap:open:ios": "npx cap open ios",
 		"cap:open:android": "npx cap open android",
+		"mobile:bundle": "npm run build:native && npm run cap:sync",
 		"mobile:check": "node ./scripts/mobile-release-check.mjs",
 		"android:release:check": "node ./scripts/android-release-pass.mjs",
 		"native:prereq": "node ./scripts/native-prereq-check.mjs",
@@ -95,6 +97,7 @@
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-cloudflare": "^7.2.9",
+		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.65.2",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"prettier": "^3.8.4",

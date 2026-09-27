@@ -2,6 +2,7 @@
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+	import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
 	type WasteRow = {
 		product: string;
@@ -19,7 +20,7 @@
 		rows: WasteRow[];
 	};
 
-	$: csvHref = `/reports/waste.csv?start=${data.startDate}&end=${data.endDate}`;
+	$: csvHref = nativeServerUrl(`/reports/waste.csv?start=${data.startDate}&end=${data.endDate}`);
 
 	function dateLabel(timestamp: number) {
 		return new Date(timestamp * 1000).toLocaleString('en-US', {

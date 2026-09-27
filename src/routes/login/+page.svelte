@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import TurnstileWidget from '$lib/components/security/TurnstileWidget.svelte';
 	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
 	import AuthShell from '$lib/components/ui/AuthShell.svelte';
@@ -27,6 +29,22 @@
 	let showPassword = false;
 	let emailValue = '';
 	let lastSeededEmail = '';
+	let submitting = false;
+	let clientError = '';
+
+	const enhanceLogin: SubmitFunction = () => {
+		submitting = true;
+		clientError = '';
+
+		return async ({ result, update }) => {
+			submitting = false;
+			if (result.type === 'error') {
+				clientError = 'Sign in could not be completed. Try again.';
+				return;
+			}
+			await update();
+		};
+	};
 
 	$: activeSession = data?.activeSession ?? null;
 	$: turnstileSiteKey = data?.turnstileSiteKey ?? '';
@@ -58,13 +76,16 @@
 	supportText=""
 >
 	<div class="auth-stack">
-		<form method="POST" action="?/login" class="auth-form">
+		<form method="POST" action="?/login" class="auth-form" use:enhance={enhanceLogin}>
 			<div class="auth-form-head">
 				<h2>Sign in</h2>
 			</div>
 
 			{#if statusMessage}
 				<p class="auth-alert" class:error={statusMessage.tone === 'error'}>{statusMessage.text}</p>
+			{/if}
+			{#if clientError}
+				<p class="auth-alert error">{clientError}</p>
 			{/if}
 
 			<div class="auth-field">
@@ -107,7 +128,9 @@
 
 			<TurnstileWidget siteKey={turnstileSiteKey} />
 
-			<button type="submit" class="auth-button">Sign in</button>
+			<button type="submit" class="auth-button" disabled={submitting}>
+				{submitting ? 'Signing in...' : 'Sign in'}
+			</button>
 		</form>
 
 		{#if activeSession?.email}
@@ -122,7 +145,7 @@
 				</div>
 				<div class="session-actions">
 					<a href={activeSession.continuePath || '/app'} class="auth-secondary-button">Continue</a>
-					<form method="POST" action="?/not_you">
+					<form method="POST" action="?/not_you" use:enhance>
 						<button type="submit" class="auth-link-button">Not you?</button>
 					</form>
 				</div>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+
   type ItemAttachment = {
     id: string;
     targetType: 'recipe' | 'document';
@@ -72,7 +74,7 @@
               <p>{attachment.content}</p>
             {/if}
             {#if attachment.fileUrl}
-              <a href={attachment.fileUrl} target="_blank" rel="noreferrer">Open document</a>
+              <a href={nativeServerUrl(attachment.fileUrl)} target="_blank" rel="noreferrer">Open document</a>
             {/if}
           </div>
         {/if}

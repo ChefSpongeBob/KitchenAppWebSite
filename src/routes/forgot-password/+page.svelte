@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import AuthShell from '$lib/components/ui/AuthShell.svelte';
 
 	export let form:
@@ -16,7 +17,7 @@
 	subtitle=""
 	supportText=""
 >
-	<form method="POST" class="auth-form">
+	<form method="POST" class="auth-form" use:enhance>
 		<div class="auth-form-head">
 			<h2>Forgot password?</h2>
 		</div>

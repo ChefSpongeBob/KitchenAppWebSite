@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
   type ListHistoryRow = {
@@ -32,7 +33,7 @@
     checklists: 'fact_check'
   };
 
-  $: csvHref = `/reports/lists.csv?domain=${data.domain}&start=${data.startDate}&end=${data.endDate}`;
+  $: csvHref = nativeServerUrl(`/reports/lists.csv?domain=${data.domain}&start=${data.startDate}&end=${data.endDate}`);
 
   function weekStart(dateIso: string) {
     const date = new Date(`${dateIso}T00:00:00`);

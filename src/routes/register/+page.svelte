@@ -1,4 +1,5 @@
 ﻿<script lang="ts">
+	import { enhance } from '$app/forms';
 	import { fade, fly } from 'svelte/transition';
 	import { onMount } from 'svelte';
 
@@ -398,13 +399,6 @@
 		return true;
 	}
 
-	function handleRegisterSubmit(event: SubmitEvent) {
-		if (validatePasswordBeforeAccountStep()) return;
-		event.preventDefault();
-		const securityIndex = visibleSlides.findIndex((slide) => slide.id === 'security');
-		activeIndex = securityIndex >= 0 ? securityIndex : activeIndex;
-	}
-
 	function handleKeydown(event: KeyboardEvent) {
 		const target = event.target as HTMLElement | null;
 		const tagName = target?.tagName;
@@ -683,7 +677,16 @@
 				{/if}
 
 				{#if activeSlide.id === 'purchase'}
-					<form class="form-zone inline-signup" method="POST" on:submit={handleRegisterSubmit}>
+					<form
+						class="form-zone inline-signup"
+						method="POST"
+						use:enhance={({ cancel }) => {
+							if (validatePasswordBeforeAccountStep()) return;
+							cancel();
+							const securityIndex = visibleSlides.findIndex((slide) => slide.id === 'security');
+							activeIndex = securityIndex >= 0 ? securityIndex : activeIndex;
+						}}
+					>
 						{#if form?.error}
 							<p class="tour-feedback error form-feedback">{form.error}</p>
 						{/if}

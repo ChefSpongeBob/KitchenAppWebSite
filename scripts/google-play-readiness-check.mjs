@@ -18,14 +18,19 @@ function expectExists(path, label) {
   checks.push({ ok: existsSync(resolve(root, path)), label, detail: path });
 }
 
-expect('capacitor.config.json', 'Capacitor Android shell uses final production app identity', (source) =>
-  source.includes('"appId": "com.nexusnorthsystems.crimini"') &&
-  source.includes('"appName": "Crimini"') &&
-  source.includes('"url": "https://criminiops.com"') &&
-  source.includes('"cleartext": false') &&
-  source.includes('"webContentsDebuggingEnabled": false') &&
-  source.includes('"allowMixedContent": false')
-);
+expect('capacitor.config.json', 'Capacitor packages the final secure Android app shell', (source) => {
+  const config = JSON.parse(source);
+  return config.appId === 'com.nexusnorthsystems.crimini' &&
+    config.appName === 'Crimini' &&
+    config.webDir === 'mobile-dist' &&
+    !config.server?.url &&
+    config.server?.androidScheme === 'https' &&
+    config.server?.cleartext === false &&
+    config.android?.webContentsDebuggingEnabled === false &&
+    config.android?.allowMixedContent === false &&
+    config.plugins?.CapacitorCookies?.enabled === true &&
+    config.plugins?.CapacitorHttp?.enabled === true;
+});
 
 expect('android/app/build.gradle', 'Android package namespace versioning and Play Billing are configured', (source) =>
   source.includes('namespace = "com.nexusnorthsystems.crimini"') &&

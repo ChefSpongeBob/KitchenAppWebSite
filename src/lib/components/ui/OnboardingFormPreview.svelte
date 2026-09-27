@@ -1,5 +1,6 @@
 <script lang="ts">
   import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   export let src = '';
   export let title = 'Onboarding form';
@@ -10,13 +11,14 @@
 
   $: isPdf = /\.pdf(?:$|[?#])/i.test(src);
   $: displayName = fileName || title || 'View form';
+  $: resourceSrc = nativeServerUrl(src);
 </script>
 
 {#if src}
   <section class="form-preview">
     <div class="form-preview__head">
       <span>{label}</span>
-      <a href={src} target="_blank" rel="noreferrer">{displayName}</a>
+      <a href={resourceSrc} target="_blank" rel="noreferrer">{displayName}</a>
       <button type="button" on:click={() => (open = !open)}>
         {open ? 'Hide' : 'Preview'}
       </button>
@@ -25,9 +27,9 @@
     {#if open}
       <div class="form-preview__stage">
         {#if isPdf}
-          <PdfPageStack {src} {title} />
+          <PdfPageStack src={resourceSrc} {title} />
         {:else}
-          <img src={src} alt={title} loading="lazy" />
+          <img src={resourceSrc} alt={title} loading="lazy" />
         {/if}
       </div>
     {/if}

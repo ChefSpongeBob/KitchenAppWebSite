@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import AuthShell from '$lib/components/ui/AuthShell.svelte';
 
 	export let data: { valid?: boolean; email?: string | null };
@@ -19,7 +20,7 @@
 	supportText=""
 >
 	{#if data.valid}
-		<form method="POST" class="auth-form">
+		<form method="POST" class="auth-form" use:enhance>
 			<div class="auth-form-head">
 				<h2>Set new password</h2>
 				{#if data.email}

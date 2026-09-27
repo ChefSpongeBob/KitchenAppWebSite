@@ -4,6 +4,7 @@
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type CameraEvent = {
@@ -186,11 +187,11 @@
 
             <div class="feed-stage">
               {#if camera.latest_clip_url}
-                <video src={camera.latest_clip_url} controls preload="metadata" playsinline>
+                <video src={nativeServerUrl(camera.latest_clip_url)} controls preload="metadata" playsinline>
                   <track kind="captions" />
                 </video>
               {:else if camera.still_url}
-                <img src={camera.still_url} alt={`${camera.title} preview`} />
+                <img src={nativeServerUrl(camera.still_url)} alt={`${camera.title} preview`} />
               {:else}
                 <div class="feed-placeholder">
                   <span class="material-icons" aria-hidden="true">photo_camera</span>
@@ -202,7 +203,7 @@
             <div class="feed-controls">
               <span>Updated {formatTimestamp(camera.latestAt)}</span>
               {#if camera.download_url}
-                <a class="control-link" href={camera.download_url} target="_blank" rel="noreferrer" download>Download</a>
+                <a class="control-link" href={nativeServerUrl(camera.download_url)} target="_blank" rel="noreferrer" download>Download</a>
               {/if}
             </div>
 
@@ -227,22 +228,22 @@
                       </div>
                       {#if event.clip_url}
                         <div class="clip-preview">
-                          <video src={event.clip_url} controls preload="metadata" playsinline>
+                          <video src={nativeServerUrl(event.clip_url)} controls preload="metadata" playsinline>
                             <track kind="captions" />
                           </video>
                         </div>
                       {:else if event.image_url}
                         <div class="clip-preview still-preview">
-                          <img src={event.image_url} alt={`${event.event_type} still`} loading="lazy" />
+                          <img src={nativeServerUrl(event.image_url)} alt={`${event.event_type} still`} loading="lazy" />
                         </div>
                       {/if}
                       <div class="clip-actions">
                         {#if event.image_url}
-                          <a href={event.image_url} target="_blank" rel="noreferrer">Still</a>
+                          <a href={nativeServerUrl(event.image_url)} target="_blank" rel="noreferrer">Still</a>
                         {/if}
                         {#if event.clip_url}
-                          <a href={event.clip_url} target="_blank" rel="noreferrer">Open</a>
-                          <a href={event.clip_url} download>Download</a>
+                          <a href={nativeServerUrl(event.clip_url)} target="_blank" rel="noreferrer">Open</a>
+                          <a href={nativeServerUrl(event.clip_url)} download>Download</a>
                         {/if}
                         <form method="POST" action="?/delete_event" use:enhance={withFeedback}>
                           <input type="hidden" name="id" value={event.id} />

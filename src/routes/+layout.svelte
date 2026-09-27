@@ -19,6 +19,7 @@
   } from "$lib/auth/roles";
   import { resolveBusinessCapabilityForPath } from "$lib/auth/routeCapabilities";
   import ToastStack from "$lib/components/ui/ToastStack.svelte";
+  import { nativeServerUrl } from "$lib/client/nativeServerUrl";
 
   type FeatureAwareNavItem = NavItem & {
     featureKey?: AppFeatureKey;
@@ -493,7 +494,7 @@
     <div class="sidebar-inner">
       <div class="sidebar-brand">
         {#if data.user?.businessLogoUrl}
-          <img src={data.user.businessLogoUrl} alt="" aria-hidden="true" class="brand-mark brand-mark-image" />
+          <img src={nativeServerUrl(data.user.businessLogoUrl)} alt="" aria-hidden="true" class="brand-mark brand-mark-image" />
         {:else}
           <span class="brand-mark">C</span>
         {/if}

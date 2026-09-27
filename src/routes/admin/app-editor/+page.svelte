@@ -5,6 +5,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { pushToast } from '$lib/client/toasts';
+  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
   import type { AppFeatureKey, AppFeatureMode } from '$lib/features/appFeatures';
 
   type FeatureRow = {
@@ -170,7 +171,7 @@
 
         {#if data.branding.logoUrl}
           <div class="logo-preview" aria-label="Current sidebar logo preview">
-            <img src={data.branding.logoUrl} alt="Current sidebar logo" />
+            <img src={nativeServerUrl(data.branding.logoUrl)} alt="Current sidebar logo" />
           </div>
         {/if}
       </div>

@@ -9,6 +9,42 @@
 		<meta name="format-detection" content="telephone=no, email=no, address=no" />
 		<script>
 			(function () {
+				const capacitor = window.Capacitor;
+				if (!capacitor?.isNativePlatform?.()) return;
+
+				const apiOrigin = 'https://criminiops.com';
+				const localOrigin = window.location.origin;
+				const nativeFetch = window.fetch.bind(window);
+				window.__CRIMINI_NATIVE__ = true;
+
+				if (window.location.pathname === '/') {
+					window.history.replaceState({}, '', '/login');
+				}
+
+				window.fetch = function (input, init) {
+					const inputUrl = input instanceof Request ? input.url : String(input);
+					const url = new URL(inputUrl, window.location.href);
+					const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+					const isServerData = url.pathname.endsWith('/__data.json');
+					const isApi = url.pathname.startsWith('/api/');
+					const isAction = method !== 'GET' && method !== 'HEAD';
+
+					if (url.origin !== localOrigin || (!isServerData && !isApi && !isAction)) {
+						return nativeFetch(input, init);
+					}
+
+					const remoteUrl = new URL(`${url.pathname}${url.search}${url.hash}`, apiOrigin);
+					if (input instanceof Request) {
+						const remoteRequest = new Request(remoteUrl, input);
+						return nativeFetch(new Request(remoteRequest, { ...init, credentials: 'include' }));
+					}
+
+					return nativeFetch(remoteUrl, { ...init, credentials: 'include' });
+				};
+			})();
+		</script>
+		<script>
+			(function () {
 				const pathname = window.location.pathname;
 				const marketingRoutes = new Set([
 					'/',

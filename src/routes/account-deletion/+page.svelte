@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import Layout from '$lib/components/ui/Layout.svelte';
 
 	export let form:
@@ -17,7 +18,7 @@
 		<h1>Account Deletion</h1>
 		<p class="updated">Last updated May 10, 2026</p>
 
-		<form method="POST" class="request-form">
+		<form method="POST" class="request-form" use:enhance>
 			{#if form?.success}
 				<p class="notice success">Request received.</p>
 			{:else if form?.error}
