@@ -76,8 +76,8 @@ function isTrustedStateChangingRequest(request: Request, requestUrl: URL) {
 	const fetchSite = request.headers.get('sec-fetch-site');
 	if (fetchSite) return fetchSite === 'same-origin' || fetchSite === 'same-site' || fetchSite === 'none';
 
-	// Native app/webview requests may omit browser CSRF headers. Browser form posts include Origin.
-	return true;
+	// Native HTTP may omit browser CSRF headers. Unknown non-native requests fail closed.
+	return nativeRequest;
 }
 
 function applySecurityHeaders(response: Response) {
