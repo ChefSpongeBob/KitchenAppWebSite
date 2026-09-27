@@ -3,6 +3,7 @@
 const NATIVE_APP_MARKERS = ['CriminiNative/', 'Capacitor'];
 
 export function isNativeAppRequest(request: Request) {
+  if (request.headers.get('x-crimini-native') === '1') return true;
   const userAgent = request.headers.get('user-agent') ?? '';
   return NATIVE_APP_MARKERS.some((marker) => userAgent.includes(marker));
 }

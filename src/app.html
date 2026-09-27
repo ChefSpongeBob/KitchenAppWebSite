@@ -36,10 +36,14 @@
 					const remoteUrl = new URL(`${url.pathname}${url.search}${url.hash}`, apiOrigin);
 					if (input instanceof Request) {
 						const remoteRequest = new Request(remoteUrl, input);
-						return nativeFetch(new Request(remoteRequest, { ...init, credentials: 'include' }));
+						const headers = new Headers(init?.headers || remoteRequest.headers);
+						headers.set('X-Crimini-Native', '1');
+						return nativeFetch(new Request(remoteRequest, { ...init, headers, credentials: 'include' }));
 					}
 
-					return nativeFetch(remoteUrl, { ...init, credentials: 'include' });
+					const headers = new Headers(init?.headers);
+					headers.set('X-Crimini-Native', '1');
+					return nativeFetch(remoteUrl, { ...init, headers, credentials: 'include' });
 				};
 			})();
 		</script>
