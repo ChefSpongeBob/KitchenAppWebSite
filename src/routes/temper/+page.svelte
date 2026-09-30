@@ -17,7 +17,9 @@
   let humidity: Record<number, number> = {};
   let lastSeen: Record<number, number> = {};
   let seenSensorIds: number[] = [];
-  const TEMP_WARNING_THRESHOLD = 42;
+  const SAFE_TEMP_LOW_F = 30;
+  const SAFE_TEMP_HIGH_F = 41;
+  const ONLINE_WINDOW_MS = 10 * 60 * 1000;
 
   const URL = '/api/temps?limit=180';
 
@@ -82,8 +84,8 @@
 
   function tempClass(temp?: number) {
     if (temp === undefined) return '';
-    if (temp >= TEMP_WARNING_THRESHOLD) return 'hot';
-    if (temp < 38) return 'cold';
+    if (temp > SAFE_TEMP_HIGH_F) return 'hot';
+    if (temp < SAFE_TEMP_LOW_F) return 'cold';
     return 'normal';
   }
 
@@ -97,8 +99,7 @@
 
   function isOnline(ts?: number) {
     if (!ts) return false;
-    const staleThresholdMs = 6 * 60 * 1000;
-    return Date.now() - ts < staleThresholdMs;
+    return Date.now() - ts < ONLINE_WINDOW_MS;
   }
 
   $: nodeIds = (() => {
@@ -107,7 +108,7 @@
   })();
   $: onlineCount = nodeIds.filter((node) => isOnline(lastSeen[node])).length;
   $: warningNodes = nodeIds
-    .filter((node) => latest[node] !== undefined && latest[node] >= TEMP_WARNING_THRESHOLD)
+    .filter((node) => latest[node] !== undefined && latest[node] > SAFE_TEMP_HIGH_F)
     .map((node) => ({
       sensorId: node,
       name: nodeNames[node] ?? `Node ${node}`,
@@ -167,7 +168,7 @@
             <span class="material-icons" aria-hidden="true">device_thermostat</span>
             <h2 title="Sensor ID: {node}">{nodeNames[node] ?? `Node ${node}`}</h2>
           </div>
-          <span class:offline={!isOnline(lastSeen[node])}>{isOnline(lastSeen[node]) ? 'Online' : 'Stale'}</span>
+          <span class:offline={!isOnline(lastSeen[node])}>{isOnline(lastSeen[node]) ? 'Online' : 'Online !'}</span>
         </div>
 
         {#if latest[node] !== undefined}
@@ -342,8 +343,9 @@
   }
 
   .node-head span.offline {
-    border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border) 58%);
-    color: color-mix(in srgb, var(--color-warning) 74%, var(--color-text) 26%);
+    border-color: color-mix(in srgb, var(--color-error) 58%, var(--color-border) 42%);
+    color: color-mix(in srgb, var(--color-error) 82%, var(--color-text) 18%);
+    font-weight: var(--weight-bold);
   }
 
   .temp {
@@ -392,8 +394,8 @@
   }
 
   .cold {
-    border-color: color-mix(in srgb, var(--color-warning) 64%, var(--color-border) 36%);
-    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-warning) 76%, transparent);
+    border-color: color-mix(in srgb, #2563eb 68%, var(--color-border) 32%);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, #2563eb 82%, transparent);
   }
 
   .normal {

@@ -88,7 +88,8 @@
   const featureAccess: AppFeatureAccess =
     data.featureAccess ?? buildFeatureAccess(defaultAppFeatureModes, isAdmin ? 'admin' : 'user');
   let lastIdeasRefresh = data.refreshedAt ?? Math.floor(Date.now() / 1000);
-  const TEMP_WARNING_THRESHOLD = 42;
+  const SAFE_TEMP_LOW_F = 30;
+  const SAFE_TEMP_HIGH_F = 41;
   const HOMEPAGE_TEMP_LIMIT = 240;
 
   const namesBySensor = new Map<number, string | null>(
@@ -285,7 +286,7 @@
   $: latestTempTs = nodeTemps.length ? Math.max(...nodeTemps.map((node) => node.ts)) : 0;
   $: tempFreshText = latestTempTs ? secondsAgoLabel(latestTempTs) : 'no data';
   $: ideasFreshText = secondsAgoLabel(lastIdeasRefresh);
-  $: highTempNodes = nodeTemps.filter((node) => node.temperature >= TEMP_WARNING_THRESHOLD);
+  $: highTempNodes = nodeTemps.filter((node) => node.temperature > SAFE_TEMP_HIGH_F);
   $: activeSpecials = dailySpecials
     .filter((special) => special.content.trim().length > 0)
     .map((special) => ({
@@ -395,7 +396,7 @@
         </div>
       {/if}
       {#if featureAccess.temps && highTempNodes.length > 0}
-        <small class="alert">Alert: {highTempNodes.length} temp node(s) at or above {TEMP_WARNING_THRESHOLD}F</small>
+        <small class="alert">Alert: {highTempNodes.length} temp node(s) above {SAFE_TEMP_HIGH_F}F</small>
       {/if}
     </div>
 
@@ -488,7 +489,11 @@
           <small>No recent nodes</small>
         {:else}
           {#each nodeTemps as node}
-            <div class="node-pill" class:warn={node.temperature >= TEMP_WARNING_THRESHOLD}>
+            <div
+              class="node-pill"
+              class:hot={node.temperature > SAFE_TEMP_HIGH_F}
+              class:cold={node.temperature < SAFE_TEMP_LOW_F}
+            >
               <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
               <span>
                 {node.temperature.toFixed(1)}F
@@ -815,7 +820,8 @@
   .tile-head small { color: var(--color-text-muted); font-size: 0.72rem; }
   .node-strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
   .node-pill { display: inline-flex; gap: 6px; align-items: center; font-size: 0.72rem; border: 1px solid var(--color-success); border-radius: 0; padding: 2px 7px; color: var(--color-success); }
-  .node-pill.warn { border-color: var(--color-error); color: var(--color-error); }
+  .node-pill.hot { border-color: var(--color-error); color: var(--color-error); }
+  .node-pill.cold { border-color: #2563eb; color: #2563eb; }
   .node-pill strong { color: var(--color-text); font-size: 0.7rem; }
   .temp-warnings {
     display: grid;

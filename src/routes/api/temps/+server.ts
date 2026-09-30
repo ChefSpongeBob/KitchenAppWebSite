@@ -35,6 +35,9 @@ type RawTempRow = {
 const DEFAULT_TEMP_QUERY_LIMIT = 240;
 const MAX_TEMP_QUERY_LIMIT = 500;
 const MAX_TEMP_BATCH_SIZE = 200;
+const MAX_TEMP_BODY_BYTES = 64 * 1024;
+const MIN_AHT20_TEMPERATURE_F = -40;
+const MAX_AHT20_TEMPERATURE_F = 185;
 const TENANT_TEMP_CACHE_CONTROL = 'private, max-age=10, stale-while-revalidate=20';
 
 function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
@@ -64,7 +67,9 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
   const wake_nonce = String(nonceRaw ?? '').trim().slice(0, 64);
   const lqi = Number(lqiRaw);
 
-  if (!node_serial || !Number.isFinite(temperature) || !Number.isFinite(ts) ||
+  if (!node_serial || !Number.isFinite(temperature) ||
+      temperature < MIN_AHT20_TEMPERATURE_F || temperature > MAX_AHT20_TEMPERATURE_F ||
+      !Number.isInteger(ts) || ts <= 0 ||
       !Number.isInteger(packet_sequence) || packet_sequence <= 0 || !wake_nonce) {
     return null;
   }
@@ -171,7 +176,15 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
 
   let body: unknown;
   try {
-    body = await request.json();
+    const declaredLength = Number(request.headers.get('content-length') ?? 0);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_TEMP_BODY_BYTES) {
+      return json({ error: 'Reading payload is too large.' }, { status: 413 });
+    }
+    const rawBody = await request.text();
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_TEMP_BODY_BYTES) {
+      return json({ error: 'Reading payload is too large.' }, { status: 413 });
+    }
+    body = JSON.parse(rawBody);
   } catch {
     return json({ error: 'Invalid JSON body' }, { status: 400 });
   }
