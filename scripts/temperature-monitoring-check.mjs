@@ -77,6 +77,20 @@ expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node signs versi
   source.includes('SLEEP_SECONDS = 300')
 );
 
+expect('migrations/0096_temperature_notification_eligibility.sql', 'high temperature alerts gain delayed notification eligibility', (source) =>
+  source.includes('notification_ready_at INTEGER') &&
+  source.includes('idx_temp_alert_events_notification_ready')
+);
+
+expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node sends randomized repeated bursts without retaining readings', (source) =>
+  source.includes('frameControl = 0x8841') &&
+  source.includes('SEND_COUNT = 3') &&
+  source.includes('esp_random() % 251') &&
+  source.includes('esp_random() % 241') &&
+  !source.includes('transmitAcknowledged') &&
+  !source.includes('FAST_RETRY_SECONDS')
+);
+
 expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node configuration accepts full serials and derives a radio address', (source) =>
   source.includes('const char NODE_SERIAL[] =') &&
   source.includes('const char RADIO_SECRET[] =') &&
@@ -90,10 +104,27 @@ expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'standalone
 );
 
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway verifies radio packets before deduplication and upload', (source) =>
-  source.includes('packet.version == 2') &&
+  source.includes('packet.version') &&
   source.includes('mbedtls_md_hmac') &&
-  source.includes('verifyPacket(packet) && !seenRecently(packet)') &&
+  source.includes('verifyPacket(packet)') &&
+  source.includes('seenRecently(packet)') &&
+  source.includes('retainLatestReading') &&
+  source.includes('MAX_PENDING_NODES = 16') &&
+  source.includes('UPLOAD_INTERVAL_MS = 10000') &&
+  source.includes('0x41') &&
+  source.includes('0x61') &&
+  !source.includes('HEARTBEAT_INTERVAL_MS') &&
+  !source.includes('restartGateway()') &&
   source.includes('RETRY_INTERVAL_MS = 60000')
+);
+
+expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute status and requested refrigeration colors', (source) =>
+  source.includes('ONLINE_WINDOW_MS = 10 * 60 * 1000') &&
+  source.includes('SAFE_TEMP_LOW_F = 30') &&
+  source.includes('SAFE_TEMP_HIGH_F = 41') &&
+  source.includes("'Online !'") &&
+  source.includes('.node-head span.offline') &&
+  source.includes('#2563eb')
 );
 
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gateway selects the external antenna before listening', (source) =>
@@ -103,13 +134,18 @@ expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gatew
   source.indexOf('digitalWrite(WIFI_ANT_CONFIG, HIGH)') < source.indexOf('esp_ieee802154_enable()')
 );
 
-expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds, stale state, acknowledgement, and recovery', (source) =>
+expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds and delays high notifications for one continuous hour', (source) =>
   source.includes('evaluateTemperatureReadings') &&
   source.includes('processTemperatureStaleAlerts') &&
   source.includes('acknowledgeTemperatureAlert') &&
   source.includes('saveTemperatureSensorSetting') &&
-  source.includes("eventType: `temperature.sensor.${eventType}`") &&
-  source.includes("status = 'recovered'")
+  source.includes('HIGH_NOTIFICATION_DELAY_SECONDS = 60 * 60') &&
+  source.includes("input.eventType === 'high' ? now + HIGH_NOTIFICATION_DELAY_SECONDS : null") &&
+  source.includes('continuityGapSeconds') &&
+  source.includes('FROM temperature_sensor_nodes sn') &&
+  source.includes('sensorName: sensorNames.get(reading.sensor_id)') &&
+  source.includes("status = 'recovered'") &&
+  !source.includes('recordOperationalEventBestEffort')
 );
 
 expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rules after saving readings', (source) =>
@@ -122,9 +158,13 @@ expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rule
   source.includes("authenticateIoTDevice(db, request, 'sensor_gateway')") &&
   source.includes('resolveGatewayNodeReading') &&
   source.includes('MAX_TEMP_BATCH_SIZE') &&
+  source.includes('MAX_TEMP_BODY_BYTES') &&
+  source.includes('MIN_AHT20_TEMPERATURE_F') &&
+  source.includes('MAX_AHT20_TEMPERATURE_F') &&
+  source.includes("request.headers.get('content-length')") &&
   source.includes("'Too many readings supplied.'") &&
-  source.includes('eventType:') &&
-  source.includes('temperature.reading_batch.received')
+  !source.includes('recordOperationalEventBestEffort') &&
+  !source.includes('temperature.reading_batch.received')
 );
 
 expect('src/routes/api/temps/+server.ts', 'temp ingest does not discard valid rows alongside unregistered nodes or refresh replayed nodes', (source) =>

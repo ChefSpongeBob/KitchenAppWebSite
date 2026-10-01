@@ -53,10 +53,16 @@ expect('src/lib/server/operationalEvents.ts', 'operational events resolve email 
   source.includes('loadRecipientsWithCapability') &&
   source.includes('resolveBusinessCapabilities') &&
   source.includes("event.event_type === 'schedule.published'") &&
-  source.includes("event.event_type.startsWith('temperature.')") &&
   source.includes("event.event_type.startsWith('camera.')") &&
   source.includes('email_updates') &&
   source.includes('operational/${event.id}/email/${recipient.id}')
+);
+
+expect('src/lib/server/operationalEvents.ts', 'temperature data and alerts are excluded from email', (source) =>
+  source.includes("event.category === 'temperature'") &&
+  source.includes("event.event_type.startsWith('temperature.')") &&
+  source.includes('Temperature monitoring is delivered through native push/SMS, never email.') &&
+  !source.includes("case 'temperature.reading_batch.received'")
 );
 
 expect('src/lib/server/operationalEvents.ts', 'operational email bodies are event specific', (source) =>
@@ -64,7 +70,6 @@ expect('src/lib/server/operationalEvents.ts', 'operational email bodies are even
   source.includes("case 'schedule.published'") &&
   source.includes("case 'schedule.time_off.requested'") &&
   source.includes("case 'onboarding.item.submitted'") &&
-  source.includes("case 'temperature.reading_batch.received'") &&
   source.includes("case 'camera.activity.received'") &&
   source.includes("event.event_type.startsWith('list.')") &&
   source.includes("event.event_type.endsWith('.completed')") &&

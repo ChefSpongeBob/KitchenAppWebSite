@@ -4,7 +4,6 @@ import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
 import { normalizeDeviceSerial } from '$lib/server/temperatureSensors';
 import { resolveGatewayNodeReading } from '$lib/server/temperatureDeviceProvisioning';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 import { evaluateTemperatureReadings, type TemperatureReading } from '$lib/server/temperatureMonitoring';
 
 type TempRow = {
@@ -288,33 +287,8 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
   if (insertedRows.length > 0) await evaluateTemperatureReadings(db, {
     businessId,
     deviceId: device.externalDeviceId,
-    readings: insertedRows,
-    request
+    readings: insertedRows
   });
-  if (insertedRows.length > 0) await recordOperationalEventBestEffort(
-    db,
-    {
-      businessId,
-      eventType: 'temperature.reading_batch.received',
-      category: 'temperature',
-      actorUserId: null,
-      subjectType: 'iot_device',
-      subjectId: device.externalDeviceId,
-      title: 'Temperature readings received',
-      dedupeKey: guardKey,
-      payload: {
-        inserted: insertedRows.length,
-        sensors: insertedRows.map((item) => item.sensor_id),
-        humidity: insertedRows.some((item) => item.humidity_pct !== null),
-        radio: {
-          protocol: 'ieee802154',
-          packetMetadata: insertedRows.some((item) => item.packet_sequence !== null || item.wake_nonce !== null),
-          linkQuality: insertedRows.some((item) => item.lqi !== null)
-        }
-      }
-    },
-    request
-  );
   await cleanupExpiredTemps(db);
   return json({ accepted: items.length, rejected, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
 };

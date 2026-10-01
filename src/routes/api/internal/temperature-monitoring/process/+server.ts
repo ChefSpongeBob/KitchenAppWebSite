@@ -26,7 +26,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     return json({ ok: false, error: 'Business required.' }, { status: 400 });
   }
 
-  const summary = await processTemperatureStaleAlerts(db, businessId, request);
+  const summary = await processTemperatureStaleAlerts(db, businessId);
   return json(
     { ok: true, ...summary },
     {

@@ -1,5 +1,4 @@
 import { dev } from '$app/environment';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 
 type DB = App.Platform['env']['DB'];
 
@@ -40,6 +39,7 @@ export type TemperatureAlertEvent = {
   acknowledged_at: number | null;
   acknowledged_by: string | null;
   recovered_at: number | null;
+  notification_ready_at: number | null;
   dedupe_key: string;
   metadata_json: string;
 };
@@ -49,6 +49,7 @@ const DEFAULT_LOW_THRESHOLD = 32;
 const DEFAULT_STALE_MINUTES = 15;
 const DEFAULT_OFFLINE_MINUTES = 45;
 const DEFAULT_COOLDOWN_MINUTES = 60;
+const HIGH_NOTIFICATION_DELAY_SECONDS = 60 * 60;
 
 let temperatureMonitoringSchemaEnsured = false;
 let temperatureMonitoringSchemaPromise: Promise<void> | null = null;
@@ -60,14 +61,6 @@ function nowSeconds() {
 function clampNumber(value: number, fallback: number, min: number, max: number) {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
-}
-
-function eventLabel(value: TemperatureAlertType) {
-  if (value === 'high') return 'High temperature';
-  if (value === 'low') return 'Low temperature';
-  if (value === 'stale') return 'Sensor stale';
-  if (value === 'offline') return 'Sensor offline';
-  return 'Sensor recovered';
 }
 
 function alertDedupeKey(sensorId: number, eventType: TemperatureAlertType) {
@@ -134,6 +127,7 @@ export async function ensureTemperatureMonitoringSchema(db: DB) {
           acknowledged_at INTEGER,
           acknowledged_by TEXT,
           recovered_at INTEGER,
+          notification_ready_at INTEGER,
           dedupe_key TEXT NOT NULL,
           metadata_json TEXT NOT NULL DEFAULT '{}'
         )
@@ -141,6 +135,7 @@ export async function ensureTemperatureMonitoringSchema(db: DB) {
       )
       .run();
     await ensureOptionalColumn(db, 'temperature_sensor_settings', 'offline_after_minutes', 'INTEGER NOT NULL DEFAULT 45');
+    await ensureOptionalColumn(db, 'temperature_alert_events', 'notification_ready_at', 'INTEGER');
     await db
       .prepare(
         `
@@ -170,6 +165,14 @@ export async function ensureTemperatureMonitoringSchema(db: DB) {
         `
         CREATE INDEX IF NOT EXISTS idx_temp_settings_business_sensor
         ON temperature_sensor_settings(business_id, sensor_id)
+        `
+      )
+      .run();
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_temp_alert_events_notification_ready
+        ON temperature_alert_events(business_id, status, event_type, notification_ready_at)
         `
       )
       .run();
@@ -210,6 +213,26 @@ export async function loadTemperatureSensorSettings(db: DB, businessId: string) 
 export async function loadTemperatureSettingsMap(db: DB, businessId: string) {
   const settings = await loadTemperatureSensorSettings(db, businessId);
   return new Map(settings.map((setting) => [setting.sensor_id, setting]));
+}
+
+async function loadTemperatureSensorNames(db: DB, businessId: string) {
+  const rows = await db
+    .prepare(
+      `
+      SELECT sensor_id, display_name
+      FROM temperature_sensor_nodes
+      WHERE business_id = ?
+        AND is_active = 1
+        AND revoked_at IS NULL
+      LIMIT 500
+      `
+    )
+    .bind(businessId)
+    .all<{ sensor_id: number; display_name: string }>();
+
+  return new Map(
+    (rows.results ?? []).map((row) => [row.sensor_id, row.display_name.trim() || `Sensor ${row.sensor_id}`])
+  );
 }
 
 export async function saveTemperatureSensorSetting(
@@ -340,12 +363,18 @@ async function upsertTemperatureAlert(
     temperature?: number | null;
     threshold?: number | null;
     readingTs?: number | null;
+    continuityGapSeconds?: number;
     metadata?: Record<string, unknown>;
   }
 ) {
   await ensureTemperatureMonitoringSchema(db);
   const now = nowSeconds();
   const dedupeKey = alertDedupeKey(input.sensorId, input.eventType);
+  const continuityGapSeconds = Math.max(
+    60,
+    Math.floor(input.continuityGapSeconds ?? DEFAULT_STALE_MINUTES * 60)
+  );
+  const notificationReadyAt = input.eventType === 'high' ? now + HIGH_NOTIFICATION_DELAY_SECONDS : null;
   await db
     .prepare(
       `
@@ -360,22 +389,51 @@ async function upsertTemperatureAlert(
         reading_ts,
         first_seen_at,
         last_seen_at,
+        notification_ready_at,
         dedupe_key,
         metadata_json
       )
-      VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(business_id, dedupe_key) DO UPDATE SET
         status = CASE
-          WHEN temperature_alert_events.status = 'recovered' THEN 'active'
+          WHEN temperature_alert_events.status = 'recovered'
+            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
+          THEN 'active'
           ELSE temperature_alert_events.status
         END,
         temperature = excluded.temperature,
         threshold = excluded.threshold,
         reading_ts = excluded.reading_ts,
+        first_seen_at = CASE
+          WHEN temperature_alert_events.status = 'recovered'
+            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
+          THEN excluded.first_seen_at
+          ELSE temperature_alert_events.first_seen_at
+        END,
         last_seen_at = excluded.last_seen_at,
+        acknowledged_at = CASE
+          WHEN temperature_alert_events.status = 'recovered'
+            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
+          THEN NULL
+          ELSE temperature_alert_events.acknowledged_at
+        END,
+        acknowledged_by = CASE
+          WHEN temperature_alert_events.status = 'recovered'
+            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
+          THEN NULL
+          ELSE temperature_alert_events.acknowledged_by
+        END,
         recovered_at = CASE
-          WHEN temperature_alert_events.status = 'recovered' THEN NULL
+          WHEN temperature_alert_events.status = 'recovered'
+            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
+          THEN NULL
           ELSE temperature_alert_events.recovered_at
+        END,
+        notification_ready_at = CASE
+          WHEN temperature_alert_events.status = 'recovered'
+            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
+          THEN excluded.notification_ready_at
+          ELSE COALESCE(temperature_alert_events.notification_ready_at, excluded.notification_ready_at)
         END,
         metadata_json = excluded.metadata_json
       `
@@ -390,8 +448,15 @@ async function upsertTemperatureAlert(
       input.readingTs ?? null,
       now,
       now,
+      notificationReadyAt,
       dedupeKey,
-      JSON.stringify(input.metadata ?? {})
+      JSON.stringify(input.metadata ?? {}),
+      continuityGapSeconds,
+      continuityGapSeconds,
+      continuityGapSeconds,
+      continuityGapSeconds,
+      continuityGapSeconds,
+      continuityGapSeconds
     )
     .run();
 }
@@ -414,41 +479,17 @@ async function recoverSensorAlerts(db: DB, businessId: string, sensorId: number)
     .run();
 }
 
-async function shouldRecordOperationalAlert(
-  db: DB,
-  businessId: string,
-  sensorId: number,
-  eventType: TemperatureAlertType,
-  cooldownMinutes: number,
-  now = nowSeconds()
-) {
-  const row = await db
-    .prepare(
-      `
-      SELECT last_seen_at
-      FROM temperature_alert_events
-      WHERE business_id = ?
-        AND dedupe_key = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, alertDedupeKey(sensorId, eventType))
-    .first<{ last_seen_at: number }>();
-  if (!row) return true;
-  return now - row.last_seen_at >= cooldownMinutes * 60;
-}
-
 export async function evaluateTemperatureReadings(
   db: DB,
   input: {
     businessId: string;
     deviceId: string;
     readings: TemperatureReading[];
-    request?: Request;
   }
 ) {
   await ensureTemperatureMonitoringSchema(db);
   const settingsMap = await loadTemperatureSettingsMap(db, input.businessId);
+  const sensorNames = await loadTemperatureSensorNames(db, input.businessId);
 
   for (const reading of input.readings) {
     const setting = settingsMap.get(reading.sensor_id) ?? defaultTemperatureSetting(reading.sensor_id);
@@ -456,7 +497,7 @@ export async function evaluateTemperatureReadings(
 
     let eventType: TemperatureAlertType | null = null;
     let threshold: number | null = null;
-    if (reading.temperature >= setting.high_threshold) {
+    if (reading.temperature > setting.high_threshold) {
       eventType = 'high';
       threshold = setting.high_threshold;
     } else if (reading.temperature <= setting.low_threshold) {
@@ -469,13 +510,6 @@ export async function evaluateTemperatureReadings(
       continue;
     }
 
-    const shouldNotify = await shouldRecordOperationalAlert(
-      db,
-      input.businessId,
-      reading.sensor_id,
-      eventType,
-      setting.alert_cooldown_minutes
-    );
     await upsertTemperatureAlert(db, {
       businessId: input.businessId,
       sensorId: reading.sensor_id,
@@ -483,47 +517,21 @@ export async function evaluateTemperatureReadings(
       temperature: reading.temperature,
       threshold,
       readingTs: reading.ts,
+      continuityGapSeconds: setting.stale_after_minutes * 60,
       metadata: {
+        sensorName: sensorNames.get(reading.sensor_id) ?? `Sensor ${reading.sensor_id}`,
         deviceId: input.deviceId,
         packetSequence: reading.packet_sequence ?? null,
         wakeNonce: reading.wake_nonce ?? null,
         lqi: reading.lqi ?? null
       }
     });
-
-    if (!shouldNotify) continue;
-    await recordOperationalEventBestEffort(
-      db,
-      {
-        businessId: input.businessId,
-        eventType: `temperature.sensor.${eventType}`,
-        category: 'temperature',
-        severity: eventType === 'high' ? 'critical' : 'warning',
-        subjectType: 'temperature_sensor',
-        subjectId: String(reading.sensor_id),
-        title: eventLabel(eventType),
-        body: `Sensor ${reading.sensor_id} is ${reading.temperature.toFixed(1)}F.`,
-        dedupeKey: `temperature-operational:${input.businessId}:${reading.sensor_id}:${eventType}:${Math.floor(Date.now() / (setting.alert_cooldown_minutes * 60 * 1000))}`,
-        payload: {
-          sensorId: reading.sensor_id,
-          temperature: reading.temperature,
-          humidityPct: reading.humidity_pct,
-          packetSequence: reading.packet_sequence ?? null,
-          wakeNonce: reading.wake_nonce ?? null,
-          lqi: reading.lqi ?? null,
-          threshold,
-          readingTs: reading.ts
-        }
-      },
-      input.request
-    );
   }
 }
 
 export async function processTemperatureStaleAlerts(
   db: DB,
   businessId: string,
-  request?: Request,
   now = nowSeconds()
 ) {
   await ensureTemperatureMonitoringSchema(db);
@@ -532,6 +540,7 @@ export async function processTemperatureStaleAlerts(
       `
       SELECT
         sn.sensor_id,
+        sn.display_name,
         COALESCE(tss.high_threshold, ?) AS high_threshold,
         COALESCE(tss.low_threshold, ?) AS low_threshold,
         COALESCE(tss.stale_after_minutes, ?) AS stale_after_minutes,
@@ -539,7 +548,7 @@ export async function processTemperatureStaleAlerts(
         COALESCE(tss.alert_cooldown_minutes, ?) AS alert_cooldown_minutes,
         COALESCE(tss.is_alerting_enabled, 1) AS is_alerting_enabled,
         MAX(t.ts) AS last_reading_ts
-      FROM sensor_nodes sn
+      FROM temperature_sensor_nodes sn
       LEFT JOIN temperature_sensor_settings tss
         ON tss.business_id = sn.business_id
         AND tss.sensor_id = sn.sensor_id
@@ -547,7 +556,9 @@ export async function processTemperatureStaleAlerts(
         ON t.business_id = sn.business_id
         AND t.sensor_id = sn.sensor_id
       WHERE sn.business_id = ?
-      GROUP BY sn.sensor_id
+        AND sn.is_active = 1
+        AND sn.revoked_at IS NULL
+      GROUP BY sn.sensor_id, sn.display_name
       LIMIT 500
       `
     )
@@ -561,6 +572,7 @@ export async function processTemperatureStaleAlerts(
     )
     .all<
       TemperatureSensorSetting & {
+        display_name: string;
         last_reading_ts: number | null;
       }
     >();
@@ -574,43 +586,17 @@ export async function processTemperatureStaleAlerts(
       now >= offlineAt ? 'offline' : now >= staleAt ? 'stale' : null;
     if (!eventType) continue;
 
-    const shouldNotify = await shouldRecordOperationalAlert(
-      db,
-      businessId,
-      row.sensor_id,
-      eventType,
-      row.alert_cooldown_minutes,
-      now
-    );
     await upsertTemperatureAlert(db, {
       businessId,
       sensorId: row.sensor_id,
       eventType,
       readingTs: row.last_reading_ts,
-      metadata: { lastReadingTs: row.last_reading_ts }
+      metadata: {
+        sensorName: row.display_name.trim() || `Sensor ${row.sensor_id}`,
+        lastReadingTs: row.last_reading_ts
+      }
     });
     processed += 1;
-
-    if (!shouldNotify) continue;
-    await recordOperationalEventBestEffort(
-      db,
-      {
-        businessId,
-        eventType: `temperature.sensor.${eventType}`,
-        category: 'temperature',
-        severity: eventType === 'offline' ? 'critical' : 'warning',
-        subjectType: 'temperature_sensor',
-        subjectId: String(row.sensor_id),
-        title: eventLabel(eventType),
-        body: `Sensor ${row.sensor_id} has not checked in.`,
-        dedupeKey: `temperature-operational:${businessId}:${row.sensor_id}:${eventType}:${Math.floor(now / (row.alert_cooldown_minutes * 60))}`,
-        payload: {
-          sensorId: row.sensor_id,
-          lastReadingTs: row.last_reading_ts
-        }
-      },
-      request
-    );
   }
 
   return { processed };

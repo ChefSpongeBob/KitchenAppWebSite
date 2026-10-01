@@ -519,10 +519,6 @@ function eventBodyFromPayload(event: OperationalEventRow) {
       return 'An onboarding item was approved.';
     case 'onboarding.item.changes_requested':
       return 'Changes were requested on an onboarding item.';
-    case 'temperature.reading_batch.received':
-      return count
-        ? `${count} temperature readings were received.`
-        : 'Temperature readings were received.';
     case 'camera.activity.received':
       return `${textValue(payload.cameraName, 'A camera')} recorded ${textValue(payload.eventType, 'activity')}. Image: ${boolLabel(payload.hasImage)}. Clip: ${boolLabel(payload.hasClip)}.`;
     case 'billing.conversion.queued':
@@ -709,6 +705,11 @@ async function loadTargetRecipient(db: DB, event: OperationalEventRow): Promise<
 }
 
 async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
+  // Temperature monitoring is delivered through native push/SMS, never email.
+  if (event.category === 'temperature' || event.event_type.startsWith('temperature.')) {
+    return [];
+  }
+
   if (event.event_type === 'schedule.published') {
     return loadAllBusinessRecipients(db, event);
   }
@@ -746,7 +747,7 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
     return loadRecipientsWithCapability(db, event, 'manage_content');
   }
 
-  if (event.event_type.startsWith('temperature.') || event.event_type.startsWith('camera.')) {
+  if (event.event_type.startsWith('camera.')) {
     return loadRecipientsWithCapability(db, event, 'manage_devices');
   }
 
