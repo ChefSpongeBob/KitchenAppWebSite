@@ -967,7 +967,6 @@ export async function convertBusinessToPaid(
 		ownerUserId?: string | null;
 		planTier: 'starter' | 'growth' | 'enterprise';
 		addOnTempMonitoring: boolean;
-		addOnCameraMonitoring: boolean;
 		now?: number;
 	}
 ) {
@@ -981,7 +980,6 @@ export async function convertBusinessToPaid(
       SET plan_tier = ?,
           status = 'active',
           addon_temp_monitoring = ?,
-          addon_camera_monitoring = ?,
           updated_at = ?
       WHERE id = ?
     `
@@ -989,7 +987,6 @@ export async function convertBusinessToPaid(
 		.bind(
 			args.planTier,
 			args.addOnTempMonitoring ? 1 : 0,
-			args.addOnCameraMonitoring ? 1 : 0,
 			now,
 			args.businessId
 		)

@@ -10,8 +10,7 @@
 			items: [
 				'Up to 20 employees',
 				'Core scheduling, todo, and lists',
-				'Temperature monitoring starts at Medium',
-				'Camera monitoring planned after launch'
+				'Temperature monitoring starts at Medium'
 			]
 		},
 		{
@@ -23,8 +22,7 @@
 			items: [
 				'Up to 75 users',
 				'Advanced admin and editor controls',
-				'Temperature monitoring included',
-				'Camera monitoring planned after launch'
+				'Temperature monitoring included'
 			]
 		},
 		{
@@ -35,8 +33,7 @@
 			items: [
 				'Up to 250 employees',
 				'Full platform + multi-team scale',
-				'Temperature monitoring included',
-				'Camera monitoring planned after launch'
+				'Temperature monitoring included'
 			]
 		}
 	];
@@ -65,12 +62,6 @@
 			starter: 'Not included',
 			growth: 'Included',
 			enterprise: 'Included'
-		},
-		{
-			label: 'Camera Monitoring',
-			starter: 'Planned',
-			growth: 'Planned',
-			enterprise: 'Planned'
 		}
 	];
 

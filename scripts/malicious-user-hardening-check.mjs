@@ -212,12 +212,6 @@ expect('src/routes/api/temps/+server.ts', 'temperature ingest is device-authenti
   source.includes('Too many readings supplied.')
 );
 
-expect('src/routes/api/camera/upload/+server.ts', 'camera uploads are beta gated and device-authenticated', (source) =>
-  source.includes('cameraBetaEnabled') &&
-  source.includes("authenticateIoTDevice(db, request, 'camera')") &&
-  source.includes("return json({ error: 'Not found.' }, { status: 404 })")
-);
-
 expect('src/lib/server/admin.ts', 'document uploads are allowlisted and exclude svg/executable formats', (source) =>
   source.includes('isAllowedDocumentUpload') &&
   !source.includes('image/svg+xml') &&

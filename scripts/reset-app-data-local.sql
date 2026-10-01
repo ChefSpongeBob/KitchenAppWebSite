@@ -8,8 +8,6 @@ DELETE FROM business_invites;
 DELETE FROM business_trials;
 DELETE FROM business_users;
 DELETE FROM businesses;
-DELETE FROM camera_events;
-DELETE FROM camera_sources;
 DELETE FROM checklist_items;
 DELETE FROM checklist_sections;
 DELETE FROM creator_category_registry;

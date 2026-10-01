@@ -29,7 +29,7 @@ const checks = [
 	['static responses get nosniff', staticHeaders.includes('X-Content-Type-Options: nosniff')],
 	['static responses deny framing', staticHeaders.includes('X-Frame-Options: DENY')],
 	['static responses set referrer policy', staticHeaders.includes('Referrer-Policy: strict-origin-when-cross-origin')],
-	['static responses set permissions policy', staticHeaders.includes('Permissions-Policy: camera=(self), geolocation=(), microphone=(), payment=(self)')],
+	['static responses set permissions policy', staticHeaders.includes('Permissions-Policy: camera=(), geolocation=(), microphone=(), payment=(self)')],
 	['static responses isolate opener', staticHeaders.includes('Cross-Origin-Opener-Policy: same-origin')],
 	['static responses disable legacy cross-domain policy files', staticHeaders.includes('X-Permitted-Cross-Domain-Policies: none')],
 	['static responses disable legacy download opening', staticHeaders.includes('X-Download-Options: noopen')],

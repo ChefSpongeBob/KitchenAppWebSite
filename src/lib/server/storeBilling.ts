@@ -26,7 +26,6 @@ export type StoreProduct = {
 	price_cents: number;
 	currency: string;
 	addon_temp_monitoring: number;
-	addon_camera_monitoring: number;
 	active: number;
 };
 
@@ -80,7 +79,6 @@ export async function ensureStoreBillingPlaceholderSchema(db: D1) {
         preferred_store TEXT NOT NULL DEFAULT 'both',
         plan_tier TEXT NOT NULL,
         addon_temp_monitoring INTEGER NOT NULL DEFAULT 0,
-        addon_camera_monitoring INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'pending_setup',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -98,7 +96,6 @@ export async function upsertStoreBillingPlaceholder(
 		preferredStore?: string | null;
 		planTier: 'starter' | 'growth' | 'enterprise';
 		addOnTempMonitoring: boolean;
-		addOnCameraMonitoring: boolean;
 		status?: StoreBillingStatus;
 		now?: number;
 	}
@@ -117,18 +114,16 @@ export async function upsertStoreBillingPlaceholder(
         preferred_store,
         plan_tier,
         addon_temp_monitoring,
-        addon_camera_monitoring,
         status,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(business_id) DO UPDATE SET
         owner_user_id = excluded.owner_user_id,
         preferred_store = excluded.preferred_store,
         plan_tier = excluded.plan_tier,
         addon_temp_monitoring = excluded.addon_temp_monitoring,
-        addon_camera_monitoring = excluded.addon_camera_monitoring,
         status = excluded.status,
         updated_at = excluded.updated_at
     `
@@ -139,7 +134,6 @@ export async function upsertStoreBillingPlaceholder(
 			preferredStore,
 			args.planTier,
 			args.addOnTempMonitoring ? 1 : 0,
-			args.addOnCameraMonitoring ? 1 : 0,
 			status,
 			now,
 			now
@@ -158,7 +152,6 @@ export async function readStoreBillingPlaceholder(db: D1, businessId: string) {
         preferred_store,
         plan_tier,
         addon_temp_monitoring,
-        addon_camera_monitoring,
         status,
         created_at,
         updated_at
@@ -174,7 +167,6 @@ export async function readStoreBillingPlaceholder(db: D1, businessId: string) {
 			preferred_store: StoreBillingPreference;
 			plan_tier: 'starter' | 'growth' | 'enterprise';
 			addon_temp_monitoring: number;
-			addon_camera_monitoring: number;
 			status: StoreBillingStatus;
 			created_at: number;
 			updated_at: number;
@@ -193,7 +185,6 @@ export async function readStoreProducts(db: D1, store?: BillingStore | null) {
           WHEN 'plan_medium' THEN 2
           WHEN 'plan_large' THEN 3
           WHEN 'addon_temp_monitoring' THEN 4
-          WHEN 'addon_camera_monitoring' THEN 5
           ELSE 99
         END
     `
@@ -237,7 +228,6 @@ export async function readBusinessEntitlements(db: D1, businessId: string) {
         entitlement_key,
         plan_tier,
         addon_temp_monitoring,
-        addon_camera_monitoring,
         status,
         current_period_start,
         current_period_end,
@@ -261,7 +251,6 @@ export async function readBusinessEntitlements(db: D1, businessId: string) {
 			entitlement_key: string;
 			plan_tier: 'starter' | 'growth' | 'enterprise' | null;
 			addon_temp_monitoring: number;
-			addon_camera_monitoring: number;
 			status: StoreEntitlementStatus;
 			current_period_start: number | null;
 			current_period_end: number | null;
@@ -376,7 +365,6 @@ export async function upsertPendingStoreEntitlement(
         entitlement_key,
         plan_tier,
         addon_temp_monitoring,
-        addon_camera_monitoring,
         purchase_token_hash,
         original_transaction_id,
         latest_transaction_id,
@@ -385,13 +373,12 @@ export async function upsertPendingStoreEntitlement(
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_verification', ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_verification', ?, ?, ?)
       ON CONFLICT(business_id, store, product_id) DO UPDATE SET
         owner_user_id = excluded.owner_user_id,
         entitlement_key = excluded.entitlement_key,
         plan_tier = excluded.plan_tier,
         addon_temp_monitoring = excluded.addon_temp_monitoring,
-        addon_camera_monitoring = excluded.addon_camera_monitoring,
         purchase_token_hash = excluded.purchase_token_hash,
         original_transaction_id = excluded.original_transaction_id,
         latest_transaction_id = excluded.latest_transaction_id,
@@ -409,7 +396,6 @@ export async function upsertPendingStoreEntitlement(
 			args.product.entitlement_key,
 			args.product.plan_tier,
 			args.product.addon_temp_monitoring,
-			args.product.addon_camera_monitoring,
 			args.purchaseTokenHash ?? null,
 			args.originalTransactionId ?? null,
 			args.transactionId ?? null,
@@ -488,7 +474,6 @@ export async function findStoreEntitlementForLifecycle(
         entitlement_key,
         plan_tier,
         addon_temp_monitoring,
-        addon_camera_monitoring,
         status,
         current_period_start,
         current_period_end,
@@ -525,7 +510,6 @@ export async function findStoreEntitlementForLifecycle(
 			entitlement_key: string;
 			plan_tier: 'starter' | 'growth' | 'enterprise' | null;
 			addon_temp_monitoring: number;
-			addon_camera_monitoring: number;
 			status: StoreEntitlementStatus;
 			current_period_start: number | null;
 			current_period_end: number | null;
@@ -647,7 +631,6 @@ export async function applyVerifiedEntitlementsToBusiness(db: D1, businessId: st
 	if (!activePlan) return { applied: false };
 
 	const addOnTempMonitoring = activePlan.plan_tier === 'growth' || activePlan.plan_tier === 'enterprise';
-	const addOnCameraMonitoring = false;
 
 	await db
 		.prepare(
@@ -656,7 +639,6 @@ export async function applyVerifiedEntitlementsToBusiness(db: D1, businessId: st
       SET plan_tier = ?,
           status = 'active',
           addon_temp_monitoring = ?,
-          addon_camera_monitoring = ?,
           updated_at = ?
       WHERE id = ?
     `
@@ -664,7 +646,6 @@ export async function applyVerifiedEntitlementsToBusiness(db: D1, businessId: st
 		.bind(
 			activePlan.plan_tier,
 			addOnTempMonitoring ? 1 : 0,
-			addOnCameraMonitoring ? 1 : 0,
 			now,
 			businessId
 		)

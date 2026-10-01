@@ -1,7 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { addNodeName, deleteNodeName, loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
-import { ensureCameraSchema } from '$lib/server/camera';
 import { revokeIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 import {
@@ -25,7 +24,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   if (!db) return { nodeNames: [], gateways: [], sensorNodes: [], sensorSettings: [], activeAlerts: [] };
   const businessId = requireBusinessId(locals);
 
-  await ensureCameraSchema(db);
   await ensureTenantSchema(db, true);
 
   const [nodeNames, gateways, sensorNodes, sensorSettings, activeAlerts] = await Promise.all([
@@ -46,7 +44,6 @@ export const actions: Actions = {
     if (!db) return fail(503, { error: 'Database not configured.' });
     const businessId = requireBusinessId(locals);
 
-    await ensureCameraSchema(db);
     await ensureTenantSchema(db, true);
 
     const formData = await request.formData();
@@ -75,7 +72,6 @@ export const actions: Actions = {
     if (!db) return fail(503, { error: 'Database not configured.' });
     const businessId = requireBusinessId(locals);
 
-    await ensureCameraSchema(db);
     await ensureTenantSchema(db, true);
 
     const formData = await request.formData();

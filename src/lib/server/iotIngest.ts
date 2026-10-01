@@ -6,7 +6,7 @@ let lastGuardCleanupAt = 0;
 let iotDeviceSchemaEnsured = false;
 let iotIngestGuardSchemaEnsured = false;
 
-export type IoTDeviceType = 'sensor' | 'camera' | 'sensor_gateway';
+export type IoTDeviceType = 'sensor' | 'sensor_gateway';
 
 export type IoTDeviceRecord = {
   id: string;
@@ -72,7 +72,6 @@ function mapIoTDevice(row: IoTDeviceRow): IoTDeviceRecord {
 }
 
 function normalizeDeviceType(value: string): IoTDeviceType {
-  if (value === 'camera') return 'camera';
   if (value === 'sensor_gateway') return 'sensor_gateway';
   return 'sensor';
 }

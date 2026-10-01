@@ -519,8 +519,6 @@ function eventBodyFromPayload(event: OperationalEventRow) {
       return 'An onboarding item was approved.';
     case 'onboarding.item.changes_requested':
       return 'Changes were requested on an onboarding item.';
-    case 'camera.activity.received':
-      return `${textValue(payload.cameraName, 'A camera')} recorded ${textValue(payload.eventType, 'activity')}. Image: ${boolLabel(payload.hasImage)}. Clip: ${boolLabel(payload.hasClip)}.`;
     case 'billing.conversion.queued':
       return `${planLabel(payload.planTier)} billing is queued for store activation.`;
     case 'billing.conversion.completed':
@@ -745,10 +743,6 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
       event.event_type.endsWith('.completed'))
   ) {
     return loadRecipientsWithCapability(db, event, 'manage_content');
-  }
-
-  if (event.event_type.startsWith('camera.')) {
-    return loadRecipientsWithCapability(db, event, 'manage_devices');
   }
 
   if (event.event_type.startsWith('billing.')) {

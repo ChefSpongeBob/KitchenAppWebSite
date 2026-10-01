@@ -133,12 +133,6 @@ expect('migrations/0082_update_launch_plan_prices.sql', 'launch store prices are
   source.includes("WHEN 'crimini.plan.large.monthly' THEN 9000")
 );
 
-expect('migrations/0082_update_launch_plan_prices.sql', 'camera billing products are deferred for launch', (source) =>
-  source.includes("WHERE product_id = 'crimini.addon.cameras.monthly'") &&
-  source.includes('SET active = 0') &&
-  source.includes("WHERE product_id = 'crimini.plan.large.monthly'")
-);
-
 expect('migrations/0083_temperature_tier_entitlements.sql', 'temperature monitoring is tier-gated to medium and large', (source) =>
   source.includes("WHERE product_id = 'crimini.addon.temps.monthly'") &&
   source.includes('SET active = 0') &&

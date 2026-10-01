@@ -111,14 +111,9 @@ expect('src/lib/server/admin.ts', 'employee onboarding records operational event
   source.includes('onboarding.item.changes_requested')
 );
 
-expect('src/routes/api/temps/+server.ts', 'temperature ingest records operational events', (source) =>
-  source.includes('temperature.reading_batch.received') &&
-  source.includes('dedupeKey: guardKey')
-);
-
-expect('src/routes/api/camera/activity/+server.ts', 'camera activity records operational events', (source) =>
-  source.includes('camera.activity.received') &&
-  source.includes('dedupeKey: `camera-activity:')
+expect('src/routes/api/temps/+server.ts', 'temperature ingest does not create operational email events', (source) =>
+  !source.includes('temperature.reading_batch.received') &&
+  !source.includes('recordOperationalEventBestEffort')
 );
 
 expect('src/routes/billing/+page.server.ts', 'billing actions record operational events', (source) =>

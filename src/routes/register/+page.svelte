@@ -715,7 +715,6 @@
 						<input type="hidden" name="business_name" value={businessName} />
 						<input type="hidden" name="plan_tier" value={planTier} />
 						<input type="hidden" name="addon_temp_monitoring" value={tempMonitoringIncluded ? '1' : '0'} />
-						<input type="hidden" name="addon_camera_monitoring" value="0" />
 						<input type="hidden" name="legal_name" value={legalName} />
 						<input type="hidden" name="registry_id" value={registryId} />
 						<input type="hidden" name="contact_email" value={contactEmail} />

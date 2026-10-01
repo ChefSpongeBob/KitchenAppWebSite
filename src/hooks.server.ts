@@ -104,7 +104,7 @@ function applySecurityHeaders(response: Response) {
 	response.headers.set('referrer-policy', 'strict-origin-when-cross-origin');
 	response.headers.set(
 		'permissions-policy',
-		'camera=(self), geolocation=(), microphone=(), payment=(self)'
+		'camera=(), geolocation=(), microphone=(), payment=(self)'
 	);
 	response.headers.set('cross-origin-opener-policy', 'same-origin');
 	response.headers.set('origin-agent-cluster', '?1');
@@ -148,11 +148,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname === '/account-deletion';
 
 	const isPublicApiRoute =
-		pathname.startsWith('/api/internal/smoke') ||
 		pathname.startsWith('/api/internal/schema-readiness') ||
 		pathname.startsWith('/api/temps') ||
-		pathname.startsWith('/api/camera/upload') ||
-		pathname.startsWith('/api/camera/activity') ||
 		pathname.startsWith('/api/billing/app-store-notifications') ||
 		pathname.startsWith('/api/billing/google-play-notifications');
 	const isBillingRoute = pathname.startsWith('/billing');

@@ -17,8 +17,7 @@
 			</p>
 			<p>
 				Operational monitoring may include temperature sensor records, uploaded document/media files,
-				IP address, user agent, device/session identifiers, and audit records. Camera monitoring data
-				would only apply if that future module is enabled.
+				IP address, user agent, device/session identifiers, and audit records.
 			</p>
 		</div>
 

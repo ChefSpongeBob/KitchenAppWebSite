@@ -17,6 +17,11 @@ function expect(path, label, predicate) {
   checks.push({ ok: Boolean(predicate(source)), label, detail: path });
 }
 
+function expectMissing(paths, label) {
+  const existing = paths.filter((path) => existsSync(resolve(root, path)));
+  checks.push({ ok: existing.length === 0, label, detail: existing.join(', ') || 'removed' });
+}
+
 expect('src/routes/admin/creator/+page.server.ts', 'Creator Studio owns content editor actions', (source) =>
   source.includes("initialEditorType: 'category' | 'list' | 'recipe' | 'document' | 'menu'") &&
   source.includes('create_creator_category') &&
@@ -54,36 +59,23 @@ expect('src/hooks.server.ts', 'feature gating uses URL-aware creator editor reso
   !source.includes('const gatedFeature = resolveFeatureKeyForPath(pathname);')
 );
 
-const redirectRoutes = [
-  ['src/routes/admin/category-creator/+page.server.ts', 'src/routes/admin/category-creator/+page.svelte', '/admin/creator?editor=category'],
-  ['src/routes/admin/lists/+page.server.ts', 'src/routes/admin/lists/+page.svelte', '/admin/creator?editor=list'],
-  ['src/routes/admin/menus/+page.server.ts', 'src/routes/admin/menus/+page.svelte', '/admin/creator?editor=menu'],
-  ['src/routes/admin/documents/+page.server.ts', 'src/routes/admin/documents/+page.svelte', '/admin/creator?editor=document'],
-  ['src/routes/admin/recipes/+page.server.ts', 'src/routes/admin/recipes/+page.svelte', '/admin/creator?editor=recipe'],
-  ['src/routes/recipes/manage/+page.server.ts', 'src/routes/recipes/manage/+page.svelte', '/admin/creator?editor=recipe']
-];
-
-for (const [path, _pagePath, target] of redirectRoutes) {
-  expect(path, `${path} redirects to Creator Studio`, (source) =>
-    source.includes('throw redirect(303') &&
-    source.includes(target) &&
-    !source.includes('export const actions')
-  );
-}
-
-for (const [_serverPath, pagePath] of redirectRoutes) {
-  expect(pagePath, `${pagePath} has no legacy editor UI`, (source) =>
-    source.includes('Opening Creator Studio.') &&
-    !source.includes('<form') &&
-    !source.includes('method="POST"') &&
-    !source.includes('name="action"') &&
-    !source.includes('DashboardCard') &&
-    !source.includes('Create Category') &&
-    !source.includes('Create Recipe') &&
-    !source.includes('Upload Menu') &&
-    !source.includes('Upload Document')
-  );
-}
+expectMissing(
+  [
+    'src/routes/admin/category-creator/+page.server.ts',
+    'src/routes/admin/category-creator/+page.svelte',
+    'src/routes/admin/lists/+page.server.ts',
+    'src/routes/admin/lists/+page.svelte',
+    'src/routes/admin/menus/+page.server.ts',
+    'src/routes/admin/menus/+page.svelte',
+    'src/routes/admin/documents/+page.server.ts',
+    'src/routes/admin/documents/+page.svelte',
+    'src/routes/admin/recipes/+page.server.ts',
+    'src/routes/admin/recipes/+page.svelte',
+    'src/routes/recipes/manage/+page.server.ts',
+    'src/routes/recipes/manage/+page.svelte'
+  ],
+  'legacy content-editor redirect routes are removed'
+);
 
 expect('src/lib/components/ui/AdminEditorMenu.svelte', 'admin dropdown has one content editor entry', (source) =>
   source.includes("label: 'Creator Studio'") &&

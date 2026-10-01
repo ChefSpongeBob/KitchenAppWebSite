@@ -22,7 +22,6 @@ expect('migrations/0053_scale_performance_indexes.sql', 'scale migration covers 
     'idx_schedule_shifts_business_week_date',
     'idx_schedule_shifts_business_user_date',
     'idx_temps_business_sensor_ts',
-    'idx_camera_events_business_created',
     'idx_employee_onboarding_items_business_file'
   ].every((indexName) => source.includes(indexName))
 );
@@ -113,12 +112,6 @@ expect('src/lib/server/retention.ts', 'temp retention cleanup is batched', (sour
   source.includes('TEMP_CLEANUP_BATCH_SIZE') &&
   source.includes('LIMIT ?') &&
   source.includes('DELETE FROM temps')
-);
-
-expect('src/lib/server/camera.ts', 'camera retention cleanup is batched', (source) =>
-  source.includes('CAMERA_CLEANUP_BATCH_SIZE') &&
-  source.includes('ORDER BY created_at ASC') &&
-  source.includes('DELETE FROM camera_events WHERE id = ?')
 );
 
 expect('src/routes/todo/+page.server.ts', 'todo cleanup is batched', (source) =>
@@ -223,16 +216,6 @@ expect('src/routes/+page.svelte', 'marketing carousel does not advance while hid
 
 expect('src/routes/api/documents/media/[...key]/+server.ts', 'document media responses stream from R2', (source) =>
   source.includes('new Response(object.body') && !source.includes('object.arrayBuffer()')
-);
-
-expect('src/routes/api/camera/media/[...key]/+server.ts', 'camera media responses stream from R2', (source) =>
-  source.includes('new Response(object.body') && !source.includes('object.arrayBuffer()')
-);
-
-expect('src/routes/api/camera/upload/+server.ts', 'camera uploads have hard size limits', (source) =>
-  source.includes('MAX_CAMERA_STILL_BYTES') &&
-  source.includes('MAX_CAMERA_CLIP_BYTES') &&
-  source.includes('status: 413')
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'scale readiness notes exist', (source) =>

@@ -1,15 +1,13 @@
 # Crimini DB And Route Inventory
 
-Generated: 2026-06-30T00:00:00.000Z
+Updated: 2026-10-01
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
 ## Summary
 
-- Tables inventoried: 96
-- Route/server files inventoried: 171
-- Source files with direct DB table references: 126
-- Tables with `business_id`: 80
+- Tables inventoried: 94
+- Tables with `business_id`: 78
 - Tables with approved alternate tenant columns: 2
 - Approved global/system/root tables: 14
 - Tables with `user_id`: 33
@@ -40,8 +38,6 @@ Use these column names exactly when scoping business data:
 - `business_store_entitlements.business_id`
 - `business_trials.business_id`
 - `business_users.business_id`
-- `camera_events.business_id`
-- `camera_sources.business_id`
 - `checklist_items.business_id`
 - `checklist_sections.business_id`
 - `creator_category_registry.business_id`
@@ -127,7 +123,7 @@ Known nonstandard tenant columns:
 
 Validated by `npm.cmd run test:db-governance`.
 
-- `tenant_data`: 80 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
+- `tenant_data`: 78 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
 - `alternate_tenant_column`: `account_deletion_requests.requester_business_id`, `iot_device_inventory.claimed_business_id`.
 - `approved_global_system`: `app_feature_flags`, `businesses`, `d1_migrations`, `devices`, `iot_ingest_guard`, `password_resets`, `security_rate_limits`, `sessions`, `store_products`, `store_webhook_events`, `trial_denials`, `user_invites`, `user_preferences`, `users`.
 
@@ -144,10 +140,10 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/admin/users` -> `manage_people`
 - `/admin/onboarding` -> `manage_onboarding`
 - `/admin/schedule`, `/admin/schedule-roles`, `/admin/schedule-settings` -> `manage_schedule`
-- `/admin/camera`, `/admin/sensors` -> `manage_devices`
+- `/admin/sensors` -> `manage_devices`
 - `/admin/vendors` -> `manage_vendors`
 - `/admin/app-editor` -> `manage_workspace`
-- `/admin/creator`, `/admin/category-creator`, `/admin/documents`, `/admin/lists`, `/admin/menus`, `/admin/recipes` -> `manage_content`
+- `/admin/creator` -> `manage_content`
 - `/reports` -> `view_reports`
 - `/vendors` -> `view_vendors`
 - `/billing` -> `manage_billing`
@@ -163,8 +159,6 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/admin` -> `src/routes/admin/+page.server.ts` -> `announcements` (reference), `business_users` (select), `employee_spotlight` (reference), `schedule_shifts` (select), `temps` (select), `todos` (select), `users` (select)
 - `/admin/+page.svelte` -> `src/routes/admin/+page.svelte` -> `announcements` (reference), `employee_spotlight` (reference), `recipes` (reference), `temps` (reference), `todos` (reference), `users` (reference)
 - `/admin/app-editor` -> `src/routes/admin/app-editor/+page.server.ts` -> `businesses` (select/update), `documents` (reference)
-- `/admin/camera` -> `src/routes/admin/camera/+page.server.ts` -> `camera_events` (delete/select), `camera_sources` (select)
-- `/admin/camera/setup` -> `src/routes/admin/camera/setup/+page.server.ts` -> `camera_sources` (insert)
 - `/admin/creator` -> `src/routes/admin/creator/+page.server.ts` -> `documents` (reference), `recipes` (reference)
 - `/admin/creator/+page.svelte` -> `src/routes/admin/creator/+page.svelte` -> `documents` (reference), `recipes` (reference)
 - `/admin/onboarding` -> `src/routes/admin/onboarding/+page.server.ts` -> `users` (reference)
@@ -178,12 +172,8 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/announcements/+page.svelte` -> `src/routes/announcements/+page.svelte` -> `announcements` (reference)
 - `/api/billing/app-store-notifications` -> `src/routes/api/billing/app-store-notifications/+server.ts` -> `store_webhook_events` (insert/update)
 - `/api/billing/google-play-notifications` -> `src/routes/api/billing/google-play-notifications/+server.ts` -> `store_webhook_events` (insert/update)
-- `/api/camera/activity` -> `src/routes/api/camera/activity/+server.ts` -> `camera_events` (insert)
-- `/api/camera/media/*key` -> `src/routes/api/camera/media/[...key]/+server.ts` -> `businesses` (reference), `camera_events` (select)
-- `/api/camera/upload` -> `src/routes/api/camera/upload/+server.ts` -> `businesses` (reference), `camera_events` (insert)
 - `/api/documents/media/*key` -> `src/routes/api/documents/media/[...key]/+server.ts` -> `businesses` (select), `documents` (select), `employee_onboarding_items` (select), `employee_onboarding_template_items` (select)
 - `/api/internal/schema-readiness` -> `src/routes/api/internal/schema-readiness/+server.ts` -> `account_audit_logs` (reference), `account_deletion_requests` (reference), `business_invites` (reference), `business_lifecycle_snapshots` (reference), `business_users` (reference), `businesses` (reference), `devices` (reference), `employee_certifications` (reference), `employee_compliance_documents` (reference), `employee_compliance_requirements` (reference), `employee_document_access_audit` (reference), `employee_employment_records` (reference), `employee_onboarding_invite_requirements` (reference), `employee_onboarding_items` (reference), `employee_onboarding_packages` (reference), `employee_onboarding_template_items` (reference), `employee_pos_permissions` (reference), `employee_role_permissions` (reference), `employee_sensitive_record_audit` (reference), `employee_sensitive_record_vault` (reference), `employee_verification_checks` (reference), `iot_device_inventory` (reference), `operational_event_delivery_attempts` (reference), `operational_events` (reference), `password_resets` (reference), `push_notification_devices` (reference), `security_rate_limits` (reference), `sessions` (reference), `store_products` (reference), `store_webhook_events` (reference), `temperature_alert_events` (reference), `temperature_sensor_nodes` (reference), `temperature_sensor_settings` (reference), `trial_identity_claims` (reference), `user_preferences` (reference), `users` (reference), `waste_logs` (reference)
-- `/api/internal/smoke/session` -> `src/routes/api/internal/smoke/session/+server.ts` -> `devices` (insert/select), `sessions` (insert/update), `users` (select)
 - `/api/temps` -> `src/routes/api/temps/+server.ts` -> `temps` (insert/select)
 - `/api/whiteboard` -> `src/routes/api/whiteboard/+server.ts` -> `users` (reference), `whiteboard_posts` (insert/select/update), `whiteboard_review` (insert/select), `whiteboard_votes` (insert/select)
 - `/app` -> `src/routes/app/+page.server.ts` -> `announcements` (reference), `daily_specials` (reference), `documents` (select), `employee_spotlight` (reference), `sensor_nodes` (select), `temps` (select), `todo_assignments` (select), `todos` (select), `users` (select), `whiteboard_posts` (select), `whiteboard_review` (select)
@@ -236,7 +226,6 @@ These files use dynamic SQL, PRAGMA, ALTER, CREATE INDEX/TABLE, or schema repair
 - `src/lib/server/announcements.ts`
 - `src/lib/server/appFeatures.ts`
 - `src/lib/server/business.ts`
-- `src/lib/server/camera.ts`
 - `src/lib/server/dailySpecials.ts`
 - `src/lib/server/dbSchema.ts`
 - `src/lib/server/employeeSpotlight.ts`
@@ -556,8 +545,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `/+layout.svelte` `src/routes/+layout.svelte` [reference]
   - `/` `src/routes/+layout.server.ts` [reference]
   - `/admin/app-editor` `src/routes/admin/app-editor/+page.server.ts` [select, update]
-  - `/api/camera/media/*key` `src/routes/api/camera/media/[...key]/+server.ts` [reference]
-  - `/api/camera/upload` `src/routes/api/camera/upload/+server.ts` [reference]
   - `/api/documents/media/*key` `src/routes/api/documents/media/[...key]/+server.ts` [select]
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
   - `/billing` `src/routes/billing/+page.server.ts` [select]
@@ -577,49 +564,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/tenant.ts` [select]
   - `src/lib/server/trial.ts` [delete, select, update]
   - `src/lib/server/vendors.ts` [reference]
-
-### camera_events
-
-**Columns**
-  - `id` TEXT (PK)
-  - `camera_id` TEXT
-  - `camera_name` TEXT
-  - `event_type` TEXT
-  - `payload_json` TEXT
-  - `image_url` TEXT
-  - `clip_url` TEXT
-  - `clip_duration_seconds` INTEGER
-  - `created_at` INTEGER (NOT NULL)
-  - `business_id` TEXT
-
-**Code Usage**
-  - `/admin/camera` `src/routes/admin/camera/+page.server.ts` [delete, select]
-  - `/api/camera/activity` `src/routes/api/camera/activity/+server.ts` [insert]
-  - `/api/camera/media/*key` `src/routes/api/camera/media/[...key]/+server.ts` [select]
-  - `/api/camera/upload` `src/routes/api/camera/upload/+server.ts` [insert]
-  - `scripts/ensure-tenant-columns.mjs` [reference]
-  - `scripts/scale-performance-check.mjs` [delete, select]
-  - `src/lib/server/camera.ts` [ddl, delete, select]
-  - `src/lib/server/tenant.ts` [reference]
-
-### camera_sources
-
-**Columns**
-  - `id` TEXT (PK)
-  - `camera_id` TEXT UNIQUE
-  - `name` TEXT (NOT NULL)
-  - `live_url` TEXT
-  - `preview_image_url` TEXT
-  - `is_active` INTEGER (NOT NULL, DEFAULT 1)
-  - `updated_at` INTEGER (NOT NULL)
-  - `business_id` TEXT
-
-**Code Usage**
-  - `/admin/camera/setup` `src/routes/admin/camera/setup/+page.server.ts` [insert]
-  - `/admin/camera` `src/routes/admin/camera/+page.server.ts` [select]
-  - `scripts/ensure-tenant-columns.mjs` [reference]
-  - `src/lib/server/camera.ts` [ddl]
-  - `src/lib/server/tenant.ts` [reference]
 
 ### checklist_items
 
@@ -733,7 +677,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 
 **Code Usage**
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
-  - `/api/internal/smoke/session` `src/routes/api/internal/smoke/session/+server.ts` [insert, select]
   - `/login` `src/routes/login/+page.server.ts` [insert, select, update]
   - `/register` `src/routes/register/+page.server.ts` [insert]
   - `scripts/auth-abuse-check.mjs` [reference]
@@ -1814,7 +1757,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 
 **Code Usage**
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
-  - `/api/internal/smoke/session` `src/routes/api/internal/smoke/session/+server.ts` [insert, update]
   - `/login` `src/routes/login/+page.server.ts` [insert, update]
   - `/logout` `src/routes/logout/+page.server.ts` [update]
   - `/privacy/+page.svelte` `src/routes/privacy/+page.svelte` [reference]
@@ -2243,7 +2185,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `/admin/users` `src/routes/admin/users/+page.server.ts` [reference]
   - `/admin` `src/routes/admin/+page.server.ts` [select]
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
-  - `/api/internal/smoke/session` `src/routes/api/internal/smoke/session/+server.ts` [select]
   - `/api/whiteboard` `src/routes/api/whiteboard/+server.ts` [reference]
   - `/app` `src/routes/app/+page.server.ts` [select]
   - `/billing` `src/routes/billing/+page.server.ts` [select]

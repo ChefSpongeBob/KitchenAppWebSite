@@ -78,8 +78,7 @@ expect('src/routes/billing-terms/+page.svelte', 'billing terms describe subscrip
   source.includes('until canceled') &&
   source.includes('Refund requests for store purchases') &&
   source.includes('Temperature monitoring') &&
-  source.includes('Medium and Large') &&
-  source.includes('Camera monitoring is deferred')
+  source.includes('Medium and Large')
 );
 
 expect('src/routes/billing/+page.svelte', 'billing page links legal subscription disclosures', (source) =>

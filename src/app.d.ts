@@ -9,14 +9,12 @@ declare global {
 		interface Platform {
 			env: {
 				DB: D1Database;
-				CAMERA_MEDIA?: R2Bucket;
 				DOC_MEDIA?: R2Bucket;
 				RESEND_API_KEY?: string;
 				RESEND_FROM_EMAIL?: string;
 				RESEND_REPLY_TO_EMAIL?: string;
 				APP_BASE_URL?: string;
 				SMOKE_INTERNAL_TOKEN?: string;
-				SMOKE_DEFAULT_EMAIL?: string;
 				ALLOW_RUNTIME_SCHEMA_MUTATION?: string;
 				SENSITIVE_DATA_KEY?: string;
 				SENSITIVE_DATA_KEY_VERSION?: string;

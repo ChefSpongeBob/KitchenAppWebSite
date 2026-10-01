@@ -23,27 +23,7 @@ function assertNotIncludes(file, needle, message) {
   console.log(`PASS: ${message}`);
 }
 
-assertIncludes(
-  'src/routes/api/camera/upload/+server.ts',
-  'businesses/${businessId}/camera/',
-  'camera uploads are stored under business-scoped object keys'
-);
-
-assertIncludes(
-  'src/routes/api/camera/media/[...key]/+server.ts',
-  'locals.businessId',
-  'camera media requires active business context'
-);
-
-assertIncludes(
-  'src/routes/api/camera/media/[...key]/+server.ts',
-  "'cache-control': 'private, no-store'",
-  'camera media is not publicly cacheable'
-);
-
 for (const file of [
-  'src/routes/api/camera/activity/+server.ts',
-  'src/routes/api/camera/upload/+server.ts',
   'src/routes/api/temps/+server.ts'
 ]) {
   assertNotIncludes(file, 'singleActiveBusinessId', `${file} does not guess tenant context`);

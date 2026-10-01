@@ -29,12 +29,6 @@ assertIncludes(
   'document media uses the document bucket only'
 );
 
-assertNotIncludes(
-  'src/routes/api/documents/media/[...key]/+server.ts',
-  'CAMERA_MEDIA',
-  'document media route does not fall back to camera storage'
-);
-
 assertIncludes(
   'src/routes/api/documents/media/[...key]/+server.ts',
   "headers.set('cache-control', 'private, no-store')",
@@ -87,12 +81,6 @@ assertIncludes(
   'src/routes/admin/creator/+page.svelte',
   '.pdf,.jpg,.jpeg,.png,.webp,.gif',
   'document upload pickers only suggest PDF and raster images'
-);
-
-assertIncludes(
-  'src/routes/api/camera/media/[...key]/+server.ts',
-  "'cache-control': 'private, no-store'",
-  'camera media remains private and not publicly cacheable'
 );
 
 console.log('\nMedia access check passed.');

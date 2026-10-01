@@ -28,8 +28,6 @@ const tenantTables = [
   'daily_specials_editors',
   'sensor_nodes',
   'temps',
-  'camera_events',
-  'camera_sources',
   'schedule_weeks',
   'schedule_shifts',
   'schedule_week_team',

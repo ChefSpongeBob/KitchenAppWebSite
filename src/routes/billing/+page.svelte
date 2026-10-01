@@ -15,7 +15,6 @@
 			name: string;
 			planTier: string;
 			addOnTempMonitoring: boolean;
-			addOnCameraMonitoring: boolean;
 		};
 		trial: {
 			mode:
@@ -43,7 +42,6 @@
 			priceCents: number;
 			currency: string;
 			addOnTempMonitoring: boolean;
-			addOnCameraMonitoring: boolean;
 		}>;
 		storeEntitlements: Array<{
 			store: NativeStore;
@@ -63,7 +61,6 @@
 			status: 'pending_setup' | 'queued' | 'active' | 'disabled';
 			planTier: 'starter' | 'growth' | 'enterprise';
 			addOnTempMonitoring: boolean;
-			addOnCameraMonitoring: boolean;
 		} | null;
 		storeStatus: string | null;
 	};
@@ -86,7 +83,6 @@
 
 	$: availableProducts = data.storeProducts.filter(
 		(product) =>
-			!product.addOnCameraMonitoring &&
 			!(product.addOnTempMonitoring && !product.planTier) &&
 			(nativeStore ? product.store === nativeStore : product.store === 'google_play')
 	);
@@ -187,7 +183,6 @@
 		nativeStore = nativeStoreForPlatform();
 		if (nativeStore) {
 			const productIds = data.storeProducts
-				.filter((product) => !product.addOnCameraMonitoring)
 				.filter((product) => !(product.addOnTempMonitoring && !product.planTier))
 				.filter((product) => product.store === nativeStore)
 				.map((product) => product.productId);
@@ -284,7 +279,6 @@
 					<form method="POST" action="?/convert" class="dev-convert" use:enhance>
 						<input type="hidden" name="plan_tier" value={selectedPlan} />
 						<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
-						<input type="hidden" name="addon_camera_monitoring" value="0" />
 						<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
 						<button type="submit" class="secondary">Local activate</button>
 					</form>

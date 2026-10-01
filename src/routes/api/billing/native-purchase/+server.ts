@@ -58,9 +58,6 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 		if (!product) {
 			return json({ ok: false, error: 'Unknown store product.' }, { status: 400 });
 		}
-		if (product.addon_camera_monitoring === 1) {
-			return json({ ok: false, error: 'Camera monitoring is not available yet.' }, { status: 400 });
-		}
 		if (product.addon_temp_monitoring === 1 && !product.plan_tier) {
 			return json({ ok: false, error: 'Temperature monitoring is included with Medium and Large.' }, { status: 400 });
 		}
@@ -140,7 +137,6 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 				preferredStore: store,
 				planTier: product.plan_tier,
 				addOnTempMonitoring: product.addon_temp_monitoring === 1,
-				addOnCameraMonitoring: product.addon_camera_monitoring === 1,
 				status: verification.verified ? 'active' : 'queued'
 			});
 		}

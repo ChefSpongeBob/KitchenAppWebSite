@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = process.cwd();
@@ -29,6 +29,35 @@ function parseInventoryCatalog(source) {
   return tableBlocks;
 }
 
+function readDroppedMigrationTables() {
+  const droppedTables = new Set();
+  const migrationNames = readdirSync(resolve(root, 'migrations'))
+    .filter((name) => name.endsWith('.sql'))
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const migrationName of migrationNames) {
+    const migration = read(`migrations/${migrationName}`);
+    const operations = [
+      ...migration.matchAll(/\b(CREATE|DROP)\s+TABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?["`[]?([A-Za-z_][A-Za-z0-9_]*)["`\]]?/gi)
+    ].map((match) => ({ index: match.index, operation: match[1].toUpperCase(), table: match[2] }));
+
+    for (const match of migration.matchAll(/\bALTER\s+TABLE\s+["`[]?([A-Za-z_][A-Za-z0-9_]*)["`\]]?\s+RENAME\s+TO\s+["`[]?([A-Za-z_][A-Za-z0-9_]*)["`\]]?/gi)) {
+      operations.push({ index: match.index, operation: 'RENAME', table: match[1], target: match[2] });
+    }
+
+    for (const operation of operations.sort((a, b) => a.index - b.index)) {
+      if (operation.operation === 'DROP') droppedTables.add(operation.table);
+      else if (operation.operation === 'CREATE') droppedTables.delete(operation.table);
+      else {
+        droppedTables.add(operation.table);
+        droppedTables.delete(operation.target);
+      }
+    }
+  }
+
+  return droppedTables;
+}
+
 function hasColumn(block, column) {
   return block.includes(`- \`${column}\``);
 }
@@ -44,6 +73,7 @@ const registerSource = read('src/routes/register/+page.server.ts');
 const packageJson = read('package.json');
 
 const catalog = parseInventoryCatalog(inventory);
+for (const table of readDroppedMigrationTables()) catalog.delete(table);
 const allTables = [...catalog.keys()].sort();
 const tenantTables = new Set(extractQuotedArray(tenantSource, 'TENANT_TABLES'));
 

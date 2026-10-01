@@ -67,8 +67,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
       SELECT
         name,
         plan_tier,
-        addon_temp_monitoring,
-        addon_camera_monitoring
+        addon_temp_monitoring
       FROM businesses
       WHERE id = ?
       LIMIT 1
@@ -79,7 +78,6 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 			name: string;
 			plan_tier: string;
 			addon_temp_monitoring: number;
-			addon_camera_monitoring: number;
 		}>();
 
 	if (!business) {
@@ -114,8 +112,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 		business: {
 			name: business.name,
 			planTier: business.plan_tier,
-			addOnTempMonitoring: business.addon_temp_monitoring === 1,
-			addOnCameraMonitoring: business.addon_camera_monitoring === 1
+			addOnTempMonitoring: business.addon_temp_monitoring === 1
 		},
 		trial,
 		canManageBilling: canManageBilling(
@@ -132,8 +129,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 			planTier: product.plan_tier,
 			priceCents: product.price_cents,
 			currency: product.currency,
-			addOnTempMonitoring: product.addon_temp_monitoring === 1,
-			addOnCameraMonitoring: product.addon_camera_monitoring === 1
+			addOnTempMonitoring: product.addon_temp_monitoring === 1
 		})),
 		storeEntitlements: storeEntitlements.map((entitlement) => ({
 			store: entitlement.store,
@@ -153,8 +149,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 					preferredStore: storeBillingPlaceholder.preferred_store,
 					status: storeBillingPlaceholder.status,
 					planTier: storeBillingPlaceholder.plan_tier,
-					addOnTempMonitoring: storeBillingPlaceholder.addon_temp_monitoring === 1,
-					addOnCameraMonitoring: storeBillingPlaceholder.addon_camera_monitoring === 1
+					addOnTempMonitoring: storeBillingPlaceholder.addon_temp_monitoring === 1
 				}
 			: null,
 		storeStatus: String(url.searchParams.get('store') ?? '').trim().toLowerCase() || null
@@ -182,7 +177,6 @@ export const actions: Actions = {
 
 			const form = await request.formData();
 			const planRaw = String(form.get('plan_tier') ?? 'small').trim().toLowerCase();
-			const addOnCameraMonitoring = false;
 			const storeBillingPreference = String(form.get('store_billing_preference') ?? 'both')
 				.trim()
 				.toLowerCase();
@@ -205,7 +199,6 @@ export const actions: Actions = {
 					preferredStore: storeBillingPreference,
 					planTier,
 					addOnTempMonitoring,
-					addOnCameraMonitoring,
 					status: 'queued'
 				});
 				await recordOperationalEventBestEffort(
@@ -218,7 +211,7 @@ export const actions: Actions = {
 						subjectType: 'business',
 						subjectId: locals.businessId,
 						title: 'Billing conversion queued',
-						payload: { planTier, addOnTempMonitoring, addOnCameraMonitoring, storeBillingPreference }
+						payload: { planTier, addOnTempMonitoring, storeBillingPreference }
 					},
 					request
 				);
@@ -229,8 +222,7 @@ export const actions: Actions = {
 				businessId: locals.businessId,
 				ownerUserId: locals.userId,
 				planTier,
-				addOnTempMonitoring,
-				addOnCameraMonitoring
+				addOnTempMonitoring
 			});
 			logOperationalEvent({
 				level: 'info',
@@ -251,7 +243,7 @@ export const actions: Actions = {
 					subjectType: 'business',
 					subjectId: locals.businessId,
 					title: 'Billing conversion completed',
-					payload: { planTier, addOnTempMonitoring, addOnCameraMonitoring }
+					payload: { planTier, addOnTempMonitoring }
 				},
 				request
 			);

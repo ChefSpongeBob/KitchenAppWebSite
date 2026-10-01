@@ -14,7 +14,6 @@ export const GET: RequestHandler = async ({ locals, url, request }) => {
 			{
 				ok: true,
 				products: products
-					.filter((product) => product.addon_camera_monitoring !== 1)
 					.filter((product) => !(product.addon_temp_monitoring === 1 && !product.plan_tier))
 					.map((product) => ({
 						store: product.store,
@@ -25,8 +24,7 @@ export const GET: RequestHandler = async ({ locals, url, request }) => {
 						billingPeriod: product.billing_period,
 						priceCents: product.price_cents,
 						currency: product.currency,
-						addOnTempMonitoring: product.addon_temp_monitoring === 1,
-						addOnCameraMonitoring: product.addon_camera_monitoring === 1
+						addOnTempMonitoring: product.addon_temp_monitoring === 1
 					}))
 			},
 			{ headers: { 'cache-control': 'no-store' } }

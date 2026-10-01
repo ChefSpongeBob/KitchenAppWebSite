@@ -149,13 +149,6 @@ expect('src/routes/api/temps/+server.ts', 'temperature ingest requires device au
   source.includes("return json({ error: 'Gateway credentials required.' }, { status: 401 })")
 );
 
-expect('src/routes/api/camera/activity/+server.ts', 'camera activity ingest remains beta gated and device authenticated', (source) =>
-  source.includes('cameraBetaEnabled') &&
-  source.includes("authenticateIoTDevice(db, request, 'camera')") &&
-  source.includes("return json({ error: 'Not found.' }, { status: 404 })") &&
-  source.includes("return json({ error: 'Device credentials required.' }, { status: 401 })")
-);
-
 expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires billing webhook token', (source) =>
   source.includes('BILLING_WEBHOOK_TOKEN') &&
   source.includes('bearerTokenFromRequest') &&

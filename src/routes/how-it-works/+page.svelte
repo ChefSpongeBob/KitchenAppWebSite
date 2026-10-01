@@ -186,7 +186,7 @@
 		},
 		{
 			title: 'Monitoring + Reports',
-			detail: 'Temperature readiness, vendors, history, exports, operational review, and future camera expansion.'
+			detail: 'Temperature readiness, vendors, history, exports, and operational review.'
 		}
 	];
 
@@ -220,7 +220,7 @@
 	const rolloutNotes = [
 		'The owner account creates the business workspace first.',
 		'Employee onboarding is controlled from admin after workspace setup.',
-		'Temperature systems can be connected after the core app is running. Camera monitoring is planned as a later expansion.',
+		'Temperature systems can be connected after the core app is running.',
 		'Store billing and mobile store release remain part of the final production launch path.'
 	];
 

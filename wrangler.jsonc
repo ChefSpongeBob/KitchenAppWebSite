@@ -14,10 +14,6 @@
 		{
 			"binding": "DOC_MEDIA",
 			"bucket_name": "crimini-doc-media"
-		},
-		{
-			"binding": "CAMERA_MEDIA",
-			"bucket_name": "crimini-camera-media"
 		}
 	],
 	"vars": {

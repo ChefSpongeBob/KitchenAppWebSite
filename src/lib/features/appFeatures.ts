@@ -97,28 +97,28 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Lists',
     description: 'Checklist and prep list tools.',
     userRoutePrefixes: ['/lists'],
-    adminRoutePrefixes: ['/admin/lists']
+    adminRoutePrefixes: []
   },
   {
     key: 'recipes',
     label: 'Recipes',
     description: 'Recipe library and editor.',
     userRoutePrefixes: ['/recipes'],
-    adminRoutePrefixes: ['/admin/recipes']
+    adminRoutePrefixes: []
   },
   {
     key: 'documents',
     label: 'Documents',
     description: 'Document library and document editor.',
     userRoutePrefixes: ['/docs'],
-    adminRoutePrefixes: ['/admin/documents']
+    adminRoutePrefixes: []
   },
   {
     key: 'menus',
     label: 'Menus',
     description: 'Menu document page and menu viewer.',
     userRoutePrefixes: ['/menu'],
-    adminRoutePrefixes: ['/admin/menus']
+    adminRoutePrefixes: []
   },
   {
     key: 'vendors',

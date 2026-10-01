@@ -104,7 +104,7 @@
 		},
 		{
 			title: 'Monitoring + Vendor Tools',
-			detail: 'Prepare for temperature nodes, vendors, history exports, operational review, and future camera expansion.'
+			detail: 'Prepare for temperature nodes, vendors, history exports, and operational review.'
 		}
 	];
 

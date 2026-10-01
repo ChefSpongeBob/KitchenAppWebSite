@@ -44,7 +44,7 @@
 			<h2>Plans</h2>
 			<p>
 				Small, Medium, and Large plans use separate store product IDs. Temperature monitoring is
-				included with Medium and Large plans. Camera monitoring is deferred until a later release.
+				included with Medium and Large plans.
 			</p>
 		</div>
 

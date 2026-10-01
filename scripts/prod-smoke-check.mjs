@@ -122,43 +122,7 @@ async function main() {
   }
   await assertSchemaReady();
 
-  if (internalToken) {
-    const smokeSessionResponse = await request('/api/internal/smoke/session', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-smoke-token': internalToken
-      },
-      body: JSON.stringify(email ? { email } : {})
-    });
-    if (smokeSessionResponse.status >= 200 && smokeSessionResponse.status < 300) {
-      logPass(`Internal smoke session established (${smokeSessionResponse.status})`);
-    } else {
-      logFail(`Internal smoke session expected 2xx, got ${smokeSessionResponse.status}`);
-    }
-
-    for (const [path, label] of privateRoutes) {
-      await assertGetOk(path, label);
-    }
-
-    if (runAdminChecks) {
-      for (const [path, label] of adminRoutes) {
-        await assertGetOk(path, label);
-      }
-    }
-
-    const internalLogout = await request('/api/internal/smoke/session', {
-      method: 'DELETE',
-      headers: {
-        'x-smoke-token': internalToken
-      }
-    });
-    if (internalLogout.status >= 200 && internalLogout.status < 300) {
-      logPass(`Internal smoke session revoked (${internalLogout.status})`);
-    } else {
-      logFail(`Internal smoke session revoke expected 2xx, got ${internalLogout.status}`);
-    }
-  } else if (email && password) {
+  if (email && password) {
     const body = new URLSearchParams({ email, password }).toString();
     const loginResponse = await request('/login', {
       method: 'POST',
@@ -200,9 +164,7 @@ async function main() {
       logFail(`Logout expected redirect, got ${logoutResponse.status}`);
     }
   } else {
-    console.log(
-      'Skipping authenticated checks. Set SMOKE_INTERNAL_TOKEN (preferred) or SMOKE_EMAIL and SMOKE_PASSWORD.'
-    );
+    console.log('Skipping authenticated checks. Set SMOKE_EMAIL and SMOKE_PASSWORD.');
   }
 
   if (failed) {

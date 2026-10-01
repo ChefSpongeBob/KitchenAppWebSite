@@ -28,7 +28,6 @@ const wrangler = parseWrangler();
 if (wrangler) {
   const d1 = wrangler.d1_databases?.find((binding) => binding.binding === 'DB');
   const docMedia = wrangler.r2_buckets?.find((bucket) => bucket.binding === 'DOC_MEDIA');
-  const cameraMedia = wrangler.r2_buckets?.find((bucket) => bucket.binding === 'CAMERA_MEDIA');
   const wranglerSource = JSON.stringify(wrangler);
 
   expect('Cloudflare Pages output directory is configured', wrangler.pages_build_output_dir === '.svelte-kit/cloudflare');
@@ -36,11 +35,10 @@ if (wrangler) {
   expect('D1 binding DB points to crimini-production', d1?.database_name === 'crimini-production');
   expect('D1 database id is present', typeof d1?.database_id === 'string' && d1.database_id.length > 20);
   expect('DOC_MEDIA R2 binding is configured', docMedia?.bucket_name === 'crimini-doc-media');
-  expect('CAMERA_MEDIA R2 binding is configured', cameraMedia?.bucket_name === 'crimini-camera-media');
   expect('APP_BASE_URL points to production domain', wrangler.vars?.APP_BASE_URL === 'https://criminiops.com');
   expect('Public signup is closed for private testing', wrangler.vars?.PUBLIC_SIGNUP_ENABLED === 'false');
   expect('Owner signup allowlist is configured for controlled testing', typeof wrangler.vars?.OWNER_SIGNUP_ALLOWLIST === 'string' && wrangler.vars.OWNER_SIGNUP_ALLOWLIST.includes('@'));
-  expect('No old copied Cloudflare resources are bound in wrangler config', !/kitchensoftware|kitchen-camera-media|"database_name":"kitchen"/i.test(wranglerSource));
+  expect('No old copied Cloudflare resources are bound in wrangler config', !/kitchensoftware|"database_name":"kitchen"/i.test(wranglerSource));
 }
 
 const packageJson = JSON.parse(read('package.json') || '{}');

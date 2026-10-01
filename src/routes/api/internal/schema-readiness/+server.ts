@@ -57,7 +57,6 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_temps_business_sensor_ts',
 	'idx_temps_business_sensor_sequence',
 	'idx_temps_business_sensor_nonce',
-	'idx_camera_events_business_created',
 	'idx_store_purchase_events_business_status_created',
 	'idx_employee_employment_records_business_status',
 	'idx_employee_compliance_requirements_business_active',

@@ -83,12 +83,6 @@ expect('src/routes/api/documents/media/[...key]/+server.ts', 'document media fai
   source.includes('document_media_object_missing')
 );
 
-expect('src/routes/api/camera/media/[...key]/+server.ts', 'camera media failures are logged', (source) =>
-  source.includes('camera_media_bucket_missing') &&
-  source.includes('camera_media_access_denied') &&
-  source.includes('camera_media_object_missing')
-);
-
 expect('scripts/prod-smoke-check.mjs', 'production smoke covers critical routes and schema readiness', (source) =>
   source.includes('privateRoutes') &&
   source.includes('adminRoutes') &&

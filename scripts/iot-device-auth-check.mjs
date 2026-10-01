@@ -42,26 +42,12 @@ assertIncludes(
 );
 
 for (const file of [
-  'src/routes/api/temps/+server.ts',
-  'src/routes/api/camera/activity/+server.ts',
-  'src/routes/api/camera/upload/+server.ts'
+  'src/routes/api/temps/+server.ts'
 ]) {
   assertIncludes(file, 'authenticateIoTDevice', `${file} requires per-device auth`);
   assertNotIncludes(file, 'IOT_API_KEY', `${file} does not use the shared IoT API key`);
   assertNotIncludes(file, 'x-api-key', `${file} does not accept the shared x-api-key auth path`);
 }
-
-assertIncludes(
-  'src/routes/admin/camera/setup/+page.server.ts',
-  'provisionIoTDevice',
-  'admins can provision camera device credentials'
-);
-
-assertIncludes(
-  'src/routes/admin/camera/setup/+page.server.ts',
-  'revokeIoTDevice',
-  'admins can revoke camera device credentials'
-);
 
 assertIncludes(
   'src/routes/admin/sensors/+page.server.ts',

@@ -103,7 +103,6 @@ SET
 	status = 'active',
 	plan_tier = ${sqlString(planTier)},
 	addon_temp_monitoring = ${addonTempMonitoring},
-	addon_camera_monitoring = 0,
 	updated_at = strftime('%s','now')
 WHERE id IN (SELECT business_id FROM _selected_test_tenant);
 
@@ -146,7 +145,6 @@ UPDATE store_billing_placeholders
 SET
 	plan_tier = ${sqlString(planTier)},
 	addon_temp_monitoring = ${addonTempMonitoring},
-	addon_camera_monitoring = 0,
 	status = 'active',
 	updated_at = strftime('%s','now')
 WHERE business_id IN (SELECT business_id FROM _selected_test_tenant);
@@ -158,7 +156,6 @@ SELECT
 	b.status AS business_status,
 	b.plan_tier,
 	b.addon_temp_monitoring,
-	b.addon_camera_monitoring,
 	bt.status AS trial_status,
 	sbp.status AS billing_placeholder_status
 FROM _selected_test_tenant selected

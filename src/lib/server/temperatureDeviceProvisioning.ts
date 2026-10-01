@@ -21,7 +21,7 @@ type InventoryRow = {
 type IoTDeviceRow = {
   id: string;
   business_id: string;
-  device_type: 'sensor_gateway' | 'sensor' | 'camera';
+  device_type: 'sensor_gateway' | 'sensor';
   external_device_id: string;
   display_name: string;
   key_prefix: string;

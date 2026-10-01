@@ -482,11 +482,11 @@ a:focus-visible {
     -webkit-overflow-scrolling: touch;
   }
 
-  :where(.head-actions, .cta, .bottom-cta, .form-actions, .feed-controls, .clip-actions, .whiteboard-actions) {
+  :where(.head-actions, .cta, .bottom-cta, .form-actions, .feed-controls, .whiteboard-actions) {
     gap: 0.45rem;
   }
 
-  :where(.head-actions a, .cta a, .bottom-cta a, .form-actions button, .feed-controls button, .clip-actions a, .clip-actions button) {
+  :where(.head-actions a, .cta a, .bottom-cta a, .form-actions button, .feed-controls button) {
     min-height: 2.35rem;
   }
 

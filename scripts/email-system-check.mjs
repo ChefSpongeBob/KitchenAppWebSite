@@ -53,7 +53,6 @@ expect('src/lib/server/operationalEvents.ts', 'operational events resolve email 
   source.includes('loadRecipientsWithCapability') &&
   source.includes('resolveBusinessCapabilities') &&
   source.includes("event.event_type === 'schedule.published'") &&
-  source.includes("event.event_type.startsWith('camera.')") &&
   source.includes('email_updates') &&
   source.includes('operational/${event.id}/email/${recipient.id}')
 );
@@ -70,7 +69,6 @@ expect('src/lib/server/operationalEvents.ts', 'operational email bodies are even
   source.includes("case 'schedule.published'") &&
   source.includes("case 'schedule.time_off.requested'") &&
   source.includes("case 'onboarding.item.submitted'") &&
-  source.includes("case 'camera.activity.received'") &&
   source.includes("event.event_type.startsWith('list.')") &&
   source.includes("event.event_type.endsWith('.completed')") &&
   source.includes("event.event_type.startsWith('billing.store_purchase.')")

@@ -50,7 +50,6 @@ type RegisterFormValues = {
 	businessName: string;
 	planTier: string;
 	addOnTempMonitoring: boolean;
-	addOnCameraMonitoring: boolean;
 	legalName: string;
 	registryId: string;
 	contactEmail: string;
@@ -244,7 +243,6 @@ export const actions: Actions = {
 			const planTierRaw = String(formData.get('plan_tier') || 'starter').trim().toLowerCase();
 			const planTier = PLAN_TIER_MAP[planTierRaw] ?? 'starter';
 			const addOnTempMonitoring = tempMonitoringIncludedForPlan(planTier);
-			const addOnCameraMonitoring = false;
 			const legalName = toOptionalString(formData, 'legal_name', 120);
 			const registryId = toOptionalString(formData, 'registry_id', 80);
 			const contactEmail = toOptionalString(formData, 'contact_email', 120).toLowerCase();
@@ -306,7 +304,6 @@ export const actions: Actions = {
 				businessName,
 				planTier: planTierRaw,
 				addOnTempMonitoring,
-				addOnCameraMonitoring,
 				legalName,
 				registryId,
 				contactEmail,
@@ -885,11 +882,10 @@ export const actions: Actions = {
 					address_postal_code,
 					address_country,
 					addon_temp_monitoring,
-					addon_camera_monitoring,
 					created_at,
 					updated_at
 				)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`
 					)
 					.bind(
@@ -910,7 +906,6 @@ export const actions: Actions = {
 						addressPostalCode || null,
 						addressCountry || null,
 						addOnTempMonitoring ? 1 : 0,
-						addOnCameraMonitoring ? 1 : 0,
 						now,
 						now
 					)
@@ -1103,7 +1098,6 @@ export const actions: Actions = {
 					preferredStore: safeStoreBillingPreference,
 					planTier,
 					addOnTempMonitoring,
-					addOnCameraMonitoring,
 					status: 'pending_setup',
 					now
 				});

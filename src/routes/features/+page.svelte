@@ -94,7 +94,7 @@
 				'Whiteboard ideas and voting',
 				'Employee spotlight',
 				'Vendor directory for admin users',
-				'Temperature node monitoring and future camera expansion readiness',
+				'Temperature node monitoring and alert history',
 				'History exports for schedules, prep, inventory, and orders'
 			],
 			image: '/marketing/app/admin-dashboard.png',
@@ -187,12 +187,6 @@
 			starter: 'Medium+',
 			growth: 'Included',
 			enterprise: 'Included'
-		},
-		{
-			module: 'Camera monitoring',
-			starter: 'Planned',
-			growth: 'Planned',
-			enterprise: 'Planned'
 		}
 	];
 

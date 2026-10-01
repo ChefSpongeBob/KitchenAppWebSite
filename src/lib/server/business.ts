@@ -119,7 +119,6 @@ export async function ensureBusinessSchema(db: D1) {
   await ensureOptionalColumn(db, 'businesses', 'address_postal_code', 'TEXT');
   await ensureOptionalColumn(db, 'businesses', 'address_country', 'TEXT');
   await ensureOptionalColumn(db, 'businesses', 'addon_temp_monitoring', 'INTEGER NOT NULL DEFAULT 0');
-  await ensureOptionalColumn(db, 'businesses', 'addon_camera_monitoring', 'INTEGER NOT NULL DEFAULT 0');
 
   await db
     .prepare(

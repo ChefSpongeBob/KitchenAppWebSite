@@ -4,7 +4,6 @@ const baseUrl =
   'http://localhost:5173';
 const email = process.env.SMOKE_EMAIL?.trim() || '';
 const password = process.env.SMOKE_PASSWORD?.trim() || '';
-const internalToken = process.env.SMOKE_INTERNAL_TOKEN?.trim() || '';
 const runAdminChecks = (process.env.SMOKE_ADMIN ?? '1').trim() !== '0';
 
 const origin = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
@@ -45,9 +44,6 @@ const adminRoutes = [
   ['/admin', 'Admin dashboard'],
   ['/admin/app-editor', 'App editor'],
   ['/admin/creator', 'Creator'],
-  ['/admin/lists', 'Admin lists'],
-  ['/admin/documents', 'Admin documents'],
-  ['/admin/recipes', 'Admin recipes'],
   ['/admin/schedule', 'Admin schedule builder'],
   ['/admin/schedule-roles', 'Schedule roles'],
   ['/admin/schedule-settings', 'Schedule settings'],
@@ -127,23 +123,6 @@ async function assertReachable(path, label, options = {}) {
 }
 
 async function createSmokeSession() {
-  if (internalToken) {
-    const response = await request('/api/internal/smoke/session', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-smoke-token': internalToken
-      },
-      body: JSON.stringify(email ? { email } : {})
-    });
-    if (response.status >= 200 && response.status < 300) {
-      log(true, `Internal smoke session established ${response.status}`);
-      return true;
-    }
-    log(false, `Internal smoke session expected 2xx, got ${response.status}`);
-    return false;
-  }
-
   if (email && password) {
     const response = await request('/login', {
       method: 'POST',
@@ -158,24 +137,11 @@ async function createSmokeSession() {
     return false;
   }
 
-  console.log('Skipping authenticated route checks. Set SMOKE_INTERNAL_TOKEN or SMOKE_EMAIL/SMOKE_PASSWORD.');
+  console.log('Skipping authenticated route checks. Set SMOKE_EMAIL and SMOKE_PASSWORD.');
   return false;
 }
 
 async function revokeSmokeSession() {
-  if (internalToken) {
-    const response = await request('/api/internal/smoke/session', {
-      method: 'DELETE',
-      headers: { 'x-smoke-token': internalToken }
-    });
-    if (response.status >= 200 && response.status < 300) {
-      log(true, `Internal smoke session revoked ${response.status}`);
-    } else {
-      log(false, `Internal smoke session revoke expected 2xx, got ${response.status}`);
-    }
-    return;
-  }
-
   if (email && password) {
     const response = await request('/logout');
     if (response.status === 302 || response.status === 303) {
