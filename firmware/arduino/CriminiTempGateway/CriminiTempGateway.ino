@@ -22,11 +22,13 @@ const char API_URL[] = "https://criminiops.com/api/temps";
 constexpr uint8_t RADIO_CHANNEL = 20;
 constexpr uint16_t RADIO_PAN = 0xC110;
 constexpr uint16_t GATEWAY_ADDRESS = 0x0001;
-constexpr size_t QUEUE_SIZE = 64;
+constexpr size_t MAX_PENDING_NODES = 16;
 constexpr size_t AUTH_TAG_SIZE = 16;
 constexpr size_t RECENT_PACKET_COUNT = 128;
 constexpr uint32_t UPLOAD_INTERVAL_MS = 10000;
 constexpr uint32_t RETRY_INTERVAL_MS = 60000;
+constexpr uint32_t HEARTBEAT_INTERVAL_MS = 300000;
+constexpr uint32_t RADIO_SILENCE_RECOVERY_MS = 720000;
 
 struct RadioFrame {
   uint8_t bytes[128];
@@ -61,14 +63,76 @@ struct QueuedReading {
   uint32_t receivedAt;
 };
 
-QueuedReading readings[QUEUE_SIZE] = {};
+QueuedReading readings[MAX_PENDING_NODES] = {};
 size_t readingCount = 0;
 uint32_t lastUpload = 0;
 uint32_t uploadInterval = UPLOAD_INTERVAL_MS;
+uint32_t lastCloudAttempt = 0;
+uint32_t heartbeatInterval = HEARTBEAT_INTERVAL_MS;
+uint32_t lastAuthenticatedPacket = 0;
+uint32_t lastRadioRecovery = 0;
+uint8_t consecutiveRadioRecoveries = 0;
 QueueHandle_t receivedFrames = nullptr;
 RecentPacket recentPackets[RECENT_PACKET_COUNT] = {};
 size_t recentPacketCount = 0;
 size_t nextRecentPacket = 0;
+uint32_t lastRadioDiagnostic = 0;
+
+void reportRadioIssue(const char* message) {
+  const uint32_t now = millis();
+  if (now - lastRadioDiagnostic < 1000) return;
+  lastRadioDiagnostic = now;
+  Serial.printf("Radio: %s\n", message);
+}
+
+void configureRadio() {
+  esp_ieee802154_set_channel(RADIO_CHANNEL);
+  esp_ieee802154_set_panid(RADIO_PAN);
+  esp_ieee802154_set_short_address(GATEWAY_ADDRESS);
+  esp_ieee802154_set_coordinator(true);
+  esp_ieee802154_set_rx_when_idle(true);
+}
+
+bool resumeRadioReceiver() {
+  esp_ieee802154_state_t state = esp_ieee802154_get_state();
+  if (state == ESP_IEEE802154_RADIO_DISABLE) {
+    if (esp_ieee802154_enable() != ESP_OK) return false;
+    configureRadio();
+    state = esp_ieee802154_get_state();
+  }
+  if (state == ESP_IEEE802154_RADIO_RECEIVE) return true;
+  if (state == ESP_IEEE802154_RADIO_TRANSMIT) {
+    const uint32_t started = millis();
+    while (esp_ieee802154_get_state() == ESP_IEEE802154_RADIO_TRANSMIT && millis() - started < 100) {
+      delay(2);
+    }
+  }
+  return esp_ieee802154_receive() == ESP_OK;
+}
+
+bool resetRadioReceiver() {
+  esp_ieee802154_state_t state = esp_ieee802154_get_state();
+  if (state != ESP_IEEE802154_RADIO_DISABLE) {
+    if (state != ESP_IEEE802154_RADIO_SLEEP) {
+      const uint32_t started = millis();
+      while (esp_ieee802154_sleep() != ESP_OK && millis() - started < 100) delay(2);
+    }
+    if (esp_ieee802154_disable() != ESP_OK) return false;
+  }
+  delay(20);
+  return resumeRadioReceiver();
+}
+
+bool pauseRadioForWifi() {
+  const uint32_t started = millis();
+  while (millis() - started < 100) {
+    const esp_ieee802154_state_t state = esp_ieee802154_get_state();
+    if (state == ESP_IEEE802154_RADIO_DISABLE || state == ESP_IEEE802154_RADIO_SLEEP) return true;
+    if (state != ESP_IEEE802154_RADIO_TRANSMIT && esp_ieee802154_sleep() == ESP_OK) return true;
+    delay(2);
+  }
+  return false;
+}
 
 bool validSerial(const char* serial) {
   const size_t length = strnlen(serial, 32);
@@ -107,6 +171,27 @@ bool seenRecently(const TemperaturePacket& packet) {
   return false;
 }
 
+void retainLatestReading(const TemperaturePacket& packet, int8_t rssi, uint8_t lqi) {
+  const QueuedReading reading = { packet, rssi, lqi, uint32_t(time(nullptr)) };
+  for (size_t i = 0; i < readingCount; ++i) {
+    if (strcmp(readings[i].packet.serial, packet.serial) == 0) {
+      readings[i] = reading;
+      return;
+    }
+  }
+
+  if (readingCount < MAX_PENDING_NODES) {
+    readings[readingCount++] = reading;
+    return;
+  }
+
+  size_t oldest = 0;
+  for (size_t i = 1; i < readingCount; ++i) {
+    if (readings[i].receivedAt < readings[oldest].receivedAt) oldest = i;
+  }
+  readings[oldest] = reading;
+}
+
 extern "C" void IRAM_ATTR esp_ieee802154_receive_done(uint8_t* frame, esp_ieee802154_frame_info_t* info) {
   if (frame && frame[0] <= 127 && receivedFrames) {
     RadioFrame incoming = {};
@@ -124,24 +209,37 @@ extern "C" void IRAM_ATTR esp_ieee802154_receive_done(uint8_t* frame, esp_ieee80
 void receiveReading(const RadioFrame& incoming) {
   const size_t headerSize = 9;
   const size_t expectedLength = headerSize + sizeof(TemperaturePacket) + 2;
-  if (incoming.length == expectedLength + 1 && readingCount < QUEUE_SIZE &&
-      incoming.bytes[1] == 0x41 && incoming.bytes[2] == 0x88 &&
-      incoming.bytes[4] == (RADIO_PAN & 0xFF) && incoming.bytes[5] == (RADIO_PAN >> 8) &&
-      incoming.bytes[6] == (GATEWAY_ADDRESS & 0xFF) && incoming.bytes[7] == (GATEWAY_ADDRESS >> 8)) {
-    TemperaturePacket packet = {};
-    memcpy(&packet, incoming.bytes + 1 + headerSize, sizeof(packet));
-    if (packet.marker == 0x4352 && packet.version == 2 &&
-        packet.humidityHundredths <= 10000 && validSerial(packet.serial) &&
-        verifyPacket(packet) && !seenRecently(packet)) {
-      readings[readingCount++] = {
-        packet,
-        incoming.rssi,
-        incoming.lqi,
-        uint32_t(time(nullptr))
-      };
-      Serial.printf("Received %s: %.2f F\n", packet.serial, packet.temperatureHundredthsF / 100.0f);
-    }
+  if (incoming.length != expectedLength + 1) {
+    reportRadioIssue("ignored unexpected frame length");
+    return;
   }
+  if ((incoming.bytes[1] != 0x41 && incoming.bytes[1] != 0x61) || incoming.bytes[2] != 0x88) {
+    reportRadioIssue("ignored unsupported frame type");
+    return;
+  }
+  if (incoming.bytes[4] != (RADIO_PAN & 0xFF) || incoming.bytes[5] != (RADIO_PAN >> 8) ||
+      incoming.bytes[6] != (GATEWAY_ADDRESS & 0xFF) || incoming.bytes[7] != (GATEWAY_ADDRESS >> 8)) {
+    reportRadioIssue("ignored wrong PAN or destination");
+    return;
+  }
+
+  TemperaturePacket packet = {};
+  memcpy(&packet, incoming.bytes + 1 + headerSize, sizeof(packet));
+  if (packet.marker != 0x4352 || packet.version != 2 || packet.humidityHundredths > 10000 ||
+      !validSerial(packet.serial)) {
+    reportRadioIssue("ignored invalid payload");
+    return;
+  }
+  if (!verifyPacket(packet)) {
+    reportRadioIssue("ignored authentication mismatch");
+    return;
+  }
+  lastAuthenticatedPacket = millis();
+  consecutiveRadioRecoveries = 0;
+  if (seenRecently(packet)) return;
+
+  retainLatestReading(packet, incoming.rssi, incoming.lqi);
+  Serial.printf("Received %s: %.2f F\n", packet.serial, packet.temperatureHundredthsF / 100.0f);
 }
 
 bool connectWifi() {
@@ -190,9 +288,10 @@ esp_err_t onHttpEvent(esp_http_client_event_t* event) {
   return ESP_OK;
 }
 
-bool uploadReadings() {
-  if (!readingCount) return true;
-  esp_ieee802154_sleep();
+bool uploadReadings(bool heartbeat = false) {
+  const size_t submittedCount = readingCount;
+  if (!submittedCount && !heartbeat) return true;
+  if (!pauseRadioForWifi()) reportRadioIssue("receiver did not pause for upload");
 
   bool uploaded = false;
   if (connectWifi()) {
@@ -212,22 +311,35 @@ bool uploadReadings() {
       esp_http_client_set_header(request, "x-device-key", FACTORY_GATEWAY_CREDENTIAL);
       esp_http_client_set_post_field(request, body.c_str(), body.length());
       const esp_err_t result = esp_http_client_perform(request);
-      const int status = result == ESP_OK ? esp_http_client_get_status_code(request) : 0;
+      const int status = esp_http_client_get_status_code(request);
+      if (result != ESP_OK) {
+        const int socketError = esp_http_client_get_errno(request);
+        int tlsError = 0;
+        int tlsFlags = 0;
+        esp_http_client_get_and_clear_last_tls_error(request, &tlsError, &tlsFlags);
+        Serial.printf("HTTPS failure: %s, socket %d, TLS 0x%x, flags 0x%x\n",
+                      esp_err_to_name(result), socketError, tlsError, tlsFlags);
+      }
       const int acceptedField = response.indexOf("\"accepted\":");
       const int rejectedField = response.indexOf("\"rejected\":");
       const int accepted = acceptedField >= 0 ? response.substring(acceptedField + 11).toInt() : -1;
       const int rejected = rejectedField >= 0 ? response.substring(rejectedField + 11).toInt() : -1;
       uploaded = (status == 200 || status == 201) && accepted >= 0 && rejected >= 0 &&
-                 accepted + rejected == static_cast<int>(readingCount);
+                  accepted + rejected == static_cast<int>(submittedCount);
       Serial.printf("Crimini upload: HTTP %d, accepted %d, rejected %d/%u\n", status, accepted, rejected,
-                    static_cast<unsigned>(readingCount));
+                    static_cast<unsigned>(submittedCount));
       esp_http_client_cleanup(request);
     }
   }
   WiFi.disconnect(true, false);
   WiFi.mode(WIFI_OFF);
-  if (uploaded) readingCount = 0;
-  esp_ieee802154_receive();
+  if (uploaded && submittedCount) readingCount = 0;
+  delay(20);
+  if (!resumeRadioReceiver() && !resetRadioReceiver()) {
+    Serial.println("Radio: recovery failed; restarting gateway");
+    delay(100);
+    ESP.restart();
+  }
   return uploaded;
 }
 
@@ -249,14 +361,15 @@ void setup() {
 
   receivedFrames = xQueueCreate(16, sizeof(RadioFrame));
   if (!receivedFrames) return;
-  esp_ieee802154_enable();
-  esp_ieee802154_set_channel(RADIO_CHANNEL);
-  esp_ieee802154_set_panid(RADIO_PAN);
-  esp_ieee802154_set_short_address(GATEWAY_ADDRESS);
-  esp_ieee802154_set_coordinator(true);
-  esp_ieee802154_set_rx_when_idle(true);
-  esp_ieee802154_receive();
-  lastUpload = millis();
+  if (!resumeRadioReceiver()) {
+    Serial.println("Radio: receiver failed to start");
+    return;
+  }
+  const uint32_t now = millis();
+  lastUpload = now;
+  lastCloudAttempt = now;
+  lastAuthenticatedPacket = now;
+  lastRadioRecovery = now;
   Serial.printf("Gateway %s listening on channel %u\n", GATEWAY_SERIAL, RADIO_CHANNEL);
 }
 
@@ -264,12 +377,28 @@ void loop() {
   RadioFrame incoming = {};
   if (receivedFrames && xQueueReceive(receivedFrames, &incoming, pdMS_TO_TICKS(20)) == pdTRUE) {
     receiveReading(incoming);
-    esp_ieee802154_receive();
+    if (!resumeRadioReceiver()) reportRadioIssue("receiver did not continue after frame");
   }
-  if (readingCount && (millis() - lastUpload >= uploadInterval ||
-      (readingCount == QUEUE_SIZE && uploadInterval == UPLOAD_INTERVAL_MS))) {
+  const uint32_t now = millis();
+  if (readingCount && now - lastUpload >= uploadInterval) {
     uploadInterval = uploadReadings() ? UPLOAD_INTERVAL_MS : RETRY_INTERVAL_MS;
     lastUpload = millis();
+    lastCloudAttempt = lastUpload;
+    heartbeatInterval = HEARTBEAT_INTERVAL_MS;
+  } else if (!readingCount && now - lastCloudAttempt >= heartbeatInterval) {
+    heartbeatInterval = uploadReadings(true) ? HEARTBEAT_INTERVAL_MS : RETRY_INTERVAL_MS;
+    lastCloudAttempt = millis();
+  }
+  if (now - lastAuthenticatedPacket >= RADIO_SILENCE_RECOVERY_MS &&
+      now - lastRadioRecovery >= RADIO_SILENCE_RECOVERY_MS) {
+    Serial.println("Radio: no authenticated node packets; rebuilding receiver");
+    lastRadioRecovery = now;
+    ++consecutiveRadioRecoveries;
+    if (!resetRadioReceiver() || consecutiveRadioRecoveries >= 2) {
+      Serial.println("Radio: prolonged silence; restarting gateway");
+      delay(100);
+      ESP.restart();
+    }
   }
   delay(20);
 }

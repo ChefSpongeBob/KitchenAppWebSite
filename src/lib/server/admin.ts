@@ -1339,6 +1339,15 @@ function canManageUserPermissions(locals: App.Locals) {
   );
 }
 
+function canManageEmployeeOnboarding(locals: App.Locals) {
+  return hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    'manage_onboarding',
+    locals.businessCapabilities
+  );
+}
+
 function isOwnerRole(role: string | null | undefined) {
   return normalizeBusinessRole(role) === 'owner';
 }
@@ -6624,6 +6633,9 @@ export async function createUserInvite(
   env?: EmailEnv | null
 ) {
   requireAdmin(locals.userRole);
+  if (!canManageEmployeeOnboarding(locals)) {
+    return fail(403, { error: 'Employee onboarding access required.' });
+  }
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -6837,6 +6849,9 @@ export async function createUserInvite(
 
 export async function revokeUserInvite(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageEmployeeOnboarding(locals)) {
+    return fail(403, { error: 'Employee onboarding access required.' });
+  }
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);

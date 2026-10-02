@@ -1,14 +1,20 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Preferences.h>
+#include <driver/usb_serial_jtag.h>
 #include <esp_ieee802154.h>
 #include <esp_sleep.h>
 #include <mbedtls/md.h>
 
-// Set this serial before uploading each sensor.
-const char NODE_SERIAL[] = "";
-// Factory-set per gateway kit. Put the same value in its gateway sketch; never use the cloud credential here.
+// Set this visible serial for the physical node being uploaded.
+const char NODE_SERIAL[] = "nnstn-00004";
+
+#if __has_include("CriminiTempNode.local.h")
+#include "CriminiTempNode.local.h"
+#else
+// Keep the shared radio secret in the ignored local header.
 const char RADIO_SECRET[] = "";
+#endif
 
 constexpr int SDA_PIN = 18;
 constexpr int SCL_PIN = 19;
@@ -16,6 +22,7 @@ constexpr uint8_t AHT20_ADDRESS = 0x38;
 constexpr uint8_t RADIO_CHANNEL = 20;
 constexpr uint16_t RADIO_PAN = 0xC110;
 constexpr uint16_t GATEWAY_ADDRESS = 0x0001;
+constexpr int8_t RADIO_TX_POWER_DBM = 18;
 constexpr uint32_t SLEEP_SECONDS = 300;
 constexpr uint8_t SEND_COUNT = 3;
 constexpr size_t AUTH_TAG_SIZE = 16;
@@ -129,14 +136,32 @@ bool advanceSequence() {
   return true;
 }
 
-void sleepNow() {
+void sleepNow(uint32_t baseSeconds = SLEEP_SECONDS) {
   Wire.end();
-  esp_sleep_enable_timer_wakeup(uint64_t(SLEEP_SECONDS + esp_random() % 21) * 1000000ULL);
+  const uint32_t nextCycleSeconds = baseSeconds + esp_random() % 21;
+
+  // A connected USB service cable keeps serial access available. Battery operation deep-sleeps.
+  if (usb_serial_jtag_is_connected()) {
+    Serial.printf("USB host connected; next reading in %lu seconds.\n",
+                  static_cast<unsigned long>(nextCycleSeconds));
+    Serial.flush();
+    const uint32_t started = millis();
+    while (usb_serial_jtag_is_connected() &&
+           millis() - started < nextCycleSeconds * 1000UL) delay(100);
+    if (usb_serial_jtag_is_connected()) {
+      ESP.restart();
+    }
+  }
+
+  esp_sleep_enable_timer_wakeup(uint64_t(nextCycleSeconds) * 1000000ULL);
   Serial.flush();
   esp_deep_sleep_start();
 }
 
 void setup() {
+#ifdef RGB_BUILTIN
+  rgbLedWrite(RGB_BUILTIN, 0, 0, 0);
+#endif
   Serial.begin(115200);
   delay(100);
   if (!validSerial() || strlen(RADIO_SECRET) < 16) {
@@ -171,13 +196,16 @@ void setup() {
 
   esp_ieee802154_enable();
   esp_ieee802154_set_channel(RADIO_CHANNEL);
-  esp_ieee802154_set_txpower(0);
+  esp_ieee802154_set_txpower(RADIO_TX_POWER_DBM);
   esp_ieee802154_set_panid(RADIO_PAN);
   esp_ieee802154_set_short_address(radioAddressFromSerial());
   esp_ieee802154_set_rx_when_idle(false);
 
+  delay(esp_random() % 251);
   for (uint8_t attempt = 0; attempt < SEND_COUNT; ++attempt) {
     uint8_t frame[128] = {};
+    // Data frame with PAN compression and short addresses. Repeated bursts avoid
+    // relying on ESP32-C6 acknowledgement generation, which is not reliable here.
     const uint16_t frameControl = 0x8841;
     const size_t headerSize = 9;
     const size_t phyLength = headerSize + sizeof(packet) + 2;
@@ -199,12 +227,12 @@ void setup() {
       const uint32_t started = millis();
       while (!transmitFinished && millis() - started < 500) delay(1);
     }
-    delay(180);
+    if (attempt + 1 < SEND_COUNT) delay(120 + (esp_random() % 241));
   }
 
   esp_ieee802154_sleep();
   Serial.printf("Sent %s: %.2f F, %.1f%% humidity\n", NODE_SERIAL, temperatureF, humidity);
-  sleepNow();
+  sleepNow(SLEEP_SECONDS);
 }
 
 void loop() {}

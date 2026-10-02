@@ -2,6 +2,7 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { getBusinessTrialAccess } from '$lib/server/trial';
 import { readBusinessEntitlements, readStoreProducts } from '$lib/server/storeBilling';
 import { logOperationalError } from '$lib/server/observability';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 function googleManageUrl(packageName: string | undefined, productId?: string | null) {
 	const params = new URLSearchParams();
@@ -14,6 +15,16 @@ function googleManageUrl(packageName: string | undefined, productId?: string | n
 export const GET: RequestHandler = async ({ locals, platform, request }) => {
 	if (!locals.DB || !locals.userId || !locals.businessId) {
 		return json({ ok: false, error: 'Sign in required.' }, { status: 401 });
+	}
+	if (
+		!hasBusinessCapability(
+			locals.businessRole,
+			locals.businessPermissionTemplate,
+			'manage_billing',
+			locals.businessCapabilities
+		)
+	) {
+		return json({ ok: false, error: 'Billing access required.' }, { status: 403 });
 	}
 
 	try {

@@ -742,7 +742,7 @@ export async function initializeBusinessTrial(
 		status === 'trialing'
 			? 'trialing'
 			: status === 'pending_payment'
-				? 'past_due'
+				? 'pending_payment'
 				: status === 'paid' || status === 'active'
 					? 'active'
 					: status;
@@ -848,11 +848,11 @@ export async function getBusinessTrialAccess(
 		if (remaining > 0) {
 			return {
 				mode: 'trialing',
-				allowApp: true,
+				allowApp: dev,
 				shouldPurge: false,
 				trialEndsAt: trial.trial_ends_at,
 				secondsRemaining: remaining,
-				denialReason: null
+				denialReason: dev ? null : 'paid_activation_required'
 			};
 		}
 

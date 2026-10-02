@@ -159,6 +159,46 @@ expect('src/routes/register/+page.server.ts', 'new business signup starts pendin
   !source.includes("const initialBusinessStatus = purchaseMode === 'buy_now' ? 'pending_payment' : 'trialing'")
 );
 
+expect('src/hooks.server.ts', 'inactive tenants are blocked from operational pages and APIs', (source) =>
+  source.includes("pathname === '/api/billing/products'") &&
+  source.includes("pathname === '/api/billing/status'") &&
+  source.includes("pathname === '/api/billing/native-purchase'") &&
+  source.includes("pathname === '/workspace/switch'") &&
+  source.includes('if (!isAccessRecoveryRoute)') &&
+  source.includes("if (pathname.startsWith('/api/'))") &&
+  source.includes("status: 402") &&
+  source.includes('Active workspace subscription required.')
+);
+
+expect('src/hooks.server.ts', 'inactive staff receive a read-only billing summary without a redirect loop', (source) =>
+  source.includes('allowInactiveBillingSummary') &&
+  source.includes('!allowInactiveBillingSummary') &&
+  source.includes('!isAccessRecoveryRoute')
+);
+
+expect('src/lib/server/trial.ts', 'production trial records do not grant operational access', (source) =>
+  source.includes('allowApp: dev') &&
+  source.includes("denialReason: dev ? null : 'paid_activation_required'") &&
+  source.includes("status === 'pending_payment'") &&
+  source.includes("? 'pending_payment'")
+);
+
+expect('src/lib/server/admin.ts', 'employee invites require explicit onboarding permission', (source) =>
+  source.includes('function canManageEmployeeOnboarding') &&
+  source.includes("'manage_onboarding'") &&
+  source.includes("return fail(403, { error: 'Employee onboarding access required.' })")
+);
+
+for (const path of [
+  'src/routes/api/billing/products/+server.ts',
+  'src/routes/api/billing/status/+server.ts'
+]) {
+  expect(path, 'billing recovery APIs require explicit billing permission', (source) =>
+    source.includes("'manage_billing'") &&
+    source.includes("return json({ ok: false, error: 'Billing access required.' }, { status: 403 })")
+  );
+}
+
 expect('src/lib/server/trial.ts', 'free-trial reuse is blocked by identity claims and denials', (source) =>
   source.includes('trial_identity_claims') &&
   source.includes('createTrialDenialRecord') &&

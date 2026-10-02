@@ -152,7 +152,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/billing/app-store-notifications') ||
 		pathname.startsWith('/api/billing/google-play-notifications');
-	const isBillingRoute = pathname.startsWith('/billing');
+	const isBillingRoute = pathname === '/billing' || pathname.startsWith('/billing/');
+	const isBillingRecoveryApiRoute =
+		pathname === '/api/billing/products' ||
+		pathname === '/api/billing/status' ||
+		pathname === '/api/billing/native-purchase';
+	const isBillingRecoveryRoute = isBillingRoute || isBillingRecoveryApiRoute;
+	const isWorkspaceSwitchRoute = pathname === '/workspace/switch';
+	const isAccessRecoveryRoute = isBillingRecoveryRoute || isWorkspaceSwitchRoute;
 
 	const isPrivateRoute = !isAuthRoute && !isPublicMarketingRoute && !isPublicApiRoute;
 	if (!isPublicApiRoute && !isTrustedStateChangingRequest(event.request, event.url)) {
@@ -395,10 +402,87 @@ export const handle: Handle = async ({ event, resolve }) => {
 		);
 		event.locals.featureModes = await loadAppFeatureModes(db, businessContext.businessId);
 
+		const trialAccess = isPrivateRoute
+			? await getBusinessTrialAccess(db, businessContext.businessId, now)
+			: null;
+		if (trialAccess && !trialAccess.allowApp) {
+			if (trialAccess.shouldPurge) {
+				logOperationalEvent({
+					level: 'warn',
+					event: 'trial_expired_purge_started',
+					request: event.request,
+					businessId: businessContext.businessId,
+					userId: session.found_user_id,
+					sessionId: session.id,
+					route: pathname,
+					status: 403,
+					metadata: { reason: trialAccess.denialReason ?? 'trial_expired' }
+				});
+				const user = await db
+					.prepare(
+						`
+						SELECT email
+						FROM users
+						WHERE id = ?
+						LIMIT 1
+					`
+					)
+					.bind(session.found_user_id)
+					.first<{ email: string }>();
+
+				await cancelTrialAndPurgeBusiness(db, {
+					businessId: businessContext.businessId,
+					source: 'expired',
+					reason: 'trial_expired_without_conversion',
+					now,
+					identity: {
+						emailNormalized: user?.email ?? '',
+						businessName: businessContext.businessName,
+						ipAddress: getRequestIpAddress(event.request),
+						userAgent: event.request.headers.get('user-agent') ?? ''
+					}
+				});
+				clearSessionCookies(event);
+				throw redirect(303, '/login?trial=expired');
+			}
+
+			if (!isAccessRecoveryRoute) {
+				logOperationalEvent({
+					level: 'warn',
+					event: 'billing_access_required',
+					request: event.request,
+					businessId: businessContext.businessId,
+					userId: session.found_user_id,
+					sessionId: session.id,
+					route: pathname,
+					status: 402,
+					metadata: { status: trialAccess.mode }
+				});
+				if (pathname.startsWith('/api/')) {
+					return applySecurityHeaders(
+						new Response(
+							JSON.stringify({ ok: false, error: 'Active workspace subscription required.' }),
+							{
+								status: 402,
+								headers: {
+									'content-type': 'application/json; charset=utf-8',
+									'cache-control': 'no-store'
+								}
+							}
+						)
+					);
+				}
+				throw redirect(303, '/billing?access=required');
+			}
+		}
+
 		const requiredCapability = resolveBusinessCapabilityForPath(pathname);
+		const allowInactiveBillingSummary =
+			isBillingRoute && Boolean(trialAccess && !trialAccess.allowApp);
 		if (
 			isPrivateRoute &&
 			requiredCapability &&
+			!allowInactiveBillingSummary &&
 			!hasBusinessCapability(
 				event.locals.businessRole,
 				event.locals.businessPermissionTemplate,
@@ -447,68 +531,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
-		if (isPrivateRoute) {
-			const trialAccess = await getBusinessTrialAccess(db, businessContext.businessId, now);
-			if (!trialAccess.allowApp) {
-				if (trialAccess.shouldPurge) {
-					logOperationalEvent({
-						level: 'warn',
-						event: 'trial_expired_purge_started',
-						request: event.request,
-						businessId: businessContext.businessId,
-						userId: session.found_user_id,
-						sessionId: session.id,
-						route: pathname,
-						status: 403,
-						metadata: { reason: trialAccess.denialReason ?? 'trial_expired' }
-					});
-					const user = await db
-						.prepare(
-							`
-							SELECT email
-							FROM users
-							WHERE id = ?
-							LIMIT 1
-						`
-						)
-						.bind(session.found_user_id)
-						.first<{ email: string }>();
-
-					await cancelTrialAndPurgeBusiness(db, {
-						businessId: businessContext.businessId,
-						source: 'expired',
-						reason: 'trial_expired_without_conversion',
-						now,
-						identity: {
-							emailNormalized: user?.email ?? '',
-							businessName: businessContext.businessName,
-							ipAddress: getRequestIpAddress(event.request),
-							userAgent: event.request.headers.get('user-agent') ?? ''
-						}
-					});
-					clearSessionCookies(event);
-					throw redirect(303, '/login?trial=expired');
-				}
-
-				if (!isBillingRoute && !pathname.startsWith('/api/')) {
-					logOperationalEvent({
-						level: 'warn',
-						event: 'billing_access_required',
-						request: event.request,
-						businessId: businessContext.businessId,
-						userId: session.found_user_id,
-						sessionId: session.id,
-						route: pathname,
-						status: 402,
-						metadata: { status: trialAccess.mode }
-					});
-					throw redirect(303, '/billing?trial=required');
-				}
-			}
-		}
-
 		if (
 			isPrivateRoute &&
+			!isAccessRecoveryRoute &&
 			!pathname.startsWith('/settings') &&
 			!pathname.startsWith('/api/') &&
 			!pathname.startsWith('/logout')

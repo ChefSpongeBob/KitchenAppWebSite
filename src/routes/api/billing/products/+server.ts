@@ -1,10 +1,21 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { normalizeStore, readStoreProducts } from '$lib/server/storeBilling';
 import { logOperationalError } from '$lib/server/observability';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 export const GET: RequestHandler = async ({ locals, url, request }) => {
-	if (!locals.DB) {
-		return json({ ok: false, error: 'Database unavailable.' }, { status: 503 });
+	if (!locals.DB || !locals.userId || !locals.businessId) {
+		return json({ ok: false, error: 'Sign in required.' }, { status: 401 });
+	}
+	if (
+		!hasBusinessCapability(
+			locals.businessRole,
+			locals.businessPermissionTemplate,
+			'manage_billing',
+			locals.businessCapabilities
+		)
+	) {
+		return json({ ok: false, error: 'Billing access required.' }, { status: 403 });
 	}
 
 	try {

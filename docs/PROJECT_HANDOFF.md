@@ -205,7 +205,8 @@ This is the only active completion list. Work it in order and do not create scat
 - Provision gateway and sensor-node serials into `iot_device_inventory`.
 - Claim a gateway in `/admin/sensors`, assign sensor nodes, ingest gateway-authenticated readings, and confirm wrong tenant, wrong gateway, unassigned, and revoked readings are rejected.
 - Tune thresholds by sensor type and verify high, low, stale, offline, recovery, dashboard, polling, and report behavior.
-- Phase 5 hardware pass: `firmware/arduino/CriminiTempNode/` and `firmware/arduino/CriminiTempGateway/` are separate Arduino IDE sketches. The node sends AHT20 temperature/humidity, packet sequence, and wake nonce over IEEE 802.15.4; the gateway adds RSSI/LQI and posts authenticated batches. Both compile with ESP32 Arduino core 3.3.10; real-board validation remains open.
+- Validate gateway outage recovery: retain only the latest transient reading per node, recover after Wi-Fi/API interruption, resume IEEE 802.15.4 receive mode, report gateway health while nodes are quiet, and complete a 24-hour bench soak plus a controlled network-outage test before restaurant deployment.
+- Phase 5 hardware pass: `firmware/arduino/CriminiTempNode/` and `firmware/arduino/CriminiTempGateway/` are separate Arduino IDE sketches. The node sends acknowledged AHT20 temperature/humidity bursts with randomized collision retries; the gateway adds RSSI/LQI and posts authenticated latest-reading batches. Both compile with ESP32 Arduino core 3.3.12; real-board validation remains open.
 - Phase 5 remaining needs: flash real boards, validate battery draw, radio range, enclosure performance, final FCC/module compliance, and live sensor ingest under private tenant testing.
 
 6. Scheduling validation
@@ -237,6 +238,7 @@ This is the only active completion list. Work it in order and do not create scat
 12. Native app release
 - Configure JDK/JAVA_HOME, Android signing, iOS/TestFlight, and Capacitor sync.
 - Test login/session persistence, uploads, PDFs, push, billing bridge, external links, deep links, account deletion, and real-device behavior.
+- Complete the ordered Phone Validation Matrix below on Android, then repeat it on iOS before store submission.
 
 13. Store submissions
 - Apple: app record, IAP products, screenshots, metadata, TestFlight build, privacy disclosures, review account, and review notes.
@@ -281,3 +283,43 @@ Run these with at least two private validation businesses before entering real r
 - Auth/security: test bad credentials, rate limits, Turnstile, reset tokens, expired invites, revoked sessions, inactive users, account deletion, internal APIs, device APIs, and billing webhooks.
 - UI/accessibility: test desktop/mobile, light/dark, keyboard focus, contrast, sidebar/footer spacing, upload states, empty states, and loading/error states.
 - Native/store: test Android and iOS builds, PDFs/uploads, push, billing bridge, deep links, review accounts, and account deletion.
+
+## Phone Validation Matrix
+
+Run this sequence on a physical phone against the private production-test environment. Record failures against the matching launch phase rather than creating another checklist.
+
+1. Authentication and session
+- Test invalid and valid credentials, Turnstile when configured, logout, relaunch, session persistence, expired session handling, password reset, and switching away from an already signed-in account.
+
+2. Navigation and feature visibility
+- Open every visible sidebar route, confirm back navigation and external links, and verify role, feature-matrix, and subscription restrictions hide and deny the same features.
+
+3. Creator and content administration
+- Create categories, lists, recipes, documents, and menus; edit and delete them; confirm immediate UI refresh and persistence after relaunch.
+
+4. Lists and service workflows
+- Add, edit, delete, and complete checklist, prep, inventory, and order items; submit counts; open attached recipes/docs; and confirm history records the correct user and business.
+
+5. Scheduling
+- Build and autosave a draft, relaunch, publish, duplicate a selected day, verify My Schedule, offer/take a shift, submit time off and availability, and approve as an authorized manager.
+
+6. Employees and onboarding
+- Invite each supported role, finish invite registration and required packet steps, review permissions, approve/reject submitted forms, and verify restricted HR information is inaccessible to unauthorized users.
+
+7. Uploads and reports
+- Upload and replace PDFs/images, open them on-device, download each supported CSV/report, and confirm files contain only the active business's data.
+
+8. Operational tools
+- Exercise ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, food cost, safety reference, and waste submission/reporting.
+
+9. Temperature monitoring
+- Register a gateway and nodes by serial, assign names, view current temperature/humidity, test stale/offline/recovery states and alerts, and confirm readings continue through app backgrounding and relaunch.
+
+10. Tenant isolation
+- Repeat representative user, schedule, list, document, report, and device actions in a second business and verify no names, records, files, notifications, or devices cross businesses.
+
+11. Mobile resilience
+- Test slow/offline transitions, interrupted submissions, app background/foreground, process restart, screen rotation/fold states where supported, duplicate taps, and retry behavior without duplicate records.
+
+12. External integrations
+- Validate email links, push notifications, PDF/file handling, store purchase/restore flows when configured, account deletion, support/privacy links, and deep links from outside the app.
