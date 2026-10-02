@@ -77,6 +77,22 @@ expect('src/routes/register/+page.svelte', 'employee invite flow submits from pe
   source.includes('{#if !inviteMode}')
 );
 
+expect('src/routes/register/+page.server.ts', 'invite registration saves personal information to the tenant employee profile', (source) =>
+  source.includes('await ensureEmployeeProfilesTable(db)') &&
+  source.includes('INSERT INTO employee_profiles') &&
+  source.includes('ON CONFLICT(business_id, user_id) DO UPDATE SET') &&
+  source.includes('realName || displayName ||') &&
+  source.includes('userPhone ||') &&
+  source.includes('birthday ||') &&
+  source.includes('userAddressLine1 ||') &&
+  source.includes('emergencyContactName ||') &&
+  source.includes('emergencyContactPhone ||')
+);
+
+expect('src/routes/settings/+page.server.ts', 'profile settings reload the tenant-scoped registration profile', (source) =>
+  source.includes('loadAdminEmployeeProfile(db, locals.userId, businessId)')
+);
+
 expect('src/routes/register/+page.server.ts', 'register validation returns user input and active slide', (source) =>
   source.includes('function registerFailure') &&
   source.includes('return fail(status, { error, activeSlideId, values })') &&
