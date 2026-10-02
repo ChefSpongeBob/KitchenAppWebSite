@@ -13,6 +13,7 @@
 
 	export let data: {
 		inviteCode: string | null;
+		onboardingRequired: boolean;
 		agreementVersion: string;
 	};
 
@@ -331,6 +332,7 @@
 	let passwordFeedback = '';
 
 	$: inviteMode = Boolean(data.inviteCode);
+	$: collectEmployeeDetails = !inviteMode || data.onboardingRequired;
 	$: visibleSlides = inviteMode
 		? slides.filter((slide) => slide.id !== 'tier' && slide.id !== 'business' && slide.id !== 'purchase')
 		: slides;
@@ -655,11 +657,13 @@
 							<input id="owner-title" bind:value={ownerTitle} placeholder="Owner / General Manager" />
 						{/if}
 
-						<label for="real-name">Legal name</label>
-						<input id="real-name" bind:value={realName} placeholder="Alex Jordan Rivera" />
+						{#if collectEmployeeDetails}
+							<label for="real-name">Legal name</label>
+							<input id="real-name" bind:value={realName} placeholder="Alex Jordan Rivera" />
 
-						<label for="birthday">Birthday</label>
-						<input id="birthday" type="date" bind:value={birthday} />
+							<label for="birthday">Birthday</label>
+							<input id="birthday" type="date" bind:value={birthday} />
+						{/if}
 
 						<label for="register-email">Email</label>
 						<input id="register-email" type="email" bind:value={email} required />
@@ -667,36 +671,38 @@
 						<label for="register-confirm-email">Confirm email</label>
 						<input id="register-confirm-email" type="email" bind:value={confirmEmail} required />
 
-						<label for="user-phone">Phone</label>
-						<input id="user-phone" bind:value={userPhone} placeholder="(555) 555-5555" />
+						{#if collectEmployeeDetails}
+							<label for="user-phone">Phone</label>
+							<input id="user-phone" bind:value={userPhone} placeholder="(555) 555-5555" />
 
-						<label for="user-address-line-1">Address line 1</label>
-						<input id="user-address-line-1" bind:value={userAddressLine1} placeholder="123 Main Street" />
+							<label for="user-address-line-1">Address line 1</label>
+							<input id="user-address-line-1" bind:value={userAddressLine1} placeholder="123 Main Street" />
 
-						<label for="user-address-line-2">Address line 2</label>
-						<input id="user-address-line-2" bind:value={userAddressLine2} placeholder="Suite / Unit" />
+							<label for="user-address-line-2">Address line 2</label>
+							<input id="user-address-line-2" bind:value={userAddressLine2} placeholder="Suite / Unit" />
 
-						<label for="user-city">City</label>
-						<input id="user-city" bind:value={userCity} />
+							<label for="user-city">City</label>
+							<input id="user-city" bind:value={userCity} />
 
-						<label for="user-state">State / Region</label>
-						<select id="user-state" bind:value={userState}>
-							{#each US_STATES as [value, label]}
-								<option value={value}>{label}</option>
-							{/each}
-						</select>
+							<label for="user-state">State / Region</label>
+							<select id="user-state" bind:value={userState}>
+								{#each US_STATES as [value, label]}
+									<option value={value}>{label}</option>
+								{/each}
+							</select>
 
-						<label for="user-postal-code">Postal code</label>
-						<input id="user-postal-code" bind:value={userPostalCode} />
+							<label for="user-postal-code">Postal code</label>
+							<input id="user-postal-code" bind:value={userPostalCode} />
 
-						<label for="emergency-contact-name">Emergency contact</label>
-						<input id="emergency-contact-name" bind:value={emergencyContactName} />
+							<label for="emergency-contact-name">Emergency contact</label>
+							<input id="emergency-contact-name" bind:value={emergencyContactName} />
 
-						<label for="emergency-contact-phone">Emergency phone</label>
-						<input id="emergency-contact-phone" bind:value={emergencyContactPhone} />
+							<label for="emergency-contact-phone">Emergency phone</label>
+							<input id="emergency-contact-phone" bind:value={emergencyContactPhone} />
 
-						<label for="emergency-contact-relationship">Relationship</label>
-						<input id="emergency-contact-relationship" bind:value={emergencyContactRelationship} />
+							<label for="emergency-contact-relationship">Relationship</label>
+							<input id="emergency-contact-relationship" bind:value={emergencyContactRelationship} />
+						{/if}
 
 						<label for="register-password">Password</label>
 						<div class="password-row">

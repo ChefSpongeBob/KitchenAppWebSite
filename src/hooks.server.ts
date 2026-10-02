@@ -19,7 +19,6 @@ import {
 	getBusinessTrialAccess,
 	getRequestIpAddress
 } from '$lib/server/trial';
-import { loadEmployeeOnboardingAccessStatus } from '$lib/server/admin';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName,
@@ -569,34 +568,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 					metadata: { feature: gatedFeature, reason: 'feature_mode' }
 				});
 				throw redirect(303, event.locals.userRole === 'admin' ? '/admin' : '/app');
-			}
-		}
-
-		if (
-			isPrivateRoute &&
-			!isAccessRecoveryRoute &&
-			!pathname.startsWith('/settings') &&
-			!pathname.startsWith('/api/') &&
-			!pathname.startsWith('/logout')
-		) {
-			const onboardingAccess = await loadEmployeeOnboardingAccessStatus(
-				db,
-				businessContext.businessId,
-				session.found_user_id
-			);
-			if (onboardingAccess.required && !onboardingAccess.approved) {
-				logOperationalEvent({
-					level: 'info',
-					event: 'employee_onboarding_gate',
-					request: event.request,
-					businessId: businessContext.businessId,
-					userId: session.found_user_id,
-					sessionId: session.id,
-					route: pathname,
-					status: 302,
-					metadata: { reason: 'onboarding_required' }
-				});
-				throw redirect(303, '/settings?tab=onboarding');
 			}
 		}
 

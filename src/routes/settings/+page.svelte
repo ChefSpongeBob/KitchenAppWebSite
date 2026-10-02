@@ -163,9 +163,18 @@
   }
 
   function completedSummary(item: EmployeeOnboardingItem) {
+    if (item.form_key === 'personal_information' || item.form_key === 'emergency_contact') {
+      return item.status === 'approved'
+        ? 'Registration details saved and approved.'
+        : 'Saved during account registration. Awaiting manager review.';
+    }
     if (item.file_name) return `Uploaded: ${item.file_name}`;
     if (item.item_type === 'form') return `Submitted by ${item.signed_name || 'employee'}`;
     return `Completed by ${item.signed_name || 'employee'}`;
+  }
+
+  function isSubmitted(item: EmployeeOnboardingItem) {
+    return item.status === 'submitted' || item.status === 'approved';
   }
 
   $: profileDisplayName = data.profile.real_name || data.user.username || 'Profile';
@@ -400,7 +409,7 @@
 
         <div class="onboarding-list">
           {#each data.onboarding.items as item}
-            <article class={`onboarding-item ${item.status === 'approved' ? 'item-approved' : ''}`}>
+            <article class={`onboarding-item ${isSubmitted(item) ? 'item-approved' : ''}`}>
               <div class="onboarding-item__head">
                 <div>
                   <span class="item-type">{formatStatus(item.item_type)}</span>
@@ -423,7 +432,7 @@
                 />
               {/if}
 
-              {#if item.status === 'approved'}
+              {#if isSubmitted(item)}
                 <p class="form-note">
                   {completedSummary(item)}
                 </p>

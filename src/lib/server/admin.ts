@@ -6702,7 +6702,9 @@ export async function createUserInvite(
   const startDate = String(formData.get('start_date') ?? '').trim().slice(0, 10);
   const payTypeRaw = String(formData.get('pay_type') ?? '').trim().toLowerCase();
   const payType = payTypeRaw === 'hourly' || payTypeRaw === 'salary' ? payTypeRaw : '';
-  const onboardingRequired = accessType === 'owner' || employmentType === 'contractor' ? 0 : 1;
+  const onboardingRequested = String(formData.get('onboarding_required') ?? '0') === '1';
+  const onboardingRequired =
+    onboardingRequested && accessType !== 'owner' && employmentType !== 'contractor' ? 1 : 0;
   if (!email || !email.includes('@')) {
     return fail(400, { error: 'A valid email is required.' });
   }
@@ -6799,44 +6801,6 @@ export async function createUserInvite(
     )
     .run();
 
-  const selectedPacketItemIds = new Set(
-    formData
-      .getAll('packet_item_ids')
-      .map((value) => String(value ?? '').trim())
-      .filter(Boolean)
-  );
-  if (onboardingRequired === 1 && selectedPacketItemIds.size > 0) {
-    const selectedTemplateItems = (await loadEmployeeOnboardingTemplate(db, businessId)).filter(
-      (item) => item.is_active === 1 && selectedPacketItemIds.has(item.id)
-    );
-    const requirementStatements: Array<ReturnType<D1['prepare']>> = [];
-    for (const item of selectedTemplateItems) {
-      const requirementId = await ensureEmployeeComplianceRequirement(
-        db,
-        businessId,
-        classifyOnboardingComplianceItem(item),
-        locals.userId ?? null,
-        now
-      );
-      requirementStatements.push(
-        db
-          .prepare(
-            `
-            INSERT OR IGNORE INTO employee_onboarding_invite_requirements (
-              business_id,
-              invite_id,
-              requirement_id,
-              created_at
-            )
-            VALUES (?, ?, ?, ?)
-            `
-          )
-          .bind(businessId, inviteId, requirementId, now)
-      );
-    }
-    if (requirementStatements.length > 0) await db.batch(requirementStatements);
-  }
-
   await writeAuditLog(db, {
     action: 'invite_created',
     request,
@@ -6852,7 +6816,7 @@ export async function createUserInvite(
       department: Boolean(department),
       departmentCount: scheduleDepartments.length,
       startDate: Boolean(startDate),
-      packetRequirementCount: selectedPacketItemIds.size
+      onboardingRequired: onboardingRequired === 1
     }
   });
 

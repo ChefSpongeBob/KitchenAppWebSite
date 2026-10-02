@@ -1136,12 +1136,31 @@ export const actions: Actions = {
 	}
 };
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, platform }) => {
 	const inviteCode = String(url.searchParams.get('invite') || url.searchParams.get('code') || '')
 		.trim()
 		.toUpperCase();
+	let onboardingRequired = false;
+	if (inviteCode && platform?.env?.DB) {
+		const now = Math.floor(Date.now() / 1000);
+		const invite = await platform.env.DB.prepare(
+			`
+			SELECT onboarding_required
+			FROM business_invites
+			WHERE invite_code = ?
+			  AND revoked_at IS NULL
+			  AND used_at IS NULL
+			  AND (expires_at IS NULL OR expires_at >= ?)
+			LIMIT 1
+			`
+		)
+			.bind(inviteCode, now)
+			.first<{ onboarding_required: number }>();
+		onboardingRequired = invite?.onboarding_required === 1;
+	}
 	return {
 		inviteCode: inviteCode || null,
+		onboardingRequired,
 		agreementVersion: LIABILITY_AGREEMENT_VERSION
 	};
 };

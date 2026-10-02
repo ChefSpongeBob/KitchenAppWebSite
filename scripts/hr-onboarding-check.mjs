@@ -48,8 +48,15 @@ expect('src/routes/register/+page.server.ts', 'employee invite onboarding skips 
 expect('src/lib/server/admin.ts', 'owner invites are owner-only and do not require employee packets by default', (source) =>
   source.includes("accessType === 'owner' && !isOwnerRole(locals.businessRole)") &&
   source.includes("Only the owner can invite another owner.") &&
-  source.includes("accessType === 'owner' || employmentType === 'contractor' ? 0 : 1") &&
+  source.includes("formData.get('onboarding_required')") &&
+  source.includes("onboardingRequested && accessType !== 'owner' && employmentType !== 'contractor'") &&
   source.includes('onboardingRequired === 1')
+);
+
+expect('src/routes/admin/onboarding/+page.svelte', 'employee packets are explicitly selected during invite', (source) =>
+  source.includes('name="onboarding_required"') &&
+  source.includes('Include onboarding packet') &&
+  !source.includes('name="packet_item_ids"')
 );
 
 expect('src/routes/register/+page.server.ts', 'invited owners are not auto-created as employees', (source) =>
@@ -68,6 +75,7 @@ expect('src/lib/server/email.ts', 'invite email copy matches packet requirement'
 
 expect('src/routes/register/+page.svelte', 'employee invite flow submits from personal information without purchase screen', (source) =>
   source.includes('$: inviteMode = Boolean(data.inviteCode)') &&
+  source.includes('$: collectEmployeeDetails = !inviteMode || data.onboardingRequired') &&
   source.includes('visibleSlides = inviteMode') &&
   source.includes("slide.id !== 'tier' && slide.id !== 'business' && slide.id !== 'purchase'") &&
   source.includes('form="registration-form" class="primary inline-continue"') &&
@@ -157,6 +165,17 @@ expect('src/routes/admin/users/[id]/+page.server.ts', 'employee profiles load on
 expect('src/routes/settings/+page.server.ts', 'employees submit onboarding from profile settings', (source) =>
   source.includes('loadEmployeeOnboarding(db, locals.userId, businessId') &&
   source.includes('submitEmployeeOnboardingItem(request, locals, platform?.env)')
+);
+
+expect('src/hooks.server.ts', 'pending onboarding does not trap employees on profile settings', (source) =>
+  !source.includes("throw redirect(303, '/settings?tab=onboarding')") &&
+  !source.includes("event: 'employee_onboarding_gate'")
+);
+
+expect('src/routes/settings/+page.svelte', 'registration profile items are read-only after submission', (source) =>
+  source.includes("item.status === 'submitted' || item.status === 'approved'") &&
+  source.includes('Saved during account registration. Awaiting manager review.') &&
+  source.includes('{#if isSubmitted(item)}')
 );
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness includes onboarding and sensitive HR tables', (source) =>
