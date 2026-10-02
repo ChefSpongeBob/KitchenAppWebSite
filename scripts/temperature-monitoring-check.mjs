@@ -127,12 +127,13 @@ expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute sta
   source.includes('#2563eb')
 );
 
-expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gateway selects the external antenna before listening', (source) =>
-  source.includes('#ifndef ARDUINO_XIAO_ESP32C6') &&
-  source.includes('digitalWrite(WIFI_ENABLE, LOW)') &&
-  source.includes('digitalWrite(WIFI_ANT_CONFIG, HIGH)') &&
-  source.indexOf('digitalWrite(WIFI_ANT_CONFIG, HIGH)') < source.indexOf('esp_ieee802154_enable()')
-);
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gateway selects the external antenna before listening', (source) => {
+  const setup = source.slice(source.indexOf('void setup()'));
+  return source.includes('#ifndef ARDUINO_XIAO_ESP32C6') &&
+    setup.includes('digitalWrite(WIFI_ENABLE, LOW)') &&
+    setup.includes('digitalWrite(WIFI_ANT_CONFIG, HIGH)') &&
+    setup.indexOf('digitalWrite(WIFI_ANT_CONFIG, HIGH)') < setup.indexOf('resumeRadioReceiver()');
+});
 
 expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds and delays high notifications for one continuous hour', (source) =>
   source.includes('evaluateTemperatureReadings') &&

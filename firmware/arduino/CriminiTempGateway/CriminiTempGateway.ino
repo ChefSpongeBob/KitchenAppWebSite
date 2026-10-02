@@ -27,7 +27,6 @@ constexpr size_t AUTH_TAG_SIZE = 16;
 constexpr size_t RECENT_PACKET_COUNT = 128;
 constexpr uint32_t UPLOAD_INTERVAL_MS = 10000;
 constexpr uint32_t RETRY_INTERVAL_MS = 60000;
-constexpr uint32_t HEARTBEAT_INTERVAL_MS = 300000;
 constexpr uint32_t RADIO_SILENCE_RECOVERY_MS = 720000;
 
 struct RadioFrame {
@@ -67,8 +66,6 @@ QueuedReading readings[MAX_PENDING_NODES] = {};
 size_t readingCount = 0;
 uint32_t lastUpload = 0;
 uint32_t uploadInterval = UPLOAD_INTERVAL_MS;
-uint32_t lastCloudAttempt = 0;
-uint32_t heartbeatInterval = HEARTBEAT_INTERVAL_MS;
 uint32_t lastAuthenticatedPacket = 0;
 uint32_t lastRadioRecovery = 0;
 uint8_t consecutiveRadioRecoveries = 0;
@@ -288,9 +285,9 @@ esp_err_t onHttpEvent(esp_http_client_event_t* event) {
   return ESP_OK;
 }
 
-bool uploadReadings(bool heartbeat = false) {
+bool uploadReadings() {
   const size_t submittedCount = readingCount;
-  if (!submittedCount && !heartbeat) return true;
+  if (!submittedCount) return true;
   if (!pauseRadioForWifi()) reportRadioIssue("receiver did not pause for upload");
 
   bool uploaded = false;
@@ -367,7 +364,6 @@ void setup() {
   }
   const uint32_t now = millis();
   lastUpload = now;
-  lastCloudAttempt = now;
   lastAuthenticatedPacket = now;
   lastRadioRecovery = now;
   Serial.printf("Gateway %s listening on channel %u\n", GATEWAY_SERIAL, RADIO_CHANNEL);
@@ -383,11 +379,6 @@ void loop() {
   if (readingCount && now - lastUpload >= uploadInterval) {
     uploadInterval = uploadReadings() ? UPLOAD_INTERVAL_MS : RETRY_INTERVAL_MS;
     lastUpload = millis();
-    lastCloudAttempt = lastUpload;
-    heartbeatInterval = HEARTBEAT_INTERVAL_MS;
-  } else if (!readingCount && now - lastCloudAttempt >= heartbeatInterval) {
-    heartbeatInterval = uploadReadings(true) ? HEARTBEAT_INTERVAL_MS : RETRY_INTERVAL_MS;
-    lastCloudAttempt = millis();
   }
   if (now - lastAuthenticatedPacket >= RADIO_SILENCE_RECOVERY_MS &&
       now - lastRadioRecovery >= RADIO_SILENCE_RECOVERY_MS) {
