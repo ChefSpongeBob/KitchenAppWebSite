@@ -89,6 +89,17 @@ expect('src/routes/register/+page.server.ts', 'invite registration saves persona
   source.includes('emergencyContactPhone ||')
 );
 
+expect('src/routes/register/+page.server.ts', 'completed invite registration opens the themed login confirmation', (source) =>
+  source.includes("inviteCode ? '/login?registered=success&onboarding=1' : '/welcome/admin'")
+);
+
+expect('src/routes/login/+page.svelte', 'registration confirmation uses Crimini branding and the real login flow', (source) =>
+  source.includes("registrationComplete = $page.url.searchParams.get('registered') === 'success'") &&
+  source.includes('src="/crimini-full-logo.jpg"') &&
+  source.includes("registrationComplete ? 'Welcome' : 'Welcome back'") &&
+  source.includes("registrationComplete ? 'Login' : 'Sign in'")
+);
+
 expect('src/routes/settings/+page.server.ts', 'profile settings reload the tenant-scoped registration profile', (source) =>
   source.includes('loadAdminEmployeeProfile(db, locals.userId, businessId)')
 );

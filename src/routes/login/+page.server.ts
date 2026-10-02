@@ -25,8 +25,11 @@ import type { PageServerLoad } from './$types';
 
 const GENERIC_LOGIN_ERROR = 'We could not sign you in with those details. Check your email and password and try again.';
 
-function resolvePostLoginPath() {
-	return '/app';
+function resolvePostLoginPath(url?: URL) {
+	return url?.searchParams.get('registered') === 'success' &&
+		url.searchParams.get('onboarding') === '1'
+		? '/welcome'
+		: '/app';
 }
 
 async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
@@ -114,7 +117,7 @@ async function revokeActiveSession(
 	cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 }
 
-export const load: PageServerLoad = async ({ locals, platform }) => {
+export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	const turnstileSiteKey = getTurnstileSiteKey(platform?.env);
 	const db = locals.DB;
 	if (!db || !locals.userId) {
@@ -149,7 +152,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 				businessName: locals.businessName ?? null,
 				businessRole,
 				role: effectiveRole,
-				continuePath: resolvePostLoginPath()
+				continuePath: resolvePostLoginPath(url)
 			}
 		};
 	} catch {
@@ -162,7 +165,7 @@ export const actions: Actions = {
 		await revokeActiveSession(locals.DB, cookies, request);
 		throw redirect(303, '/login?switch=1');
 	},
-	login: async ({ request, cookies, locals, platform, getClientAddress }) => {
+	login: async ({ request, cookies, locals, platform, getClientAddress, url }) => {
 		let email = '';
 		try {
 			const formData = await request.formData();
@@ -193,7 +196,7 @@ export const actions: Actions = {
 					.first<{ email: string | null }>();
 
 				if (String(activeUser?.email ?? '').trim().toLowerCase() === email) {
-					throw redirect(303, resolvePostLoginPath());
+					throw redirect(303, resolvePostLoginPath(url));
 				}
 			}
 
@@ -451,7 +454,7 @@ export const actions: Actions = {
 			]);
 
 			setSessionCookies(cookies, request, sessionToken);
-			throw redirect(303, resolvePostLoginPath());
+			throw redirect(303, resolvePostLoginPath(url));
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;

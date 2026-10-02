@@ -48,6 +48,7 @@
 
 	$: activeSession = data?.activeSession ?? null;
 	$: turnstileSiteKey = data?.turnstileSiteKey ?? '';
+	$: registrationComplete = $page.url.searchParams.get('registered') === 'success';
 	$: seededEmail = form?.email ?? '';
 	$: if (seededEmail !== lastSeededEmail) {
 		emailValue = seededEmail;
@@ -60,7 +61,12 @@
 		if (params.get('registered') === 'success' && params.get('purchase') === 'pending') {
 			return { tone: 'notice', text: 'Account created. Paid activation is pending.' };
 		}
-		if (params.get('registered') === 'success') return { tone: 'notice', text: 'Account created. You can sign in now.' };
+		if (params.get('registered') === 'success') {
+			return {
+				tone: 'notice',
+				text: activeSession?.email ? 'Account created.' : 'Account created. You can sign in now.'
+			};
+		}
 		if (params.get('reset') === 'success') return { tone: 'notice', text: 'Password reset. Sign in with your new password.' };
 		if (params.get('trial') === 'expired') return { tone: 'error', text: 'Trial access ended. This workspace now requires paid activation.' };
 		if (params.get('trial') === 'canceled') return { tone: 'notice', text: 'Workspace canceled. Future signup will require paid activation.' };
@@ -71,14 +77,20 @@
 
 <AuthShell
 	eyebrow=""
-	title="Welcome back"
+	title={registrationComplete ? 'Welcome' : 'Welcome back'}
 	subtitle=""
 	supportText=""
 >
 	<div class="auth-stack">
+		{#if registrationComplete}
+			<div class="registration-brand">
+				<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+			</div>
+		{/if}
+
 		<form method="POST" action="?/login" class="auth-form" use:enhance={enhanceLogin}>
 			<div class="auth-form-head">
-				<h2>Sign in</h2>
+				<h2>{registrationComplete ? 'Login' : 'Sign in'}</h2>
 			</div>
 
 			{#if statusMessage}
@@ -152,10 +164,12 @@
 			</div>
 		{/if}
 
-		<div class="auth-footer-row">
-			<p class="auth-footer">No account yet?</p>
-			<a href="/register#onboarding-slideshow" class="auth-link-button">Create workspace</a>
-		</div>
+		{#if !registrationComplete}
+			<div class="auth-footer-row">
+				<p class="auth-footer">No account yet?</p>
+				<a href="/register#onboarding-slideshow" class="auth-link-button">Create workspace</a>
+			</div>
+		{/if}
 
 		<div class="install-wrap">
 			<AppInstallCard compact />
@@ -167,6 +181,19 @@
 	.auth-stack {
 		display: grid;
 		gap: 0.95rem;
+	}
+
+	.registration-brand {
+		display: flex;
+		justify-content: center;
+		padding: 0.15rem 0 0.35rem;
+		border-bottom: 1px solid var(--color-divider);
+	}
+
+	.registration-brand img {
+		display: block;
+		width: min(19rem, 82%);
+		height: auto;
 	}
 
 	.auth-label-row {

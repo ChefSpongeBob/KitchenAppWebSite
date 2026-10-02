@@ -1104,7 +1104,10 @@ export const actions: Actions = {
 				throw redirect(303, '/billing?purchase=pending');
 			}
 
-			throw redirect(303, inviteCode ? '/welcome' : '/welcome/admin');
+			throw redirect(
+				303,
+				inviteCode ? '/login?registered=success&onboarding=1' : '/welcome/admin'
+			);
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;
