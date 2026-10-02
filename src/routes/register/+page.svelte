@@ -332,7 +332,7 @@
 
 	$: inviteMode = Boolean(data.inviteCode);
 	$: visibleSlides = inviteMode
-		? slides.filter((slide) => slide.id !== 'tier' && slide.id !== 'business')
+		? slides.filter((slide) => slide.id !== 'tier' && slide.id !== 'business' && slide.id !== 'purchase')
 		: slides;
 	$: if (!appliedFormSlide && form?.activeSlideId && visibleSlides.some((slide) => slide.id === form.activeSlideId)) {
 		activeIndex = visibleSlides.findIndex((slide) => slide.id === form.activeSlideId);
@@ -450,6 +450,59 @@
 		<div class="tour-shade"></div>
 	</div>
 
+	<form
+		id="registration-form"
+		class="registration-submit-form"
+		method="POST"
+		use:enhance={({ cancel }) => {
+			if (validatePasswordBeforeAccountStep()) return;
+			cancel();
+			const securityIndex = visibleSlides.findIndex((slide) => slide.id === 'security');
+			activeIndex = securityIndex >= 0 ? securityIndex : activeIndex;
+		}}
+	>
+		<input type="hidden" name="display_name" value={displayName} />
+		<input type="hidden" name="owner_title" value={ownerTitle} />
+		<input type="hidden" name="real_name" value={realName} />
+		<input type="hidden" name="birthday" value={birthday} />
+		<input type="hidden" name="email" value={email} />
+		<input type="hidden" name="confirm_email" value={confirmEmail} />
+		<input type="hidden" name="user_phone" value={userPhone} />
+		<input type="hidden" name="user_address_line_1" value={userAddressLine1} />
+		<input type="hidden" name="user_address_line_2" value={userAddressLine2} />
+		<input type="hidden" name="user_city" value={userCity} />
+		<input type="hidden" name="user_state" value={userState} />
+		<input type="hidden" name="user_postal_code" value={userPostalCode} />
+		<input type="hidden" name="emergency_contact_name" value={emergencyContactName} />
+		<input type="hidden" name="emergency_contact_phone" value={emergencyContactPhone} />
+		<input type="hidden" name="emergency_contact_relationship" value={emergencyContactRelationship} />
+		<input type="hidden" name="password" value={password} />
+		<input type="hidden" name="confirm_password" value={confirmPassword} />
+		<input type="hidden" name="email_updates" value={emailUpdates ? '1' : '0'} />
+		<input type="hidden" name="business_name" value={businessName} />
+		<input type="hidden" name="plan_tier" value={planTier} />
+		<input type="hidden" name="addon_temp_monitoring" value={tempMonitoringIncluded ? '1' : '0'} />
+		<input type="hidden" name="legal_name" value={legalName} />
+		<input type="hidden" name="registry_id" value={registryId} />
+		<input type="hidden" name="contact_email" value={contactEmail} />
+		<input type="hidden" name="contact_phone" value={contactPhone} />
+		<input type="hidden" name="website_url" value={websiteUrl} />
+		<input type="hidden" name="address_line_1" value={addressLine1} />
+		<input type="hidden" name="address_line_2" value={addressLine2} />
+		<input type="hidden" name="address_city" value={addressCity} />
+		<input type="hidden" name="address_state" value={addressState} />
+		<input type="hidden" name="address_postal_code" value={addressPostalCode} />
+		<input type="hidden" name="address_country" value={addressCountry} />
+		<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
+		<input type="hidden" name="purchase_mode" value={purchaseMode} />
+		<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
+		<input type="hidden" name="liability_agreement_accepted" value={liabilityAgreementAccepted ? '1' : '0'} />
+		<input type="hidden" name="liability_agreement_version" value={data.agreementVersion} />
+		{#if inviteMode}
+			<input type="hidden" name="invite_code" value={data.inviteCode} />
+		{/if}
+	</form>
+
 	{#key activeSlide.id}
 		<main
 			class="tour-main"
@@ -461,6 +514,9 @@
 			out:fade={{ duration: 160 }}
 		>
 			<div class="tour-copy" in:fly={{ y: 18, duration: 260 }}>
+				{#if form?.error && activeSlide.id !== 'security' && activeSlide.id !== 'purchase'}
+					<p class="tour-feedback error form-feedback">{form.error}</p>
+				{/if}
 				{#if activeSlide.kind === 'info'}
 					<h1>{activeSlide.title}</h1>
 					<p class="tour-description">{activeSlide.description}</p>
@@ -671,67 +727,22 @@
 						{#if passwordFeedback}
 							<p class="tour-feedback error password-feedback">{passwordFeedback}</p>
 						{/if}
+						{#if form?.error}
+							<p class="tour-feedback error form-feedback">{form.error}</p>
+						{/if}
 
-						<button type="button" class="primary inline-continue" on:click={nextSlide}>Continue</button>
+						{#if inviteMode}
+							<button type="submit" form="registration-form" class="primary inline-continue">Create account</button>
+						{:else}
+							<button type="button" class="primary inline-continue" on:click={nextSlide}>Continue</button>
+						{/if}
 					</div>
 				{/if}
 
 				{#if activeSlide.id === 'purchase'}
-					<form
-						class="form-zone inline-signup"
-						method="POST"
-						use:enhance={({ cancel }) => {
-							if (validatePasswordBeforeAccountStep()) return;
-							cancel();
-							const securityIndex = visibleSlides.findIndex((slide) => slide.id === 'security');
-							activeIndex = securityIndex >= 0 ? securityIndex : activeIndex;
-						}}
-					>
+					<div class="form-zone inline-signup">
 						{#if form?.error}
 							<p class="tour-feedback error form-feedback">{form.error}</p>
-						{/if}
-						<input type="hidden" name="display_name" value={displayName} />
-						<input type="hidden" name="owner_title" value={ownerTitle} />
-						<input type="hidden" name="real_name" value={realName} />
-						<input type="hidden" name="birthday" value={birthday} />
-						<input type="hidden" name="email" value={email} />
-						<input type="hidden" name="confirm_email" value={confirmEmail} />
-						<input type="hidden" name="user_phone" value={userPhone} />
-						<input type="hidden" name="user_address_line_1" value={userAddressLine1} />
-						<input type="hidden" name="user_address_line_2" value={userAddressLine2} />
-						<input type="hidden" name="user_city" value={userCity} />
-						<input type="hidden" name="user_state" value={userState} />
-						<input type="hidden" name="user_postal_code" value={userPostalCode} />
-						<input type="hidden" name="emergency_contact_name" value={emergencyContactName} />
-						<input type="hidden" name="emergency_contact_phone" value={emergencyContactPhone} />
-						<input
-							type="hidden"
-							name="emergency_contact_relationship"
-							value={emergencyContactRelationship}
-						/>
-						<input type="hidden" name="password" value={password} />
-						<input type="hidden" name="confirm_password" value={confirmPassword} />
-						<input type="hidden" name="email_updates" value={emailUpdates ? '1' : '0'} />
-						<input type="hidden" name="business_name" value={businessName} />
-						<input type="hidden" name="plan_tier" value={planTier} />
-						<input type="hidden" name="addon_temp_monitoring" value={tempMonitoringIncluded ? '1' : '0'} />
-						<input type="hidden" name="legal_name" value={legalName} />
-						<input type="hidden" name="registry_id" value={registryId} />
-						<input type="hidden" name="contact_email" value={contactEmail} />
-						<input type="hidden" name="contact_phone" value={contactPhone} />
-						<input type="hidden" name="website_url" value={websiteUrl} />
-						<input type="hidden" name="address_line_1" value={addressLine1} />
-						<input type="hidden" name="address_line_2" value={addressLine2} />
-						<input type="hidden" name="address_city" value={addressCity} />
-						<input type="hidden" name="address_state" value={addressState} />
-						<input type="hidden" name="address_postal_code" value={addressPostalCode} />
-						<input type="hidden" name="address_country" value={addressCountry} />
-						<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
-						<input type="hidden" name="purchase_mode" value={purchaseMode} />
-						<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
-						<input type="hidden" name="liability_agreement_version" value={data.agreementVersion} />
-						{#if inviteMode}
-							<input type="hidden" name="invite_code" value={data.inviteCode} />
 						{/if}
 
 						{#if !inviteMode}
@@ -819,12 +830,12 @@
 							</label>
 						{/if}
 
-						<button type="submit" class="primary submit-btn">Create account</button>
+						<button type="submit" form="registration-form" class="primary submit-btn">Create account</button>
 						<p class="auth-note">
 							Already have an account?
 							<a href="/login">Login</a>
 						</p>
-					</form>
+					</div>
 				{/if}
 			</div>
 
@@ -858,7 +869,7 @@
 			<span aria-hidden="true">&lt;</span>
 			<span class="sr-only">Back</span>
 		</button>
-		{#if activeSlide.id !== 'purchase'}
+		{#if activeIndex < visibleSlides.length - 1}
 			<button type="button" class="side-arrow side-arrow-right" on:click={nextSlide}>
 				<span aria-hidden="true">&gt;</span>
 				<span class="sr-only">Next</span>
@@ -868,6 +879,10 @@
 </section>
 
 <style>
+	.registration-submit-form {
+		display: none;
+	}
+
 	.tour-shell {
 		position: relative;
 		min-height: 100dvh;

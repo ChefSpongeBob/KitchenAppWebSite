@@ -66,10 +66,12 @@ expect('src/lib/server/email.ts', 'invite email copy matches packet requirement'
   source.includes("onboardingRequired ? 'Complete your setup and onboarding forms:' : 'Complete your setup:'")
 );
 
-expect('src/routes/register/+page.svelte', 'employee invite flow hides business purchase controls', (source) =>
+expect('src/routes/register/+page.svelte', 'employee invite flow submits from personal information without purchase screen', (source) =>
   source.includes('$: inviteMode = Boolean(data.inviteCode)') &&
   source.includes('visibleSlides = inviteMode') &&
-  source.includes("slide.id !== 'tier' && slide.id !== 'business'") &&
+  source.includes("slide.id !== 'tier' && slide.id !== 'business' && slide.id !== 'purchase'") &&
+  source.includes('form="registration-form" class="primary inline-continue"') &&
+  source.includes('>Create account</button') &&
   source.includes('{#if !inviteMode}') &&
   source.includes('payment-placeholder') &&
   source.includes('{#if !inviteMode}')
