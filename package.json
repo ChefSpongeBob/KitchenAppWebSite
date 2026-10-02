@@ -87,6 +87,8 @@
 		"db:migrations:apply:local": "npx wrangler d1 migrations apply DB --local",
 		"db:migrations:apply:remote": "npx wrangler d1 migrations apply crimini-production --remote",
 		"schema:readiness:prod": "node ./scripts/schema-readiness-check.mjs",
+		"deploy:email-dispatcher": "npx wrangler deploy --config ./workers/operational-email-dispatcher/wrangler.jsonc",
+		"secret:email-dispatcher": "npx wrangler secret put SMOKE_INTERNAL_TOKEN --config ./workers/operational-email-dispatcher/wrangler.jsonc",
 		"db:tenant:ensure:local": "node ./scripts/ensure-tenant-columns.mjs --local",
 		"db:tenant:ensure:remote": "node ./scripts/ensure-tenant-columns.mjs --remote",
 		"lint": "prettier --check .",

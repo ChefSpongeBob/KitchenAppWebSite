@@ -31,6 +31,24 @@ import { hasBusinessCapability } from '$lib/server/permissions';
 import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
 import { wrapProductionSchemaGuard } from '$lib/server/schemaGuard';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
+import { processOperationalEvents } from '$lib/server/operationalEvents';
+
+const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
+	'/admin',
+	'/billing',
+	'/lists',
+	'/my-schedule',
+	'/schedule',
+	'/settings',
+	'/tools/waste'
+];
+
+function shouldDispatchOperationalEvents(pathname: string, method: string) {
+	if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) return false;
+	return OPERATIONAL_EVENT_MUTATION_PREFIXES.some(
+		(prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+	);
+}
 
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const cookieName = getSessionCookieName();
@@ -149,6 +167,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	const isPublicApiRoute =
 		pathname.startsWith('/api/internal/schema-readiness') ||
+		pathname === '/api/internal/operational-events/process' ||
 		pathname.startsWith('/api/temps') ||
 		pathname.startsWith('/api/billing/app-store-notifications') ||
 		pathname.startsWith('/api/billing/google-play-notifications');
@@ -174,6 +193,28 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 	const resolveWithNoStore = async () => {
 		const response = await resolve(event);
+		if (
+			response.status < 500 &&
+			event.locals.DB &&
+			event.platform?.env &&
+			shouldDispatchOperationalEvents(pathname, event.request.method)
+		) {
+			const delivery = processOperationalEvents(event.locals.DB, {
+				env: event.platform.env,
+				request: event.request,
+				limit: 25
+			}).catch((error) => {
+				logOperationalError({
+					event: 'operational_event_background_delivery_failed',
+					request: event.request,
+					businessId: event.locals.businessId,
+					userId: event.locals.userId,
+					route: pathname,
+					error
+				});
+			});
+			event.platform.ctx.waitUntil(delivery);
+		}
 		response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
 		response.headers.set('pragma', 'no-cache');
 		response.headers.set('expires', '0');

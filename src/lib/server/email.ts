@@ -41,7 +41,7 @@ function extractErrorMessage(body: string) {
   }
 }
 
-function renderCriminiEmail({
+export function renderCriminiEmail({
   eyebrow = 'Crimini',
   title,
   body,
@@ -144,7 +144,7 @@ export async function sendTransactionalEmail({
     if (!response.ok) {
       const body = await response.text();
       const errorMessage = extractErrorMessage(body);
-      console.error('Resend email send failed:', response.status, body);
+      console.error('Resend email send failed:', response.status, errorMessage || 'Provider rejected the request.');
       return {
         sent: false,
         reason: errorMessage
@@ -426,5 +426,48 @@ export async function sendPasswordResetEmail({
       'This link expires in 2 hours.'
     ].join('\n'),
     idempotencyKey: `password-reset/${resetToken.slice(0, 24)}`
+  });
+}
+
+export async function sendAccountDeletionRequestEmail({
+  env,
+  origin,
+  userEmail,
+  workspaceName,
+  requestScope,
+  requestId
+}: {
+  env?: EmailEnv | null;
+  origin: string;
+  userEmail: string;
+  workspaceName?: string | null;
+  requestScope: 'user' | 'workspace';
+  requestId: string;
+}) {
+  const baseUrl = getAppBaseUrl(origin, env);
+  const supportUrl = `${baseUrl}/support`;
+  const scopeLabel = requestScope === 'workspace' ? 'workspace' : 'account';
+  const workspaceText = workspaceName?.trim() ? ` for ${workspaceName.trim()}` : '';
+
+  return sendTransactionalEmail({
+    env,
+    to: userEmail,
+    subject: 'Crimini deletion request received',
+    html: renderCriminiEmail({
+      eyebrow: 'Deletion Request',
+      title: 'We received your request',
+      body: `Your ${scopeLabel} deletion request${workspaceText} is now pending review. We will contact you if verification or additional information is needed.`,
+      actionLabel: 'Contact support',
+      actionUrl: supportUrl
+    }),
+    text: [
+      'We received your Crimini deletion request.',
+      '',
+      `Your ${scopeLabel} deletion request${workspaceText} is now pending review.`,
+      'We will contact you if verification or additional information is needed.',
+      '',
+      `Support: ${supportUrl}`
+    ].join('\n'),
+    idempotencyKey: `account-deletion/${requestId}`
   });
 }

@@ -1,4 +1,4 @@
-import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
+import type { D1Database, ExecutionContext, R2Bucket } from '@cloudflare/workers-types';
 import type { AppFeatureModes } from './lib/features/appFeatures';
 import type { BusinessCapability, BusinessCapabilityOverrides } from './lib/auth/roles';
 
@@ -7,6 +7,7 @@ import type { BusinessCapability, BusinessCapabilityOverrides } from './lib/auth
 declare global {
 	namespace App {
 		interface Platform {
+			ctx: ExecutionContext;
 			env: {
 				DB: D1Database;
 				DOC_MEDIA?: R2Bucket;

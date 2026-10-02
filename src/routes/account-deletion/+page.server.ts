@@ -2,9 +2,10 @@ import { fail, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { checkRateLimit, getRequestIpAddress, hashedAuditValue } from '$lib/server/security';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
+import { sendAccountDeletionRequestEmail } from '$lib/server/email';
 
 export const actions: Actions = {
-	default: async ({ request, locals, getClientAddress }) => {
+	default: async ({ request, locals, platform, url, getClientAddress }) => {
 		let email = '';
 		let workspaceName = '';
 
@@ -43,6 +44,7 @@ export const actions: Actions = {
 			}
 
 			const now = Math.floor(Date.now() / 1000);
+			const requestId = crypto.randomUUID();
 			await db
 				.prepare(
 					`
@@ -64,7 +66,7 @@ export const actions: Actions = {
 				`
 				)
 				.bind(
-					crypto.randomUUID(),
+					requestId,
 					email,
 					workspaceName || null,
 					requestScope,
@@ -77,6 +79,18 @@ export const actions: Actions = {
 					now
 				)
 				.run();
+
+			const emailResult = await sendAccountDeletionRequestEmail({
+				env: platform?.env,
+				origin: url.origin,
+				userEmail: email,
+				workspaceName,
+				requestScope,
+				requestId
+			});
+			if (!emailResult.sent) {
+				console.warn('Deletion confirmation email was not sent:', emailResult.reason ?? 'unknown error');
+			}
 
 			return { success: true };
 		} catch (error) {

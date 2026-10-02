@@ -1,5 +1,5 @@
 import { dev } from '$app/environment';
-import { sendTransactionalEmail } from '$lib/server/email';
+import { getAppBaseUrl, renderCriminiEmail, sendTransactionalEmail } from '$lib/server/email';
 import { logOperationalError } from '$lib/server/observability';
 import {
   resolveBusinessCapabilities,
@@ -519,6 +519,8 @@ function eventBodyFromPayload(event: OperationalEventRow) {
       return 'An onboarding item was approved.';
     case 'onboarding.item.changes_requested':
       return 'Changes were requested on an onboarding item.';
+    case 'onboarding.package.approved':
+      return 'Your onboarding package has been approved.';
     case 'billing.conversion.queued':
       return `${planLabel(payload.planTier)} billing is queued for store activation.`;
     case 'billing.conversion.completed':
@@ -546,15 +548,6 @@ function parseEventText(event: OperationalEventRow) {
   const title = asText(event.title || event.event_type.replace(/\./g, ' '), 180);
   const body = asText(event.body || eventBodyFromPayload(event) || 'Crimini has an operational update ready.', 500);
   return { title, body };
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function parseCapabilityOverrides(value: string | null | undefined): BusinessCapabilityOverrides {
@@ -616,6 +609,46 @@ async function loadRecipientsWithCapability(db: DB, event: OperationalEventRow, 
   const candidates = await loadRecipientCandidates(db, event.business_id);
   return candidates
     .filter((row) => recipientHasCapability(row, capability))
+    .map(({ id, email, display_name }) => ({ id, email, display_name }));
+}
+
+async function loadOnboardingReviewRecipients(db: DB, event: OperationalEventRow) {
+  const candidates = (await loadRecipientCandidates(db, event.business_id)).filter(
+    (row) => row.id !== event.actor_user_id && recipientHasCapability(row, 'manage_onboarding')
+  );
+  if (candidates.length === 0) return [];
+
+  const departmentRows = await db
+    .prepare(
+      `
+      SELECT user_id, department
+      FROM user_schedule_departments
+      WHERE business_id = ?
+      `
+    )
+    .bind(event.business_id)
+    .all<{ user_id: string; department: string }>();
+  const departmentsByUser = new Map<string, Set<string>>();
+  for (const row of departmentRows.results ?? []) {
+    const department = String(row.department ?? '').trim();
+    if (!department) continue;
+    const current = departmentsByUser.get(row.user_id) ?? new Set<string>();
+    current.add(department);
+    departmentsByUser.set(row.user_id, current);
+  }
+
+  const employeeDepartments = event.target_user_id
+    ? departmentsByUser.get(event.target_user_id) ?? new Set<string>()
+    : new Set<string>();
+  const departmentScopedTemplates = new Set(['foh_manager', 'boh_manager', 'hourly_manager', 'shift_lead']);
+
+  return candidates
+    .filter((row) => {
+      if (!departmentScopedTemplates.has(row.permission_template)) return true;
+      if (employeeDepartments.size === 0) return false;
+      const managerDepartments = departmentsByUser.get(row.id) ?? new Set<string>();
+      return Array.from(managerDepartments).some((department) => employeeDepartments.has(department));
+    })
     .map(({ id, email, display_name }) => ({ id, email, display_name }));
 }
 
@@ -733,7 +766,7 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
   }
 
   if (event.event_type === 'onboarding.item.submitted') {
-    return loadRecipientsWithCapability(db, event, 'manage_onboarding');
+    return loadOnboardingReviewRecipients(db, event);
   }
 
   if (
@@ -752,6 +785,37 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
   return loadTargetRecipient(db, event);
 }
 
+function eventEmailAction(event: OperationalEventRow, env: Partial<App.Platform['env']> | undefined) {
+  const baseUrl = getAppBaseUrl('https://criminiops.com', env);
+  if (event.event_type === 'onboarding.item.submitted' && event.target_user_id) {
+    return {
+      label: 'Review onboarding',
+      url: `${baseUrl}/admin/users/${encodeURIComponent(event.target_user_id)}?tab=onboarding`
+    };
+  }
+  if (event.event_type.startsWith('onboarding.')) {
+    return { label: 'Open onboarding', url: `${baseUrl}/settings?tab=onboarding` };
+  }
+  if (
+    event.event_type.startsWith('schedule.') &&
+    (event.event_type === 'schedule.published' ||
+      event.event_type.includes('approved') ||
+      event.event_type.includes('declined'))
+  ) {
+    return { label: 'View schedule', url: `${baseUrl}/my-schedule` };
+  }
+  if (event.event_type.startsWith('schedule.')) {
+    return { label: 'Open scheduling', url: `${baseUrl}/schedule` };
+  }
+  if (event.event_type.startsWith('billing.')) {
+    return { label: 'Open billing', url: `${baseUrl}/billing` };
+  }
+  if (event.event_type.startsWith('list.')) {
+    return { label: 'Open lists', url: `${baseUrl}/lists` };
+  }
+  return null;
+}
+
 function retryDelaySeconds(attemptNumber: number) {
   const delays = [60, 300, 900, 3600, 10800, 21600];
   return delays[Math.min(Math.max(0, attemptNumber - 1), delays.length - 1)];
@@ -768,31 +832,30 @@ async function deliverEventByEmail(
   }
 
   const { title, body } = parseEventText(event);
-  const safeTitle = escapeHtml(title);
-  const safeBody = escapeHtml(body);
+  const action = eventEmailAction(event, env);
 
   const providerIds: string[] = [];
   const failures: string[] = [];
   const skipped: string[] = [];
   for (const recipient of recipients) {
-    const safeName = escapeHtml(recipient.display_name?.trim() || 'there');
+    const name = recipient.display_name?.trim() || 'there';
     const result = await sendTransactionalEmail({
       env,
       to: recipient.email,
       subject: title,
-      html: `
-        <div style="margin:0;padding:0;background:#f7f2e8;color:#181716;font-family:Georgia,'Times New Roman',serif;">
-          <div style="max-width:620px;margin:0 auto;padding:30px 18px;">
-            <div style="background:#fffdf8;border:1px solid #ded2bf;border-radius:24px;padding:28px;">
-              <p style="margin:0 0 12px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#7a6f61;">Crimini</p>
-              <h1 style="margin:0 0 16px;font-size:28px;line-height:1.1;font-weight:400;color:#181716;">${safeTitle}</h1>
-              <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#4c463f;">Hi ${safeName},</p>
-              <p style="margin:0;font-size:16px;line-height:1.6;color:#292520;">${safeBody}</p>
-            </div>
-          </div>
-        </div>
-      `,
-      text: [`Hi ${recipient.display_name?.trim() || 'there'},`, '', title, body].join('\n'),
+      html: renderCriminiEmail({
+        title,
+        body: `Hi ${name}, ${body}`,
+        actionLabel: action?.label,
+        actionUrl: action?.url
+      }),
+      text: [
+        `Hi ${name},`,
+        '',
+        title,
+        body,
+        ...(action ? ['', `${action.label}: ${action.url}`] : [])
+      ].join('\n'),
       idempotencyKey: `operational/${event.id}/email/${recipient.id}`
     });
 

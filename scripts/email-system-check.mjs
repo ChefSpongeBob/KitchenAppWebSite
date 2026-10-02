@@ -29,10 +29,18 @@ expect('src/lib/server/email.ts', 'direct user emails are branded and wired', (s
   source.includes('sendInviteEmail') &&
   source.includes('sendApprovalEmail') &&
   source.includes('sendPasswordResetEmail') &&
+  source.includes('sendAccountDeletionRequestEmail') &&
   source.includes('Employee Onboarding') &&
   source.includes('Access Approved') &&
   source.includes('Password Reset') &&
   !source.includes('font-family: Arial')
+);
+
+expect('src/routes/account-deletion/+page.server.ts', 'account deletion persists before sending confirmation', (source) =>
+  source.includes('account_deletion_requests') &&
+  source.includes('sendAccountDeletionRequestEmail') &&
+  source.includes('requestId') &&
+  source.includes('Deletion confirmation email was not sent')
 );
 
 expect('src/lib/server/admin.ts', 'admin invite and approval emails use the central helper', (source) =>
@@ -51,10 +59,19 @@ expect('src/routes/forgot-password/+page.server.ts', 'password reset requires su
 expect('src/lib/server/operationalEvents.ts', 'operational events resolve email recipients by event intent', (source) =>
   source.includes('loadEventEmailRecipients') &&
   source.includes('loadRecipientsWithCapability') &&
+  source.includes('loadOnboardingReviewRecipients') &&
+  source.includes('user_schedule_departments') &&
   source.includes('resolveBusinessCapabilities') &&
   source.includes("event.event_type === 'schedule.published'") &&
   source.includes('email_updates') &&
   source.includes('operational/${event.id}/email/${recipient.id}')
+);
+
+expect('src/lib/server/operationalEvents.ts', 'operational emails include direct app actions', (source) =>
+  source.includes('eventEmailAction') &&
+  source.includes('Review onboarding') &&
+  source.includes('Open onboarding') &&
+  source.includes('View schedule')
 );
 
 expect('src/lib/server/operationalEvents.ts', 'temperature data and alerts are excluded from email', (source) =>
@@ -78,6 +95,24 @@ expect('src/routes/api/internal/operational-events/process/+server.ts', 'email d
   source.includes('SMOKE_INTERNAL_TOKEN') &&
   source.includes('processOperationalEvents') &&
   source.includes('Not found.')
+);
+
+expect('src/hooks.server.ts', 'successful app mutations dispatch queued emails in the background', (source) =>
+  source.includes('processOperationalEvents') &&
+  source.includes('shouldDispatchOperationalEvents') &&
+  source.includes('event.platform.ctx.waitUntil(delivery)') &&
+  source.includes("pathname === '/api/internal/operational-events/process'")
+);
+
+expect('workers/operational-email-dispatcher/index.js', 'scheduled dispatcher invokes the protected processor', (source) =>
+  source.includes('async scheduled') &&
+  source.includes('SMOKE_INTERNAL_TOKEN') &&
+  source.includes('/api/internal/operational-events/process')
+);
+
+expect('workers/operational-email-dispatcher/wrangler.jsonc', 'scheduled dispatcher runs every minute', (source) =>
+  source.includes('crimini-operational-email-dispatcher') &&
+  source.includes('"crons": ["* * * * *"]')
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 3 email status', (source) =>

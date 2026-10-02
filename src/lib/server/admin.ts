@@ -2896,27 +2896,40 @@ async function refreshEmployeeOnboardingPackageStatus(
   businessId: string,
   approvedBy?: string | null
 ) {
-  const counts = await db
-    .prepare(
-      `
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-        SUM(CASE WHEN status = 'needs_changes' THEN 1 ELSE 0 END) AS needs_changes_count,
-        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count
-      FROM employee_onboarding_items
-      WHERE package_id = ? AND business_id = ?
-      `
-    )
-    .bind(packageId, businessId)
-    .first<{
-      total: number;
-      pending_count: number | null;
-      needs_changes_count: number | null;
-      submitted_count: number | null;
-      approved_count: number | null;
-    }>();
+  const [existingPackage, counts] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT user_id, status
+        FROM employee_onboarding_packages
+        WHERE id = ? AND business_id = ?
+        LIMIT 1
+        `
+      )
+      .bind(packageId, businessId)
+      .first<{ user_id: string; status: EmployeeOnboardingPackage['status'] }>(),
+    db
+      .prepare(
+        `
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+          SUM(CASE WHEN status = 'needs_changes' THEN 1 ELSE 0 END) AS needs_changes_count,
+          SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
+          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count
+        FROM employee_onboarding_items
+        WHERE package_id = ? AND business_id = ?
+        `
+      )
+      .bind(packageId, businessId)
+      .first<{
+        total: number;
+        pending_count: number | null;
+        needs_changes_count: number | null;
+        submitted_count: number | null;
+        approved_count: number | null;
+      }>()
+  ]);
 
   const total = counts?.total ?? 0;
   const pendingCount = counts?.pending_count ?? 0;
@@ -2975,6 +2988,12 @@ async function refreshEmployeeOnboardingPackageStatus(
       .bind(now, reviewer, businessId, packageId)
       .run();
   }
+
+  return {
+    status,
+    userId: existingPackage?.user_id ?? null,
+    changedToApproved: status === 'approved' && existingPackage?.status !== 'approved'
+  };
 }
 
 function profilePayloadForCompletedOnboardingItem(
@@ -6568,7 +6587,7 @@ async function reviewEmployeeOnboardingItem(
     now
   );
 
-  await refreshEmployeeOnboardingPackageStatus(
+  const packageStatus = await refreshEmployeeOnboardingPackageStatus(
     db,
     item.package_id,
     businessId,
@@ -6596,15 +6615,23 @@ async function reviewEmployeeOnboardingItem(
     {
       businessId,
       eventType:
-        status === 'approved'
+        packageStatus.changedToApproved
+          ? 'onboarding.package.approved'
+          : status === 'approved'
           ? 'onboarding.item.approved'
           : 'onboarding.item.changes_requested',
       category: 'onboarding',
       actorUserId: locals.userId ?? null,
       targetUserId: item.user_id,
-      subjectType: 'employee_onboarding_item',
-      subjectId: item.id,
-      title: status === 'approved' ? 'Onboarding item approved' : 'Onboarding changes requested',
+      subjectType: packageStatus.changedToApproved
+        ? 'employee_onboarding_package'
+        : 'employee_onboarding_item',
+      subjectId: packageStatus.changedToApproved ? item.package_id : item.id,
+      title: packageStatus.changedToApproved
+        ? 'Onboarding approved'
+        : status === 'approved'
+          ? 'Onboarding item approved'
+          : 'Onboarding changes requested',
       payload: {
         packageId: item.package_id,
         itemType: item.item_type,
