@@ -1,9 +1,8 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
   import AvailabilityEditor from '$lib/components/ui/AvailabilityEditor.svelte';
-  import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -31,36 +30,6 @@
     endTime: string;
   };
 
-  type PendingBirthdayRequest = {
-    requested_birthday: string;
-    requested_at: number;
-  } | null;
-
-  type EmployeeOnboardingPackage = {
-    id: string;
-    status: 'sent' | 'in_progress' | 'submitted' | 'approved';
-    sent_at: number;
-    completed_at: number | null;
-    approved_at: number | null;
-  };
-
-  type EmployeeOnboardingItem = {
-    id: string;
-    item_type: 'form' | 'document' | 'acknowledgement';
-    form_key: string;
-    title: string;
-    description: string;
-    status: 'pending' | 'submitted' | 'approved' | 'needs_changes';
-    file_url: string;
-    file_name: string;
-    form_payload: string;
-    source_file_url: string;
-    source_file_name: string;
-    signed_name: string;
-    manager_note: string;
-    submitted_at: number | null;
-  };
-
   export let data: {
     activeTab: string;
     user: {
@@ -69,10 +38,6 @@
       email: string;
     };
     profile: Profile;
-    onboarding: {
-      package: EmployeeOnboardingPackage | null;
-      items: EmployeeOnboardingItem[];
-    };
     approvedDepartments: ScheduleDepartment[];
     availability: AvailabilityEntry[];
     preferences: {
@@ -82,6 +47,11 @@
       darkMode: boolean;
       language: string;
     };
+    employeeOnboarding: {
+      id: string;
+      status: string;
+      highlighted: boolean;
+    } | null;
     sessions: {
       id: string;
       deviceName: string | null;
@@ -92,10 +62,9 @@
       revokedAt: number | null;
       current: boolean;
     }[];
-    pendingBirthdayRequest: PendingBirthdayRequest;
   };
 
-  const tabs = ['availability', 'profile', 'onboarding', 'app'] as const;
+  const tabs = ['availability', 'profile', 'app'] as const;
   type TabKey = (typeof tabs)[number];
 
   function normalizeTab(value: string): TabKey {
@@ -128,60 +97,18 @@
   const departmentSummary =
     data.approvedDepartments.length > 0 ? data.approvedDepartments.join(', ') : 'No schedule departments';
 
-  function formatBirthday(value: string) {
-    return value ? new Date(`${value}T00:00:00`).toLocaleDateString() : 'Not set';
-  }
-
-  function formatPendingDate(value: number) {
-    return new Date(value * 1000).toLocaleDateString();
-  }
-
-  function formatDateTime(value: number | null) {
-    return value ? new Date(value * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not set';
-  }
-
   function sessionLabel(session: (typeof data.sessions)[number]) {
     return session.deviceName || session.platform || session.userAgent?.split(' ')[0] || 'Session';
   }
 
-  function formatStatus(value: string) {
-    return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  function formatDateTime(value: number) {
+    return new Date(value * 1000).toLocaleString();
   }
 
   $: activeSessions = data.sessions.filter((session) => !session.revokedAt);
 
-  function payloadFor(item: EmployeeOnboardingItem) {
-    try {
-      return JSON.parse(item.form_payload || '{}') as Record<string, string>;
-    } catch {
-      return {};
-    }
-  }
-
-  function formValue(item: EmployeeOnboardingItem, key: string, fallback = '') {
-    return payloadFor(item)[key] ?? fallback;
-  }
-
-  function completedSummary(item: EmployeeOnboardingItem) {
-    if (item.form_key === 'personal_information' || item.form_key === 'emergency_contact') {
-      return item.status === 'approved'
-        ? 'Registration details saved and approved.'
-        : 'Saved during account registration. Awaiting manager review.';
-    }
-    if (item.file_name) return `Uploaded: ${item.file_name}`;
-    if (item.item_type === 'form') return `Submitted by ${item.signed_name || 'employee'}`;
-    return `Completed by ${item.signed_name || 'employee'}`;
-  }
-
-  function isSubmitted(item: EmployeeOnboardingItem) {
-    return item.status === 'submitted' || item.status === 'approved';
-  }
-
   $: profileDisplayName = data.profile.real_name || data.user.username || 'Profile';
   $: profileInitial = profileDisplayName.trim().charAt(0).toUpperCase() || 'P';
-  $: onboardingDoneCount = data.onboarding.items.filter(
-    (item) => item.status === 'submitted' || item.status === 'approved'
-  ).length;
 </script>
 
 <Layout>
@@ -202,15 +129,26 @@
         <strong>{departmentSummary}</strong>
       </div>
       <div class="meta-item">
-        <span>Birthday</span>
-        <strong>{formatBirthday(data.profile.birthday)}</strong>
-      </div>
-      <div class="meta-item">
         <span>Status</span>
-        <strong>{data.pendingBirthdayRequest ? 'Birthday request pending' : 'Profile active'}</strong>
+        <strong>Profile active</strong>
       </div>
     </div>
   </section>
+
+  {#if data.employeeOnboarding}
+    <section class:highlighted={data.employeeOnboarding.highlighted} class="onboarding-prompt">
+      <div>
+        <span>Employee Onboarding</span>
+        <h2>{data.employeeOnboarding.status === 'submitted' ? 'Onboarding submitted' : 'Complete your company onboarding'}</h2>
+        <p>
+          {data.employeeOnboarding.status === 'submitted'
+            ? 'Your packet is waiting for review.'
+            : 'Open your secure packet and check your email for onboarding requests.'}
+        </p>
+      </div>
+      <a href="/onboarding">Open onboarding</a>
+    </section>
+  {/if}
 
   <nav class="settings-nav" aria-label="Settings sections">
     <button type="button" class:active={activeTab === 'availability'} on:click={() => (activeTab = 'availability')}>
@@ -218,9 +156,6 @@
     </button>
     <button type="button" class:active={activeTab === 'profile'} on:click={() => (activeTab = 'profile')}>
       Profile
-    </button>
-    <button type="button" class:active={activeTab === 'onboarding'} on:click={() => (activeTab = 'onboarding')}>
-      Onboarding
     </button>
     <button type="button" class:active={activeTab === 'app'} on:click={() => (activeTab = 'app')}>
       App
@@ -261,60 +196,18 @@
             <input name="username" value={data.user.username} required />
           </label>
 
-          <label>
-            <span>Real Name</span>
-            <input name="real_name" value={data.profile.real_name} placeholder="Your full name" />
-          </label>
         </div>
 
-        <div class="birthday-inline">
-          <label>
-            <span>Birthday</span>
-            <input value={formatBirthday(data.profile.birthday)} readonly disabled />
-          </label>
-
-          <details class="birthday-request">
-            <summary>Edit Birthday</summary>
-
-            <div class="birthday-inline__row">
-              <input
-                form="birthday-request-form"
-                name="requested_birthday"
-                type="date"
-                value={data.pendingBirthdayRequest?.requested_birthday ?? data.profile.birthday}
-                required
-              />
-              <button form="birthday-request-form" type="submit" class="secondary-button">Submit</button>
-            </div>
-
-            {#if data.pendingBirthdayRequest}
-              <p class="form-note">
-                Pending request for {formatBirthday(data.pendingBirthdayRequest.requested_birthday)} submitted
-                {formatPendingDate(data.pendingBirthdayRequest.requested_at)}.
-              </p>
-            {/if}
-          </details>
-        </div>
 
         <div class="form-actions">
           <button type="submit">Save Personal Info</button>
         </div>
       </form>
-
-      <form
-        id="birthday-request-form"
-        method="POST"
-        action="?/request_birthday_edit"
-        use:enhance={withFeedback}
-        class="hidden-form"
-      ></form>
-
       <form method="POST" action="?/save_contact_info" use:enhance={withFeedback} class="stack-form">
         <header class="form-section-head">
-          <span class="panel-kicker">Contact</span>
-          <h2>Contact Info</h2>
+          <span class="panel-kicker">Account</span>
+          <h2>Contact</h2>
         </header>
-
         <div class="field-grid">
           <label>
             <span>Email</span>
@@ -325,402 +218,8 @@
             <input name="phone" type="tel" value={data.profile.phone} placeholder="(555) 555-5555" />
           </label>
         </div>
-
-        <div class="field-grid">
-          <label>
-            <span>Address Line 1</span>
-            <input name="address_line_1" value={data.profile.address_line_1} />
-          </label>
-          <label>
-            <span>Address Line 2</span>
-            <input name="address_line_2" value={data.profile.address_line_2} />
-          </label>
-          <label>
-            <span>City</span>
-            <input name="city" value={data.profile.city} />
-          </label>
-        </div>
-
-        <div class="field-grid field-grid-three">
-          <label>
-            <span>State</span>
-            <input name="state" value={data.profile.state} />
-          </label>
-          <label>
-            <span>Postal Code</span>
-            <input name="postal_code" value={data.profile.postal_code} />
-          </label>
-          <span></span>
-        </div>
-
-        <div class="field-grid field-grid-three">
-          <label>
-            <span>Emergency Contact</span>
-            <input name="emergency_contact_name" value={data.profile.emergency_contact_name} />
-          </label>
-          <label>
-            <span>Emergency Phone</span>
-            <input name="emergency_contact_phone" type="tel" value={data.profile.emergency_contact_phone} />
-          </label>
-          <label>
-            <span>Relationship</span>
-            <input name="emergency_contact_relationship" value={data.profile.emergency_contact_relationship} />
-          </label>
-        </div>
-
-        <div class="form-actions">
-          <button type="submit">Save Contact Info</button>
-        </div>
+        <div class="form-actions"><button type="submit">Save Contact</button></div>
       </form>
-    </section>
-  {/if}
-
-  {#if activeTab === 'onboarding'}
-    <section class="panel">
-      <header class="panel-head">
-        <div>
-          <span class="panel-kicker">Employee Setup</span>
-          <h2>Onboarding</h2>
-        </div>
-        {#if data.onboarding.package}
-          <span class="status-pill status-pill-{data.onboarding.package.status}">
-            {formatStatus(data.onboarding.package.status)}
-          </span>
-        {/if}
-      </header>
-
-      {#if !data.onboarding.package}
-        <p class="panel-note">No onboarding package has been assigned yet.</p>
-      {:else}
-        <div class="onboarding-summary">
-          <div>
-            <span>Progress</span>
-            <strong>{onboardingDoneCount} / {data.onboarding.items.length}</strong>
-          </div>
-          <div>
-            <span>Sent</span>
-            <strong>{formatDateTime(data.onboarding.package.sent_at)}</strong>
-          </div>
-          <div>
-            <span>Approved</span>
-            <strong>{formatDateTime(data.onboarding.package.approved_at)}</strong>
-          </div>
-        </div>
-
-        <div class="onboarding-list">
-          {#each data.onboarding.items as item}
-            <article class={`onboarding-item ${isSubmitted(item) ? 'item-approved' : ''}`}>
-              <div class="onboarding-item__head">
-                <div>
-                  <span class="item-type">{formatStatus(item.item_type)}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                </div>
-                <span class="status-pill status-pill-{item.status}">{formatStatus(item.status)}</span>
-              </div>
-
-              {#if item.manager_note}
-                <p class="manager-note">{item.manager_note}</p>
-              {/if}
-
-              {#if item.source_file_url}
-                <OnboardingFormPreview
-                  src={item.source_file_url}
-                  title={item.title}
-                  fileName={item.source_file_name}
-                  label="Active form"
-                />
-              {/if}
-
-              {#if isSubmitted(item)}
-                <p class="form-note">
-                  {completedSummary(item)}
-                </p>
-              {:else}
-                <form
-                  method="POST"
-                  action="?/submit_onboarding_item"
-                  enctype="multipart/form-data"
-                  use:enhance={withFeedback}
-                  class="onboarding-form"
-                >
-                  <input type="hidden" name="item_id" value={item.id} />
-
-                  {#if item.item_type === 'form'}
-                    {#if item.form_key === 'personal_information'}
-                      <div class="field-grid">
-                        <label>
-                          <span>Legal Name</span>
-                          <input name="legal_name" value={formValue(item, 'legal_name', data.profile.real_name)} required />
-                        </label>
-                        <label>
-                          <span>Preferred Name</span>
-                          <input name="preferred_name" value={formValue(item, 'preferred_name', data.user.username)} />
-                        </label>
-                        <label>
-                          <span>Birthday</span>
-                          <input name="birthday" type="date" value={formValue(item, 'birthday', data.profile.birthday)} required />
-                        </label>
-                        <label>
-                          <span>Phone</span>
-                          <input name="phone" type="tel" value={formValue(item, 'phone', data.profile.phone)} required />
-                        </label>
-                        <label>
-                          <span>Address Line 1</span>
-                          <input name="address_line_1" value={formValue(item, 'address_line_1', data.profile.address_line_1)} required />
-                        </label>
-                        <label>
-                          <span>Address Line 2</span>
-                          <input name="address_line_2" value={formValue(item, 'address_line_2', data.profile.address_line_2)} />
-                        </label>
-                        <label>
-                          <span>City</span>
-                          <input name="city" value={formValue(item, 'city', data.profile.city)} required />
-                        </label>
-                        <label>
-                          <span>State</span>
-                          <input name="state" value={formValue(item, 'state', data.profile.state)} required />
-                        </label>
-                        <label>
-                          <span>Postal Code</span>
-                          <input name="postal_code" value={formValue(item, 'postal_code', data.profile.postal_code)} required />
-                        </label>
-                      </div>
-                    {:else if item.form_key === 'emergency_contact'}
-                      <div class="field-grid">
-                        <label>
-                          <span>Emergency Contact</span>
-                          <input name="emergency_contact_name" value={formValue(item, 'emergency_contact_name', data.profile.emergency_contact_name)} required />
-                        </label>
-                        <label>
-                          <span>Emergency Phone</span>
-                          <input name="emergency_contact_phone" type="tel" value={formValue(item, 'emergency_contact_phone', data.profile.emergency_contact_phone)} required />
-                        </label>
-                        <label>
-                          <span>Relationship</span>
-                          <input name="emergency_contact_relationship" value={formValue(item, 'emergency_contact_relationship', data.profile.emergency_contact_relationship)} required />
-                        </label>
-                      </div>
-                    {:else if item.form_key === 'federal_i9'}
-                      <div class="field-grid">
-                        <label>
-                          <span>Legal Last Name</span>
-                          <input name="legal_last_name" value={formValue(item, 'legal_last_name')} required />
-                        </label>
-                        <label>
-                          <span>Legal First Name</span>
-                          <input name="legal_first_name" value={formValue(item, 'legal_first_name')} required />
-                        </label>
-                        <label>
-                          <span>Other Last Names</span>
-                          <input name="other_last_names" value={formValue(item, 'other_last_names')} />
-                        </label>
-                        <label>
-                          <span>Date of Birth</span>
-                          <input name="date_of_birth" type="date" value={formValue(item, 'date_of_birth', data.profile.birthday)} required />
-                        </label>
-                        <label>
-                          <span>SSN Last Four</span>
-                          <input name="ssn_last_four" inputmode="numeric" maxlength="4" value={formValue(item, 'ssn_last_four')} />
-                        </label>
-                        <label>
-                          <span>Phone</span>
-                          <input name="phone" type="tel" value={formValue(item, 'phone', data.profile.phone)} />
-                        </label>
-                        <label>
-                          <span>Email</span>
-                          <input name="email" type="email" value={formValue(item, 'email', data.user.email)} />
-                        </label>
-                        <label>
-                          <span>Address Line 1</span>
-                          <input name="address_line_1" value={formValue(item, 'address_line_1', data.profile.address_line_1)} required />
-                        </label>
-                        <label>
-                          <span>City</span>
-                          <input name="city" value={formValue(item, 'city', data.profile.city)} required />
-                        </label>
-                        <label>
-                          <span>State</span>
-                          <input name="state" value={formValue(item, 'state', data.profile.state)} required />
-                        </label>
-                        <label>
-                          <span>Postal Code</span>
-                          <input name="postal_code" value={formValue(item, 'postal_code', data.profile.postal_code)} required />
-                        </label>
-                        <label>
-                          <span>Citizenship Status</span>
-                          <select name="citizenship_status">
-                            <option value="">Select</option>
-                            <option value="us_citizen" selected={formValue(item, 'citizenship_status') === 'us_citizen'}>U.S. Citizen</option>
-                            <option value="noncitizen_national" selected={formValue(item, 'citizenship_status') === 'noncitizen_national'}>Noncitizen National</option>
-                            <option value="lawful_permanent_resident" selected={formValue(item, 'citizenship_status') === 'lawful_permanent_resident'}>Lawful Permanent Resident</option>
-                            <option value="authorized_alien" selected={formValue(item, 'citizenship_status') === 'authorized_alien'}>Authorized Alien</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Document Choice</span>
-                          <input name="document_choice" value={formValue(item, 'document_choice')} placeholder="List A, or List B + C" />
-                        </label>
-                        <label>
-                          <span>Alien Registration Number</span>
-                          <input name="alien_registration_number" value={formValue(item, 'alien_registration_number')} />
-                        </label>
-                        <label>
-                          <span>I-94 Number</span>
-                          <input name="i94_number" value={formValue(item, 'i94_number')} />
-                        </label>
-                        <label>
-                          <span>Passport Number</span>
-                          <input name="passport_number" value={formValue(item, 'passport_number')} />
-                        </label>
-                        <label>
-                          <span>Passport Country</span>
-                          <input name="passport_country" value={formValue(item, 'passport_country')} />
-                        </label>
-                      </div>
-                    {:else if item.form_key === 'federal_w4'}
-                      <div class="field-grid">
-                        <label>
-                          <span>Filing Status</span>
-                          <select name="filing_status" required>
-                            <option value="">Select</option>
-                            <option value="single" selected={formValue(item, 'filing_status') === 'single'}>Single or Married Filing Separately</option>
-                            <option value="married" selected={formValue(item, 'filing_status') === 'married'}>Married Filing Jointly</option>
-                            <option value="head_of_household" selected={formValue(item, 'filing_status') === 'head_of_household'}>Head of Household</option>
-                          </select>
-                        </label>
-                        <label class="toggle-card">
-                          <input type="checkbox" name="multiple_jobs" value="1" checked={formValue(item, 'multiple_jobs') === 'yes'} />
-                          <div><strong>Multiple Jobs or Spouse Works</strong></div>
-                        </label>
-                        <label>
-                          <span>Dependents Amount</span>
-                          <input name="dependents_amount" inputmode="decimal" value={formValue(item, 'dependents_amount')} />
-                        </label>
-                        <label>
-                          <span>Other Income</span>
-                          <input name="other_income" inputmode="decimal" value={formValue(item, 'other_income')} />
-                        </label>
-                        <label>
-                          <span>Deductions</span>
-                          <input name="deductions" inputmode="decimal" value={formValue(item, 'deductions')} />
-                        </label>
-                        <label>
-                          <span>Extra Withholding</span>
-                          <input name="extra_withholding" inputmode="decimal" value={formValue(item, 'extra_withholding')} />
-                        </label>
-                        <label class="toggle-card">
-                          <input type="checkbox" name="exempt" value="1" checked={formValue(item, 'exempt') === 'yes'} />
-                          <div><strong>Claim Exempt</strong></div>
-                        </label>
-                      </div>
-                    {:else if item.form_key === 'state_withholding'}
-                      <div class="field-grid">
-                        <label>
-                          <span>State</span>
-                          <input name="state" value={formValue(item, 'state', data.profile.state)} required />
-                        </label>
-                        <label>
-                          <span>Filing Status</span>
-                          <input name="filing_status" value={formValue(item, 'filing_status')} required />
-                        </label>
-                        <label>
-                          <span>Allowances</span>
-                          <input name="allowances" inputmode="decimal" value={formValue(item, 'allowances')} />
-                        </label>
-                        <label>
-                          <span>Additional Withholding</span>
-                          <input name="additional_withholding" inputmode="decimal" value={formValue(item, 'additional_withholding')} />
-                        </label>
-                        <label class="toggle-card">
-                          <input type="checkbox" name="exempt" value="1" checked={formValue(item, 'exempt') === 'yes'} />
-                          <div><strong>Claim Exempt</strong></div>
-                        </label>
-                        <label class="field-span-2">
-                          <span>Notes</span>
-                          <input name="state_notes" value={formValue(item, 'state_notes')} />
-                        </label>
-                      </div>
-                    {:else}
-                      <div class="field-grid">
-                        <label>
-                          <span>Classification</span>
-                          <select name="worker_classification">
-                            <option value="employee" selected>Employee</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Start Date</span>
-                          <input name="start_date" type="date" value={formValue(item, 'start_date')} required />
-                        </label>
-                        <label>
-                          <span>Pay Type</span>
-                          <select name="pay_type">
-                            <option value="hourly" selected={formValue(item, 'pay_type') !== 'salary'}>Hourly</option>
-                            <option value="salary" selected={formValue(item, 'pay_type') === 'salary'}>Salary</option>
-                          </select>
-                        </label>
-                        <label class="toggle-card">
-                          <input
-                            type="checkbox"
-                            name="direct_deposit_authorized"
-                            value="1"
-                            checked={formValue(item, 'direct_deposit_authorized') === 'yes'}
-                          />
-                          <div>
-                            <strong>Direct Deposit Authorization</strong>
-                          </div>
-                        </label>
-                        <label>
-                          <span>Bank Name</span>
-                          <input name="bank_name" value={formValue(item, 'bank_name')} />
-                        </label>
-                        <label>
-                          <span>Routing Last Four</span>
-                          <input name="routing_last_four" inputmode="numeric" maxlength="4" value={formValue(item, 'routing_last_four')} />
-                        </label>
-                        <label>
-                          <span>Account Last Four</span>
-                          <input name="account_last_four" inputmode="numeric" maxlength="4" value={formValue(item, 'account_last_four')} />
-                        </label>
-                      </div>
-                    {/if}
-                    <label>
-                      <span>Typed Name</span>
-                      <input name="signed_name" value={item.signed_name} placeholder={profileDisplayName} required />
-                    </label>
-                  {:else if item.item_type === 'document'}
-                    <label>
-                      <span>Document</span>
-                      <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
-                    </label>
-                    {#if item.file_name}
-                      <p class="form-note">Current upload: {item.file_name}</p>
-                    {/if}
-                  {:else}
-                    <label class="toggle-card">
-                      <input type="checkbox" name="acknowledged" value="1" />
-                      <div>
-                        <strong>I have reviewed and understand this item.</strong>
-                      </div>
-                    </label>
-                    <label>
-                      <span>Typed Name</span>
-                      <input name="signed_name" value={item.signed_name} placeholder={profileDisplayName} required />
-                    </label>
-                  {/if}
-
-                  <div class="form-actions">
-                    <button type="submit">
-                      {item.status === 'needs_changes' ? 'Resubmit' : 'Submit'}
-                    </button>
-                  </div>
-                </form>
-              {/if}
-            </article>
-          {/each}
-        </div>
-      {/if}
     </section>
   {/if}
 
@@ -819,6 +318,7 @@
 
 <style>
   .profile-header,
+  .onboarding-prompt,
   .panel {
     position: relative;
     border: 0;
@@ -836,11 +336,62 @@
   }
 
   .profile-header,
+  .onboarding-prompt,
   .panel {
     padding: 1rem;
   }
 
-  .eyebrow,
+  .onboarding-prompt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1rem;
+  }
+
+  .onboarding-prompt.highlighted {
+    border-color: color-mix(in srgb, var(--color-text) 30%, var(--color-divider));
+  }
+
+  .onboarding-prompt div {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .onboarding-prompt span {
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .onboarding-prompt h2,
+  .onboarding-prompt p {
+    margin: 0;
+  }
+
+  .onboarding-prompt h2 {
+    font-size: 1rem;
+  }
+
+  .onboarding-prompt p {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+  }
+
+  .onboarding-prompt a {
+    flex: 0 0 auto;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid currentColor;
+    color: var(--color-text);
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+
   .panel-kicker {
     display: inline-flex;
     font-size: 0.72rem;
@@ -957,16 +508,6 @@
     margin: 0.2rem 0 0;
   }
 
-  .panel-note,
-  .form-note {
-    margin: 0;
-    color: var(--color-text-muted);
-  }
-
-  .form-note {
-    font-size: 0.84rem;
-  }
-
   .stack-form {
     display: grid;
     gap: 0.9rem;
@@ -992,60 +533,6 @@
     display: grid;
     gap: 0.8rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .birthday-inline {
-    display: grid;
-    gap: 0.8rem;
-    padding: 0.9rem 0;
-    border-radius: 0;
-    border: 0;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
-    background: transparent;
-  }
-
-  .birthday-inline__row {
-    display: flex;
-    gap: 0.7rem;
-    align-items: end;
-  }
-
-  .birthday-request {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .birthday-request summary {
-    cursor: pointer;
-    list-style: none;
-    color: var(--color-text);
-    font-size: 0.84rem;
-    font-weight: var(--weight-medium);
-  }
-
-  .birthday-request summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .birthday-request summary::after {
-    content: 'Expand';
-    margin-left: 0.55rem;
-    color: var(--color-text-muted);
-    font-size: 0.76rem;
-    font-weight: var(--weight-regular);
-  }
-
-  .birthday-request[open] summary::after {
-    content: 'Hide';
-  }
-
-  .birthday-inline__row input {
-    flex: 1 1 auto;
-  }
-
-  .field-grid-three {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .toggle-card,
@@ -1101,113 +588,6 @@
   .toggle-card strong {
     display: block;
     margin-bottom: 0.2rem;
-  }
-
-  .toggle-card span {
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
-  }
-
-  .status-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: fit-content;
-    min-height: 1.8rem;
-    padding: 0.35rem 0.65rem;
-    border: 0;
-    border-bottom: 1px solid var(--color-border);
-    border-radius: 0;
-    color: var(--color-text-muted);
-    background: transparent;
-    font-size: 0.72rem;
-    font-weight: var(--weight-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .status-pill-approved {
-    border-color: color-mix(in srgb, var(--color-success) 38%, var(--color-border));
-    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    background: transparent;
-  }
-
-  .status-pill-submitted,
-  .status-pill-in_progress {
-    border-color: color-mix(in srgb, #3b82f6 34%, var(--color-border));
-    color: color-mix(in srgb, var(--color-accent) 74%, var(--color-text));
-    background: transparent;
-  }
-
-  .status-pill-needs_changes {
-    border-color: color-mix(in srgb, #f59e0b 38%, var(--color-border));
-    color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
-    background: transparent;
-  }
-
-  .onboarding-summary {
-    display: grid;
-    gap: 0.8rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-bottom: 0.9rem;
-  }
-
-  .onboarding-summary div {
-    display: grid;
-    gap: 0.2rem;
-    padding: 0.75rem 0;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .onboarding-summary span,
-  .item-type {
-    color: var(--color-text-muted);
-    font-size: 0.76rem;
-  }
-
-  .onboarding-list,
-  .onboarding-form {
-    display: grid;
-    gap: 0.8rem;
-  }
-
-  .onboarding-item {
-    display: grid;
-    gap: 0.75rem;
-    padding: 0.9rem 0;
-    border: 0;
-    border-top: 1px solid var(--color-divider);
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .onboarding-item.item-approved {
-    border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border));
-  }
-
-  .onboarding-item__head {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .onboarding-item h3 {
-    margin: 0.2rem 0;
-    font-size: 1rem;
-  }
-
-  .onboarding-item p {
-    margin: 0;
-    color: var(--color-text-muted);
-  }
-
-  .manager-note {
-    padding: 0.7rem 0;
-    border-top: 1px solid color-mix(in srgb, var(--color-warning) 34%, var(--color-divider));
-    border-radius: 0;
-    background: transparent;
   }
 
   .utility-links {
@@ -1284,13 +664,13 @@
     min-width: 7rem;
   }
 
-  .hidden-form {
-    display: none;
-  }
-
   @media (max-width: 900px) {
+    .onboarding-prompt {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
     .profile-meta,
-    .onboarding-summary,
     .toggle-grid {
       grid-template-columns: 1fr;
     }
@@ -1301,19 +681,8 @@
       align-items: flex-start;
     }
 
-    .field-grid,
-    .field-grid-three {
+    .field-grid {
       grid-template-columns: 1fr;
-    }
-
-    .birthday-inline__row {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .onboarding-item__head {
-      flex-direction: column;
-      align-items: stretch;
     }
 
     .form-actions {
@@ -1326,6 +695,3 @@
     }
   }
 </style>
-
-
-

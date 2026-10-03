@@ -2,12 +2,8 @@ import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { getTableColumns } from '$lib/server/dbSchema';
 import {
-  ensureEmployeeProfileEditRequestsTable,
   ensureEmployeeProfilesTable,
-  loadEmployeeOnboarding,
-  loadAdminEmployeeProfile,
-  loadPendingEmployeeProfileEditRequest,
-  submitEmployeeOnboardingItem
+  loadAdminEmployeeProfile
 } from '$lib/server/admin';
 import {
   loadScheduleDepartmentApprovalsByUser,
@@ -30,10 +26,10 @@ async function getUsersColumns(db: App.Platform['env']['DB']) {
   return getTableColumns(db, 'users');
 }
 
-function resolveActiveTab(requestedTab: string | null, shouldShowOnboarding: boolean) {
+function resolveActiveTab(requestedTab: string | null) {
   if (requestedTab === 'personal' || requestedTab === 'contact') return 'profile';
-  if (['availability', 'profile', 'onboarding', 'app'].includes(String(requestedTab))) return requestedTab;
-  return shouldShowOnboarding ? 'onboarding' : 'profile';
+  if (['availability', 'profile', 'app'].includes(String(requestedTab))) return requestedTab;
+  return 'profile';
 }
 
 function resolveSessionToken(cookies: Parameters<PageServerLoad>[0]['cookies']) {
@@ -45,7 +41,7 @@ function profileText(formData: FormData, key: string, maxLength: number) {
   return normalizeFormText(formData, key, { maxLength });
 }
 
-export const load: PageServerLoad = async ({ locals, url, cookies, platform }) => {
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;
   if (!db) throw redirect(303, '/login');
@@ -54,7 +50,6 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
 
   await ensureUserPreferencesSchema(db);
   await ensureEmployeeProfilesTable(db);
-  await ensureEmployeeProfileEditRequestsTable(db);
 
   const userColumns = await getUsersColumns(db);
   const displayNameExpr = userColumns.has('display_name')
@@ -81,16 +76,8 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
   const sessionToken = resolveSessionToken(cookies);
   const currentSessionTokenHash = sessionToken ? await hashSessionToken(sessionToken) : null;
 
-  const [profile, pendingBirthdayRequest, onboarding, approvalsByUser, availability, preferences, sessions] = await Promise.all([
+  const [profile, approvalsByUser, availability, preferences, sessions, onboardingPackage] = await Promise.all([
     loadAdminEmployeeProfile(db, locals.userId, businessId),
-    loadPendingEmployeeProfileEditRequest(db, locals.userId, businessId),
-    loadEmployeeOnboarding(db, locals.userId, businessId, {
-      env: platform?.env,
-      actorUserId: locals.userId,
-      actorBusinessRole: locals.businessRole,
-      actorPermissionTemplate: locals.businessPermissionTemplate,
-      actorCapabilities: locals.businessCapabilities
-    }),
     loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
     loadUserScheduleAvailability(db, locals.userId, businessId),
     db
@@ -110,21 +97,30 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
         dark_mode: number;
         language: string;
       }>(),
-    listUserSessions(db, locals.userId, currentSessionTokenHash)
+    listUserSessions(db, locals.userId, currentSessionTokenHash),
+    db
+      .prepare(
+        `
+        SELECT id, status
+        FROM employee_onboarding_packages
+        WHERE business_id = ? AND user_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+        `
+      )
+      .bind(businessId, locals.userId)
+      .first<{ id: string; status: string }>()
+      .catch(() => null)
   ]);
 
   return {
-    activeTab: resolveActiveTab(
-      url.searchParams.get('tab'),
-      Boolean(onboarding.package && onboarding.package.status !== 'approved')
-    ),
+    activeTab: resolveActiveTab(url.searchParams.get('tab')),
     user: {
       id: user.id,
       username: user.display_name ?? '',
       email: user.email ?? ''
     },
     profile,
-    onboarding,
     approvedDepartments: approvalsByUser.get(locals.userId) ?? ([] as ScheduleDepartment[]),
     availability,
     preferences: {
@@ -134,28 +130,29 @@ export const load: PageServerLoad = async ({ locals, url, cookies, platform }) =
       darkMode: (preferences?.dark_mode ?? 0) === 1,
       language: preferences?.language ?? 'en'
     },
-    sessions,
-    pendingBirthdayRequest
+    employeeOnboarding:
+      onboardingPackage && onboardingPackage.status !== 'approved'
+        ? {
+            id: onboardingPackage.id,
+            status: onboardingPackage.status,
+            highlighted: url.searchParams.get('onboarding') === '1'
+          }
+        : null,
+    sessions
   };
 };
 
 export const actions: Actions = {
-  submit_onboarding_item: ({ request, locals, platform }) =>
-    submitEmployeeOnboardingItem(request, locals, platform?.env),
   save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
 
   save_personal_info: async ({ request, locals }) => {
     if (!locals.userId) throw redirect(303, '/login');
     const db = locals.DB;
     if (!db) throw redirect(303, '/login');
-    const businessId = locals.businessId;
-    if (!businessId) throw redirect(303, '/login');
-
-    await ensureEmployeeProfilesTable(db);
+    if (!locals.businessId) throw redirect(303, '/login');
 
     const formData = await request.formData();
     const username = profileText(formData, 'username', 120);
-    const realName = profileText(formData, 'real_name', 120);
 
     if (!username) return fail(400, { error: 'Username is required.' });
 
@@ -181,108 +178,7 @@ export const actions: Actions = {
         .run();
     }
 
-    const existing = await loadAdminEmployeeProfile(db, locals.userId, businessId);
-    await db
-      .prepare(
-        `
-        INSERT INTO employee_profiles (
-          business_id,
-          user_id,
-          real_name,
-          phone,
-          birthday,
-          address_line_1,
-          address_line_2,
-          city,
-          state,
-          postal_code,
-          emergency_contact_name,
-          emergency_contact_phone,
-          emergency_contact_relationship,
-          updated_at,
-          updated_by
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(business_id, user_id) DO UPDATE SET
-          real_name = excluded.real_name,
-          updated_at = excluded.updated_at,
-          updated_by = excluded.updated_by
-        `
-      )
-      .bind(
-        businessId,
-        locals.userId,
-        realName,
-        existing.phone,
-        existing.birthday,
-        existing.address_line_1,
-        existing.address_line_2,
-        existing.city,
-        existing.state,
-        existing.postal_code,
-        existing.emergency_contact_name,
-        existing.emergency_contact_phone,
-        existing.emergency_contact_relationship,
-        now,
-        locals.userId
-      )
-      .run();
-
-    return { success: true, message: 'Personal information updated.' };
-  },
-
-  request_birthday_edit: async ({ request, locals }) => {
-    if (!locals.userId) throw redirect(303, '/login');
-    const db = locals.DB;
-    if (!db) throw redirect(303, '/login');
-    const businessId = locals.businessId;
-    if (!businessId) throw redirect(303, '/login');
-
-    await ensureEmployeeProfileEditRequestsTable(db);
-
-    const formData = await request.formData();
-    const requestedBirthday = String(formData.get('requested_birthday') ?? '').trim();
-    if (!requestedBirthday || !/^\d{4}-\d{2}-\d{2}$/.test(requestedBirthday)) {
-      return fail(400, { error: 'Birthday must use a valid date.' });
-    }
-
-    const currentProfile = await loadAdminEmployeeProfile(db, locals.userId, businessId);
-    const now = Math.floor(Date.now() / 1000);
-    const existing = await loadPendingEmployeeProfileEditRequest(db, locals.userId, businessId);
-
-    if (existing) {
-      await db
-        .prepare(
-          `
-          UPDATE employee_profile_edit_requests
-          SET requested_birthday = ?, requested_real_name = ?, requested_at = ?
-          WHERE id = ? AND business_id = ?
-          `
-        )
-        .bind(requestedBirthday, currentProfile.real_name, now, existing.id, businessId)
-        .run();
-    } else {
-      await db
-        .prepare(
-          `
-          INSERT INTO employee_profile_edit_requests (
-            id,
-            business_id,
-            user_id,
-            requested_real_name,
-            requested_birthday,
-            status,
-            manager_note,
-            requested_at
-          )
-          VALUES (?, ?, ?, ?, ?, 'pending', '', ?)
-          `
-        )
-        .bind(crypto.randomUUID(), businessId, locals.userId, currentProfile.real_name, requestedBirthday, now)
-        .run();
-    }
-
-    return { success: true, message: 'Birthday edit request submitted.' };
+    return { success: true, message: 'Profile name updated.' };
   },
 
   save_contact_info: async ({ request, locals }) => {
@@ -369,14 +265,6 @@ export const actions: Actions = {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(business_id, user_id) DO UPDATE SET
           phone = excluded.phone,
-          address_line_1 = excluded.address_line_1,
-          address_line_2 = excluded.address_line_2,
-          city = excluded.city,
-          state = excluded.state,
-          postal_code = excluded.postal_code,
-          emergency_contact_name = excluded.emergency_contact_name,
-          emergency_contact_phone = excluded.emergency_contact_phone,
-          emergency_contact_relationship = excluded.emergency_contact_relationship,
           updated_at = excluded.updated_at,
           updated_by = excluded.updated_by
         `
@@ -387,14 +275,14 @@ export const actions: Actions = {
         currentProfile.real_name,
         profileText(formData, 'phone', 48),
         currentProfile.birthday,
-        profileText(formData, 'address_line_1', 120),
-        profileText(formData, 'address_line_2', 120),
-        profileText(formData, 'city', 80),
-        profileText(formData, 'state', 80),
-        profileText(formData, 'postal_code', 24),
-        profileText(formData, 'emergency_contact_name', 120),
-        profileText(formData, 'emergency_contact_phone', 48),
-        profileText(formData, 'emergency_contact_relationship', 80),
+        currentProfile.address_line_1,
+        currentProfile.address_line_2,
+        currentProfile.city,
+        currentProfile.state,
+        currentProfile.postal_code,
+        currentProfile.emergency_contact_name,
+        currentProfile.emergency_contact_phone,
+        currentProfile.emergency_contact_relationship,
         now,
         locals.userId
       )

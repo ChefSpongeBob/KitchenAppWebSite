@@ -513,6 +513,10 @@ function eventBodyFromPayload(event: OperationalEventRow) {
       return `An open ${department} shift request was declined.`;
     case 'onboarding.package.sent':
       return 'Your onboarding package is ready.';
+    case 'onboarding.package.submitted':
+      return 'An onboarding packet was submitted for review.';
+    case 'onboarding.package.returned':
+      return 'Your onboarding packet was returned with a correction request.';
     case 'onboarding.item.submitted':
       return 'An onboarding item was submitted for review.';
     case 'onboarding.item.approved':
@@ -765,7 +769,7 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
     );
   }
 
-  if (event.event_type === 'onboarding.item.submitted') {
+  if (event.event_type === 'onboarding.package.submitted') {
     return loadOnboardingReviewRecipients(db, event);
   }
 
@@ -787,14 +791,14 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
 
 function eventEmailAction(event: OperationalEventRow, env: Partial<App.Platform['env']> | undefined) {
   const baseUrl = getAppBaseUrl('https://criminiops.com', env);
-  if (event.event_type === 'onboarding.item.submitted' && event.target_user_id) {
+  if (event.event_type === 'onboarding.package.submitted' && event.target_user_id) {
     return {
       label: 'Review onboarding',
       url: `${baseUrl}/admin/users/${encodeURIComponent(event.target_user_id)}?tab=onboarding`
     };
   }
   if (event.event_type.startsWith('onboarding.')) {
-    return { label: 'Open onboarding', url: `${baseUrl}/settings?tab=onboarding` };
+    return { label: 'Open onboarding', url: `${baseUrl}/onboarding` };
   }
   if (
     event.event_type.startsWith('schedule.') &&

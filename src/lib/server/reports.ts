@@ -359,7 +359,7 @@ export async function loadOnboardingReport(
         COALESCE(SUM(CASE WHEN i.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_items,
         COALESCE(SUM(CASE WHEN i.status = 'submitted' THEN 1 ELSE 0 END), 0) AS submitted_items,
         COALESCE(SUM(CASE WHEN i.status = 'approved' THEN 1 ELSE 0 END), 0) AS approved_items,
-        COALESCE(SUM(CASE WHEN i.status = 'changes_requested' THEN 1 ELSE 0 END), 0) AS changes_requested_items,
+        COALESCE(SUM(CASE WHEN i.status = 'needs_changes' THEN 1 ELSE 0 END), 0) AS changes_requested_items,
         p.updated_at
       FROM employee_onboarding_packages p
       JOIN users u ON u.id = p.user_id

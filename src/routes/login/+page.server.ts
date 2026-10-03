@@ -25,11 +25,34 @@ import type { PageServerLoad } from './$types';
 
 const GENERIC_LOGIN_ERROR = 'We could not sign you in with those details. Check your email and password and try again.';
 
-function resolvePostLoginPath(url?: URL) {
-	return url?.searchParams.get('registered') === 'success' &&
-		url.searchParams.get('onboarding') === '1'
-		? '/welcome'
-		: '/app';
+async function resolvePostLoginPath(
+	db: App.Platform['env']['DB'],
+	userId: string,
+	businessId: string | null | undefined,
+	url?: URL
+) {
+	if (url?.searchParams.get('onboarding') === '1') {
+		return '/settings?onboarding=1';
+	}
+	if (!businessId) return '/app';
+
+	const onboardingPackage = await db
+		.prepare(
+			`
+			SELECT id
+			FROM employee_onboarding_packages
+			WHERE business_id = ?
+			  AND user_id = ?
+			  AND status IN ('sent', 'in_progress', 'returned')
+			ORDER BY updated_at DESC
+			LIMIT 1
+			`
+		)
+		.bind(businessId, userId)
+		.first<{ id: string }>()
+		.catch(() => null);
+
+	return onboardingPackage?.id ? '/settings?onboarding=1' : '/app';
 }
 
 async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
@@ -152,7 +175,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 				businessName: locals.businessName ?? null,
 				businessRole,
 				role: effectiveRole,
-				continuePath: resolvePostLoginPath(url)
+				continuePath: await resolvePostLoginPath(db, locals.userId, locals.businessId, url)
 			}
 		};
 	} catch {
@@ -196,7 +219,7 @@ export const actions: Actions = {
 					.first<{ email: string | null }>();
 
 				if (String(activeUser?.email ?? '').trim().toLowerCase() === email) {
-					throw redirect(303, resolvePostLoginPath(url));
+					throw redirect(303, await resolvePostLoginPath(db, locals.userId, locals.businessId, url));
 				}
 			}
 
@@ -454,7 +477,10 @@ export const actions: Actions = {
 			]);
 
 			setSessionCookies(cookies, request, sessionToken);
-			throw redirect(303, resolvePostLoginPath(url));
+			throw redirect(
+				303,
+				await resolvePostLoginPath(db, user.id, businessContext?.businessId, url)
+			);
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;

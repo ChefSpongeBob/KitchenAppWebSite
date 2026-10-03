@@ -18,6 +18,21 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 	const businesses =
 		locals.DB && locals.userId ? await loadUserBusinessMemberships(locals.DB, locals.userId) : [];
+	const onboardingPacket = locals.DB && locals.businessId
+		? await locals.DB
+				.prepare(
+					`
+					SELECT id
+					FROM employee_onboarding_packages
+					WHERE business_id = ? AND user_id = ?
+					ORDER BY updated_at DESC
+					LIMIT 1
+					`
+				)
+				.bind(locals.businessId, locals.userId)
+				.first<{ id: string }>()
+				.catch(() => null)
+		: null;
 	const preferences = locals.DB && locals.userId
 		? await locals.DB
 				.prepare(
@@ -44,6 +59,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			businessPermissionTemplate: locals.businessPermissionTemplate ?? null,
 			businessCapabilities: locals.businessCapabilities ?? [],
 			businessOnboardingComplete: locals.businessOnboardingComplete ?? false,
+			hasEmployeeOnboarding: Boolean(onboardingPacket?.id),
 			businesses,
 			preferredTheme: preferences?.dark_mode === 1 ? 'dark' : 'light',
 			pushNotificationsEnabled: preferences?.push_updates === 1

@@ -1,9 +1,9 @@
-<script lang="ts">
+﻿<script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
-  import { invalidateAll } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
   import {
     businessAccessOptions,
@@ -48,11 +48,28 @@
 
   type EmployeeOnboardingPackage = {
     id: string;
-    status: 'sent' | 'in_progress' | 'submitted' | 'approved';
+    status: 'sent' | 'in_progress' | 'submitted' | 'returned' | 'approved';
     payroll_classification: 'employee' | 'contractor';
     sent_at: number;
     completed_at: number | null;
     approved_at: number | null;
+    submitted_at: number | null;
+    manager_note: string;
+    version: number;
+  };
+
+  type EmployeeI9Verification = {
+    id: string;
+    status: 'pending' | 'verified';
+    document_selection: string;
+    employee_first_day: string;
+    examined_at: string;
+    verifier_name: string;
+    verifier_title: string;
+    attested_at: number | null;
+    completed_i9_file_url: string;
+    completed_i9_file_name: string;
+    document_copies: { id: string; file_url: string; file_name: string; uploaded_at: number }[];
   };
 
   type EmployeeOnboardingItem = {
@@ -112,21 +129,39 @@
     created_at: number;
   };
 
+  type EmployeeComplianceDocument = {
+    id: string;
+    document_type: string;
+    status: string;
+    file_url: string;
+    file_name: string;
+    signed_name: string;
+    submitted_at: number | null;
+    reviewed_at: number | null;
+    locked_at: number | null;
+    updated_at: number;
+  };
+
   export let data: {
     employee: Employee;
     profile: EmployeeProfile;
     onboarding: {
       package: EmployeeOnboardingPackage | null;
       items: EmployeeOnboardingItem[];
+      i9Verification: EmployeeI9Verification | null;
     };
+    hrSettings: { retain_i9_document_copies: number; everify_participant: number };
     hrPos: {
       pos: EmployeePosPermissions;
       certifications: EmployeeCertification[];
       verificationChecks: EmployeeVerificationCheck[];
       directHrAccess: boolean;
       documentAudit: EmployeeDocumentAccessAudit[];
+      complianceDocuments: EmployeeComplianceDocument[];
     } | null;
+    canReadSensitiveProfile: boolean;
     canManageHrPos: boolean;
+    canManageOnboarding: boolean;
     departments: ScheduleDepartment[];
     canEditPermissions: boolean;
     canManageManagerAccess: boolean;
@@ -163,60 +198,6 @@
   const formatRecordDate = (value: number | null) =>
     value ? new Date(value * 1000).toLocaleDateString([], { dateStyle: 'medium' }) : 'Not set';
 
-  const formLabelMap: Record<string, string> = {
-    legal_name: 'Legal name',
-    preferred_name: 'Preferred name',
-    birthday: 'Birthday',
-    phone: 'Phone',
-    address_line_1: 'Address line 1',
-    address_line_2: 'Address line 2',
-    city: 'City',
-    state: 'State',
-    postal_code: 'Postal code',
-    emergency_contact_name: 'Emergency contact',
-    emergency_contact_phone: 'Emergency phone',
-    emergency_contact_relationship: 'Relationship',
-    worker_classification: 'Classification',
-    start_date: 'Start date',
-    pay_type: 'Pay type',
-    direct_deposit_authorized: 'Direct deposit',
-    bank_name: 'Bank name',
-    routing_last_four: 'Routing last four',
-    account_last_four: 'Account last four',
-    legal_last_name: 'Legal last name',
-    legal_first_name: 'Legal first name',
-    other_last_names: 'Other last names',
-    date_of_birth: 'Date of birth',
-    ssn_last_four: 'SSN last four',
-    email: 'Email',
-    citizenship_status: 'Citizenship status',
-    document_choice: 'Document choice',
-    alien_registration_number: 'Alien registration number',
-    i94_number: 'I-94 number',
-    passport_number: 'Passport number',
-    passport_country: 'Passport country',
-    filing_status: 'Filing status',
-    multiple_jobs: 'Multiple jobs',
-    dependents_amount: 'Dependents amount',
-    other_income: 'Other income',
-    deductions: 'Deductions',
-    extra_withholding: 'Extra withholding',
-    exempt: 'Exempt',
-    allowances: 'Allowances',
-    additional_withholding: 'Additional withholding',
-    state_notes: 'State notes',
-    protected_record: 'Protected record'
-  };
-
-  function payloadEntries(item: EmployeeOnboardingItem) {
-    try {
-      const payload = JSON.parse(item.form_payload || '{}') as Record<string, string>;
-      return Object.entries(payload).filter(([, value]) => Boolean(value));
-    } catch {
-      return [];
-    }
-  }
-
   const addressSummary = (profile: EmployeeProfile) => {
     const parts = [
       profile.address_line_1,
@@ -239,13 +220,30 @@
     };
   };
 
-  $: onboardingApprovedCount = data.onboarding.items.filter((item) => item.status === 'approved').length;
+  const deleteEmployee: SubmitFunction = ({ cancel }) => {
+    if (!window.confirm(`Delete ${displayName(data.employee)} from this business?`)) {
+      cancel();
+      return;
+    }
+
+    return async ({ result }) => {
+      if (result.type === 'redirect') {
+        pushToast('Employee deleted.', 'success');
+        await goto(result.location, { invalidateAll: true });
+      } else if (result.type === 'failure') {
+        await applyAction(result);
+        pushToast(result.data?.error ?? 'That employee could not be deleted.', 'error');
+      } else if (result.type === 'error') {
+        pushToast('That employee could not be deleted.', 'error');
+      }
+    };
+  };
+
   $: onboardingSubmittedCount = data.onboarding.items.filter(
     (item) => item.status === 'submitted' || item.status === 'approved'
   ).length;
-  $: needsOnboardingReview = data.onboarding.items.filter(
-    (item) => item.status === 'submitted' || item.status === 'needs_changes'
-  ).length;
+  $: needsOnboardingReview = data.onboarding.package?.status === 'submitted' ? 1 : 0;
+  $: i9Item = data.onboarding.items.find((item) => item.form_key === 'federal_i9');
 </script>
 
 <Layout>
@@ -366,7 +364,7 @@
               <button type="submit" disabled={!data.canEditPermissions}>Save Access</button>
             </form>
 
-            <form method="POST" action="?/delete_user" use:enhance={withFeedback}>
+            <form method="POST" action="?/delete_user" use:enhance={deleteEmployee}>
               <input type="hidden" name="user_id" value={data.employee.id} />
               <button type="submit" class="danger-action">Delete Employee</button>
             </form>
@@ -398,76 +396,27 @@
       </aside>
 
       <div class="profile-main">
+        {#if data.canReadSensitiveProfile}
         <section class="workspace-section">
           <header class="section-head">
             <div>
               <span class="kicker">Employee Record</span>
-              <h2>Contact and emergency information</h2>
+              <h2>Protected employee information</h2>
             </div>
             <span class="address-chip">{addressSummary(data.profile)}</span>
           </header>
 
-          <form method="POST" action="?/save_profile" use:enhance={withFeedback} class="profile-form">
-            <input type="hidden" name="user_id" value={data.employee.id} />
-
-            <div class="field-grid two">
-              <label>
-                <span>Phone</span>
-                <input name="phone" type="tel" value={data.profile.phone} placeholder="(555) 555-5555" />
-              </label>
-              <label>
-                <span>Birthday</span>
-                <input name="birthday" type="date" value={data.profile.birthday} />
-              </label>
-            </div>
-
-            <div class="field-grid two">
-              <label>
-                <span>Address Line 1</span>
-                <input name="address_line_1" value={data.profile.address_line_1} placeholder="Street address" />
-              </label>
-              <label>
-                <span>Address Line 2</span>
-                <input name="address_line_2" value={data.profile.address_line_2} placeholder="Apartment, suite, etc." />
-              </label>
-            </div>
-
-            <div class="field-grid three">
-              <label>
-                <span>City</span>
-                <input name="city" value={data.profile.city} />
-              </label>
-              <label>
-                <span>State</span>
-                <input name="state" value={data.profile.state} />
-              </label>
-              <label>
-                <span>Postal Code</span>
-                <input name="postal_code" value={data.profile.postal_code} />
-              </label>
-            </div>
-
-            <div class="field-grid three">
-              <label>
-                <span>Emergency Contact</span>
-                <input name="emergency_contact_name" value={data.profile.emergency_contact_name} placeholder="Full name" />
-              </label>
-              <label>
-                <span>Emergency Phone</span>
-                <input name="emergency_contact_phone" type="tel" value={data.profile.emergency_contact_phone} placeholder="(555) 555-5555" />
-              </label>
-              <label>
-                <span>Relationship</span>
-                <input name="emergency_contact_relationship" value={data.profile.emergency_contact_relationship} placeholder="Parent, partner, friend" />
-              </label>
-            </div>
-
-            <div class="form-actions">
-              <span>Changes save to this employee record only.</span>
-              <button type="submit">Save Profile</button>
-            </div>
-          </form>
+          <div class="protected-record-grid">
+            <div><span>Phone</span><strong>{data.profile.phone || 'Not provided'}</strong></div>
+            <div><span>Date of birth</span><strong>{formatBirthday(data.profile.birthday)}</strong></div>
+            <div><span>Address</span><strong>{addressSummary(data.profile)}</strong></div>
+            <div><span>Emergency contact</span><strong>{data.profile.emergency_contact_name || 'Not provided'}</strong></div>
+            <div><span>Emergency phone</span><strong>{data.profile.emergency_contact_phone || 'Not provided'}</strong></div>
+            <div><span>Relationship</span><strong>{data.profile.emergency_contact_relationship || 'Not provided'}</strong></div>
+          </div>
+          <p class="section-note">Accepted employment information is read-only. Issue a new onboarding packet when a legal record must be corrected.</p>
         </section>
+        {/if}
 
         {#if data.canManageHrPos && data.hrPos}
           <section class="workspace-section hr-pos-section">
@@ -506,6 +455,7 @@
                 <button type="submit">Save POS</button>
               </form>
 
+              {#if data.canReadSensitiveProfile}
               <section class="record-panel">
                 <header>
                   <strong>Certifications</strong>
@@ -582,6 +532,27 @@
                   {/each}
                 </div>
               </section>
+              {/if}
+
+              <section class="record-panel">
+                <header>
+                  <strong>Employment Documents</strong>
+                  <span>{data.hrPos.complianceDocuments.length}</span>
+                </header>
+                <div class="record-list">
+                  {#each data.hrPos.complianceDocuments as document}
+                    <div class="record-row">
+                      <div>
+                        <strong>{formatOnboardingStatus(document.document_type)}</strong>
+                        <span>{formatOnboardingStatus(document.status)} | {formatDateTime(document.reviewed_at ?? document.submitted_at)}</span>
+                      </div>
+                      {#if document.file_url}<a href={document.file_url} target="_blank">View</a>{/if}
+                    </div>
+                  {:else}
+                    <p class="quiet-note">No employment documents.</p>
+                  {/each}
+                </div>
+              </section>
 
               <section class="record-panel">
                 <header>
@@ -606,8 +577,8 @@
         <section class="workspace-section onboarding-review">
           <header class="section-head">
             <div>
-              <span class="kicker">Onboarding Review</span>
-              <h2>Packet status</h2>
+              <span class="kicker">Employment Records</span>
+              <h2>Onboarding packet</h2>
             </div>
             {#if data.onboarding.package}
               <span class={`status-pill status-pill-${data.onboarding.package.status}`}>
@@ -617,33 +588,32 @@
           </header>
 
           {#if !data.onboarding.package}
-            <p class="section-note">Send an onboarding package when this employee is ready to complete required forms and acknowledgements.</p>
+            <p class="section-note">Send an onboarding packet when this employee is ready to complete employment forms.</p>
+            {#if data.canManageOnboarding}
             <form method="POST" action="?/send_onboarding_package" use:enhance={withFeedback} class="send-onboarding">
               <input type="hidden" name="user_id" value={data.employee.id} />
-              <label>
-                <span>Classification</span>
-                <select name="payroll_classification">
-                  <option value="employee">Employee</option>
-                  <option value="contractor">Contractor</option>
-                </select>
-              </label>
+              <input type="hidden" name="payroll_classification" value="employee" />
               <button type="submit">Send Onboarding</button>
             </form>
+            {/if}
           {:else}
             <div class="onboarding-summary">
-              <div>
-                <span>Sent</span>
-                <strong>{formatDateTime(data.onboarding.package.sent_at)}</strong>
-              </div>
-              <div>
-                <span>Completed</span>
-                <strong>{onboardingSubmittedCount} / {data.onboarding.items.length}</strong>
-              </div>
-              <div>
-                <span>Approved</span>
-                <strong>{onboardingApprovedCount} / {data.onboarding.items.length}</strong>
-              </div>
+              <div><span>Packet</span><strong>{data.onboarding.package.version}</strong></div>
+              <div><span>Sent</span><strong>{formatDateTime(data.onboarding.package.sent_at)}</strong></div>
+              <div><span>Submitted</span><strong>{onboardingSubmittedCount} / {data.onboarding.items.length}</strong></div>
             </div>
+
+            {#if data.onboarding.package.status === 'approved' && data.canManageOnboarding}
+              <form method="POST" action="?/send_onboarding_package" use:enhance={withFeedback} class="send-onboarding">
+                <input type="hidden" name="user_id" value={data.employee.id} />
+                <input type="hidden" name="payroll_classification" value="employee" />
+                <button type="submit">Issue New Packet</button>
+              </form>
+            {/if}
+
+            {#if data.onboarding.package.manager_note}
+              <p class="manager-note">{data.onboarding.package.manager_note}</p>
+            {/if}
 
             <div class="onboarding-list">
               {#each data.onboarding.items as item}
@@ -656,72 +626,82 @@
                     </div>
                     <span class={`status-pill status-pill-${item.status}`}>{formatOnboardingStatus(item.status)}</span>
                   </div>
-
                   <div class="onboarding-evidence">
-                    {#if item.file_url}
-                      <span>{item.file_name || 'Uploaded document'}</span>
-                    {:else if item.item_type === 'form' && payloadEntries(item).length > 0}
-                      <span>Form submitted</span>
-                      <span>{payloadEntries(item).length} fields</span>
-                    {:else if item.signed_name}
-                      <span>Signed by {item.signed_name}</span>
-                    {:else}
-                      <span>No submission yet</span>
-                    {/if}
-                    {#if item.submitted_at}
-                      <span>{formatDateTime(item.submitted_at)}</span>
-                    {/if}
+                    <span>{item.file_name || (item.signed_name ? `Signed by ${item.signed_name}` : 'No submission yet')}</span>
+                    {#if item.submitted_at}<span>{formatDateTime(item.submitted_at)}</span>{/if}
                   </div>
-
                   {#if item.source_file_url}
-                    <OnboardingFormPreview
-                      src={item.source_file_url}
-                      title={item.title}
-                      fileName={item.source_file_name}
-                      label="Active form"
-                    />
+                    <OnboardingFormPreview src={item.source_file_url} title={item.title} fileName={item.source_file_name} label="Assigned form" />
                   {/if}
-
                   {#if item.file_url}
-                    <OnboardingFormPreview
-                      src={item.file_url}
-                      title={`${item.title} submission`}
-                      fileName={item.file_name}
-                      label="Submitted upload"
-                    />
-                  {/if}
-
-                  {#if item.manager_note}
-                    <p class="manager-note">{item.manager_note}</p>
-                  {/if}
-
-                  {#if item.item_type === 'form' && payloadEntries(item).length > 0}
-                    <dl class="onboarding-form-review">
-                      {#each payloadEntries(item) as [key, value]}
-                        <div>
-                          <dt>{formLabelMap[key] ?? formatOnboardingStatus(key)}</dt>
-                          <dd>{value}</dd>
-                        </div>
-                      {/each}
-                    </dl>
-                  {/if}
-
-                  {#if item.status === 'submitted'}
-                    <div class="review-actions">
-                      <form method="POST" action="?/approve_onboarding_item" use:enhance={withFeedback}>
-                        <input type="hidden" name="item_id" value={item.id} />
-                        <button type="submit" class="success-action">Approve</button>
-                      </form>
-                      <form method="POST" action="?/request_onboarding_changes" use:enhance={withFeedback}>
-                        <input type="hidden" name="item_id" value={item.id} />
-                        <input name="manager_note" placeholder="What needs to change?" />
-                        <button type="submit" class="warn-action">Request Changes</button>
-                      </form>
-                    </div>
+                    <OnboardingFormPreview src={item.file_url} title={`${item.title} submission`} fileName={item.file_name} label="Submitted record" />
                   {/if}
                 </article>
               {/each}
             </div>
+
+            {#if data.onboarding.package.status === 'submitted' && i9Item && data.canReadSensitiveProfile}
+              <details class="i9-verification" open={data.onboarding.i9Verification?.status !== 'verified'}>
+                <summary>
+                  <span><span class="kicker">Employer Step</span><strong>Physical I-9 verification</strong></span>
+                  <em>{data.onboarding.i9Verification?.status === 'verified' ? 'Verified' : 'Required'}</em>
+                </summary>
+
+                {#if data.onboarding.i9Verification?.status === 'verified'}
+                  <div class="verification-record">
+                    <span>{data.onboarding.i9Verification.document_selection === 'list_a' ? 'List A' : 'List B + List C'}</span>
+                    <span>Examined {data.onboarding.i9Verification.examined_at}</span>
+                    <span>{data.onboarding.i9Verification.verifier_name}, {data.onboarding.i9Verification.verifier_title}</span>
+                    <a href={data.onboarding.i9Verification.completed_i9_file_url} target="_blank">Completed Form I-9</a>
+                    {#each data.onboarding.i9Verification.document_copies as copy}
+                      <a href={copy.file_url} target="_blank">{copy.file_name}</a>
+                    {/each}
+                  </div>
+                {:else}
+                  <form method="POST" action="?/verify_i9" enctype="multipart/form-data" use:enhance={withFeedback} class="packet-form">
+                    <input type="hidden" name="package_id" value={data.onboarding.package.id} />
+                    <label>
+                      <span>Documents presented</span>
+                      <select name="document_selection" required>
+                        <option value="">Select</option>
+                        <option value="list_a">One List A document</option>
+                        <option value="list_b_and_c">One List B and one List C document</option>
+                      </select>
+                    </label>
+                    <label><span>Employee first day</span><input name="employee_first_day" type="date" required /></label>
+                    <label><span>Physical examination date</span><input name="examined_at" type="date" required /></label>
+                    <label><span>Authorized verifier</span><input name="verifier_name" required /></label>
+                    <label><span>Verifier title</span><input name="verifier_title" required /></label>
+                    <label class="wide"><span>Completed Form I-9 with Section 2</span><input name="completed_i9" type="file" accept=".pdf,application/pdf" required /></label>
+                    {#if data.hrSettings.retain_i9_document_copies === 1 || data.hrSettings.everify_participant === 1}
+                      <label class="wide"><span>Retained document copies</span><input name="document_copies" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple /></label>
+                    {/if}
+                    {#if data.hrSettings.everify_participant === 1}
+                      <label class="toggle-card wide"><input type="checkbox" name="photo_matching_document_present" value="1" /><span>Employee presented an E-Verify photo-matching document</span></label>
+                    {/if}
+                    <label class="toggle-card wide">
+                      <input type="checkbox" name="attested" value="1" required />
+                      <span>I physically examined the original documents in the employee's presence, they reasonably appear genuine and relate to the employee, and I completed Section 2.</span>
+                    </label>
+                    <button type="submit">Record Verification</button>
+                  </form>
+                {/if}
+              </details>
+            {/if}
+
+            {#if data.onboarding.package.status === 'submitted' && data.canReadSensitiveProfile && data.canManageOnboarding}
+              <div class="packet-review-actions">
+                <form method="POST" action="?/approve_onboarding_packet" use:enhance={withFeedback}>
+                  <input type="hidden" name="package_id" value={data.onboarding.package.id} />
+                  <button type="submit">Accept Packet</button>
+                </form>
+                <form method="POST" action="?/return_onboarding_packet" use:enhance={withFeedback}>
+                  <input type="hidden" name="package_id" value={data.onboarding.package.id} />
+                  <input name="manager_note" placeholder="What must be corrected?" required />
+                  <button type="submit">Return Packet</button>
+                </form>
+              </div>
+            {/if}
           {/if}
         </section>
       </div>
@@ -798,8 +778,7 @@
   .snapshot-list span,
   .onboarding-summary span,
   .item-type,
-  .onboarding-evidence,
-  .form-actions span {
+  .onboarding-evidence {
     color: var(--color-text-muted);
     font-size: 0.68rem;
     font-weight: var(--weight-semibold);
@@ -973,6 +952,78 @@
     gap: 0.85rem;
   }
 
+  .protected-record-grid,
+  .verification-record {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .protected-record-grid > div,
+  .verification-record > * {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .protected-record-grid span,
+  .verification-record span {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .i9-verification {
+    margin-top: 1rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .i9-verification summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    cursor: pointer;
+  }
+
+  .i9-verification summary > span {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .i9-verification summary em {
+    color: var(--color-text-muted);
+    font-style: normal;
+  }
+
+  .packet-form,
+  .packet-review-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    padding: 0.9rem 0;
+  }
+
+  .packet-form .wide,
+  .packet-form > button {
+    grid-column: 1 / -1;
+  }
+
+  .packet-review-actions form {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .packet-review-actions input {
+    min-width: 0;
+    flex: 1;
+  }
+
   .hr-pos-section {
     display: grid;
     gap: 0.9rem;
@@ -1140,7 +1191,6 @@
     cursor: pointer;
   }
 
-  .form-actions button,
   .send-onboarding button {
     width: auto;
     min-width: 10rem;
@@ -1313,47 +1363,10 @@
     flex-wrap: wrap;
   }
 
-  .onboarding-form-review {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
-    margin: 0;
-  }
-
-  .onboarding-form-review div {
-    display: grid;
-    gap: 0.16rem;
-    padding: 0.55rem 0;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  .onboarding-form-review dt {
-    color: var(--color-text-muted);
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .onboarding-form-review dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
   .manager-note {
     padding: 0.7rem;
     border-radius: 12px;
     background: color-mix(in srgb, #f59e0b 12%, transparent);
-  }
-
-  .review-actions {
-    display: grid;
-    gap: 0.65rem;
-    grid-template-columns: minmax(8rem, 0.35fr) minmax(14rem, 1fr);
-  }
-
-  .review-actions form {
-    display: flex;
-    gap: 0.55rem;
   }
 
   @media (max-width: 1080px) {
@@ -1378,8 +1391,10 @@
     .field-grid.two,
     .field-grid.three,
     .onboarding-summary,
-    .review-actions,
-    .onboarding-form-review,
+    .protected-record-grid,
+    .verification-record,
+    .packet-form,
+    .packet-review-actions,
     .send-onboarding {
       grid-template-columns: 1fr;
     }
@@ -1400,14 +1415,12 @@
       flex-direction: column;
     }
 
-    .form-actions button,
-    .send-onboarding button,
-    .review-actions form,
-    .review-actions button {
+    .send-onboarding button {
       width: 100%;
     }
 
-    .review-actions form {
+    .packet-review-actions form {
+      align-items: stretch;
       flex-direction: column;
     }
   }

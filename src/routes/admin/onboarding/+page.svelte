@@ -27,7 +27,7 @@
     role: string;
     is_active: number;
     package_id: string | null;
-    package_status: 'not_sent' | 'sent' | 'in_progress' | 'submitted' | 'approved';
+    package_status: 'not_sent' | 'sent' | 'in_progress' | 'submitted' | 'returned' | 'approved';
     payroll_classification: 'employee' | 'contractor' | null;
     sent_at: number | null;
     completed_at: number | null;
@@ -84,6 +84,10 @@
       state: string;
       items: PacketRecommendation[];
     };
+    hrSettings: {
+      retain_i9_document_copies: number;
+      everify_participant: number;
+    };
   };
 
   let feedbackMessage = '';
@@ -91,8 +95,8 @@
   $: staffUsers = data.users.filter((user) => user.is_active === 1);
   $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
   $: usedInvites = data.invites.filter((invite) => invite.used_at !== null);
-  $: needsReview = data.onboardingRows.filter((row) => row.package_status === 'submitted' || row.submitted_items > 0);
-  $: activeRows = data.onboardingRows.filter((row) => row.package_status === 'sent' || row.package_status === 'in_progress');
+  $: needsReview = data.onboardingRows.filter((row) => row.package_status === 'submitted');
+  $: activeRows = data.onboardingRows.filter((row) => ['sent', 'in_progress', 'returned'].includes(row.package_status));
   $: completedRows = data.onboardingRows.filter((row) => row.package_status === 'approved');
   $: missingRows = data.onboardingRows.filter((row) => row.package_status === 'not_sent');
   $: packetRows = [...data.onboardingRows].sort((a, b) => statusRank(a.package_status) - statusRank(b.package_status));
@@ -117,7 +121,7 @@
   };
 
   function statusRank(value: OnboardingRow['package_status']) {
-    return { submitted: 0, in_progress: 1, sent: 2, not_sent: 3, approved: 4 }[value] ?? 5;
+    return { submitted: 0, returned: 1, in_progress: 2, sent: 3, not_sent: 4, approved: 5 }[value] ?? 6;
   }
 
   function formatStatus(value: string) {
@@ -362,6 +366,33 @@
     <details class="workspace-section packet-setup">
       <summary>
         <span>
+          <span class="section-kicker">Verification</span>
+          <strong>I-9 Policy</strong>
+        </span>
+        <em>{data.hrSettings.retain_i9_document_copies === 1 ? 'Copies retained' : 'Examination record only'}</em>
+      </summary>
+      <form method="POST" action="?/save_hr_settings" use:enhance={withFeedback} class="packet-form compact">
+        <label class="toggle-card wide">
+          <input type="checkbox" name="retain_i9_document_copies" value="1" checked={data.hrSettings.retain_i9_document_copies === 1} />
+          <span>
+            <strong>Retain copies consistently</strong>
+            <small>Store copies of documents examined for every employee. Physical examination is still required.</small>
+          </span>
+        </label>
+        <label class="toggle-card wide">
+          <input type="checkbox" name="everify_participant" value="1" checked={data.hrSettings.everify_participant === 1} />
+          <span>
+            <strong>E-Verify participant</strong>
+            <small>Requires copies when an employee presents a qualifying photo-matching document.</small>
+          </span>
+        </label>
+        <button type="submit">Save Policy</button>
+      </form>
+    </details>
+
+    <details class="workspace-section packet-setup">
+      <summary>
+        <span>
           <span class="section-kicker">Setup</span>
           <strong>Packet Forms</strong>
         </span>
@@ -374,8 +405,8 @@
             <span class="section-kicker">Recommended Packet</span>
             <strong>{data.recommendations.state ? `${data.recommendations.state} employee onboarding` : 'Employee onboarding'}</strong>
             <p>
-              Install these to create the packet employees receive from their onboarding link. Form items are filled out in Crimini;
-              uploaded files are for source PDFs/images such as handbooks, policies, or business-specific forms.
+              Install these to create the packet employees receive from their onboarding link. Personal forms are completed in Crimini;
+              federal tax and eligibility records use the current official PDFs.
             </p>
           </div>
           <form method="POST" action="?/install_standard_packet" use:enhance={withFeedback}>
@@ -408,8 +439,8 @@
           <label>
             <span>Type</span>
             <select name="item_type">
-              <option value="form">Employee Form</option>
-              <option value="document">Employee Document</option>
+              <option value="form">Employee Information Form</option>
+              <option value="document">Completed Document Upload</option>
               <option value="acknowledgement">Policy Acknowledgement</option>
             </select>
           </label>
@@ -495,8 +526,8 @@
                 <label>
                   <span>Type</span>
                   <select name="item_type">
-                    <option value="form" selected={item.item_type === 'form'}>Employee Form</option>
-                    <option value="document" selected={item.item_type === 'document'}>Employee Document</option>
+                    <option value="form" selected={item.item_type === 'form'}>Employee Information Form</option>
+                    <option value="document" selected={item.item_type === 'document'}>Completed Document Upload</option>
                     <option value="acknowledgement" selected={item.item_type === 'acknowledgement'}>Policy Acknowledgement</option>
                   </select>
                 </label>

@@ -4,6 +4,7 @@ import {
   createEmployeeOnboardingTemplateItem,
   deleteEmployeeOnboardingTemplateItem,
   installStandardEmployeeOnboardingTemplate,
+  loadBusinessHrSettings,
   loadAdminInvites,
   loadAdminUsers,
   loadEmployeeOnboardingDashboard,
@@ -12,6 +13,7 @@ import {
   revokeUserInvite,
   requireAdmin,
   sendEmployeeOnboardingPackage,
+  saveBusinessHrSettings,
   updateEmployeeOnboardingTemplateItem
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
@@ -27,7 +29,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       users: [],
       invites: [],
       departments: [],
-      recommendations: { state: '', items: [] }
+      recommendations: { state: '', items: [] },
+      hrSettings: { retain_i9_document_copies: 0, everify_participant: 0 }
     };
   }
   const businessId = requireBusinessId(locals);
@@ -38,7 +41,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     users: await loadAdminUsers(db, businessId),
     invites: await loadAdminInvites(db, businessId),
     departments: await loadScheduleDepartments(db, businessId),
-    recommendations: await loadEmployeeOnboardingRecommendations(db, businessId)
+    recommendations: await loadEmployeeOnboardingRecommendations(db, businessId),
+    hrSettings: await loadBusinessHrSettings(db, businessId)
   };
 };
 
@@ -50,5 +54,6 @@ export const actions: Actions = {
   install_standard_packet: ({ request, locals }) => installStandardEmployeeOnboardingTemplate(request, locals),
   create_item: ({ request, locals }) => createEmployeeOnboardingTemplateItem(request, locals),
   update_item: ({ request, locals }) => updateEmployeeOnboardingTemplateItem(request, locals),
-  delete_item: ({ request, locals }) => deleteEmployeeOnboardingTemplateItem(request, locals)
+  delete_item: ({ request, locals }) => deleteEmployeeOnboardingTemplateItem(request, locals),
+  save_hr_settings: ({ request, locals }) => saveBusinessHrSettings(request, locals)
 };

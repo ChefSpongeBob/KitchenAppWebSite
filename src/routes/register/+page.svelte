@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { fade, fly } from 'svelte/transition';
 	import { onMount } from 'svelte';
+	import EmployeeInviteRegistration from '$lib/components/onboarding/EmployeeInviteRegistration.svelte';
 
 	export let form:
 		| {
@@ -13,6 +14,7 @@
 
 	export let data: {
 		inviteCode: string | null;
+		inviteEmail: string | null;
 		onboardingRequired: boolean;
 		agreementVersion: string;
 	};
@@ -59,6 +61,7 @@
 		emergencyContactPhone: string;
 		emergencyContactRelationship: string;
 		emailUpdates: boolean;
+		smsUpdates: boolean;
 		businessName: string;
 		planTier: string;
 		addOnTempMonitoring: boolean;
@@ -319,6 +322,7 @@
 	let password = '';
 	let confirmPassword = '';
 	let emailUpdates = formValues.emailUpdates ?? true;
+	let smsUpdates = formValues.smsUpdates ?? false;
 	let clientFingerprint = '';
 	let purchaseMode: 'buy_now' = 'buy_now';
 	let storeBillingPreference: 'both' | 'google_play' | 'app_store' = formValues.storeBillingPreference ?? 'both';
@@ -402,6 +406,7 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
+		if (inviteMode) return;
 		const target = event.target as HTMLElement | null;
 		const tagName = target?.tagName;
 		if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
@@ -410,12 +415,14 @@
 	}
 
 	function handleTouchStart(event: TouchEvent) {
+		if (inviteMode) return;
 		const touch = event.changedTouches[0];
 		touchStartX = touch.clientX;
 		touchStartY = touch.clientY;
 	}
 
 	function handleTouchEnd(event: TouchEvent) {
+		if (inviteMode) return;
 		const touch = event.changedTouches[0];
 		const deltaX = touch.clientX - touchStartX;
 		const deltaY = touch.clientY - touchStartY;
@@ -431,6 +438,13 @@
 	on:touchend={handleTouchEnd}
 />
 
+{#if inviteMode && data.inviteCode}
+	<EmployeeInviteRegistration
+		inviteCode={data.inviteCode}
+		inviteEmail={data.inviteEmail ?? ''}
+		{form}
+	/>
+{:else}
 <section class="tour-shell" id="onboarding-slideshow" aria-label="Signup onboarding slideshow">
 	<a class="tour-home-link" href="/" aria-label="Return to homepage">
 		<span aria-hidden="true">&lt;</span>
@@ -481,6 +495,7 @@
 		<input type="hidden" name="password" value={password} />
 		<input type="hidden" name="confirm_password" value={confirmPassword} />
 		<input type="hidden" name="email_updates" value={emailUpdates ? '1' : '0'} />
+		<input type="hidden" name="sms_updates" value={smsUpdates ? '1' : '0'} />
 		<input type="hidden" name="business_name" value={businessName} />
 		<input type="hidden" name="plan_tier" value={planTier} />
 		<input type="hidden" name="addon_temp_monitoring" value={tempMonitoringIncluded ? '1' : '0'} />
@@ -883,6 +898,7 @@
 		{/if}
 	</nav>
 </section>
+{/if}
 
 <style>
 	.registration-submit-form {

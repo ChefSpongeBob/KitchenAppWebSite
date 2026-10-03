@@ -53,7 +53,7 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
   const businessMediaPrefix = `businesses/${locals.businessId}/`;
 
   if (key.includes('/employee-onboarding/')) {
-    const record = await locals.DB
+    let record = await locals.DB
       .prepare(
         `
         SELECT user_id, business_id
@@ -65,6 +65,24 @@ export const GET: RequestHandler = async ({ params, platform, locals, request })
       )
       .bind(fileUrl, fileUrl, locals.businessId)
       .first<{ user_id: string; business_id: string }>();
+
+    if (!record) {
+      record = await locals.DB
+        .prepare(
+          `
+          SELECT user_id, business_id
+          FROM employee_i9_verifications
+          WHERE completed_i9_file_url = ? AND business_id = ?
+          UNION ALL
+          SELECT user_id, business_id
+          FROM employee_i9_document_copies
+          WHERE file_url = ? AND business_id = ?
+          LIMIT 1
+          `
+        )
+        .bind(fileUrl, locals.businessId, fileUrl, locals.businessId)
+        .first<{ user_id: string; business_id: string }>();
+    }
 
     const canReadEmployeeOnboardingMedia =
       record &&

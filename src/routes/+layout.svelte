@@ -58,6 +58,7 @@
           businesses?: BusinessMembership[];
           preferredTheme?: "dark" | "light";
           pushNotificationsEnabled?: boolean;
+          hasEmployeeOnboarding?: boolean;
         }
       | null;
     featureModes?: AppFeatureModes;
@@ -77,6 +78,11 @@
     label: "Manager",
     route: "/admin",
     icon: "admin_panel_settings"
+  };
+  const employeeOnboardingNavItem: NavItem = {
+    label: "Onboarding",
+    route: "/onboarding",
+    icon: "assignment_ind"
   };
   const adminControlGroups: AdminControlGroup[] = [
     {
@@ -251,10 +257,11 @@
     "/reports",
     "/menu",
     "/settings",
+    "/onboarding",
     "/specials",
     "/billing"
   ];
-  $: isOnboardingRoute = currentPath === "/register";
+  $: isOnboardingRoute = currentPath === "/register" || currentPath.startsWith("/register/");
   $: isMarketingRoute =
     marketingExactRoutes.has(currentPath) ||
     marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix));
@@ -340,7 +347,10 @@
     .filter((group) => group.items.length > 0);
   $: userBusinesses = data.user?.businesses ?? [];
   $: isAdminRoute = currentPath.startsWith("/admin");
-  $: navItems = isAdminAccount || isAdminRoute ? [...mainNavItems, adminNavItem] : mainNavItems;
+  $: employeePacketNav = data.user?.hasEmployeeOnboarding ? [employeeOnboardingNavItem] : [];
+  $: navItems = isAdminAccount || isAdminRoute
+    ? [...mainNavItems, ...employeePacketNav, adminNavItem]
+    : [...mainNavItems, ...employeePacketNav];
   $: isAdminSidebar = isAdminRoute;
   $: if (currentPath) {
     sidebarOpen = false;

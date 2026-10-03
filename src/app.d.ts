@@ -24,8 +24,10 @@ declare global {
 				APP_STORE_KEY_ID?: string;
 				APP_STORE_PRIVATE_KEY?: string;
 				APP_STORE_ENVIRONMENT?: string;
+				APP_STORE_DOWNLOAD_URL?: string;
 				GOOGLE_PLAY_PACKAGE_NAME?: string;
 				GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?: string;
+				GOOGLE_PLAY_DOWNLOAD_URL?: string;
 				BILLING_WEBHOOK_TOKEN?: string;
 				TURNSTILE_SITE_KEY?: string;
 				TURNSTILE_SECRET_KEY?: string;

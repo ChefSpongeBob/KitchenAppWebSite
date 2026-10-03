@@ -8,7 +8,11 @@ import {
 } from '$lib/server/activeBusiness';
 import { hasColumn } from '$lib/server/dbSchema';
 import { ensureBusinessSchema, reserveBusinessSlug } from '$lib/server/business';
-import { ensureEmployeeOnboardingRequirement, ensureEmployeeProfilesTable } from '$lib/server/admin';
+import {
+	ensureEmployeeOnboardingRequirement,
+	ensureEmployeeProfilesTable,
+	loadEmployeeOnboarding
+} from '$lib/server/admin';
 import {
 	LIABILITY_AGREEMENT_KEY,
 	LIABILITY_AGREEMENT_VERSION,
@@ -26,6 +30,7 @@ import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/server/permissions';
 import { sendSignupConfirmationEmail } from '$lib/server/email';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
+import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
@@ -47,6 +52,7 @@ type RegisterFormValues = {
 	emergencyContactPhone: string;
 	emergencyContactRelationship: string;
 	emailUpdates: boolean;
+	smsUpdates: boolean;
 	businessName: string;
 	planTier: string;
 	addOnTempMonitoring: boolean;
@@ -266,6 +272,7 @@ export const actions: Actions = {
 			const emergencyContactPhone = toOptionalString(formData, 'emergency_contact_phone', 48);
 			const emergencyContactRelationship = toOptionalString(formData, 'emergency_contact_relationship', 80);
 			const wantsEmailUpdates = String(formData.get('email_updates') || '0') === '1';
+			const wantsSmsUpdates = String(formData.get('sms_updates') || '0') === '1';
 			const clientFingerprint = String(formData.get('client_fingerprint') || '').trim();
 			const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')
 				.trim()
@@ -301,6 +308,7 @@ export const actions: Actions = {
 				emergencyContactPhone,
 				emergencyContactRelationship,
 				emailUpdates: wantsEmailUpdates,
+				smsUpdates: wantsSmsUpdates,
 				businessName,
 				planTier: planTierRaw,
 				addOnTempMonitoring,
@@ -322,6 +330,12 @@ export const actions: Actions = {
 
 			if (!displayName || !email || !confirmEmail || !password || !confirmPassword) {
 				return registerFailure(400, 'All fields required.', 'security', submittedValues);
+			}
+			if (
+				inviteCode &&
+				(!realName || !birthday || !userPhone || !userAddressLine1 || !userCity || !userState || !userPostalCode)
+			) {
+				return registerFailure(400, 'Complete your personal information to continue.', 'security', submittedValues);
 			}
 			if (!inviteCode && !businessName) {
 				return registerFailure(400, 'Business name is required to create your workspace.', 'business', submittedValues);
@@ -663,13 +677,14 @@ export const actions: Actions = {
 				.prepare(
 					`
 			INSERT INTO user_preferences (user_id, email_updates, sms_updates, dark_mode, language, updated_at)
-			VALUES (?, ?, 0, 0, 'en', ?)
+			VALUES (?, ?, ?, 0, 'en', ?)
 			ON CONFLICT(user_id) DO UPDATE SET
 				email_updates = excluded.email_updates,
+				sms_updates = excluded.sms_updates,
 				updated_at = excluded.updated_at
 		`
 				)
-				.bind(userId, wantsEmailUpdates ? 1 : 0, now)
+				.bind(userId, wantsEmailUpdates ? 1 : 0, wantsSmsUpdates ? 1 : 0, now)
 				.run();
 
 			registerPhase = inviteCode ? 'accept_invite' : 'create_business';
@@ -709,7 +724,7 @@ export const actions: Actions = {
 						now
 					)
 					.run();
-				if (invitedBusinessRole !== 'owner') {
+				if (invitedBusinessRole !== 'owner' || businessInvite.onboarding_required === 1) {
 					await db
 						.prepare(
 							`
@@ -729,11 +744,11 @@ export const actions: Actions = {
 					updated_at,
 					updated_by
 				)
-				VALUES (?, ?, 'onboarding', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(business_id, user_id) DO UPDATE SET
 					employment_status = CASE
 						WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
-						ELSE 'onboarding'
+						ELSE excluded.employment_status
 					END,
 					employment_type = excluded.employment_type,
 					job_title = excluded.job_title,
@@ -750,7 +765,8 @@ export const actions: Actions = {
 						.bind(
 							businessInvite.business_id,
 							userId,
-							businessInvite.employment_type || 'employee',
+							invitedBusinessRole === 'owner' ? 'active' : 'onboarding',
+							invitedBusinessRole === 'owner' ? 'owner' : businessInvite.employment_type || 'employee',
 							businessInvite.job_title || '',
 							businessInvite.department || '',
 							businessInvite.primary_schedule_department || businessInvite.department || '',
@@ -1037,7 +1053,28 @@ export const actions: Actions = {
 				.run();
 
 			if (businessInvite && businessInvite.onboarding_required === 1 && businessInvite.employment_type !== 'contractor') {
-				await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null);
+				const onboarding = await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null, {
+					allowOwnerPacket: invitedBusinessRole === 'owner'
+				});
+				if (onboarding.packageId) {
+					await loadEmployeeOnboarding(db, userId, resolvedBusinessId, {
+						env: platform?.env,
+						actorUserId: userId
+					});
+					await recordOperationalEventBestEffort(
+						db,
+						{
+							businessId: resolvedBusinessId,
+							eventType: 'onboarding.package.sent',
+							category: 'onboarding',
+							targetUserId: userId,
+							subjectType: 'employee_onboarding_package',
+							subjectId: onboarding.packageId,
+							title: 'Onboarding package ready'
+						},
+						request
+					);
+				}
 			}
 
 			registerPhase = 'legal_agreement';
@@ -1106,7 +1143,9 @@ export const actions: Actions = {
 
 			throw redirect(
 				303,
-				inviteCode ? '/login?registered=success&onboarding=1' : '/welcome/admin'
+				inviteCode
+					? `/register/welcome?onboarding=${businessInvite?.onboarding_required === 1 ? '1' : '0'}`
+					: '/welcome/admin'
 			);
 		} catch (err) {
 			if (isRedirect(err)) {
@@ -1141,11 +1180,12 @@ export const load: PageServerLoad = async ({ url, platform }) => {
 		.trim()
 		.toUpperCase();
 	let onboardingRequired = false;
+	let inviteEmail = '';
 	if (inviteCode && platform?.env?.DB) {
 		const now = Math.floor(Date.now() / 1000);
 		const invite = await platform.env.DB.prepare(
 			`
-			SELECT onboarding_required
+			SELECT onboarding_required, email_normalized
 			FROM business_invites
 			WHERE invite_code = ?
 			  AND revoked_at IS NULL
@@ -1155,11 +1195,29 @@ export const load: PageServerLoad = async ({ url, platform }) => {
 			`
 		)
 			.bind(inviteCode, now)
-			.first<{ onboarding_required: number }>();
+			.first<{ onboarding_required: number; email_normalized: string }>();
 		onboardingRequired = invite?.onboarding_required === 1;
+		inviteEmail = String(invite?.email_normalized ?? '').trim().toLowerCase();
+		if (!inviteEmail) {
+			const legacyInvite = await platform.env.DB.prepare(
+				`
+				SELECT email_normalized
+				FROM user_invites
+				WHERE invite_code = ?
+				  AND revoked_at IS NULL
+				  AND used_at IS NULL
+				  AND (expires_at IS NULL OR expires_at >= ?)
+				LIMIT 1
+				`
+			)
+				.bind(inviteCode, now)
+				.first<{ email_normalized: string }>();
+			inviteEmail = String(legacyInvite?.email_normalized ?? '').trim().toLowerCase();
+		}
 	}
 	return {
 		inviteCode: inviteCode || null,
+		inviteEmail: inviteEmail || null,
 		onboardingRequired,
 		agreementVersion: LIABILITY_AGREEMENT_VERSION
 	};

@@ -29,7 +29,8 @@ import {
   checkRateLimit,
   rateLimitFailure,
   revokeUserSessions,
-  writeAuditLog
+  writeAuditLog,
+  writeAuditLogSafe
 } from '$lib/server/security';
 import {
   canAccessEmployeeSensitiveData,
@@ -245,7 +246,7 @@ export type EmployeeOnboardingPackage = {
   id: string;
   business_id: string;
   user_id: string;
-  status: 'sent' | 'in_progress' | 'submitted' | 'approved';
+  status: 'sent' | 'in_progress' | 'submitted' | 'returned' | 'approved';
   payroll_classification: 'employee' | 'contractor';
   sent_at: number;
   completed_at: number | null;
@@ -254,6 +255,46 @@ export type EmployeeOnboardingPackage = {
   created_by: string | null;
   updated_at: number;
   manager_note: string;
+  submitted_at: number | null;
+  returned_at: number | null;
+  returned_by: string | null;
+  locked_at: number | null;
+  version: number;
+  supersedes_package_id: string | null;
+};
+
+export type EmployeeI9Verification = {
+  id: string;
+  business_id: string;
+  user_id: string;
+  package_id: string;
+  status: 'pending' | 'verified';
+  examination_method: 'physical';
+  document_selection: 'list_a' | 'list_b_and_c' | '';
+  photo_matching_document_present: number;
+  employee_first_day: string;
+  examined_at: string;
+  verifier_user_id: string | null;
+  verifier_name: string;
+  verifier_title: string;
+  attested_at: number | null;
+  completed_i9_file_url: string;
+  completed_i9_file_name: string;
+  created_at: number;
+  updated_at: number;
+  document_copies: EmployeeI9DocumentCopy[];
+};
+
+export type EmployeeI9DocumentCopy = {
+  id: string;
+  file_url: string;
+  file_name: string;
+  uploaded_at: number;
+};
+
+export type BusinessHrSettings = {
+  retain_i9_document_copies: number;
+  everify_participant: number;
 };
 
 export type EmployeeOnboardingItem = {
@@ -284,6 +325,8 @@ export type EmployeeOnboardingItem = {
 export type EmployeeOnboardingState = {
   package: EmployeeOnboardingPackage | null;
   items: EmployeeOnboardingItem[];
+  i9Verification: EmployeeI9Verification | null;
+  history: EmployeeOnboardingPackage[];
 };
 
 export type EmployeeOnboardingTemplateItem = {
@@ -674,11 +717,26 @@ export async function ensureEmployeeOnboardingTables(db: D1) {
     )
     .run();
 
+  await ensureOptionalColumn(db, 'employee_onboarding_packages', 'submitted_at', 'INTEGER');
+  await ensureOptionalColumn(db, 'employee_onboarding_packages', 'returned_at', 'INTEGER');
+  await ensureOptionalColumn(db, 'employee_onboarding_packages', 'returned_by', 'TEXT');
+  await ensureOptionalColumn(db, 'employee_onboarding_packages', 'locked_at', 'INTEGER');
+  await ensureOptionalColumn(db, 'employee_onboarding_packages', 'version', 'INTEGER NOT NULL DEFAULT 1');
+  await ensureOptionalColumn(db, 'employee_onboarding_packages', 'supersedes_package_id', 'TEXT');
+
   await db
     .prepare(
       `
       CREATE INDEX IF NOT EXISTS idx_employee_onboarding_packages_user
       ON employee_onboarding_packages(business_id, user_id, status, updated_at)
+      `
+    )
+    .run();
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_onboarding_packages_review
+      ON employee_onboarding_packages(business_id, status, submitted_at, updated_at)
       `
     )
     .run();
@@ -761,6 +819,135 @@ export async function ensureEmployeeOnboardingTables(db: D1) {
     .run();
 
   await ensureOptionalColumn(db, 'employee_onboarding_template_items', 'form_key', "TEXT NOT NULL DEFAULT ''");
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS business_hr_settings (
+        business_id TEXT PRIMARY KEY,
+        retain_i9_document_copies INTEGER NOT NULL DEFAULT 0,
+        everify_participant INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        updated_by TEXT
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_i9_verifications (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        package_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        examination_method TEXT NOT NULL DEFAULT 'physical',
+        document_selection TEXT NOT NULL DEFAULT '',
+        photo_matching_document_present INTEGER NOT NULL DEFAULT 0,
+        employee_first_day TEXT NOT NULL DEFAULT '',
+        examined_at TEXT NOT NULL DEFAULT '',
+        verifier_user_id TEXT,
+        verifier_name TEXT NOT NULL DEFAULT '',
+        verifier_title TEXT NOT NULL DEFAULT '',
+        attested_at INTEGER,
+        completed_i9_file_url TEXT NOT NULL DEFAULT '',
+        completed_i9_file_name TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+      `
+    )
+    .run();
+  await ensureOptionalColumn(
+    db,
+    'employee_i9_verifications',
+    'photo_matching_document_present',
+    'INTEGER NOT NULL DEFAULT 0'
+  );
+  await db
+    .prepare(
+      `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_i9_verifications_package
+      ON employee_i9_verifications(business_id, package_id)
+      `
+    )
+    .run();
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_i9_verifications_user
+      ON employee_i9_verifications(business_id, user_id, status, updated_at)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_i9_document_copies (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        verification_id TEXT NOT NULL,
+        file_url TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        uploaded_at INTEGER NOT NULL,
+        uploaded_by TEXT
+      )
+      `
+    )
+    .run();
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_i9_document_copies_verification
+      ON employee_i9_document_copies(business_id, verification_id, uploaded_at)
+      `
+    )
+    .run();
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS employee_onboarding_sensitive_snapshots (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        package_id TEXT NOT NULL,
+        onboarding_item_id TEXT NOT NULL,
+        source_vault_id TEXT,
+        record_scope TEXT NOT NULL,
+        record_type TEXT NOT NULL,
+        encrypted_payload TEXT NOT NULL,
+        payload_iv TEXT NOT NULL,
+        payload_tag TEXT NOT NULL DEFAULT '',
+        key_version TEXT NOT NULL,
+        encryption_algorithm TEXT NOT NULL,
+        display_last_four TEXT NOT NULL DEFAULT '',
+        accepted_at INTEGER NOT NULL,
+        accepted_by TEXT,
+        locked_at INTEGER NOT NULL
+      )
+      `
+    )
+    .run();
+  await db
+    .prepare(
+      `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_onboarding_sensitive_snapshot_item
+      ON employee_onboarding_sensitive_snapshots(business_id, onboarding_item_id)
+      `
+    )
+    .run();
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_employee_onboarding_sensitive_snapshot_package
+      ON employee_onboarding_sensitive_snapshots(business_id, package_id, user_id)
+      `
+    )
+    .run();
   employeeOnboardingTablesEnsured = true;
 }
 
@@ -1494,6 +1681,19 @@ export type EmployeeDocumentAccessAudit = {
   created_at: number;
 };
 
+export type EmployeeComplianceDocument = {
+  id: string;
+  document_type: string;
+  status: string;
+  file_url: string;
+  file_name: string;
+  signed_name: string;
+  submitted_at: number | null;
+  reviewed_at: number | null;
+  locked_at: number | null;
+  updated_at: number;
+};
+
 function emptyEmployeePosPermissions(): EmployeePosPermissions {
   return {
     pos_external_id: '',
@@ -1507,7 +1707,7 @@ function emptyEmployeePosPermissions(): EmployeePosPermissions {
 }
 
 export async function loadEmployeeHrPosAccess(db: D1, userId: string, businessId = '') {
-  const [pos, certifications, verificationChecks, directHrAccess, documentAudit] = await Promise.all([
+  const [pos, certifications, verificationChecks, directHrAccess, documentAudit, complianceDocuments] = await Promise.all([
     db
       .prepare(
         `
@@ -1604,7 +1804,20 @@ export async function loadEmployeeHrPosAccess(db: D1, userId: string, businessId
       )
       .bind(businessId, userId)
       .all<EmployeeDocumentAccessAudit>()
-      .catch(() => ({ results: [] as EmployeeDocumentAccessAudit[] }))
+      .catch(() => ({ results: [] as EmployeeDocumentAccessAudit[] })),
+    db
+      .prepare(
+        `
+        SELECT id, document_type, status, file_url, file_name, signed_name,
+          submitted_at, reviewed_at, locked_at, updated_at
+        FROM employee_compliance_documents
+        WHERE business_id = ? AND user_id = ?
+        ORDER BY updated_at DESC
+        `
+      )
+      .bind(businessId, userId)
+      .all<EmployeeComplianceDocument>()
+      .catch(() => ({ results: [] as EmployeeComplianceDocument[] }))
   ]);
 
   return {
@@ -1612,7 +1825,8 @@ export async function loadEmployeeHrPosAccess(db: D1, userId: string, businessId
     certifications: certifications.results ?? [],
     verificationChecks: verificationChecks.results ?? [],
     directHrAccess: directHrAccess?.is_enabled === 1,
-    documentAudit: documentAudit.results ?? []
+    documentAudit: documentAudit.results ?? [],
+    complianceDocuments: complianceDocuments.results ?? []
   };
 }
 
@@ -1672,10 +1886,10 @@ function defaultEmployeeOnboardingItems(state = ''): DefaultEmployeeOnboardingIt
   const stateItems: DefaultEmployeeOnboardingItem[] = normalizedState
     ? [
         {
-          item_type: 'form',
+          item_type: 'document',
           form_key: 'state_withholding',
           title: `${normalizedState} withholding`,
-          description: 'Complete state withholding details for payroll setup.',
+          description: 'Complete and sign the current state withholding form, then upload the completed PDF.',
           source_file_url: '',
           source_file_name: '',
           sort_order: 5
@@ -1711,19 +1925,19 @@ function defaultEmployeeOnboardingItems(state = ''): DefaultEmployeeOnboardingIt
       sort_order: 2
     },
     {
-      item_type: 'form',
+      item_type: 'document',
       form_key: 'federal_i9',
       title: 'Federal I-9',
-      description: 'Complete employee employment eligibility attestation.',
+      description: 'Complete and sign Section 1 of the current official Form I-9, then upload the completed PDF.',
       source_file_url: '',
       source_file_name: '',
       sort_order: 3
     },
     {
-      item_type: 'form',
+      item_type: 'document',
       form_key: 'federal_w4',
       title: 'Federal W-4',
-      description: 'Complete federal withholding information for payroll.',
+      description: 'Complete and sign the current official federal Form W-4, then upload the completed PDF.',
       source_file_url: '',
       source_file_name: '',
       sort_order: 4
@@ -2042,7 +2256,10 @@ function sanitizeSensitiveOnboardingPayload(formKey: string, payload: Record<str
 async function storeSensitiveOnboardingFormPayload(
   db: D1,
   env: Partial<App.Platform['env']> | undefined,
-  item: Pick<EmployeeOnboardingItem, 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'>,
+  item: Pick<
+    EmployeeOnboardingItem,
+    'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'
+  >,
   payload: Record<string, string>,
   updatedBy: string | null,
   now = Math.floor(Date.now() / 1000)
@@ -2093,6 +2310,7 @@ async function storeSensitiveOnboardingFormPayload(
         key_version = ?,
         encryption_algorithm = ?,
         display_last_four = ?,
+        locked_at = NULL,
         updated_at = ?,
         updated_by = ?
       WHERE business_id = ?
@@ -2137,7 +2355,10 @@ async function storeSensitiveOnboardingFormPayload(
 async function decryptSensitiveOnboardingFormPayload(
   db: D1,
   env: Partial<App.Platform['env']> | undefined,
-  item: Pick<EmployeeOnboardingItem, 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'>,
+  item: Pick<
+    EmployeeOnboardingItem,
+    'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'
+  >,
   actorUserId: string | null | undefined,
   shouldAudit = false
 ) {
@@ -2145,11 +2366,43 @@ async function decryptSensitiveOnboardingFormPayload(
   const classification = classifyOnboardingComplianceItem(item);
   if (!classification.sensitiveScope || !classification.sensitiveRecordType) return null;
 
-  const record = await db
+  type EncryptedOnboardingRecord = {
+    id: string;
+    audit_vault_id: string | null;
+    encrypted_payload: string;
+    payload_iv: string;
+    key_version: string;
+    encryption_algorithm: string;
+  };
+
+  let record = await db
     .prepare(
       `
       SELECT
         id,
+        source_vault_id AS audit_vault_id,
+        encrypted_payload,
+        payload_iv,
+        key_version,
+        encryption_algorithm
+      FROM employee_onboarding_sensitive_snapshots
+      WHERE business_id = ?
+        AND user_id = ?
+        AND package_id = ?
+        AND onboarding_item_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(item.business_id, item.user_id, item.package_id, item.id)
+    .first<EncryptedOnboardingRecord>();
+
+  if (!record?.encrypted_payload) {
+    record = await db
+    .prepare(
+      `
+      SELECT
+        id,
+        id AS audit_vault_id,
         encrypted_payload,
         payload_iv,
         key_version,
@@ -2159,18 +2412,13 @@ async function decryptSensitiveOnboardingFormPayload(
         AND user_id = ?
         AND record_scope = ?
         AND record_type = ?
-        AND status = 'active'
+        AND status IN ('active', 'accepted')
       LIMIT 1
       `
     )
     .bind(item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType)
-    .first<{
-      id: string;
-      encrypted_payload: string;
-      payload_iv: string;
-      key_version: string;
-      encryption_algorithm: string;
-    }>();
+    .first<EncryptedOnboardingRecord>();
+  }
 
   if (!record?.encrypted_payload) return null;
 
@@ -2185,12 +2433,15 @@ async function decryptSensitiveOnboardingFormPayload(
     await writeSensitiveRecordAudit(db, {
       businessId: item.business_id,
       userId: item.user_id,
-      vaultRecordId: record.id,
+      vaultRecordId: record.audit_vault_id,
       actorUserId: actorUserId ?? null,
       action: 'sensitive_record_decrypted_read',
       metadata: {
         recordScope: classification.sensitiveScope,
-        recordType: classification.sensitiveRecordType
+        recordType: classification.sensitiveRecordType,
+        packageId: item.package_id,
+        onboardingItemId: item.id,
+        immutableSnapshot: record.id !== record.audit_vault_id
       }
     });
   }
@@ -2284,16 +2535,16 @@ function normalizeOnboardingItemType(value: string): EmployeeOnboardingItem['ite
 }
 
 function normalizeOnboardingFormKey(value: string, itemType: EmployeeOnboardingItem['item_type']) {
-  if (itemType !== 'form') return '';
   const normalized = value.trim().toLowerCase();
+  if (itemType === 'document') {
+    return ['federal_i9', 'federal_w4', 'state_withholding'].includes(normalized) ? normalized : '';
+  }
+  if (itemType !== 'form') return '';
   if (
     [
       'personal_information',
       'emergency_contact',
-      'payroll_setup',
-      'federal_i9',
-      'federal_w4',
-      'state_withholding'
+      'payroll_setup'
     ].includes(normalized)
   ) {
     return normalized;
@@ -2374,80 +2625,6 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
       (!/^\d{4}$/.test(fields.routing_last_four) || !/^\d{4}$/.test(fields.account_last_four))
     ) {
       return { error: 'Direct deposit routing and account references must be the last four digits.' };
-    }
-    return { payload: fields };
-  }
-
-  if (formKey === 'federal_i9') {
-    const fields = {
-      legal_last_name: formString(formData, 'legal_last_name', 80),
-      legal_first_name: formString(formData, 'legal_first_name', 80),
-      other_last_names: formString(formData, 'other_last_names', 120),
-      address_line_1: formString(formData, 'address_line_1', 120),
-      city: formString(formData, 'city', 80),
-      state: formString(formData, 'state', 80),
-      postal_code: formString(formData, 'postal_code', 24),
-      date_of_birth: formString(formData, 'date_of_birth', 10),
-      ssn_last_four: formString(formData, 'ssn_last_four', 4),
-      email: formString(formData, 'email', 160),
-      phone: formString(formData, 'phone', 48),
-      citizenship_status: formString(formData, 'citizenship_status', 48),
-      document_choice: formString(formData, 'document_choice', 80),
-      alien_registration_number: formString(formData, 'alien_registration_number', 80),
-      i94_number: formString(formData, 'i94_number', 80),
-      passport_number: formString(formData, 'passport_number', 80),
-      passport_country: formString(formData, 'passport_country', 80)
-    };
-    if (
-      !requireFormFields(fields, [
-        'legal_last_name',
-        'legal_first_name',
-        'address_line_1',
-        'city',
-        'state',
-        'postal_code',
-        'date_of_birth',
-        'citizenship_status'
-      ])
-    ) {
-      return { error: 'Complete every required I-9 field.' };
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.date_of_birth)) {
-      return { error: 'Date of birth must use a valid date.' };
-    }
-    if (fields.ssn_last_four && !/^\d{4}$/.test(fields.ssn_last_four)) {
-      return { error: 'SSN reference must be the last four digits.' };
-    }
-    return { payload: fields };
-  }
-
-  if (formKey === 'federal_w4') {
-    const fields = {
-      filing_status: formString(formData, 'filing_status', 48),
-      multiple_jobs: String(formData.get('multiple_jobs') ?? '0') === '1' ? 'yes' : 'no',
-      dependents_amount: formString(formData, 'dependents_amount', 16),
-      other_income: formString(formData, 'other_income', 16),
-      deductions: formString(formData, 'deductions', 16),
-      extra_withholding: formString(formData, 'extra_withholding', 16),
-      exempt: String(formData.get('exempt') ?? '0') === '1' ? 'yes' : 'no'
-    };
-    if (!requireFormFields(fields, ['filing_status'])) {
-      return { error: 'Choose a federal filing status.' };
-    }
-    return { payload: fields };
-  }
-
-  if (formKey === 'state_withholding') {
-    const fields = {
-      state: formString(formData, 'state', 80),
-      filing_status: formString(formData, 'filing_status', 48),
-      allowances: formString(formData, 'allowances', 16),
-      additional_withholding: formString(formData, 'additional_withholding', 16),
-      exempt: String(formData.get('exempt') ?? '0') === '1' ? 'yes' : 'no',
-      state_notes: formString(formData, 'state_notes', 240)
-    };
-    if (!requireFormFields(fields, ['state', 'filing_status'])) {
-      return { error: 'Complete state and filing status for state withholding.' };
     }
     return { payload: fields };
   }
@@ -2634,8 +2811,12 @@ export async function createEmployeeOnboardingTemplateItem(request: Request, loc
   await ensureEmployeeOnboardingTables(db);
 
   const formData = await request.formData();
-  const itemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
-  const formKey = normalizeOnboardingFormKey(String(formData.get('form_key') ?? '').trim(), itemType ?? 'acknowledgement');
+  const requestedFormKey = String(formData.get('form_key') ?? '').trim().toLowerCase();
+  const requestedItemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
+  const itemType = ['federal_i9', 'federal_w4', 'state_withholding'].includes(requestedFormKey)
+    ? 'document'
+    : requestedItemType;
+  const formKey = normalizeOnboardingFormKey(requestedFormKey, itemType ?? 'acknowledgement');
   const title = formString(formData, 'title', 160);
   const description = formMultilineString(formData, 'description', 1000);
   const sortOrder = Number(formData.get('sort_order') ?? 0);
@@ -2702,7 +2883,7 @@ export async function installStandardEmployeeOnboardingTemplate(_request: Reques
     .prepare(
       `
       UPDATE employee_onboarding_template_items
-      SET item_type = 'form',
+      SET item_type = 'document',
         form_key = CASE
           WHEN LOWER(title) LIKE '%i-9%' OR LOWER(title) LIKE '%employment eligibility%' THEN 'federal_i9'
           WHEN LOWER(title) LIKE '%w-4%' OR LOWER(title) LIKE '%federal withholding%' THEN 'federal_w4'
@@ -2804,8 +2985,12 @@ export async function updateEmployeeOnboardingTemplateItem(request: Request, loc
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '').trim();
-  const itemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
-  const formKey = normalizeOnboardingFormKey(String(formData.get('form_key') ?? '').trim(), itemType ?? 'acknowledgement');
+  const requestedFormKey = String(formData.get('form_key') ?? '').trim().toLowerCase();
+  const requestedItemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
+  const itemType = ['federal_i9', 'federal_w4', 'state_withholding'].includes(requestedFormKey)
+    ? 'document'
+    : requestedItemType;
+  const formKey = normalizeOnboardingFormKey(requestedFormKey, itemType ?? 'acknowledgement');
   const title = formString(formData, 'title', 160);
   const description = formMultilineString(formData, 'description', 1000);
   const sortOrder = Number(formData.get('sort_order') ?? 0);
@@ -2893,8 +3078,7 @@ export async function deleteEmployeeOnboardingTemplateItem(request: Request, loc
 async function refreshEmployeeOnboardingPackageStatus(
   db: D1,
   packageId: string,
-  businessId: string,
-  approvedBy?: string | null
+  businessId: string
 ) {
   const [existingPackage, counts] = await Promise.all([
     db
@@ -2938,61 +3122,33 @@ async function refreshEmployeeOnboardingPackageStatus(
   const approvedCount = counts?.approved_count ?? 0;
   const now = Math.floor(Date.now() / 1000);
 
-  let status: EmployeeOnboardingPackage['status'] = 'sent';
-  let completedAt: number | null = null;
-  let approvedAt: number | null = null;
-  let reviewer: string | null = null;
-
-  if (total > 0 && approvedCount === total) {
-    status = 'approved';
-    completedAt = now;
-    approvedAt = now;
-    reviewer = approvedBy ?? null;
-  } else if (total > 0 && pendingCount === 0 && needsChangesCount === 0) {
-    status = 'submitted';
-    completedAt = now;
-  } else if (submittedCount > 0 || approvedCount > 0 || needsChangesCount > 0) {
-    status = 'in_progress';
+  if (existingPackage?.status === 'approved' || existingPackage?.status === 'submitted') {
+    return {
+      status: existingPackage.status,
+      userId: existingPackage.user_id,
+      changedToApproved: false
+    };
   }
+
+  let status: EmployeeOnboardingPackage['status'] = existingPackage?.status === 'returned' ? 'returned' : 'sent';
+  if (submittedCount > 0 || approvedCount > 0 || needsChangesCount > 0) status = 'in_progress';
 
   await db
     .prepare(
       `
       UPDATE employee_onboarding_packages
       SET status = ?,
-        completed_at = CASE WHEN ? IS NULL THEN completed_at ELSE ? END,
-        approved_at = CASE WHEN ? IS NULL THEN approved_at ELSE ? END,
-        approved_by = CASE WHEN ? IS NULL THEN approved_by ELSE ? END,
         updated_at = ?
       WHERE id = ? AND business_id = ?
       `
     )
-    .bind(status, completedAt, completedAt, approvedAt, approvedAt, reviewer, reviewer, now, packageId, businessId)
+    .bind(status, now, packageId, businessId)
     .run();
-
-  if (status === 'approved') {
-    await db
-      .prepare(
-        `
-        UPDATE employee_employment_records
-        SET employment_status = CASE
-            WHEN employment_status = 'terminated' THEN employment_status
-            ELSE 'active'
-          END,
-          updated_at = ?,
-          updated_by = COALESCE(?, updated_by)
-        WHERE business_id = ?
-          AND onboarding_package_id = ?
-        `
-      )
-      .bind(now, reviewer, businessId, packageId)
-      .run();
-  }
 
   return {
     status,
     userId: existingPackage?.user_id ?? null,
-    changedToApproved: status === 'approved' && existingPackage?.status !== 'approved'
+    changedToApproved: false
   };
 }
 
@@ -3042,7 +3198,8 @@ async function hydrateProfileBackedOnboardingItems(
   businessId: string,
   packageSentAt: number,
   items: EmployeeOnboardingItem[],
-  packageId?: string
+  packageId?: string,
+  env?: Partial<App.Platform['env']>
 ) {
   if (!items.some((item) => item.status === 'pending' && (item.form_key === 'personal_information' || item.form_key === 'emergency_contact'))) {
     return items;
@@ -3079,6 +3236,13 @@ async function hydrateProfileBackedOnboardingItems(
   });
 
   if (packageId && completedItems.length > 0) {
+    for (const item of completedItems) {
+      const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key, fallbackLegalName);
+      if (payload && isSensitiveOnboardingFormKey(item.form_key)) {
+        await storeSensitiveOnboardingFormPayload(db, env, item, payload, userId, now);
+      }
+    }
+
     await db.batch(
       completedItems.map((item) =>
         db
@@ -3138,22 +3302,6 @@ export async function loadEmployeeOnboarding(
   await ensureEmployeeOnboardingTables(db);
   await ensureBusinessSchema(db);
 
-  const membership = await db
-    .prepare(
-      `
-      SELECT role, COALESCE(is_active, 1) AS is_active
-      FROM business_users
-      WHERE business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ role: string | null; is_active: number }>();
-
-  if (membership?.is_active === 1 && normalizeBusinessRole(membership.role) === 'owner') {
-    return { package: null, items: [] };
-  }
-
   const onboardingPackage = await db
     .prepare(
       `
@@ -3169,7 +3317,13 @@ export async function loadEmployeeOnboarding(
         approved_by,
         created_by,
         updated_at,
-        manager_note
+        manager_note,
+        submitted_at,
+        returned_at,
+        returned_by,
+        locked_at,
+        COALESCE(version, 1) AS version,
+        supersedes_package_id
       FROM employee_onboarding_packages
       WHERE user_id = ? AND business_id = ?
       ORDER BY updated_at DESC
@@ -3180,7 +3334,7 @@ export async function loadEmployeeOnboarding(
     .first<EmployeeOnboardingPackage>();
 
   if (!onboardingPackage) {
-    return { package: null, items: [] };
+    return { package: null, items: [], i9Verification: null, history: [] };
   }
 
   const items = await db
@@ -3225,7 +3379,8 @@ export async function loadEmployeeOnboarding(
     businessId,
     onboardingPackage.sent_at,
     items.results ?? [],
-    onboardingPackage.id
+    onboardingPackage.id,
+    options.env
   );
   const canReadSensitive = await canAccessEmployeeSensitiveData(
     db,
@@ -3244,6 +3399,9 @@ export async function loadEmployeeOnboarding(
       if (!canReadSensitive) {
         return {
           ...item,
+          file_url: '',
+          file_name: '',
+          signed_name: '',
           form_payload: item.form_payload || JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})),
           sensitive_redacted: true
         };
@@ -3265,9 +3423,60 @@ export async function loadEmployeeOnboarding(
     })
   );
 
+  const historyRows = await db
+    .prepare(
+      `
+      SELECT
+        id, business_id, user_id, status, payroll_classification, sent_at, completed_at,
+        approved_at, approved_by, created_by, updated_at, manager_note, submitted_at,
+        returned_at, returned_by, locked_at, COALESCE(version, 1) AS version,
+        supersedes_package_id
+      FROM employee_onboarding_packages
+      WHERE user_id = ? AND business_id = ?
+      ORDER BY COALESCE(version, 1) DESC, updated_at DESC
+      `
+    )
+    .bind(userId, businessId)
+    .all<EmployeeOnboardingPackage>();
+
+  const i9Row = canReadSensitive
+    ? await db
+        .prepare(
+          `
+          SELECT
+            id, business_id, user_id, package_id, status, examination_method,
+            document_selection, photo_matching_document_present, employee_first_day, examined_at, verifier_user_id,
+            verifier_name, verifier_title, attested_at, completed_i9_file_url,
+            completed_i9_file_name, created_at, updated_at
+          FROM employee_i9_verifications
+          WHERE business_id = ? AND package_id = ? AND user_id = ?
+          LIMIT 1
+          `
+        )
+        .bind(businessId, onboardingPackage.id, userId)
+        .first<Omit<EmployeeI9Verification, 'document_copies'>>()
+    : null;
+  const i9Copies = i9Row
+    ? await db
+        .prepare(
+          `
+          SELECT id, file_url, file_name, uploaded_at
+          FROM employee_i9_document_copies
+          WHERE business_id = ? AND verification_id = ? AND user_id = ?
+          ORDER BY uploaded_at ASC
+          `
+        )
+        .bind(businessId, i9Row.id, userId)
+        .all<EmployeeI9DocumentCopy>()
+    : null;
+
   return {
     package: onboardingPackage,
-    items: hydratedItems
+    items: hydratedItems,
+    i9Verification: i9Row
+      ? { ...i9Row, document_copies: i9Copies?.results ?? [] }
+      : null,
+    history: historyRows.results ?? []
   };
 }
 
@@ -3278,6 +3487,7 @@ async function createEmployeeOnboardingPackageForUser(
     userId: string;
     payrollClassification?: EmployeeOnboardingPackage['payroll_classification'];
     createdBy?: string | null;
+    allowOwnerPacket?: boolean;
   }
 ) {
   await ensureEmployeeOnboardingTables(db);
@@ -3295,7 +3505,7 @@ async function createEmployeeOnboardingPackageForUser(
     .bind(options.businessId, options.userId)
     .first<{ role: string | null; is_active: number }>();
 
-  if (membership && normalizeBusinessRole(membership.role) === 'owner') {
+  if (membership && normalizeBusinessRole(membership.role) === 'owner' && !options.allowOwnerPacket) {
     const now = Math.floor(Date.now() / 1000);
     await db
       .prepare(
@@ -3337,6 +3547,19 @@ async function createEmployeeOnboardingPackageForUser(
   const now = Math.floor(Date.now() / 1000);
   const packageId = crypto.randomUUID();
   const payrollClassification = options.payrollClassification === 'contractor' ? 'contractor' : 'employee';
+  const previousPackage = await db
+    .prepare(
+      `
+      SELECT id, COALESCE(version, 1) AS version
+      FROM employee_onboarding_packages
+      WHERE business_id = ? AND user_id = ?
+      ORDER BY COALESCE(version, 1) DESC, updated_at DESC
+      LIMIT 1
+      `
+    )
+    .bind(options.businessId, options.userId)
+    .first<{ id: string; version: number }>();
+  const version = Math.max(1, Number(previousPackage?.version ?? 0) + 1);
 
   await db
     .prepare(
@@ -3353,12 +3576,28 @@ async function createEmployeeOnboardingPackageForUser(
         approved_by,
         created_by,
         updated_at,
-        manager_note
+        manager_note,
+        submitted_at,
+        returned_at,
+        returned_by,
+        locked_at,
+        version,
+        supersedes_package_id
       )
-      VALUES (?, ?, ?, 'sent', ?, ?, NULL, NULL, NULL, ?, ?, '')
+      VALUES (?, ?, ?, 'sent', ?, ?, NULL, NULL, NULL, ?, ?, '', NULL, NULL, NULL, NULL, ?, ?)
       `
     )
-    .bind(packageId, options.businessId, options.userId, payrollClassification, now, options.createdBy ?? null, now)
+    .bind(
+      packageId,
+      options.businessId,
+      options.userId,
+      payrollClassification,
+      now,
+      options.createdBy ?? null,
+      now,
+      version,
+      previousPackage?.id ?? null
+    )
     .run();
 
   const templateItems = (await loadEmployeeOnboardingTemplate(db, options.businessId)).filter(
@@ -3479,6 +3718,23 @@ async function createEmployeeOnboardingPackageForUser(
     )
     .run();
 
+  if (normalizeBusinessRole(membership?.role) === 'owner' && options.allowOwnerPacket) {
+    await db
+      .prepare(
+        `
+        UPDATE employee_employment_records
+        SET employment_status = CASE WHEN employment_status = 'terminated' THEN employment_status ELSE 'active' END,
+          employment_type = 'owner',
+          onboarding_package_id = ?,
+          updated_at = ?,
+          updated_by = COALESCE(?, updated_by)
+        WHERE business_id = ? AND user_id = ?
+        `
+      )
+      .bind(packageId, now, options.createdBy ?? null, options.businessId, options.userId)
+      .run();
+  }
+
   return { created: true, packageId, status: 'sent' as const };
 }
 
@@ -3486,7 +3742,8 @@ export async function ensureEmployeeOnboardingRequirement(
   db: D1,
   businessId: string,
   userId: string,
-  createdBy?: string | null
+  createdBy?: string | null,
+  options: { allowOwnerPacket?: boolean } = {}
 ) {
   if (!businessId || !userId) return { required: false, approved: true, status: 'not_required' as const };
 
@@ -3521,7 +3778,28 @@ export async function ensureEmployeeOnboardingRequirement(
     .first<{ employment_type: string | null }>();
   const employmentType = String(employment?.employment_type ?? '').trim().toLowerCase();
   const businessRole = normalizeBusinessRole(membership.role);
-  if (employmentType === 'contractor' || employmentType === 'owner' || businessRole === 'owner') {
+  const latest = await db
+    .prepare(
+      `
+      SELECT id, status
+      FROM employee_onboarding_packages
+      WHERE business_id = ? AND user_id = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
+
+  if (latest?.status === 'approved') {
+    return { required: true, approved: true, status: latest.status, packageId: latest.id };
+  }
+
+  if (latest) {
+    return { required: true, approved: false, status: latest.status, packageId: latest.id };
+  }
+
+  if (employmentType === 'contractor' || ((employmentType === 'owner' || businessRole === 'owner') && !options.allowOwnerPacket)) {
     if (businessRole === 'owner' && employmentType !== 'owner') {
       const now = Math.floor(Date.now() / 1000);
       await db
@@ -3545,27 +3823,6 @@ export async function ensureEmployeeOnboardingRequirement(
     return { required: false, approved: true, status: 'not_required' as const };
   }
 
-  const latest = await db
-    .prepare(
-      `
-      SELECT id, status
-      FROM employee_onboarding_packages
-      WHERE business_id = ? AND user_id = ?
-      ORDER BY updated_at DESC
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
-
-  if (latest?.status === 'approved') {
-    return { required: true, approved: true, status: latest.status, packageId: latest.id };
-  }
-
-  if (latest) {
-    return { required: true, approved: false, status: latest.status, packageId: latest.id };
-  }
-
   if (isBusinessAdminRole(membership.role) && !employmentType) {
     return { required: false, approved: true, status: 'not_required' as const };
   }
@@ -3573,7 +3830,8 @@ export async function ensureEmployeeOnboardingRequirement(
   const created = await createEmployeeOnboardingPackageForUser(db, {
     businessId,
     userId,
-    createdBy: createdBy ?? null
+    createdBy: createdBy ?? null,
+    allowOwnerPacket: options.allowOwnerPacket
   });
 
   return {
@@ -5426,14 +5684,14 @@ async function getUserById(db: D1, userId: string) {
   return db
     .prepare(
       `
-      SELECT id, COALESCE(role, 'user') AS role, COALESCE(is_active, 1) AS is_active
+      SELECT id, email, COALESCE(role, 'user') AS role, COALESCE(is_active, 1) AS is_active
       FROM users
       WHERE id = ?
       LIMIT 1
       `
     )
     .bind(userId)
-    .first<{ id: string; role: string; is_active: number }>();
+    .first<{ id: string; email: string | null; role: string; is_active: number }>();
 }
 
 async function countAdmins(db: D1, businessId: string) {
@@ -5463,6 +5721,22 @@ async function hasOtherActiveBusinessMembership(db: D1, userId: string, business
       WHERE user_id = ?
         AND business_id != ?
         AND COALESCE(is_active, 1) = 1
+      LIMIT 1
+      `
+    )
+    .bind(userId, businessId)
+    .first<{ business_id: string }>();
+  return Boolean(row?.business_id);
+}
+
+async function hasOtherBusinessMembership(db: D1, userId: string, businessId: string) {
+  await ensureBusinessSchema(db);
+  const row = await db
+    .prepare(
+      `
+      SELECT business_id
+      FROM business_users
+      WHERE user_id = ? AND business_id != ?
       LIMIT 1
       `
     )
@@ -5561,25 +5835,39 @@ export async function deleteUser(request: Request, locals: App.Locals) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(`DELETE FROM business_users WHERE business_id = ? AND user_id = ?`)
-    .bind(businessId, userId)
-    .run();
+  const hasOtherMembership = await hasOtherBusinessMembership(db, userId, businessId);
+  const statements = [
+    db
+      .prepare(`DELETE FROM business_users WHERE business_id = ? AND user_id = ?`)
+      .bind(businessId, userId)
+  ];
 
-  if (!(await hasOtherActiveBusinessMembership(db, userId, businessId))) {
-    await revokeUserAccess(db, userId, now);
-    await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+  if (!hasOtherMembership) {
+    statements.push(
+      db.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, userId),
+      db
+        .prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
+        .bind(now, now, userId),
+      db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId)
+    );
   }
 
-  await writeAuditLog(db, {
+  await db.batch(statements);
+
+  await writeAuditLogSafe(db, {
     action: 'user_deleted_from_business',
     request,
     businessId,
     actorUserId: locals.userId ?? null,
-    targetUserId: userId
+    targetUserId: hasOtherMembership ? userId : null,
+    email: target.email,
+    metadata: {
+      removedUserId: userId,
+      accountDeleted: !hasOtherMembership
+    }
   });
 
-  return { success: true };
+  throw redirect(303, '/admin/users');
 }
 
 export async function toggleSpecialsAccess(request: Request, locals: App.Locals) {
@@ -6103,117 +6391,11 @@ export async function updateEmployeeVerificationCheck(request: Request, locals: 
   return { success: true, message: 'Verification updated.' };
 }
 
-export async function saveEmployeeProfile(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  await ensureEmployeeProfilesTable(db);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'Employee not found in this business.' });
-  }
-  if (
-    !(await canAccessEmployeeSensitiveData(
-      db,
-      businessId,
-      locals.userId,
-      locals.businessRole,
-      userId,
-      locals.businessPermissionTemplate,
-      locals.businessCapabilities
-    ))
-  ) {
-    return fail(403, { error: 'HR access is required.' });
-  }
-
-  const target = await getUserById(db, userId);
-  if (!target) return fail(404, { error: 'Employee not found.' });
-
-  const profile = {
-    real_name: formString(formData, 'real_name', 120),
-    phone: formString(formData, 'phone', 48),
-    birthday: String(formData.get('birthday') ?? '').trim(),
-    address_line_1: formString(formData, 'address_line_1', 120),
-    address_line_2: formString(formData, 'address_line_2', 120),
-    city: formString(formData, 'city', 80),
-    state: formString(formData, 'state', 80),
-    postal_code: formString(formData, 'postal_code', 24),
-    emergency_contact_name: formString(formData, 'emergency_contact_name', 120),
-    emergency_contact_phone: formString(formData, 'emergency_contact_phone', 48),
-    emergency_contact_relationship: formString(formData, 'emergency_contact_relationship', 80)
-  };
-
-  if (profile.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(profile.birthday)) {
-    return fail(400, { error: 'Birthday must use a valid date.' });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_profiles (
-        business_id,
-        user_id,
-        real_name,
-        phone,
-        birthday,
-        address_line_1,
-        address_line_2,
-        city,
-        state,
-        postal_code,
-        emergency_contact_name,
-        emergency_contact_phone,
-        emergency_contact_relationship,
-        updated_at,
-        updated_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(business_id, user_id) DO UPDATE SET
-        real_name = excluded.real_name,
-        phone = excluded.phone,
-        birthday = excluded.birthday,
-        address_line_1 = excluded.address_line_1,
-        address_line_2 = excluded.address_line_2,
-        city = excluded.city,
-        state = excluded.state,
-        postal_code = excluded.postal_code,
-        emergency_contact_name = excluded.emergency_contact_name,
-        emergency_contact_phone = excluded.emergency_contact_phone,
-        emergency_contact_relationship = excluded.emergency_contact_relationship,
-        updated_at = excluded.updated_at,
-        updated_by = excluded.updated_by
-      `
-    )
-    .bind(
-      businessId,
-      userId,
-      profile.real_name,
-      profile.phone,
-      profile.birthday,
-      profile.address_line_1,
-      profile.address_line_2,
-      profile.city,
-      profile.state,
-      profile.postal_code,
-      profile.emergency_contact_name,
-      profile.emergency_contact_phone,
-      profile.emergency_contact_relationship,
-      now,
-      locals.userId ?? null
-    )
-    .run();
-
-  return { success: true, message: 'Employee profile saved.' };
-}
-
 export async function sendEmployeeOnboardingPackage(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageEmployeeOnboarding(locals)) {
+    return fail(403, { error: 'Employee onboarding access required.' });
+  }
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -6246,10 +6428,6 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
     return fail(400, { error: 'Employee must be active before onboarding.' });
   }
 
-  if (normalizeBusinessRole(membership.role) === 'owner') {
-    return fail(400, { error: 'Owners do not need employee onboarding packets.' });
-  }
-
   if (payrollClassification === 'contractor') {
     return fail(400, { error: 'Contractors do not receive employee onboarding packets.' });
   }
@@ -6258,7 +6436,8 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
     businessId,
     userId,
     payrollClassification,
-    createdBy: locals.userId ?? null
+    createdBy: locals.userId ?? null,
+    allowOwnerPacket: true
   });
 
   if (!created.created) {
@@ -6354,6 +6533,9 @@ export async function submitEmployeeOnboardingItem(
   if (item.package_status === 'approved') {
     return fail(400, { error: 'This onboarding package is already approved.' });
   }
+  if (item.package_status === 'submitted') {
+    return fail(400, { error: 'This onboarding package is under review. It must be returned before it can be changed.' });
+  }
 
   let fileUrl = item.file_url;
   let fileName = item.file_name;
@@ -6367,6 +6549,13 @@ export async function submitEmployeeOnboardingItem(
       }
       if (!locals.MEDIA_BUCKET) {
         return fail(503, { error: 'Document storage is not configured.' });
+      }
+      if (
+        ['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key) &&
+        upload.type !== 'application/pdf' &&
+        !upload.name.toLowerCase().endsWith('.pdf')
+      ) {
+        return fail(400, { error: 'Official employment and tax forms must be uploaded as PDF files.' });
       }
 
       try {
@@ -6384,6 +6573,12 @@ export async function submitEmployeeOnboardingItem(
 
     if (!fileUrl) {
       return fail(400, { error: 'Upload the requested document before submitting.' });
+    }
+    if (['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key)) {
+      if (String(formData.get('official_form_confirmed') ?? '0') !== '1') {
+        return fail(400, { error: 'Confirm that the current official form is complete and signed.' });
+      }
+      if (!signedName) return fail(400, { error: 'Type your name to certify this submission.' });
     }
   } else if (item.item_type === 'form') {
     const formResult = buildOnboardingFormPayload(formData, item.form_key);
@@ -6452,6 +6647,40 @@ export async function submitEmployeeOnboardingItem(
   );
 
   await refreshEmployeeOnboardingPackageStatus(db, item.package_id, businessId);
+  await db
+    .prepare(
+      `
+      UPDATE employee_onboarding_packages
+      SET status = 'in_progress',
+        submitted_at = NULL,
+        completed_at = NULL,
+        returned_at = NULL,
+        returned_by = NULL,
+        manager_note = '',
+        updated_at = ?
+      WHERE id = ? AND business_id = ? AND status <> 'approved'
+      `
+    )
+    .bind(now, item.package_id, businessId)
+    .run();
+
+  if (item.form_key === 'federal_i9') {
+    await db
+      .prepare(
+        `
+        UPDATE employee_i9_verifications
+        SET status = 'pending',
+          attested_at = NULL,
+          verifier_user_id = NULL,
+          verifier_name = '',
+          verifier_title = '',
+          updated_at = ?
+        WHERE business_id = ? AND package_id = ? AND user_id = ?
+        `
+      )
+      .bind(now, businessId, item.package_id, locals.userId)
+      .run();
+  }
 
   await writeAuditLog(db, {
     action: 'employee_onboarding_item_submitted',
@@ -6467,191 +6696,598 @@ export async function submitEmployeeOnboardingItem(
       sensitive: isSensitiveOnboardingFormKey(item.form_key)
     }
   });
-  await recordOperationalEventBestEffort(
-    db,
-    {
-      businessId,
-      eventType: 'onboarding.item.submitted',
-      category: 'onboarding',
-      actorUserId: locals.userId,
-      targetUserId: locals.userId,
-      subjectType: 'employee_onboarding_item',
-      subjectId: item.id,
-      title: 'Onboarding item submitted',
-      payload: {
-        packageId: item.package_id,
-        itemType: item.item_type,
-        formKey: item.form_key,
-        sensitive: isSensitiveOnboardingFormKey(item.form_key)
-      }
-    },
-    request
-  );
-
   return { success: true, message: 'Onboarding item submitted.' };
 }
 
-async function reviewEmployeeOnboardingItem(
-  request: Request,
-  locals: App.Locals,
-  status: Extract<EmployeeOnboardingItem['status'], 'approved' | 'needs_changes'>
-) {
-  requireAdmin(locals.userRole);
+export async function submitEmployeeOnboardingPacket(request: Request, locals: App.Locals) {
+  if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
-
   await ensureEmployeeOnboardingTables(db);
 
   const formData = await request.formData();
-  const itemId = String(formData.get('item_id') ?? '').trim();
-  const managerNote = String(formData.get('manager_note') ?? '').trim();
+  const packageId = String(formData.get('package_id') ?? '').trim();
+  if (!packageId) return fail(400, { error: 'Missing onboarding packet.' });
 
-  if (!itemId) return fail(400, { error: 'Missing onboarding item.' });
-  if (status === 'needs_changes' && !managerNote) {
-    return fail(400, { error: 'Add a note so the employee knows what to fix.' });
-  }
-
-  const item = await db
+  const packet = await db
     .prepare(
       `
-      SELECT
-        id,
-        package_id,
-        business_id,
-        user_id,
-        CASE WHEN item_type = 'profile' THEN 'form' ELSE item_type END AS item_type,
-        CASE
-          WHEN item_type = 'profile' AND COALESCE(form_key, '') = '' THEN 'personal_information'
-          ELSE form_key
-        END AS form_key,
-        title,
-        status,
-        file_url,
-        file_name,
-        signed_name,
-        submitted_at
-      FROM employee_onboarding_items
-      WHERE id = ? AND business_id = ?
+      SELECT id, status
+      FROM employee_onboarding_packages
+      WHERE id = ? AND business_id = ? AND user_id = ?
       LIMIT 1
       `
     )
-    .bind(itemId, businessId)
-    .first<
-      Pick<
-        EmployeeOnboardingItem,
-        | 'id'
-        | 'package_id'
-        | 'business_id'
-        | 'user_id'
-        | 'item_type'
-        | 'form_key'
-        | 'title'
-        | 'status'
-        | 'file_url'
-        | 'file_name'
-        | 'signed_name'
-        | 'submitted_at'
-      >
-    >();
+    .bind(packageId, businessId, locals.userId)
+    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
+  if (!packet) return fail(404, { error: 'Onboarding packet not found.' });
+  if (packet.status === 'approved') return fail(400, { error: 'This onboarding packet is already accepted.' });
+  if (packet.status === 'submitted') return fail(400, { error: 'This onboarding packet is already under review.' });
 
-  if (!item) return fail(404, { error: 'Onboarding item not found.' });
-  if (!(await userBelongsToBusiness(db, item.user_id, businessId))) {
-    return fail(404, { error: 'Employee not found in this business.' });
+  const counts = await db
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted
+      FROM employee_onboarding_items
+      WHERE package_id = ? AND business_id = ? AND user_id = ?
+      `
+    )
+    .bind(packageId, businessId, locals.userId)
+    .first<{ total: number; submitted: number | null }>();
+  if (!counts?.total || (counts.submitted ?? 0) !== counts.total) {
+    return fail(400, { error: 'Complete every packet item before submitting the packet.' });
   }
 
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
       `
-      UPDATE employee_onboarding_items
-      SET status = ?,
-        manager_note = ?,
-        reviewed_at = ?,
-        reviewed_by = ?
-      WHERE id = ? AND business_id = ?
+      UPDATE employee_onboarding_packages
+      SET status = 'submitted',
+        submitted_at = ?,
+        completed_at = ?,
+        returned_at = NULL,
+        returned_by = NULL,
+        manager_note = '',
+        updated_at = ?
+      WHERE id = ? AND business_id = ? AND user_id = ? AND status <> 'approved'
       `
     )
-    .bind(status, managerNote, now, locals.userId ?? null, item.id, businessId)
+    .bind(now, now, now, packageId, businessId, locals.userId)
     .run();
 
-  await upsertComplianceDocumentForOnboardingItem(
-    db,
-    {
-      ...item,
-      status,
-      reviewed_at: now,
-      reviewed_by: locals.userId ?? null
-    },
-    locals.userId ?? null,
-    now
-  );
-
-  const packageStatus = await refreshEmployeeOnboardingPackageStatus(
-    db,
-    item.package_id,
-    businessId,
-    status === 'approved' ? (locals.userId ?? null) : null
-  );
-
   await writeAuditLog(db, {
-    action:
-      status === 'approved'
-        ? 'employee_onboarding_item_approved'
-        : 'employee_onboarding_item_changes_requested',
+    action: 'employee_onboarding_packet_submitted',
     request,
     businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: item.user_id,
-    metadata: {
-      packageId: item.package_id,
-      itemId: item.id,
-      itemType: item.item_type,
-      formKey: item.form_key
-    }
+    actorUserId: locals.userId,
+    targetUserId: locals.userId,
+    metadata: { packageId }
   });
   await recordOperationalEventBestEffort(
     db,
     {
       businessId,
-      eventType:
-        packageStatus.changedToApproved
-          ? 'onboarding.package.approved'
-          : status === 'approved'
-          ? 'onboarding.item.approved'
-          : 'onboarding.item.changes_requested',
+      eventType: 'onboarding.package.submitted',
       category: 'onboarding',
-      actorUserId: locals.userId ?? null,
-      targetUserId: item.user_id,
-      subjectType: packageStatus.changedToApproved
-        ? 'employee_onboarding_package'
-        : 'employee_onboarding_item',
-      subjectId: packageStatus.changedToApproved ? item.package_id : item.id,
-      title: packageStatus.changedToApproved
-        ? 'Onboarding approved'
-        : status === 'approved'
-          ? 'Onboarding item approved'
-          : 'Onboarding changes requested',
-      payload: {
-        packageId: item.package_id,
-        itemType: item.item_type,
-        formKey: item.form_key
-      }
+      actorUserId: locals.userId,
+      targetUserId: locals.userId,
+      subjectType: 'employee_onboarding_package',
+      subjectId: packageId,
+      title: 'Onboarding packet submitted'
     },
     request
   );
 
+  return { success: true, message: 'Onboarding packet submitted for review.' };
+}
+
+export async function loadBusinessHrSettings(db: D1, businessId: string): Promise<BusinessHrSettings> {
+  await ensureEmployeeOnboardingTables(db);
+  const settings = await db
+    .prepare(
+      `
+      SELECT retain_i9_document_copies, everify_participant
+      FROM business_hr_settings
+      WHERE business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId)
+    .first<BusinessHrSettings>();
+  return settings ?? { retain_i9_document_copies: 0, everify_participant: 0 };
+}
+
+export async function saveBusinessHrSettings(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  if (!canManageEmployeeOnboarding(locals)) {
+    return fail(403, { error: 'Employee onboarding access required.' });
+  }
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const retainCopies = String(formData.get('retain_i9_document_copies') ?? '0') === '1' ? 1 : 0;
+  const everifyParticipant = String(formData.get('everify_participant') ?? '0') === '1' ? 1 : 0;
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO business_hr_settings (
+        business_id, retain_i9_document_copies, everify_participant, updated_at, updated_by
+      )
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(business_id) DO UPDATE SET
+        retain_i9_document_copies = excluded.retain_i9_document_copies,
+        everify_participant = excluded.everify_participant,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(businessId, retainCopies, everifyParticipant, now, locals.userId ?? null)
+    .run();
+  await writeAuditLog(db, {
+    action: 'business_i9_policy_updated',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    metadata: { retainCopies: retainCopies === 1, everifyParticipant: everifyParticipant === 1 }
+  });
+  return { success: true, message: 'I-9 verification policy saved.' };
+}
+
+async function requireSensitiveOnboardingReviewer(
+  db: D1,
+  businessId: string,
+  targetUserId: string,
+  locals: App.Locals
+) {
+  if (!canManageEmployeeOnboarding(locals)) return false;
+  return canAccessEmployeeSensitiveData(
+    db,
+    businessId,
+    locals.userId,
+    locals.businessRole,
+    targetUserId,
+    locals.businessPermissionTemplate,
+    locals.businessCapabilities
+  );
+}
+
+function isPdfUpload(file: File) {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+}
+
+export async function verifyEmployeeI9(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const packageId = String(formData.get('package_id') ?? '').trim();
+  const documentSelection = String(formData.get('document_selection') ?? '').trim();
+  const employeeFirstDay = formString(formData, 'employee_first_day', 10);
+  const examinedAt = formString(formData, 'examined_at', 10);
+  const verifierName = formString(formData, 'verifier_name', 120);
+  const verifierTitle = formString(formData, 'verifier_title', 120);
+  const attested = String(formData.get('attested') ?? '0') === '1';
+  const photoMatchingDocumentPresent = String(formData.get('photo_matching_document_present') ?? '0') === '1';
+  const completedI9Upload = formData.get('completed_i9');
+  const documentCopyUploads = formData
+    .getAll('document_copies')
+    .filter((value): value is File => value instanceof File && value.size > 0);
+
+  if (!packageId) return fail(400, { error: 'Missing onboarding packet.' });
+  if (!['list_a', 'list_b_and_c'].includes(documentSelection)) {
+    return fail(400, { error: 'Record whether the employee presented List A or List B and List C documents.' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(employeeFirstDay) || !/^\d{4}-\d{2}-\d{2}$/.test(examinedAt)) {
+    return fail(400, { error: 'Add the employee start date and physical examination date.' });
+  }
+  if (!verifierName || !verifierTitle || !attested) {
+    return fail(400, { error: 'The authorized verifier must complete and attest to the examination.' });
+  }
+
+  const packet = await db
+    .prepare(
+      `
+      SELECT p.id, p.user_id, p.status,
+        SUM(CASE WHEN i.form_key = 'federal_i9' AND i.status = 'submitted' THEN 1 ELSE 0 END) AS i9_submitted
+      FROM employee_onboarding_packages p
+      LEFT JOIN employee_onboarding_items i
+        ON i.package_id = p.id AND i.business_id = p.business_id
+      WHERE p.id = ? AND p.business_id = ?
+      GROUP BY p.id, p.user_id, p.status
+      LIMIT 1
+      `
+    )
+    .bind(packageId, businessId)
+    .first<{ id: string; user_id: string; status: string; i9_submitted: number | null }>();
+  if (!packet) return fail(404, { error: 'Onboarding packet not found.' });
+  if (packet.status !== 'submitted') {
+    return fail(400, { error: 'The employee must submit the complete packet before I-9 verification.' });
+  }
+  if ((packet.i9_submitted ?? 0) < 1) {
+    return fail(400, { error: 'The employee has not submitted Form I-9 Section 1.' });
+  }
+  if (!(await requireSensitiveOnboardingReviewer(db, businessId, packet.user_id, locals))) {
+    return fail(403, { error: 'Sensitive employee data access is required for I-9 verification.' });
+  }
+  if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
+
+  const existing = await db
+    .prepare(
+      `
+      SELECT v.id, v.completed_i9_file_url, v.completed_i9_file_name,
+        (
+          SELECT COUNT(*)
+          FROM employee_i9_document_copies c
+          WHERE c.business_id = v.business_id AND c.verification_id = v.id
+        ) AS document_copy_count
+      FROM employee_i9_verifications v
+      WHERE v.business_id = ? AND v.package_id = ? AND v.user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, packageId, packet.user_id)
+    .first<{
+      id: string;
+      completed_i9_file_url: string;
+      completed_i9_file_name: string;
+      document_copy_count: number;
+    }>();
+
+  let completedI9FileUrl = existing?.completed_i9_file_url ?? '';
+  let completedI9FileName = existing?.completed_i9_file_name ?? '';
+  if (completedI9Upload instanceof File && completedI9Upload.size > 0) {
+    if (completedI9Upload.size > 15 * 1024 * 1024 || !isPdfUpload(completedI9Upload)) {
+      return fail(400, { error: 'The completed Form I-9 must be a PDF no larger than 15MB.' });
+    }
+    const uploaded = await uploadEmployeeOnboardingMedia(
+      locals.MEDIA_BUCKET,
+      businessId,
+      packet.user_id,
+      completedI9Upload
+    );
+    const previousKey = documentMediaKeyFromUrl(completedI9FileUrl);
+    if (previousKey) await locals.MEDIA_BUCKET.delete(previousKey);
+    completedI9FileUrl = uploaded.url;
+    completedI9FileName = completedI9Upload.name;
+  }
+  if (!completedI9FileUrl) {
+    return fail(400, { error: 'Upload the completed Form I-9 with Section 2 before verifying.' });
+  }
+
+  const hrSettings = await loadBusinessHrSettings(db, businessId);
+  const copiesRequired = hrSettings.retain_i9_document_copies === 1 ||
+    (hrSettings.everify_participant === 1 && photoMatchingDocumentPresent);
+  if (copiesRequired && documentCopyUploads.length === 0 && (existing?.document_copy_count ?? 0) === 0) {
+    return fail(400, { error: 'This business policy requires retained copies of the examined documents.' });
+  }
+  if (hrSettings.retain_i9_document_copies !== 1 && !copiesRequired && documentCopyUploads.length > 0) {
+    return fail(400, { error: 'Document-copy retention is disabled in the business I-9 policy.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const verificationId = existing?.id ?? crypto.randomUUID();
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_i9_verifications (
+        id, business_id, user_id, package_id, status, examination_method,
+        document_selection, photo_matching_document_present, employee_first_day,
+        examined_at, verifier_user_id, verifier_name, verifier_title, attested_at,
+        completed_i9_file_url, completed_i9_file_name, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, 'verified', 'physical', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, package_id) DO UPDATE SET
+        status = 'verified',
+        examination_method = 'physical',
+        document_selection = excluded.document_selection,
+        photo_matching_document_present = excluded.photo_matching_document_present,
+        employee_first_day = excluded.employee_first_day,
+        examined_at = excluded.examined_at,
+        verifier_user_id = excluded.verifier_user_id,
+        verifier_name = excluded.verifier_name,
+        verifier_title = excluded.verifier_title,
+        attested_at = excluded.attested_at,
+        completed_i9_file_url = excluded.completed_i9_file_url,
+        completed_i9_file_name = excluded.completed_i9_file_name,
+        updated_at = excluded.updated_at
+      `
+    )
+    .bind(
+      verificationId,
+      businessId,
+      packet.user_id,
+      packageId,
+      documentSelection,
+      photoMatchingDocumentPresent ? 1 : 0,
+      employeeFirstDay,
+      examinedAt,
+      locals.userId ?? null,
+      verifierName,
+      verifierTitle,
+      now,
+      completedI9FileUrl,
+      completedI9FileName,
+      now,
+      now
+    )
+    .run();
+
+  for (const copy of documentCopyUploads.slice(0, 6)) {
+    if (copy.size > 15 * 1024 * 1024) return fail(400, { error: 'Each retained document copy must be 15MB or smaller.' });
+    const uploaded = await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET, businessId, packet.user_id, copy);
+    await db
+      .prepare(
+        `
+        INSERT INTO employee_i9_document_copies (
+          id, business_id, user_id, verification_id, file_url, file_name, uploaded_at, uploaded_by
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `
+      )
+      .bind(
+        crypto.randomUUID(), businessId, packet.user_id, verificationId,
+        uploaded.url, copy.name, now, locals.userId ?? null
+      )
+      .run();
+  }
+
+  await writeSensitiveRecordAudit(db, {
+    businessId,
+    userId: packet.user_id,
+    actorUserId: locals.userId ?? null,
+    action: 'employee_i9_physically_verified',
+    request,
+    metadata: {
+      packageId,
+      documentSelection,
+      copiesRetained: documentCopyUploads.length,
+      everifyPhotoMatch: hrSettings.everify_participant === 1 && photoMatchingDocumentPresent
+    }
+  });
+  return { success: true, message: 'Physical I-9 verification recorded.' };
+}
+
+async function reviewEmployeeOnboardingPacket(
+  request: Request,
+  locals: App.Locals,
+  decision: 'approved' | 'returned'
+) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureEmployeeOnboardingTables(db);
+
+  const formData = await request.formData();
+  const packageId = String(formData.get('package_id') ?? '').trim();
+  const managerNote = formMultilineString(formData, 'manager_note', 1000);
+  if (!packageId) return fail(400, { error: 'Missing onboarding packet.' });
+  if (decision === 'returned' && !managerNote) {
+    return fail(400, { error: 'Explain what the employee needs to correct.' });
+  }
+
+  const packet = await db
+    .prepare(
+      `
+      SELECT id, user_id, status
+      FROM employee_onboarding_packages
+      WHERE id = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(packageId, businessId)
+    .first<{ id: string; user_id: string; status: EmployeeOnboardingPackage['status'] }>();
+  if (!packet) return fail(404, { error: 'Onboarding packet not found.' });
+  if (!(await requireSensitiveOnboardingReviewer(db, businessId, packet.user_id, locals))) {
+    return fail(403, { error: 'Sensitive employee data access is required to review onboarding packets.' });
+  }
+  if (packet.status !== 'submitted') {
+    return fail(400, { error: 'Only a submitted packet can be accepted or returned.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (decision === 'approved') {
+    const packetItemRows = await db
+      .prepare(
+        `
+        SELECT
+          id, package_id, business_id, user_id, item_type, form_key, title, status
+        FROM employee_onboarding_items
+        WHERE package_id = ? AND business_id = ? AND user_id = ?
+        `
+      )
+      .bind(packageId, businessId, packet.user_id)
+      .all<
+        Pick<
+          EmployeeOnboardingItem,
+          'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title' | 'status'
+        >
+      >();
+    const packetItems = packetItemRows.results ?? [];
+    if (packetItems.length === 0 || packetItems.some((item) => item.status !== 'submitted')) {
+      return fail(400, { error: 'Every packet item must be submitted before acceptance.' });
+    }
+    if (packetItems.some((item) => item.form_key === 'federal_i9')) {
+      const verification = await db
+        .prepare(
+          `
+          SELECT status
+          FROM employee_i9_verifications
+          WHERE business_id = ? AND package_id = ? AND user_id = ?
+          LIMIT 1
+          `
+        )
+        .bind(businessId, packageId, packet.user_id)
+        .first<{ status: string }>();
+      if (verification?.status !== 'verified') {
+        return fail(400, { error: 'Complete the employer I-9 physical verification before accepting this packet.' });
+      }
+    }
+
+    const sensitiveRecordStatements = packetItems.flatMap((item) => {
+      const classification = classifyOnboardingComplianceItem(item);
+      if (!classification.sensitiveScope || !classification.sensitiveRecordType) return [];
+
+      return [
+        db
+          .prepare(
+            `
+            INSERT OR IGNORE INTO employee_onboarding_sensitive_snapshots (
+              id, business_id, user_id, package_id, onboarding_item_id, source_vault_id,
+              record_scope, record_type, encrypted_payload, payload_iv, payload_tag,
+              key_version, encryption_algorithm, display_last_four, accepted_at,
+              accepted_by, locked_at
+            )
+            SELECT
+              ?, v.business_id, v.user_id, ?, ?, v.id,
+              v.record_scope, v.record_type, v.encrypted_payload, v.payload_iv, v.payload_tag,
+              v.key_version, v.encryption_algorithm, v.display_last_four, ?, ?, ?
+            FROM employee_sensitive_record_vault v
+            WHERE v.business_id = ?
+              AND v.user_id = ?
+              AND v.record_scope = ?
+              AND v.record_type = ?
+              AND COALESCE(v.encrypted_payload, '') <> ''
+            `
+          )
+          .bind(
+            crypto.randomUUID(),
+            packageId,
+            item.id,
+            now,
+            locals.userId ?? null,
+            now,
+            businessId,
+            packet.user_id,
+            classification.sensitiveScope,
+            classification.sensitiveRecordType
+          ),
+        db
+          .prepare(
+            `
+            UPDATE employee_sensitive_record_vault
+            SET locked_at = ?,
+              status = CASE WHEN status = 'empty' THEN status ELSE 'accepted' END,
+              updated_at = ?
+            WHERE business_id = ?
+              AND user_id = ?
+              AND record_scope = ?
+              AND record_type = ?
+            `
+          )
+          .bind(
+            now,
+            now,
+            businessId,
+            packet.user_id,
+            classification.sensitiveScope,
+            classification.sensitiveRecordType
+          )
+      ];
+    });
+
+    await db.batch([
+      db
+        .prepare(
+          `
+          UPDATE employee_onboarding_items
+          SET status = 'approved', reviewed_at = ?, reviewed_by = ?, manager_note = ''
+          WHERE package_id = ? AND business_id = ? AND user_id = ?
+          `
+        )
+        .bind(now, locals.userId ?? null, packageId, businessId, packet.user_id),
+      db
+        .prepare(
+          `
+          UPDATE employee_onboarding_packages
+          SET status = 'approved', approved_at = ?, approved_by = ?, locked_at = ?,
+            completed_at = COALESCE(completed_at, ?), manager_note = '', updated_at = ?
+          WHERE id = ? AND business_id = ?
+          `
+        )
+        .bind(now, locals.userId ?? null, now, now, now, packageId, businessId),
+      db
+        .prepare(
+          `
+          UPDATE employee_compliance_documents
+          SET status = 'approved', reviewed_at = ?, reviewed_by = ?, locked_at = ?, updated_at = ?
+          WHERE business_id = ? AND user_id = ?
+            AND onboarding_item_id IN (
+              SELECT id FROM employee_onboarding_items WHERE package_id = ? AND business_id = ?
+            )
+          `
+        )
+        .bind(now, locals.userId ?? null, now, now, businessId, packet.user_id, packageId, businessId),
+      ...sensitiveRecordStatements,
+      db
+        .prepare(
+          `
+          UPDATE employee_employment_records
+          SET employment_status = CASE WHEN employment_status = 'terminated' THEN employment_status ELSE 'active' END,
+            updated_at = ?, updated_by = ?
+          WHERE business_id = ? AND user_id = ? AND onboarding_package_id = ?
+          `
+        )
+        .bind(now, locals.userId ?? null, businessId, packet.user_id, packageId)
+    ]);
+  } else {
+    await db
+      .prepare(
+        `
+        UPDATE employee_onboarding_packages
+        SET status = 'returned', returned_at = ?, returned_by = ?, manager_note = ?, updated_at = ?
+        WHERE id = ? AND business_id = ?
+        `
+      )
+      .bind(now, locals.userId ?? null, managerNote, now, packageId, businessId)
+      .run();
+  }
+
+  await writeAuditLog(db, {
+    action: decision === 'approved' ? 'employee_onboarding_packet_approved' : 'employee_onboarding_packet_returned',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: packet.user_id,
+    metadata: { packageId, managerNote: decision === 'returned' ? managerNote : undefined }
+  });
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: decision === 'approved' ? 'onboarding.package.approved' : 'onboarding.package.returned',
+      category: 'onboarding',
+      actorUserId: locals.userId ?? null,
+      targetUserId: packet.user_id,
+      subjectType: 'employee_onboarding_package',
+      subjectId: packageId,
+      title: decision === 'approved' ? 'Onboarding approved' : 'Onboarding returned',
+      payload: decision === 'returned' ? { managerNote } : {}
+    },
+    request
+  );
   return {
     success: true,
-    message: status === 'approved' ? 'Onboarding item approved.' : 'Changes requested.'
+    message: decision === 'approved' ? 'Onboarding packet accepted.' : 'Onboarding packet returned.'
   };
 }
 
-export const approveEmployeeOnboardingItem = (request: Request, locals: App.Locals) =>
-  reviewEmployeeOnboardingItem(request, locals, 'approved');
+export const approveEmployeeOnboardingPackage = (request: Request, locals: App.Locals) =>
+  reviewEmployeeOnboardingPacket(request, locals, 'approved');
 
-export const requestEmployeeOnboardingChanges = (request: Request, locals: App.Locals) =>
-  reviewEmployeeOnboardingItem(request, locals, 'needs_changes');
+export const returnEmployeeOnboardingPackage = (request: Request, locals: App.Locals) =>
+  reviewEmployeeOnboardingPacket(request, locals, 'returned');
 
 export async function createUserInvite(
   request: Request,
@@ -6704,7 +7340,7 @@ export async function createUserInvite(
   const payType = payTypeRaw === 'hourly' || payTypeRaw === 'salary' ? payTypeRaw : '';
   const onboardingRequested = String(formData.get('onboarding_required') ?? '0') === '1';
   const onboardingRequired =
-    onboardingRequested && accessType !== 'owner' && employmentType !== 'contractor' ? 1 : 0;
+    onboardingRequested && employmentType !== 'contractor' ? 1 : 0;
   if (!email || !email.includes('@')) {
     return fail(400, { error: 'A valid email is required.' });
   }

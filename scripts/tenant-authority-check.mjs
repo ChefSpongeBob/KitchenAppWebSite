@@ -16,6 +16,7 @@ function assertCheck(name, condition, detail) {
 const hooks = read('src/hooks.server.ts');
 const login = read('src/routes/login/+page.server.ts');
 const admin = read('src/lib/server/admin.ts');
+const employeeDetail = read('src/routes/admin/users/[id]/+page.svelte');
 const roles = read('src/lib/auth/roles.ts');
 
 assertCheck(
@@ -44,6 +45,16 @@ assertCheck(
   'admin users list does not fall back to global role',
   !/COALESCE\(bu\.role,\s*u\.role/.test(admin),
   'Admin user lists should display the business membership role, not global users.role.'
+);
+
+assertCheck(
+  'employee deletion is tenant-safe and leaves the deleted profile route',
+  admin.includes('const hasOtherMembership = await hasOtherBusinessMembership(db, userId, businessId);') &&
+    admin.includes('await db.batch(statements);') &&
+    admin.includes('targetUserId: hasOtherMembership ? userId : null') &&
+    admin.includes("throw redirect(303, '/admin/users');") &&
+    employeeDetail.includes('use:enhance={deleteEmployee}'),
+  'Employee deletion must atomically remove only the current membership, preserve accounts used by other businesses, avoid dangling audit references, and redirect to the staff roster.'
 );
 
 assertCheck(

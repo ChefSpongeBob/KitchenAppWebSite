@@ -1,16 +1,16 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
 ## Summary
 
-- Tables inventoried: 94
-- Tables with `business_id`: 78
+- Tables inventoried: 98
+- Tables with `business_id`: 82
 - Tables with approved alternate tenant columns: 2
 - Approved global/system/root tables: 14
-- Tables with `user_id`: 33
+- Tables with `user_id`: 35
 
 ## Inventory Caveats
 
@@ -34,6 +34,7 @@ Use these column names exactly when scoping business data:
 - `announcements.business_id`
 - `app_feature_flags_business.business_id`
 - `business_invites.business_id`
+- `business_hr_settings.business_id`
 - `business_lifecycle_snapshots.business_id`
 - `business_store_entitlements.business_id`
 - `business_trials.business_id`
@@ -49,9 +50,12 @@ Use these column names exactly when scoping business data:
 - `employee_compliance_requirements.business_id`
 - `employee_document_access_audit.business_id`
 - `employee_employment_records.business_id`
+- `employee_i9_document_copies.business_id`
+- `employee_i9_verifications.business_id`
 - `employee_onboarding_invite_requirements.business_id`
 - `employee_onboarding_items.business_id`
 - `employee_onboarding_packages.business_id`
+- `employee_onboarding_sensitive_snapshots.business_id`
 - `employee_onboarding_template_items.business_id`
 - `employee_pos_permissions.business_id`
 - `employee_profile_edit_requests.business_id`
@@ -123,7 +127,7 @@ Known nonstandard tenant columns:
 
 Validated by `npm.cmd run test:db-governance`.
 
-- `tenant_data`: 78 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
+- `tenant_data`: 79 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
 - `alternate_tenant_column`: `account_deletion_requests.requester_business_id`, `iot_device_inventory.claimed_business_id`.
 - `approved_global_system`: `app_feature_flags`, `businesses`, `d1_migrations`, `devices`, `iot_ingest_guard`, `password_resets`, `security_rate_limits`, `sessions`, `store_products`, `store_webhook_events`, `trial_denials`, `user_invites`, `user_preferences`, `users`.
 
@@ -173,7 +177,7 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/api/billing/app-store-notifications` -> `src/routes/api/billing/app-store-notifications/+server.ts` -> `store_webhook_events` (insert/update)
 - `/api/billing/google-play-notifications` -> `src/routes/api/billing/google-play-notifications/+server.ts` -> `store_webhook_events` (insert/update)
 - `/api/documents/media/*key` -> `src/routes/api/documents/media/[...key]/+server.ts` -> `businesses` (select), `documents` (select), `employee_onboarding_items` (select), `employee_onboarding_template_items` (select)
-- `/api/internal/schema-readiness` -> `src/routes/api/internal/schema-readiness/+server.ts` -> `account_audit_logs` (reference), `account_deletion_requests` (reference), `business_invites` (reference), `business_lifecycle_snapshots` (reference), `business_users` (reference), `businesses` (reference), `devices` (reference), `employee_certifications` (reference), `employee_compliance_documents` (reference), `employee_compliance_requirements` (reference), `employee_document_access_audit` (reference), `employee_employment_records` (reference), `employee_onboarding_invite_requirements` (reference), `employee_onboarding_items` (reference), `employee_onboarding_packages` (reference), `employee_onboarding_template_items` (reference), `employee_pos_permissions` (reference), `employee_role_permissions` (reference), `employee_sensitive_record_audit` (reference), `employee_sensitive_record_vault` (reference), `employee_verification_checks` (reference), `iot_device_inventory` (reference), `operational_event_delivery_attempts` (reference), `operational_events` (reference), `password_resets` (reference), `push_notification_devices` (reference), `security_rate_limits` (reference), `sessions` (reference), `store_products` (reference), `store_webhook_events` (reference), `temperature_alert_events` (reference), `temperature_sensor_nodes` (reference), `temperature_sensor_settings` (reference), `trial_identity_claims` (reference), `user_preferences` (reference), `users` (reference), `waste_logs` (reference)
+- `/api/internal/schema-readiness` -> `src/routes/api/internal/schema-readiness/+server.ts` -> `account_audit_logs` (reference), `account_deletion_requests` (reference), `business_invites` (reference), `business_lifecycle_snapshots` (reference), `business_users` (reference), `businesses` (reference), `devices` (reference), `employee_certifications` (reference), `employee_compliance_documents` (reference), `employee_compliance_requirements` (reference), `employee_document_access_audit` (reference), `employee_employment_records` (reference), `employee_onboarding_invite_requirements` (reference), `employee_onboarding_items` (reference), `employee_onboarding_packages` (reference), `employee_onboarding_sensitive_snapshots` (reference), `employee_onboarding_template_items` (reference), `employee_pos_permissions` (reference), `employee_role_permissions` (reference), `employee_sensitive_record_audit` (reference), `employee_sensitive_record_vault` (reference), `employee_verification_checks` (reference), `iot_device_inventory` (reference), `operational_event_delivery_attempts` (reference), `operational_events` (reference), `password_resets` (reference), `push_notification_devices` (reference), `security_rate_limits` (reference), `sessions` (reference), `store_products` (reference), `store_webhook_events` (reference), `temperature_alert_events` (reference), `temperature_sensor_nodes` (reference), `temperature_sensor_settings` (reference), `trial_identity_claims` (reference), `user_preferences` (reference), `users` (reference), `waste_logs` (reference)
 - `/api/temps` -> `src/routes/api/temps/+server.ts` -> `temps` (insert/select)
 - `/api/whiteboard` -> `src/routes/api/whiteboard/+server.ts` -> `users` (reference), `whiteboard_posts` (insert/select/update), `whiteboard_review` (insert/select), `whiteboard_votes` (insert/select)
 - `/app` -> `src/routes/app/+page.server.ts` -> `announcements` (reference), `daily_specials` (reference), `documents` (select), `employee_spotlight` (reference), `sensor_nodes` (select), `temps` (select), `todo_assignments` (select), `todos` (select), `users` (select), `whiteboard_posts` (select), `whiteboard_review` (select)
@@ -386,6 +390,21 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 **Code Usage**
   - `scripts/ensure-tenant-columns.mjs` [reference]
   - `src/lib/server/appFeatures.ts` [ddl, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### business_hr_settings
+
+**Columns**
+  - `business_id` TEXT (PK)
+  - `retain_i9_document_copies` INTEGER (NOT NULL, DEFAULT 0)
+  - `everify_participant` INTEGER (NOT NULL, DEFAULT 0)
+  - `updated_at` INTEGER (NOT NULL)
+  - `updated_by` TEXT
+
+**Code Usage**
+  - `/admin/onboarding` `src/routes/admin/onboarding/+page.server.ts` [select, update]
+  - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `src/lib/server/admin.ts` [ddl, insert, select, update]
   - `src/lib/server/tenant.ts` [reference]
 
 ### business_invites
@@ -852,6 +871,54 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `scripts/hr-onboarding-check.mjs` [insert]
   - `src/lib/server/admin.ts` [insert, select, update]
 
+### employee_i9_document_copies
+
+**Columns**
+  - `id` TEXT (PK)
+  - `business_id` TEXT (NOT NULL)
+  - `user_id` TEXT (NOT NULL)
+  - `verification_id` TEXT (NOT NULL)
+  - `file_url` TEXT (NOT NULL)
+  - `file_name` TEXT (NOT NULL)
+  - `uploaded_at` INTEGER (NOT NULL)
+  - `uploaded_by` TEXT
+
+**Code Usage**
+  - `/admin/users/[id]` `src/routes/admin/users/[id]/+page.server.ts` [insert, select]
+  - `/api/documents/media/*key` `src/routes/api/documents/media/[...key]/+server.ts` [select]
+  - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `src/lib/server/admin.ts` [ddl, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### employee_i9_verifications
+
+**Columns**
+  - `id` TEXT (PK)
+  - `business_id` TEXT (NOT NULL)
+  - `user_id` TEXT (NOT NULL)
+  - `package_id` TEXT (NOT NULL)
+  - `status` TEXT (NOT NULL, DEFAULT 'pending')
+  - `examination_method` TEXT (NOT NULL, DEFAULT 'physical')
+  - `document_selection` TEXT (NOT NULL, DEFAULT '')
+  - `photo_matching_document_present` INTEGER (NOT NULL, DEFAULT 0)
+  - `employee_first_day` TEXT (NOT NULL, DEFAULT '')
+  - `examined_at` TEXT (NOT NULL, DEFAULT '')
+  - `verifier_user_id` TEXT
+  - `verifier_name` TEXT (NOT NULL, DEFAULT '')
+  - `verifier_title` TEXT (NOT NULL, DEFAULT '')
+  - `attested_at` INTEGER
+  - `completed_i9_file_url` TEXT (NOT NULL, DEFAULT '')
+  - `completed_i9_file_name` TEXT (NOT NULL, DEFAULT '')
+  - `created_at` INTEGER (NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+
+**Code Usage**
+  - `/admin/users/[id]` `src/routes/admin/users/[id]/+page.server.ts` [insert, select, update]
+  - `/api/documents/media/*key` `src/routes/api/documents/media/[...key]/+server.ts` [select]
+  - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `src/lib/server/admin.ts` [ddl, insert, select, update]
+  - `src/lib/server/tenant.ts` [reference]
+
 ### employee_onboarding_invite_requirements
 
 **Columns**
@@ -892,6 +959,7 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 **Code Usage**
   - `/api/documents/media/*key` `src/routes/api/documents/media/[...key]/+server.ts` [select]
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `/onboarding` `src/routes/onboarding/+page.server.ts` [select, update]
   - `scripts/ensure-tenant-columns.mjs` [reference]
   - `scripts/hr-onboarding-check.mjs` [reference]
   - `src/lib/server/admin.ts` [ddl, insert, select, update]
@@ -913,13 +981,47 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `created_by` TEXT
   - `updated_at` INTEGER (NOT NULL)
   - `manager_note` TEXT (NOT NULL, DEFAULT '')
+  - `submitted_at` INTEGER
+  - `returned_at` INTEGER
+  - `returned_by` TEXT
+  - `locked_at` INTEGER
+  - `version` INTEGER (NOT NULL, DEFAULT 1)
+  - `supersedes_package_id` TEXT
 
 **Code Usage**
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `/onboarding` `src/routes/onboarding/+page.server.ts` [select, update]
   - `scripts/ensure-tenant-columns.mjs` [reference]
   - `scripts/hr-onboarding-check.mjs` [reference]
   - `src/lib/server/admin.ts` [ddl, insert, select, update]
   - `src/lib/server/reports.ts` [select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### employee_onboarding_sensitive_snapshots
+
+**Columns**
+  - `id` TEXT (PK)
+  - `business_id` TEXT (NOT NULL)
+  - `user_id` TEXT (NOT NULL)
+  - `package_id` TEXT (NOT NULL)
+  - `onboarding_item_id` TEXT (NOT NULL)
+  - `source_vault_id` TEXT
+  - `record_scope` TEXT (NOT NULL)
+  - `record_type` TEXT (NOT NULL)
+  - `encrypted_payload` TEXT (NOT NULL)
+  - `payload_iv` TEXT (NOT NULL)
+  - `payload_tag` TEXT (NOT NULL, DEFAULT '')
+  - `key_version` TEXT (NOT NULL)
+  - `encryption_algorithm` TEXT (NOT NULL)
+  - `display_last_four` TEXT (NOT NULL, DEFAULT '')
+  - `accepted_at` INTEGER (NOT NULL)
+  - `accepted_by` TEXT
+  - `locked_at` INTEGER (NOT NULL)
+
+**Code Usage**
+  - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `scripts/hr-onboarding-check.mjs` [reference]
+  - `src/lib/server/admin.ts` [ddl, insert, select]
   - `src/lib/server/tenant.ts` [reference]
 
 ### employee_onboarding_template_items

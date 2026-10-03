@@ -45,12 +45,13 @@ expect('src/routes/register/+page.server.ts', 'employee invite onboarding skips 
   source.includes('ensureEmployeeOnboardingRequirement')
 );
 
-expect('src/lib/server/admin.ts', 'owner invites are owner-only and do not require employee packets by default', (source) =>
+expect('src/lib/server/admin.ts', 'owner invites are owner-only with explicitly optional onboarding packets', (source) =>
   source.includes("accessType === 'owner' && !isOwnerRole(locals.businessRole)") &&
   source.includes("Only the owner can invite another owner.") &&
   source.includes("formData.get('onboarding_required')") &&
-  source.includes("onboardingRequested && accessType !== 'owner' && employmentType !== 'contractor'") &&
-  source.includes('onboardingRequired === 1')
+  source.includes("onboardingRequested && employmentType !== 'contractor'") &&
+  source.includes('allowOwnerPacket: true') &&
+  source.includes('!options.allowOwnerPacket')
 );
 
 expect('src/routes/admin/onboarding/+page.svelte', 'employee packets are explicitly selected during invite', (source) =>
@@ -59,8 +60,11 @@ expect('src/routes/admin/onboarding/+page.svelte', 'employee packets are explici
   !source.includes('name="packet_item_ids"')
 );
 
-expect('src/routes/register/+page.server.ts', 'invited owners are not auto-created as employees', (source) =>
-  source.includes("if (invitedBusinessRole !== 'owner')") &&
+expect('src/routes/register/+page.server.ts', 'invited owners only receive employment onboarding when explicitly selected', (source) =>
+  source.includes("if (invitedBusinessRole !== 'owner' || businessInvite.onboarding_required === 1)") &&
+  source.includes("invitedBusinessRole === 'owner' ? 'active' : 'onboarding'") &&
+  source.includes("invitedBusinessRole === 'owner' ? 'owner' : businessInvite.employment_type") &&
+  source.includes("allowOwnerPacket: invitedBusinessRole === 'owner'") &&
   source.includes('INSERT INTO employee_employment_records') &&
   source.includes('recordLegalAgreementAcceptance') &&
   source.includes('if (!inviteCode)')
@@ -97,8 +101,15 @@ expect('src/routes/register/+page.server.ts', 'invite registration saves persona
   source.includes('emergencyContactPhone ||')
 );
 
-expect('src/routes/register/+page.server.ts', 'completed invite registration opens the themed login confirmation', (source) =>
-  source.includes("inviteCode ? '/login?registered=success&onboarding=1' : '/welcome/admin'")
+expect('src/routes/register/+page.server.ts', 'completed invite registration opens the employee welcome step', (source) =>
+  source.includes('/register/welcome?onboarding=') &&
+  source.includes("businessInvite?.onboarding_required === 1 ? '1' : '0'")
+);
+
+expect('src/routes/register/welcome/+page.svelte', 'employee welcome step provides install and browser paths', (source) =>
+  source.includes('04 / 04') &&
+  source.includes('Continue in browser') &&
+  source.includes('/login?registered=success&onboarding=1')
 );
 
 expect('src/routes/login/+page.svelte', 'registration confirmation uses Crimini branding and the real login flow', (source) =>
@@ -119,14 +130,11 @@ expect('src/routes/register/+page.server.ts', 'register validation returns user 
   source.includes("return registerFailure(400, String(passwordError.data?.error ?? 'Enter a valid password.'), 'security', submittedValues);")
 );
 
-expect('src/lib/server/sensitive.ts', 'sensitive HR forms are encrypted and audited', (source) =>
+expect('src/lib/server/sensitive.ts', 'structured sensitive HR records are encrypted and audited', (source) =>
   source.includes('AES-GCM') &&
   source.includes('sensitiveFormKeys') &&
   source.includes('personal_information') &&
   source.includes('payroll_setup') &&
-  source.includes('federal_i9') &&
-  source.includes('federal_w4') &&
-  source.includes('state_withholding') &&
   source.includes('employee_sensitive_record_audit') &&
   source.includes("'view_sensitive_employee_data'")
 );
@@ -138,17 +146,51 @@ expect('src/lib/server/admin.ts', 'sensitive onboarding submissions store redact
   source.includes('sensitiveConfigurationFailure')
 );
 
-expect('src/lib/server/admin.ts', 'onboarding review writes compliance docs and operational events', (source) =>
-  source.includes('approveEmployeeOnboardingItem') &&
-  source.includes('requestEmployeeOnboardingChanges') &&
+expect('src/lib/server/admin.ts', 'legal forms use official document artifacts instead of custom web-form replicas', (source) =>
+  source.includes("item_type: 'document'") &&
+  source.includes("form_key: 'federal_i9'") &&
+  source.includes("form_key: 'federal_w4'") &&
+  source.includes("['federal_i9', 'federal_w4', 'state_withholding'].includes(normalized)") &&
+  !source.includes("if (formKey === 'federal_i9') {\n    const fields") &&
+  !source.includes("if (formKey === 'federal_w4') {\n    const fields")
+);
+
+expect('src/lib/server/admin.ts', 'onboarding is reviewed and locked as one packet', (source) =>
+  source.includes('submitEmployeeOnboardingPacket') &&
+  source.includes('approveEmployeeOnboardingPackage') &&
+  source.includes('returnEmployeeOnboardingPackage') &&
+  source.includes("SET status = 'approved', approved_at = ?, approved_by = ?, locked_at = ?") &&
   source.includes('upsertComplianceDocumentForOnboardingItem') &&
-  source.includes('employee_onboarding_item_approved') &&
-  source.includes('employee_onboarding_item_changes_requested')
+  source.includes('employee_onboarding_packet_approved') &&
+  source.includes('employee_onboarding_packet_returned') &&
+  !source.includes('approveEmployeeOnboardingItem') &&
+  !source.includes('requestEmployeeOnboardingChanges')
+);
+
+expect('src/lib/server/admin.ts', 'accepted sensitive packet data is preserved as an immutable versioned snapshot', (source) =>
+  source.includes('employee_onboarding_sensitive_snapshots') &&
+  source.includes('INSERT OR IGNORE INTO employee_onboarding_sensitive_snapshots') &&
+  source.includes('AND onboarding_item_id = ?') &&
+  source.includes("AND status IN ('active', 'accepted')") &&
+  source.includes('locked_at = NULL') &&
+  source.includes('immutableSnapshot')
+);
+
+expect('src/lib/server/admin.ts', 'I-9 employer review records physical inspection and document-copy policy', (source) =>
+  source.includes('verifyEmployeeI9') &&
+  source.includes("examination_method = 'physical'") &&
+  source.includes('employee_i9_verifications') &&
+  source.includes('employee_i9_document_copies') &&
+  source.includes('retain_i9_document_copies') &&
+  source.includes('everify_participant') &&
+  source.includes('employee_i9_physically_verified')
 );
 
 expect('src/routes/api/documents/media/[...key]/+server.ts', 'employee onboarding media is private and audited', (source) =>
   source.includes("key.includes('/employee-onboarding/')") &&
   source.includes('canAccessEmployeeSensitiveData') &&
+  source.includes('employee_i9_verifications') &&
+  source.includes('employee_i9_document_copies') &&
   source.includes('employee_onboarding_media_read') &&
   source.includes('hasBusinessCapability') &&
   source.includes("'view_sensitive_employee_data'") &&
@@ -158,24 +200,43 @@ expect('src/routes/api/documents/media/[...key]/+server.ts', 'employee onboardin
 expect('src/routes/admin/users/[id]/+page.server.ts', 'employee profiles load onboarding with audited sensitive reads', (source) =>
   source.includes('loadEmployeeOnboarding(db, employee.id, locals.businessId') &&
   source.includes('auditSensitiveRead: true') &&
-  source.includes('approve_onboarding_item') &&
-  source.includes('request_onboarding_changes')
+  source.includes('verify_i9') &&
+  source.includes('approve_onboarding_packet') &&
+  source.includes('return_onboarding_packet') &&
+  !source.includes('save_profile')
 );
 
-expect('src/routes/settings/+page.server.ts', 'employees submit onboarding from profile settings', (source) =>
-  source.includes('loadEmployeeOnboarding(db, locals.userId, businessId') &&
-  source.includes('submitEmployeeOnboardingItem(request, locals, platform?.env)')
+expect('src/routes/onboarding/+page.server.ts', 'employees submit tenant-scoped packets from the dedicated onboarding route', (source) =>
+  source.includes('loadEmployeeOnboarding') &&
+  source.includes('submitEmployeeOnboardingItem') &&
+  source.includes('submitEmployeeOnboardingPacket') &&
+  source.includes('locals.businessId') &&
+  source.includes('locals.userId')
+);
+
+expect('src/routes/onboarding/+page.svelte', 'employee packet uses official federal forms and one final submission', (source) =>
+  source.includes('https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf') &&
+  source.includes('https://www.irs.gov/pub/irs-pdf/fw4.pdf') &&
+  source.includes('Submit Packet') &&
+  source.includes("['submitted', 'approved'].includes(packet.status)") &&
+  source.includes('A new packet is required for changes.')
+);
+
+expect('src/routes/settings/+page.server.ts', 'ordinary profile settings cannot edit accepted legal identity fields', (source) =>
+  !source.includes("profileText(formData, 'real_name'") &&
+  !source.includes('submitEmployeeOnboardingItem') &&
+  !source.includes('loadEmployeeOnboarding')
+);
+
+expect('src/routes/+layout.svelte', 'employee onboarding uses app chrome and is available for assigned packets', (source) =>
+  source.includes('"/onboarding"') &&
+  source.includes('hasEmployeeOnboarding') &&
+  source.includes('employeePacketNav')
 );
 
 expect('src/hooks.server.ts', 'pending onboarding does not trap employees on profile settings', (source) =>
   !source.includes("throw redirect(303, '/settings?tab=onboarding')") &&
   !source.includes("event: 'employee_onboarding_gate'")
-);
-
-expect('src/routes/settings/+page.svelte', 'registration profile items are read-only after submission', (source) =>
-  source.includes("item.status === 'submitted' || item.status === 'approved'") &&
-  source.includes('Saved during account registration. Awaiting manager review.') &&
-  source.includes('{#if isSubmitted(item)}')
 );
 
 expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness includes onboarding and sensitive HR tables', (source) =>
@@ -185,8 +246,23 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
   source.includes('idx_employee_onboarding_packages_user') &&
   source.includes('idx_employee_onboarding_items_package') &&
   source.includes('idx_employee_onboarding_template_business') &&
+  source.includes('business_hr_settings') &&
+  source.includes('employee_i9_verifications') &&
+  source.includes('employee_i9_document_copies') &&
+  source.includes('employee_onboarding_sensitive_snapshots') &&
+  source.includes('idx_employee_onboarding_packages_review') &&
+  source.includes('idx_employee_onboarding_sensitive_snapshot_item') &&
+  source.includes('idx_employee_onboarding_sensitive_snapshot_package') &&
   source.includes('employee_sensitive_record_vault') &&
   source.includes('employee_sensitive_record_audit')
+);
+
+expect('migrations/0098_employee_onboarding_legal_workflow.sql', 'legal onboarding schema is versioned and tenant-scoped', (source) =>
+  source.includes('CREATE TABLE IF NOT EXISTS business_hr_settings') &&
+  source.includes('CREATE TABLE IF NOT EXISTS employee_i9_verifications') &&
+  source.includes('CREATE TABLE IF NOT EXISTS employee_i9_document_copies') &&
+  source.includes('CREATE TABLE IF NOT EXISTS employee_onboarding_sensitive_snapshots') &&
+  source.includes("WHERE form_key IN ('federal_i9', 'federal_w4', 'state_withholding')")
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'Phase 10 manual testing notes are tracked', (source) =>

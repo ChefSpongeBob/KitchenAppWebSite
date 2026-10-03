@@ -106,9 +106,11 @@ expect('src/lib/server/operationalEvents.ts', 'list event email routing covers s
 
 expect('src/lib/server/admin.ts', 'employee onboarding records operational events', (source) =>
   source.includes('onboarding.package.sent') &&
-  source.includes('onboarding.item.submitted') &&
-  source.includes('onboarding.item.approved') &&
-  source.includes('onboarding.item.changes_requested')
+  source.includes('onboarding.package.submitted') &&
+  source.includes('onboarding.package.approved') &&
+  source.includes('onboarding.package.returned') &&
+  !source.includes("eventType: 'onboarding.item.approved'") &&
+  !source.includes("eventType: 'onboarding.item.changes_requested'")
 );
 
 expect('src/routes/api/temps/+server.ts', 'temperature ingest does not create operational email events', (source) =>

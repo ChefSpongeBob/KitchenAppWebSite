@@ -47,6 +47,7 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - R2 buckets: `crimini-doc-media`, `crimini-camera-media`
 - Production base URL: `APP_BASE_URL=https://criminiops.com`
 - Required secrets include `SMOKE_INTERNAL_TOKEN`, `SENSITIVE_DATA_KEY`, `PASSWORD_PEPPER`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_STORE_PRIVATE_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `BILLING_WEBHOOK_TOKEN`, `TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY`.
+- Set `APP_STORE_DOWNLOAD_URL` and `GOOGLE_PLAY_DOWNLOAD_URL` only after the real public store listings exist; employee welcome screens never use placeholder listing links.
 - Private testing lock: keep marketing public, set `PUBLIC_SIGNUP_ENABLED=false`, and set `OWNER_SIGNUP_ALLOWLIST` to comma-separated owner test emails. Public tenant creation stays closed unless explicitly enabled or allowlisted; invited users can still register through valid active-tenant invites.
 - Login Turnstile is enabled automatically when both Turnstile secrets are present; local/dev remains open when they are absent.
 - Cloudflare edge security before public launch: enable Managed WAF rules, OWASP managed rules where available, and rate limits/challenges for `/login`, `/register`, `/forgot-password`, `/account-deletion`, and public API abuse paths. Do not challenge token/device-auth service paths: billing webhooks, smoke/schema readiness, temperature ingest, camera ingest, and operational-event processing.
@@ -224,6 +225,9 @@ This is the only active completion list. Work it in order and do not create scat
 9. Invite, onboarding, and HR
 - Test owner, manager, employee, consultant, and contractor invite flows.
 - Confirm employee/manager invite registration skips business pricing, creates correct onboarding packets, stores packet submissions, supports review/change/approval, and audits sensitive HR media access.
+- Confirm invited employees receive the four-step light-theme flow (name/birthday, address, contact/login, welcome), retain completed fields after a validation error, and enter the exact inviting business.
+- Confirm browser/native sign-in routes employees with an active packet to the non-blocking Profile & Settings onboarding prompt, while employees without a packet enter the dashboard normally.
+- Confirm the welcome screen uses only configured store listing URLs, browser installation remains available, and secure packet access remains at `/onboarding`.
 - Legal/payroll review is still required for I-9, W-4, state forms, contractor handling, retention, and employment documentation wording.
 
 10. Authentication and account lifecycle
@@ -277,6 +281,7 @@ Run these with at least two private validation businesses before entering real r
 - Scheduling: test draft save, publish, edits, duplicate day, templates, labor targets, open shifts, offers, time off, approvals, My Schedule, notifications, and exports.
 - Lists and content: test checklist, prep, inventory, order lists, item attachments, recipes, SOPs, docs, menus, uploads, replacements, deletes, and CSV exports.
 - HR: test invite links, onboarding packets, submissions, review/change/approval, sensitive media, audit logs, and restricted access.
+- Employee registration: test all four invite steps on desktop/mobile, email and SMS preference storage, password reset-in-place behavior, profile hydration, welcome downloads, and Profile & Settings handoff.
 - Billing: test native purchase, restore, cancellation, refund/revoke, renewal, grace, hold, past-due, webhook processing, and entitlement changes.
 - Temperature: test serial claim, gateway ingest, thresholds, stale/offline processor, wrong-tenant rejection, dashboard, polling, and temperature CSVs.
 - Reports: test schedule, requests, temperature, onboarding, waste, and list reports by role, tenant, row limit, and spreadsheet safety.

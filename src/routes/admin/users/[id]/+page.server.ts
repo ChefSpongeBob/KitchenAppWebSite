@@ -1,25 +1,26 @@
 import type { Actions, PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import {
-  approveEmployeeOnboardingItem,
+  approveEmployeeOnboardingPackage,
   addEmployeeCertification,
   addEmployeeVerificationCheck,
   deleteEmployeeCertification,
   deleteUser,
   loadEmployeeOnboarding,
+  loadBusinessHrSettings,
   loadEmployeeHrPosAccess,
   loadAdminEmployeeProfile,
   loadAdminUsers,
-  requestEmployeeOnboardingChanges,
+  returnEmployeeOnboardingPackage,
   requireAdmin,
-  saveEmployeeProfile,
   saveEmployeePosPermissions,
   sendEmployeeOnboardingPackage,
   toggleEmployeeHrAccess,
   toggleScheduleDepartmentApproval,
   updateEmployeeVerificationCheck,
   updateUserBusinessPermissions,
-  updateUserCapabilityOverrides
+  updateUserCapabilityOverrides,
+  verifyEmployeeI9
 } from '$lib/server/admin';
 import { loadScheduleDepartments } from '$lib/server/schedules';
 import { canAccessEmployeeSensitiveData } from '$lib/server/sensitive';
@@ -68,7 +69,10 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
       'manage_permissions',
       locals.businessCapabilities
     );
-  const hrPos = canManageHrPos ? await loadEmployeeHrPosAccess(db, employee.id, locals.businessId) : null;
+  const loadedHrPos = canManageHrPos ? await loadEmployeeHrPosAccess(db, employee.id, locals.businessId) : null;
+  const hrPos = loadedHrPos && !canReadSensitiveProfile
+    ? { ...loadedHrPos, documentAudit: [], complianceDocuments: [] }
+    : loadedHrPos;
   const actorIsOwner = normalizeBusinessRole(locals.businessRole) === 'owner';
   const targetRole = normalizeBusinessRole(employee.role);
   const canEditPermissions =
@@ -106,8 +110,16 @@ export const load: PageServerLoad = async ({ locals, params, platform }) => {
           emergency_contact_relationship: ''
         },
     onboarding,
+    hrSettings: await loadBusinessHrSettings(db, locals.businessId),
     hrPos,
+    canReadSensitiveProfile,
     canManageHrPos,
+    canManageOnboarding: hasBusinessCapability(
+      locals.businessRole,
+      locals.businessPermissionTemplate,
+      'manage_onboarding',
+      locals.businessCapabilities
+    ),
     departments: await loadScheduleDepartments(db, locals.businessId),
     canEditPermissions,
     canManageManagerAccess: actorIsOwner,
@@ -124,7 +136,6 @@ export const actions: Actions = {
   update_permissions: ({ request, locals }) => updateUserBusinessPermissions(request, locals),
   update_capabilities: ({ request, locals }) => updateUserCapabilityOverrides(request, locals),
   toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),
-  save_profile: ({ request, locals }) => saveEmployeeProfile(request, locals),
   save_pos_permissions: ({ request, locals }) => saveEmployeePosPermissions(request, locals),
   toggle_hr_access: ({ request, locals }) => toggleEmployeeHrAccess(request, locals),
   add_certification: ({ request, locals }) => addEmployeeCertification(request, locals),
@@ -132,6 +143,7 @@ export const actions: Actions = {
   add_verification_check: ({ request, locals }) => addEmployeeVerificationCheck(request, locals),
   update_verification_check: ({ request, locals }) => updateEmployeeVerificationCheck(request, locals),
   send_onboarding_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
-  approve_onboarding_item: ({ request, locals }) => approveEmployeeOnboardingItem(request, locals),
-  request_onboarding_changes: ({ request, locals }) => requestEmployeeOnboardingChanges(request, locals)
+  verify_i9: ({ request, locals }) => verifyEmployeeI9(request, locals),
+  approve_onboarding_packet: ({ request, locals }) => approveEmployeeOnboardingPackage(request, locals),
+  return_onboarding_packet: ({ request, locals }) => returnEmployeeOnboardingPackage(request, locals)
 };
