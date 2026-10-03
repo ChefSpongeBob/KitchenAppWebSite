@@ -40,6 +40,7 @@
     profile: Profile;
     approvedDepartments: ScheduleDepartment[];
     availability: AvailabilityEntry[];
+    pendingAvailability: { id: string; updatedAt: number } | null;
     preferences: {
       emailUpdates: boolean;
       smsUpdates: boolean;
@@ -171,11 +172,15 @@
         </div>
       </header>
 
+      {#if data.pendingAvailability}
+        <p class="pending-note">Your latest availability change is waiting for manager approval.</p>
+      {/if}
+
       <AvailabilityEditor
         entries={availabilityEntries}
         action="?/save_availability"
         enhanceFn={withFeedback}
-        submitLabel="Save Availability"
+        submitLabel={data.pendingAvailability ? 'Update Pending Availability' : 'Submit Availability'}
       />
     </section>
   {/if}
@@ -319,6 +324,15 @@
 </Layout>
 
 <style>
+  .pending-note {
+    margin: 0 0 0.8rem;
+    padding: 0.55rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
   .profile-header,
   .onboarding-prompt,
   .panel {

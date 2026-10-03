@@ -7,6 +7,7 @@ import {
 } from '$lib/server/admin';
 import {
   loadScheduleDepartmentApprovalsByUser,
+  loadUserPendingScheduleAvailabilityRequest,
   loadUserScheduleAvailability,
   saveUserScheduleAvailability
 } from '$lib/server/schedules';
@@ -77,10 +78,11 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   const sessionToken = resolveSessionToken(cookies);
   const currentSessionTokenHash = sessionToken ? await hashSessionToken(sessionToken) : null;
 
-  const [profile, approvalsByUser, availability, preferences, sessions, onboardingPackage] = await Promise.all([
+  const [profile, approvalsByUser, availability, pendingAvailability, preferences, sessions, onboardingPackage] = await Promise.all([
     loadAdminEmployeeProfile(db, locals.userId, businessId),
     loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
     loadUserScheduleAvailability(db, locals.userId, businessId),
+    loadUserPendingScheduleAvailabilityRequest(db, locals.userId, businessId),
     db
       .prepare(
         `
@@ -125,7 +127,13 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
     },
     profile,
     approvedDepartments: approvalsByUser.get(locals.userId) ?? ([] as ScheduleDepartment[]),
-    availability,
+    availability: pendingAvailability?.availability ?? availability,
+    pendingAvailability: pendingAvailability
+      ? {
+          id: pendingAvailability.id,
+          updatedAt: pendingAvailability.updatedAt
+        }
+      : null,
     preferences: {
 	  emailUpdates: preferences?.email_updates === 1 && preferences.email_updates_consented_at !== null,
 	  smsUpdates: preferences?.sms_updates === 1 && preferences.sms_updates_consented_at !== null,

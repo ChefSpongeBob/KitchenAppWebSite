@@ -280,6 +280,7 @@ Run these with at least two private validation businesses before entering real r
 - Permissions: verify owner, manager, staff, consultant, contractor, permission templates, route access, feature hiding, and direct URL denial.
 - Tenancy: create similar employee names, departments, schedules, list names, docs, menus, recipes, and reports in separate businesses and confirm nothing crosses tenants.
 - Scheduling: test draft save, publish, edits, duplicate day, templates, labor targets, open shifts, offers, time off, approvals, My Schedule, notifications, and exports.
+- Manager dashboard: verify scoped time-off and availability approvals, approved availability in the builder, named temperature exceptions, announcement history/delete/retention, reminders, ToDo aging, whiteboard moderation, and Schedule & People links.
 - Lists and content: test checklist, prep, inventory, order lists, item attachments, recipes, SOPs, docs, menus, uploads, replacements, deletes, and CSV exports.
 - HR: test invite links, onboarding packets, submissions, review/change/approval, sensitive media, audit logs, and restricted access.
 - Employee registration: test all four invite steps on desktop/mobile, email and SMS preference storage, password reset-in-place behavior, profile hydration, welcome downloads, and Profile & Settings handoff.

@@ -144,6 +144,20 @@ export type UserScheduleAvailability = {
   endTime: string;
 };
 
+export type ScheduleAvailabilityRequest = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string;
+  availability: UserScheduleAvailability[];
+  status: 'pending' | 'approved' | 'declined';
+  managerNote: string;
+  createdAt: number;
+  updatedAt: number;
+  resolvedAt: number | null;
+  resolvedByUserId: string | null;
+};
+
 export type ScheduleTimeOffRequest = {
   id: string;
   userId: string;
@@ -499,6 +513,88 @@ export async function loadScheduleAvailabilityByUser(db: DB, userIds?: string[],
   }
 
   return availability;
+}
+
+export async function loadPendingScheduleAvailabilityRequests(
+  db: DB,
+  businessId: string,
+  userIds?: string[]
+) {
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+
+  const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
+  if (requestedUserIds && requestedUserIds.length === 0) return [];
+  const placeholders = requestedUserIds?.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        r.id,
+        r.user_id,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        r.availability_json,
+        r.status,
+        r.manager_note,
+        r.created_at,
+        r.updated_at,
+        r.resolved_at,
+        r.resolved_by_user_id
+      FROM user_schedule_availability_requests r
+      JOIN users u ON u.id = r.user_id
+      WHERE r.business_id = ?
+        AND r.status = 'pending'
+        ${requestedUserIds ? `AND r.user_id IN (${placeholders})` : ''}
+      ORDER BY r.updated_at ASC
+      LIMIT 100
+      `
+    )
+    .bind(businessId, ...(requestedUserIds ?? []))
+    .all<{
+      id: string;
+      user_id: string;
+      user_name: string | null;
+      user_email: string;
+      availability_json: string;
+      status: 'pending' | 'approved' | 'declined';
+      manager_note: string;
+      created_at: number;
+      updated_at: number;
+      resolved_at: number | null;
+      resolved_by_user_id: string | null;
+    }>();
+
+  return (rows.results ?? []).flatMap((row) => {
+    try {
+      const parsed = parseScheduleAvailabilityPayload(JSON.parse(row.availability_json));
+      if (parsed.error) return [];
+      return [{
+        id: row.id,
+        userId: row.user_id,
+        userName: row.user_name,
+        userEmail: row.user_email,
+        availability: parsed.rows,
+        status: row.status,
+        managerNote: row.manager_note,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        resolvedAt: row.resolved_at,
+        resolvedByUserId: row.resolved_by_user_id
+      } satisfies ScheduleAvailabilityRequest];
+    } catch {
+      return [];
+    }
+  });
+}
+
+export async function loadUserPendingScheduleAvailabilityRequest(
+  db: DB,
+  userId: string,
+  businessId: string
+) {
+  const requests = await loadPendingScheduleAvailabilityRequests(db, businessId, [userId]);
+  return requests[0] ?? null;
 }
 
 async function loadScheduleAssignableUsersById(db: DB, userIds: string[], businessId?: string | null) {
@@ -927,6 +1023,28 @@ export async function ensureScheduleSchema(db: DB) {
     await db
       .prepare(
         `
+        CREATE TABLE IF NOT EXISTS user_schedule_availability_requests (
+          id TEXT PRIMARY KEY,
+          business_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          availability_json TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
+          manager_note TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          resolved_at INTEGER,
+          resolved_by_user_id TEXT,
+          FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
         CREATE TABLE IF NOT EXISTS user_schedule_time_off_requests (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
@@ -1059,6 +1177,34 @@ export async function ensureScheduleSchema(db: DB) {
         `
         CREATE INDEX IF NOT EXISTS idx_user_schedule_availability_user
         ON user_schedule_availability(business_id, user_id, weekday)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_availability_requests_business_status
+        ON user_schedule_availability_requests(business_id, status, updated_at DESC)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_availability_requests_business_user
+        ON user_schedule_availability_requests(business_id, user_id, status, updated_at DESC)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_availability_requests_one_pending
+        ON user_schedule_availability_requests(business_id, user_id)
+        WHERE status = 'pending'
         `
       )
       .run();
@@ -1957,6 +2103,77 @@ export async function loadScheduleTimeOffRequestsForRange(
   })) satisfies ScheduleTimeOffRequest[];
 }
 
+export async function loadPendingScheduleTimeOffRequests(
+  db: DB,
+  businessId: string,
+  userIds?: string[]
+) {
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+
+  const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
+  if (requestedUserIds && requestedUserIds.length === 0) return [];
+  const placeholders = requestedUserIds?.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        r.id,
+        r.user_id,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        r.start_date,
+        r.end_date,
+        r.note,
+        r.status,
+        r.manager_note,
+        r.created_at,
+        r.updated_at,
+        r.resolved_at,
+        r.resolved_by_user_id
+      FROM user_schedule_time_off_requests r
+      JOIN users u ON u.id = r.user_id
+      WHERE r.business_id = ?
+        AND r.status = 'pending'
+        ${requestedUserIds ? `AND r.user_id IN (${placeholders})` : ''}
+      ORDER BY r.start_date ASC, r.created_at ASC
+      LIMIT 100
+      `
+    )
+    .bind(businessId, ...(requestedUserIds ?? []))
+    .all<{
+      id: string;
+      user_id: string;
+      user_name: string | null;
+      user_email: string;
+      start_date: string;
+      end_date: string;
+      note: string | null;
+      status: 'pending' | 'approved' | 'declined';
+      manager_note: string | null;
+      created_at: number;
+      updated_at: number;
+      resolved_at: number | null;
+      resolved_by_user_id: string | null;
+    }>();
+
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    note: row.note ?? '',
+    status: row.status,
+    managerNote: row.manager_note ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    resolvedAt: row.resolved_at,
+    resolvedByUserId: row.resolved_by_user_id
+  })) satisfies ScheduleTimeOffRequest[];
+}
+
 async function loadOwnedShift(db: DB, shiftId: string, businessId?: string | null) {
   return db
     .prepare(
@@ -2292,35 +2509,19 @@ async function validatePublishWeek(db: DB, weekId: string, weekStart: string, bu
   return { errors, warnings };
 }
 
-export async function saveUserScheduleAvailability(request: Request, locals: App.Locals) {
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
-
-  await ensureScheduleSchema(db);
-  await ensureTenantSchema(db, true);
-  const businessId = requireBusinessId(locals);
-  const form = await request.formData();
-  const payload = String(form.get('availability') ?? '').trim();
-  if (!payload) {
-    return fail(400, { error: 'No availability data was submitted.' });
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    return fail(400, { error: 'Availability data could not be read.' });
-  }
-
+function parseScheduleAvailabilityPayload(parsed: unknown): {
+  rows: UserScheduleAvailability[];
+  error: string | null;
+} {
   if (!Array.isArray(parsed) || parsed.length !== 7) {
-    return fail(400, { error: 'Availability must include all seven days.' });
+    return { rows: [], error: 'Availability must include all seven days.' };
   }
 
   const rows: UserScheduleAvailability[] = [];
+  const weekdays = new Set<number>();
   for (const entry of parsed) {
     if (!entry || typeof entry !== 'object') {
-      return fail(400, { error: 'Availability entries must be valid objects.' });
+      return { rows: [], error: 'Availability entries must be valid objects.' };
     }
     const row = entry as Record<string, unknown>;
     const weekday = Number(row.weekday);
@@ -2328,16 +2529,17 @@ export async function saveUserScheduleAvailability(request: Request, locals: App
     const startTime = String(row.startTime ?? '').trim();
     const endTime = String(row.endTime ?? '').trim();
 
-    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
-      return fail(400, { error: 'Availability day is invalid.' });
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || weekdays.has(weekday)) {
+      return { rows: [], error: 'Availability day is invalid.' };
     }
+    weekdays.add(weekday);
 
     if (isAvailable) {
       if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
-        return fail(400, { error: 'Available days need a start and end time.' });
+        return { rows: [], error: 'Available days need a start and end time.' };
       }
       if (startTime >= endTime) {
-        return fail(400, { error: 'Availability end time must be after the start time.' });
+        return { rows: [], error: 'Availability end time must be after the start time.' };
       }
     }
 
@@ -2349,27 +2551,120 @@ export async function saveUserScheduleAvailability(request: Request, locals: App
     });
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(`DELETE FROM user_schedule_availability WHERE user_id = ? AND (business_id = ? OR business_id IS NULL)`)
-    .bind(locals.userId, businessId)
-    .run();
+  return { rows: rows.sort((a, b) => a.weekday - b.weekday), error: null };
+}
 
-  for (const row of rows) {
+function availabilityReplacementStatements(
+  db: DB,
+  businessId: string,
+  userId: string,
+  rows: UserScheduleAvailability[],
+  now: number
+) {
+  return [
+    db
+      .prepare(`DELETE FROM user_schedule_availability WHERE user_id = ? AND business_id = ?`)
+      .bind(userId, businessId),
+    ...rows.map((row) =>
+      db
+        .prepare(
+          `
+          INSERT INTO user_schedule_availability (
+            user_id, weekday, is_available, start_time, end_time, updated_at, business_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          `
+        )
+        .bind(userId, row.weekday, row.isAvailable ? 1 : 0, row.startTime, row.endTime, now, businessId)
+    )
+  ];
+}
+
+export async function saveUserScheduleAvailability(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!locals.userId) return fail(403, { error: 'Sign in required.' });
+
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
+  const form = await request.formData();
+  const payload = String(form.get('availability') ?? '').trim();
+  if (!payload) return fail(400, { error: 'No availability data was submitted.' });
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return fail(400, { error: 'Availability data could not be read.' });
+  }
+
+  const normalized = parseScheduleAvailabilityPayload(parsed);
+  if (normalized.error) return fail(400, { error: normalized.error });
+
+  const now = Math.floor(Date.now() / 1000);
+  if (requireScheduleManager(locals)) {
+    await db.batch([
+      ...availabilityReplacementStatements(db, businessId, locals.userId, normalized.rows, now),
+      db
+        .prepare(
+          `UPDATE user_schedule_availability_requests
+           SET status = 'approved', manager_note = 'Applied directly by schedule manager.',
+               updated_at = ?, resolved_at = ?, resolved_by_user_id = ?
+           WHERE business_id = ? AND user_id = ? AND status = 'pending'`
+        )
+        .bind(now, now, locals.userId, businessId, locals.userId)
+    ]);
+    return { success: true, message: 'Availability updated.' };
+  }
+
+  const existing = await db
+    .prepare(
+      `SELECT id FROM user_schedule_availability_requests
+       WHERE business_id = ? AND user_id = ? AND status = 'pending'
+       LIMIT 1`
+    )
+    .bind(businessId, locals.userId)
+    .first<{ id: string }>();
+  const availabilityJson = JSON.stringify(normalized.rows);
+
+  if (existing) {
     await db
       .prepare(
-        `
-        INSERT INTO user_schedule_availability (
-          user_id, weekday, is_available, start_time, end_time, updated_at, business_id
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        `
+        `UPDATE user_schedule_availability_requests
+         SET availability_json = ?, manager_note = '', updated_at = ?
+         WHERE id = ? AND business_id = ? AND user_id = ? AND status = 'pending'`
       )
-      .bind(locals.userId, row.weekday, row.isAvailable ? 1 : 0, row.startTime, row.endTime, now, businessId)
+      .bind(availabilityJson, now, existing.id, businessId, locals.userId)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `INSERT INTO user_schedule_availability_requests (
+           id, business_id, user_id, availability_json, status, manager_note,
+           created_at, updated_at, resolved_at, resolved_by_user_id
+         ) VALUES (?, ?, ?, ?, 'pending', '', ?, ?, NULL, NULL)`
+      )
+      .bind(crypto.randomUUID(), businessId, locals.userId, availabilityJson, now, now)
       .run();
   }
 
-  return { success: true, message: 'Availability updated.' };
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: 'schedule.availability.submitted',
+      category: 'schedule',
+      actorUserId: locals.userId,
+      targetUserId: locals.userId,
+      subjectType: 'availability_request',
+      subjectId: existing?.id ?? null,
+      title: 'Availability change submitted'
+    },
+    request
+  );
+
+  return { success: true, message: 'Availability sent for manager approval.' };
 }
 
 export async function createUserScheduleTimeOffRequest(request: Request, locals: App.Locals) {
@@ -3239,6 +3534,123 @@ export async function declineScheduleTimeOffRequest(request: Request, locals: Ap
   );
 
   return { success: true, message: 'Time off declined.' };
+}
+
+export async function approveScheduleAvailabilityRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Scheduling access required.' });
+
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
+  const form = await request.formData();
+  const requestId = String(form.get('request_id') ?? '').trim();
+  const managerNote = String(form.get('manager_note') ?? '').trim().slice(0, 500);
+  if (!requestId) return fail(400, { error: 'Missing request id.' });
+
+  const existing = await db
+    .prepare(
+      `SELECT id, user_id, availability_json
+       FROM user_schedule_availability_requests
+       WHERE id = ? AND business_id = ? AND status = 'pending'
+       LIMIT 1`
+    )
+    .bind(requestId, businessId)
+    .first<{ id: string; user_id: string; availability_json: string }>();
+  if (!existing) return fail(404, { error: 'That availability request could not be found.' });
+  const userAccessFailure = await scheduleUserAccessFailure(db, locals, businessId, existing.user_id);
+  if (userAccessFailure) return userAccessFailure;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(existing.availability_json);
+  } catch {
+    return fail(400, { error: 'That availability request is invalid.' });
+  }
+  const normalized = parseScheduleAvailabilityPayload(parsed);
+  if (normalized.error) return fail(400, { error: normalized.error });
+
+  const now = Math.floor(Date.now() / 1000);
+  await db.batch([
+    ...availabilityReplacementStatements(db, businessId, existing.user_id, normalized.rows, now),
+    db
+      .prepare(
+        `UPDATE user_schedule_availability_requests
+         SET status = 'approved', manager_note = ?, updated_at = ?, resolved_at = ?, resolved_by_user_id = ?
+         WHERE id = ? AND business_id = ? AND status = 'pending'`
+      )
+      .bind(managerNote, now, now, locals.userId, requestId, businessId)
+  ]);
+
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: 'schedule.availability.approved',
+      category: 'schedule',
+      actorUserId: locals.userId,
+      targetUserId: existing.user_id,
+      subjectType: 'availability_request',
+      subjectId: requestId,
+      title: 'Availability change approved'
+    },
+    request
+  );
+  return { success: true, message: 'Availability approved.' };
+}
+
+export async function declineScheduleAvailabilityRequest(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Scheduling access required.' });
+
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
+  const form = await request.formData();
+  const requestId = String(form.get('request_id') ?? '').trim();
+  const managerNote = String(form.get('manager_note') ?? '').trim().slice(0, 500);
+  if (!requestId) return fail(400, { error: 'Missing request id.' });
+
+  const existing = await db
+    .prepare(
+      `SELECT id, user_id
+       FROM user_schedule_availability_requests
+       WHERE id = ? AND business_id = ? AND status = 'pending'
+       LIMIT 1`
+    )
+    .bind(requestId, businessId)
+    .first<{ id: string; user_id: string }>();
+  if (!existing) return fail(404, { error: 'That availability request could not be found.' });
+  const userAccessFailure = await scheduleUserAccessFailure(db, locals, businessId, existing.user_id);
+  if (userAccessFailure) return userAccessFailure;
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `UPDATE user_schedule_availability_requests
+       SET status = 'declined', manager_note = ?, updated_at = ?, resolved_at = ?, resolved_by_user_id = ?
+       WHERE id = ? AND business_id = ? AND status = 'pending'`
+    )
+    .bind(managerNote, now, now, locals.userId, requestId, businessId)
+    .run();
+
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: 'schedule.availability.declined',
+      category: 'schedule',
+      actorUserId: locals.userId,
+      targetUserId: existing.user_id,
+      subjectType: 'availability_request',
+      subjectId: requestId,
+      title: 'Availability change declined'
+    },
+    request
+  );
+  return { success: true, message: 'Availability declined.' };
 }
 
 export async function saveScheduleShift(request: Request, locals: App.Locals) {

@@ -95,6 +95,34 @@ expect('src/routes/+layout.svelte', 'admin sidebar has one content editor entry'
   !source.includes('label: "Recipes", route: "/admin/recipes"')
 );
 
+expect('src/routes/admin/+page.svelte', 'manager dashboard keeps navigation and groups scheduling with people tools', (source) =>
+  source.includes('<PageHeader title="Manager Dashboard" />') &&
+  source.includes('<h2>Schedule & People</h2>') &&
+  source.includes('href="/admin/schedule-settings"') &&
+  source.includes('href="/admin/schedule"') &&
+  source.includes('href="/admin/users"') &&
+  source.includes('href="/admin/onboarding#employee-packets"') &&
+  source.includes('href="/admin/onboarding#packet-builder"')
+);
+
+expect('src/routes/admin/+page.server.ts', 'manager dashboard wires approvals and announcement history', (source) =>
+  source.includes('loadPendingScheduleTimeOffRequests') &&
+  source.includes('loadPendingScheduleAvailabilityRequests') &&
+  source.includes('approve_time_off') &&
+  source.includes('decline_time_off') &&
+  source.includes('approve_availability') &&
+  source.includes('decline_availability') &&
+  source.includes('loadAdminAnnouncementHistory') &&
+  source.includes('delete_announcement_history')
+);
+
+expect('migrations/0100_admin_dashboard_workflows.sql', 'dashboard workflow storage is tenant scoped and indexed', (source) =>
+  source.includes('CREATE TABLE IF NOT EXISTS announcement_history') &&
+  source.includes('CREATE TABLE IF NOT EXISTS user_schedule_availability_requests') &&
+  source.includes('business_id TEXT NOT NULL') &&
+  source.includes('idx_schedule_availability_requests_one_pending')
+);
+
 const failed = checks.filter((check) => !check.ok);
 for (const check of checks) {
   console.log(`${check.ok ? 'PASS' : 'FAIL'} ${check.label}`);

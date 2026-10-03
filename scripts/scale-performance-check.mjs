@@ -127,10 +127,10 @@ expect('src/lib/server/admin.ts', 'whiteboard cleanup is throttled and batched',
   source.includes('LIMIT ?')
 );
 
-expect('src/routes/admin/+page.server.ts', 'admin todo analytics are aggregated', (source) =>
-  source.includes("SELECT 'created' AS kind") &&
-  source.includes('UNION ALL') &&
-  source.includes('completed_previous_window')
+expect('src/routes/admin/+page.server.ts', 'admin dashboard avoids unused todo analytics queries', (source) =>
+  !source.includes("SELECT 'created' AS kind") &&
+  !source.includes('todoSeries') &&
+  source.includes('const todoActive = todos.filter')
 );
 
 expect('src/routes/docs/+page.server.ts', 'document listing avoids full document content payloads', (source) =>

@@ -160,7 +160,7 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/+page.svelte` -> `src/routes/+page.svelte` -> `announcements` (reference), `documents` (reference), `recipes` (reference)
 - `/account-deletion` -> `src/routes/account-deletion/+page.server.ts` -> `account_deletion_requests` (insert)
 - `/account-deletion/+page.svelte` -> `src/routes/account-deletion/+page.svelte` -> `users` (reference)
-- `/admin` -> `src/routes/admin/+page.server.ts` -> `announcements` (reference), `business_users` (select), `employee_spotlight` (reference), `schedule_shifts` (select), `temps` (select), `todos` (select), `users` (select)
+- `/admin` -> `src/routes/admin/+page.server.ts` -> `announcement_history` (delete, select), `announcements` (reference), `business_users` (select), `employee_spotlight` (reference), `schedule_shifts` (select), `temperature_alert_events` (select), `temps` (select), `todos` (select), `user_schedule_availability_requests` (select, update), `user_schedule_time_off_requests` (select, update), `users` (select)
 - `/admin/+page.svelte` -> `src/routes/admin/+page.svelte` -> `announcements` (reference), `employee_spotlight` (reference), `recipes` (reference), `temps` (reference), `todos` (reference), `users` (reference)
 - `/admin/app-editor` -> `src/routes/admin/app-editor/+page.server.ts` -> `businesses` (select/update), `documents` (reference)
 - `/admin/creator` -> `src/routes/admin/creator/+page.server.ts` -> `documents` (reference), `recipes` (reference)
@@ -335,6 +335,21 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 **Code Usage**
   - `src/lib/server/admin.ts` [delete, insert, select]
   - `src/lib/server/announcements.ts` [ddl, select]
+
+### announcement_history
+
+**Columns**
+  - `id` TEXT (PK)
+  - `business_id` TEXT (NOT NULL)
+  - `content` TEXT (NOT NULL)
+  - `created_by` TEXT
+  - `created_at` INTEGER (NOT NULL)
+
+**Code Usage**
+  - `/admin` `src/routes/admin/+page.server.ts` [delete, select]
+  - `src/lib/server/admin.ts` [delete, select]
+  - `src/lib/server/announcements.ts` [ddl, delete, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
 
 ### announcements
 
@@ -2219,6 +2234,26 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 **Code Usage**
   - `scripts/ensure-tenant-columns.mjs` [reference]
   - `src/lib/server/schedules.ts` [ddl, delete, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### user_schedule_availability_requests
+
+**Columns**
+  - `id` TEXT (PK)
+  - `business_id` TEXT (NOT NULL)
+  - `user_id` TEXT (NOT NULL)
+  - `availability_json` TEXT (NOT NULL)
+  - `status` TEXT (NOT NULL, DEFAULT 'pending')
+  - `manager_note` TEXT (NOT NULL, DEFAULT '')
+  - `created_at` INTEGER (NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+  - `resolved_at` INTEGER
+  - `resolved_by_user_id` TEXT
+
+**Code Usage**
+  - `/admin` `src/routes/admin/+page.server.ts` [select, update]
+  - `/settings` `src/routes/settings/+page.server.ts` [select, update]
+  - `src/lib/server/schedules.ts` [ddl, insert, select, update]
   - `src/lib/server/tenant.ts` [reference]
 
 ### user_schedule_departments

@@ -2,7 +2,9 @@ import { dev } from '$app/environment';
 import { fail, redirect } from '@sveltejs/kit';
 import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import {
+  deleteAnnouncementHistoryEntry,
   ensureAnnouncementsSchema,
+  loadAnnouncementHistory,
   loadHomepageAnnouncement,
   saveHomepageAnnouncement
 } from '$lib/server/announcements';
@@ -4097,6 +4099,12 @@ export async function loadAdminAnnouncement(db: D1, businessId: string) {
   return loadHomepageAnnouncement(db, businessId);
 }
 
+export async function loadAdminAnnouncementHistory(db: D1, businessId: string) {
+  await ensureAnnouncementsSchema(db);
+  await ensureTenantSchema(db, true);
+  return loadAnnouncementHistory(db, businessId);
+}
+
 export async function loadAdminEmployeeSpotlight(db: D1, businessId: string) {
   await ensureEmployeeSpotlightSchema(db);
   await ensureTenantSchema(db, true);
@@ -5400,6 +5408,19 @@ export async function makeUserAdmin(request: Request, locals: App.Locals) {
     targetUserId: userId
   });
 
+  return { success: true };
+}
+
+export async function deleteAnnouncementHistory(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const historyId = String(formData.get('history_id') ?? '').trim();
+  if (!historyId) return fail(400, { error: 'Missing announcement history id.' });
+
+  await deleteAnnouncementHistoryEntry(db, businessId, historyId);
   return { success: true };
 }
 

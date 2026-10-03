@@ -326,7 +326,7 @@
       </section>
     </div>
 
-    <section class="workspace-section" aria-label="Employee onboarding packets">
+    <section class="workspace-section" id="employee-packets" aria-label="Employee onboarding packets">
       <header class="section-head">
         <div>
           <span class="section-kicker">Dashboard</span>
@@ -390,7 +390,7 @@
       </form>
     </details>
 
-    <details class="workspace-section packet-setup">
+    <details class="workspace-section packet-setup" id="packet-builder">
       <summary>
         <span>
           <span class="section-kicker">Setup</span>

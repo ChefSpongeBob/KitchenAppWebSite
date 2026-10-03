@@ -5,7 +5,20 @@ export type HomepageAnnouncement = {
   content: string;
   updatedAt: number;
 };
+
+export type AnnouncementHistoryEntry = {
+  id: string;
+  content: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdByEmail: string | null;
+  createdAt: number;
+};
+
+const ANNOUNCEMENT_HISTORY_RETENTION_SECONDS = 60 * 60 * 24 * 30 * 9;
+const ANNOUNCEMENT_HISTORY_CLEANUP_INTERVAL_SECONDS = 60 * 60 * 24;
 let announcementsSchemaEnsured = false;
+const lastHistoryCleanupAtByBusiness = new Map<string, number>();
 
 function homepageAnnouncementId(businessId?: string | null) {
   return businessId ? `${businessId}:homepage` : 'homepage';
@@ -63,6 +76,21 @@ export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
       `
     )
     .run();
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS announcement_history (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_by TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
   await ensureOptionalColumn(db, 'announcements', 'business_id', 'TEXT');
   await db
     .prepare(`CREATE INDEX IF NOT EXISTS idx_announcements_business_id ON announcements(business_id)`)
@@ -70,7 +98,86 @@ export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
   await db
     .prepare(`CREATE INDEX IF NOT EXISTS idx_announcement_editors_business_id ON announcement_editors(business_id)`)
     .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_announcement_history_business_created
+       ON announcement_history(business_id, created_at DESC)`
+    )
+    .run();
   announcementsSchemaEnsured = true;
+}
+
+async function cleanupAnnouncementHistory(
+  db: App.Platform['env']['DB'],
+  businessId: string,
+  force = false
+) {
+  const now = Math.floor(Date.now() / 1000);
+  const lastCleanupAt = lastHistoryCleanupAtByBusiness.get(businessId) ?? 0;
+  if (!force && now - lastCleanupAt < ANNOUNCEMENT_HISTORY_CLEANUP_INTERVAL_SECONDS) return;
+  const cutoff = now - ANNOUNCEMENT_HISTORY_RETENTION_SECONDS;
+  await db
+    .prepare(`DELETE FROM announcement_history WHERE business_id = ? AND created_at < ?`)
+    .bind(businessId, cutoff)
+    .run();
+  lastHistoryCleanupAtByBusiness.set(businessId, now);
+}
+
+export async function loadAnnouncementHistory(
+  db: App.Platform['env']['DB'],
+  businessId: string,
+  limit = 40
+) {
+  await ensureAnnouncementsSchema(db);
+  await cleanupAnnouncementHistory(db, businessId);
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        h.id,
+        h.content,
+        h.created_by,
+        h.created_at,
+        u.display_name AS created_by_name,
+        u.email AS created_by_email
+      FROM announcement_history h
+      LEFT JOIN users u ON u.id = h.created_by
+      WHERE h.business_id = ?
+      ORDER BY h.created_at DESC
+      LIMIT ?
+      `
+    )
+    .bind(businessId, safeLimit)
+    .all<{
+      id: string;
+      content: string;
+      created_by: string | null;
+      created_at: number;
+      created_by_name: string | null;
+      created_by_email: string | null;
+    }>();
+
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    content: row.content,
+    createdBy: row.created_by,
+    createdByName: row.created_by_name,
+    createdByEmail: row.created_by_email,
+    createdAt: row.created_at
+  })) satisfies AnnouncementHistoryEntry[];
+}
+
+export async function deleteAnnouncementHistoryEntry(
+  db: App.Platform['env']['DB'],
+  businessId: string,
+  historyId: string
+) {
+  await ensureAnnouncementsSchema(db);
+  await db
+    .prepare(`DELETE FROM announcement_history WHERE id = ? AND business_id = ?`)
+    .bind(historyId, businessId)
+    .run();
 }
 
 export async function loadHomepageAnnouncement(db: App.Platform['env']['DB'], businessId?: string | null) {
@@ -154,8 +261,12 @@ export async function saveHomepageAnnouncement(
   await ensureAnnouncementsSchema(db);
   const now = Math.floor(Date.now() / 1000);
 
-  await db
-    .prepare(
+  const current = await db
+    .prepare(`SELECT content FROM announcements WHERE id = ? AND business_id = ? LIMIT 1`)
+    .bind(homepageAnnouncementId(businessId), businessId)
+    .first<{ content: string }>();
+  const statements = [
+    db.prepare(
       `
       INSERT INTO announcements (id, content, updated_by, updated_at, business_id)
       VALUES (?, ?, ?, ?, ?)
@@ -167,5 +278,21 @@ export async function saveHomepageAnnouncement(
       `
     )
     .bind(homepageAnnouncementId(businessId), content, userId ?? null, now, businessId)
-    .run();
+  ];
+
+  if (content && content !== current?.content) {
+    statements.push(
+      db
+        .prepare(
+          `
+          INSERT INTO announcement_history (id, business_id, content, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?)
+          `
+        )
+        .bind(crypto.randomUUID(), businessId, content, userId ?? null, now)
+    );
+  }
+
+  await db.batch(statements);
+  await cleanupAnnouncementHistory(db, businessId, true);
 }
