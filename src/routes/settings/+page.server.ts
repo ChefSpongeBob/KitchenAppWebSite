@@ -21,6 +21,7 @@ import {
 } from '$lib/server/security';
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
+import { COMMUNICATION_CONSENT_VERSION } from '$lib/communicationConsent';
 
 async function getUsersColumns(db: App.Platform['env']['DB']) {
   return getTableColumns(db, 'users');
@@ -83,7 +84,7 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
     db
       .prepare(
         `
-        SELECT email_updates, sms_updates, push_updates, dark_mode, language
+		SELECT email_updates, sms_updates, email_updates_consented_at, sms_updates_consented_at, push_updates, dark_mode, language
         FROM user_preferences
         WHERE user_id = ?
         LIMIT 1
@@ -93,6 +94,8 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
       .first<{
         email_updates: number;
         sms_updates: number;
+		email_updates_consented_at: number | null;
+		sms_updates_consented_at: number | null;
         push_updates: number;
         dark_mode: number;
         language: string;
@@ -124,8 +127,8 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
     approvedDepartments: approvalsByUser.get(locals.userId) ?? ([] as ScheduleDepartment[]),
     availability,
     preferences: {
-      emailUpdates: (preferences?.email_updates ?? 1) === 1,
-      smsUpdates: (preferences?.sms_updates ?? 0) === 1,
+	  emailUpdates: preferences?.email_updates === 1 && preferences.email_updates_consented_at !== null,
+	  smsUpdates: preferences?.sms_updates === 1 && preferences.sms_updates_consented_at !== null,
       pushUpdates: (preferences?.push_updates ?? 0) === 1,
       darkMode: (preferences?.dark_mode ?? 0) === 1,
       language: preferences?.language ?? 'en'
@@ -309,11 +312,27 @@ export const actions: Actions = {
     await db
       .prepare(
         `
-        INSERT INTO user_preferences (user_id, email_updates, sms_updates, push_updates, dark_mode, language, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO user_preferences (
+		  user_id,
+		  email_updates,
+		  sms_updates,
+		  email_updates_consented_at,
+		  sms_updates_consented_at,
+		  communication_consent_version,
+		  communication_consent_source,
+		  push_updates,
+		  dark_mode,
+		  language,
+		  updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, 'settings', ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
           email_updates = excluded.email_updates,
           sms_updates = excluded.sms_updates,
+		  email_updates_consented_at = excluded.email_updates_consented_at,
+		  sms_updates_consented_at = excluded.sms_updates_consented_at,
+		  communication_consent_version = excluded.communication_consent_version,
+		  communication_consent_source = excluded.communication_consent_source,
           push_updates = excluded.push_updates,
           dark_mode = excluded.dark_mode,
           language = excluded.language,
@@ -324,12 +343,46 @@ export const actions: Actions = {
         locals.userId,
         emailUpdates ? 1 : 0,
         smsUpdates ? 1 : 0,
+		emailUpdates ? now : null,
+		smsUpdates ? now : null,
+		COMMUNICATION_CONSENT_VERSION,
         pushUpdates ? 1 : 0,
         darkMode ? 1 : 0,
         language,
         now
       )
       .run();
+
+	await db.batch([
+	  db
+		.prepare(
+		  `INSERT INTO communication_consent_events (
+			id, user_id, business_id, channel, granted, disclosure_version, source, recorded_at
+		  ) VALUES (?, ?, ?, 'email', ?, ?, 'settings', ?)`
+		)
+		.bind(
+		  crypto.randomUUID(),
+		  locals.userId,
+		  locals.businessId ?? null,
+		  emailUpdates ? 1 : 0,
+		  COMMUNICATION_CONSENT_VERSION,
+		  now
+		),
+	  db
+		.prepare(
+		  `INSERT INTO communication_consent_events (
+			id, user_id, business_id, channel, granted, disclosure_version, source, recorded_at
+		  ) VALUES (?, ?, ?, 'sms', ?, ?, 'settings', ?)`
+		)
+		.bind(
+		  crypto.randomUUID(),
+		  locals.userId,
+		  locals.businessId ?? null,
+		  smsUpdates ? 1 : 0,
+		  COMMUNICATION_CONSENT_VERSION,
+		  now
+		)
+	]);
 
     return {
       success: true,

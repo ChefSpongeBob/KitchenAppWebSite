@@ -228,6 +228,7 @@ This is the only active completion list. Work it in order and do not create scat
 - Confirm invited employees receive the four-step light-theme flow (name/birthday, address, contact/login, welcome), retain completed fields after a validation error, and enter the exact inviting business.
 - Confirm browser/native sign-in routes employees with an active packet to the non-blocking Profile & Settings onboarding prompt, while employees without a packet enter the dashboard normally.
 - Confirm the welcome screen uses only configured store listing URLs, browser installation remains available, and secure packet access remains at `/onboarding`.
+- Verify employee and purchaser notification consent begins unselected, requires separate Email and SMS Yes/No decisions, permits refusal without blocking registration, records the disclosure version/source/time and every later change, and immediately excludes revoked users from optional delivery. Before enabling SMS delivery, verify provider-level `STOP`/`HELP` handling and have qualified counsel approve the final consent language.
 - Legal/payroll review is still required for I-9, W-4, state forms, contractor handling, retention, and employment documentation wording.
 
 10. Authentication and account lifecycle

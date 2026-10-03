@@ -36,8 +36,12 @@ export async function ensureUserPreferencesSchema(db: D1) {
       `
       CREATE TABLE IF NOT EXISTS user_preferences (
         user_id TEXT PRIMARY KEY,
-        email_updates INTEGER NOT NULL DEFAULT 1,
+		email_updates INTEGER NOT NULL DEFAULT 0,
         sms_updates INTEGER NOT NULL DEFAULT 0,
+		email_updates_consented_at INTEGER,
+		sms_updates_consented_at INTEGER,
+		communication_consent_version TEXT,
+		communication_consent_source TEXT,
         push_updates INTEGER NOT NULL DEFAULT 0,
         dark_mode INTEGER NOT NULL DEFAULT 0,
         language TEXT NOT NULL DEFAULT 'en',
@@ -53,6 +57,10 @@ export async function ensureUserPreferencesSchema(db: D1) {
     .run();
 
   await ensureOptionalColumn(db, 'user_preferences', 'sms_updates', 'INTEGER NOT NULL DEFAULT 0');
+	await ensureOptionalColumn(db, 'user_preferences', 'email_updates_consented_at', 'INTEGER');
+	await ensureOptionalColumn(db, 'user_preferences', 'sms_updates_consented_at', 'INTEGER');
+	await ensureOptionalColumn(db, 'user_preferences', 'communication_consent_version', 'TEXT');
+	await ensureOptionalColumn(db, 'user_preferences', 'communication_consent_source', 'TEXT');
   await ensureOptionalColumn(db, 'user_preferences', 'push_updates', 'INTEGER NOT NULL DEFAULT 0');
   await ensureOptionalColumn(db, 'user_preferences', 'dark_mode', 'INTEGER NOT NULL DEFAULT 0');
   await ensureOptionalColumn(db, 'user_preferences', 'language', "TEXT NOT NULL DEFAULT 'en'");
@@ -60,6 +68,28 @@ export async function ensureUserPreferencesSchema(db: D1) {
   await ensureOptionalColumn(db, 'user_preferences', 'welcome_tour_variant', 'TEXT');
   await ensureOptionalColumn(db, 'user_preferences', 'user_home_tour_completed_at', 'INTEGER');
   await ensureOptionalColumn(db, 'user_preferences', 'admin_tour_completed_at', 'INTEGER');
+	await db
+		.prepare(
+			`CREATE TABLE IF NOT EXISTS communication_consent_events (
+				id TEXT PRIMARY KEY,
+				user_id TEXT NOT NULL,
+				business_id TEXT,
+				channel TEXT NOT NULL CHECK (channel IN ('email', 'sms')),
+				granted INTEGER NOT NULL CHECK (granted IN (0, 1)),
+				disclosure_version TEXT NOT NULL,
+				source TEXT NOT NULL,
+				recorded_at INTEGER NOT NULL,
+				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+				FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE SET NULL
+			)`
+		)
+		.run();
+	await db
+		.prepare(
+			`CREATE INDEX IF NOT EXISTS idx_communication_consent_user_channel
+			 ON communication_consent_events(user_id, channel, recorded_at DESC)`
+		)
+		.run();
   userPreferencesSchemaEnsured = true;
 }
 
@@ -96,7 +126,7 @@ export async function markWelcomeTourComplete(db: D1, userId: string, variant: W
         welcome_tour_completed_at,
         welcome_tour_variant
       )
-      VALUES (?, 1, ?, ?, ?)
+		VALUES (?, 0, ?, ?, ?)
       ON CONFLICT(user_id)
       DO UPDATE SET
         updated_at = excluded.updated_at,
@@ -142,7 +172,7 @@ export async function markFirstOpenTourComplete(db: D1, userId: string, variant:
         updated_at,
         ${column}
       )
-      VALUES (?, 1, ?, ?)
+		VALUES (?, 0, ?, ?)
       ON CONFLICT(user_id)
       DO UPDATE SET
         updated_at = excluded.updated_at,

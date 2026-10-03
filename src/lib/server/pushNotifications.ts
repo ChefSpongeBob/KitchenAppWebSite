@@ -145,7 +145,7 @@ export async function setPushPreference(db: DB, userId: string, enabled: boolean
     .prepare(
       `
       INSERT INTO user_preferences (user_id, email_updates, push_updates, updated_at)
-      VALUES (?, 1, ?, ?)
+		VALUES (?, 0, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         push_updates = excluded.push_updates,
         updated_at = excluded.updated_at

@@ -587,7 +587,8 @@ async function loadRecipientCandidates(db: DB, businessId: string) {
         ON erp.business_id = bu.business_id
         AND erp.user_id = u.id
       WHERE COALESCE(u.is_active, 1) = 1
-        AND COALESCE(up.email_updates, 1) = 1
+		AND COALESCE(up.email_updates, 0) = 1
+		AND up.email_updates_consented_at IS NOT NULL
         AND u.email IS NOT NULL
         AND trim(u.email) <> ''
       GROUP BY u.id, u.email, u.display_name, bu.role, bu.permission_template
@@ -691,7 +692,8 @@ async function loadRecipientsForScheduleDepartment(db: DB, event: OperationalEve
       LEFT JOIN user_preferences up
         ON up.user_id = u.id
       WHERE COALESCE(u.is_active, 1) = 1
-        AND COALESCE(up.email_updates, 1) = 1
+		AND COALESCE(up.email_updates, 0) = 1
+		AND up.email_updates_consented_at IS NOT NULL
         AND u.email IS NOT NULL
         AND trim(u.email) <> ''
         AND (? IS NULL OR u.id <> ?)
@@ -728,7 +730,8 @@ async function loadTargetRecipient(db: DB, event: OperationalEventRow): Promise<
         ON up.user_id = u.id
       WHERE u.id = ?
         AND COALESCE(u.is_active, 1) = 1
-        AND COALESCE(up.email_updates, 1) = 1
+		AND COALESCE(up.email_updates, 0) = 1
+		AND up.email_updates_consented_at IS NOT NULL
         AND u.email IS NOT NULL
         AND trim(u.email) <> ''
       LIMIT 1

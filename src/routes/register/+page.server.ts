@@ -31,6 +31,7 @@ import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/se
 import { sendSignupConfirmationEmail } from '$lib/server/email';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { COMMUNICATION_CONSENT_VERSION } from '$lib/communicationConsent';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
@@ -51,8 +52,8 @@ type RegisterFormValues = {
 	emergencyContactName: string;
 	emergencyContactPhone: string;
 	emergencyContactRelationship: string;
-	emailUpdates: boolean;
-	smsUpdates: boolean;
+	emailUpdates: boolean | null;
+	smsUpdates: boolean | null;
 	businessName: string;
 	planTier: string;
 	addOnTempMonitoring: boolean;
@@ -345,8 +346,10 @@ export const actions: Actions = {
 			const emergencyContactName = toOptionalString(formData, 'emergency_contact_name', 120);
 			const emergencyContactPhone = toOptionalString(formData, 'emergency_contact_phone', 48);
 			const emergencyContactRelationship = toOptionalString(formData, 'emergency_contact_relationship', 80);
-			const wantsEmailUpdates = String(formData.get('email_updates') || '0') === '1';
-			const wantsSmsUpdates = String(formData.get('sms_updates') || '0') === '1';
+			const emailUpdatesResponse = String(formData.get('email_updates') ?? '').trim();
+			const smsUpdatesResponse = String(formData.get('sms_updates') ?? '').trim();
+			const wantsEmailUpdates = emailUpdatesResponse === '1';
+			const wantsSmsUpdates = smsUpdatesResponse === '1';
 			const clientFingerprint = String(formData.get('client_fingerprint') || '').trim();
 			const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')
 				.trim()
@@ -390,8 +393,8 @@ export const actions: Actions = {
 				emergencyContactName,
 				emergencyContactPhone,
 				emergencyContactRelationship,
-				emailUpdates: wantsEmailUpdates,
-				smsUpdates: wantsSmsUpdates,
+				emailUpdates: emailUpdatesResponse ? wantsEmailUpdates : null,
+				smsUpdates: smsUpdatesResponse ? wantsSmsUpdates : null,
 				businessName,
 				planTier: planTierRaw,
 				addOnTempMonitoring,
@@ -414,6 +417,12 @@ export const actions: Actions = {
 
 			if (!email || !confirmEmail || !password || !confirmPassword) {
 				return registerFailure(400, 'All fields required.', 'security', submittedValues);
+			}
+			if (!['0', '1'].includes(emailUpdatesResponse) || !['0', '1'].includes(smsUpdatesResponse)) {
+				return registerFailure(400, 'Choose Yes or No for both notification options.', 'security', submittedValues);
+			}
+			if (wantsSmsUpdates && !userPhone) {
+				return registerFailure(400, 'Enter a phone number to allow text notifications.', 'security', submittedValues);
 			}
 			const accountDisplayName =
 				displayName || realName || email.split('@')[0]?.slice(0, 120) || 'Owner';
@@ -849,16 +858,71 @@ export const actions: Actions = {
 			await db
 				.prepare(
 					`
-			INSERT INTO user_preferences (user_id, email_updates, sms_updates, dark_mode, language, updated_at)
-			VALUES (?, ?, ?, 0, 'en', ?)
+			INSERT INTO user_preferences (
+				user_id,
+				email_updates,
+				sms_updates,
+				email_updates_consented_at,
+				sms_updates_consented_at,
+				communication_consent_version,
+				communication_consent_source,
+				dark_mode,
+				language,
+				updated_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?, 'registration', 0, 'en', ?)
 			ON CONFLICT(user_id) DO UPDATE SET
 				email_updates = excluded.email_updates,
 				sms_updates = excluded.sms_updates,
+				email_updates_consented_at = excluded.email_updates_consented_at,
+				sms_updates_consented_at = excluded.sms_updates_consented_at,
+				communication_consent_version = excluded.communication_consent_version,
+				communication_consent_source = excluded.communication_consent_source,
 				updated_at = excluded.updated_at
 		`
 				)
-				.bind(userId, wantsEmailUpdates ? 1 : 0, wantsSmsUpdates ? 1 : 0, now)
+				.bind(
+					userId,
+					wantsEmailUpdates ? 1 : 0,
+					wantsSmsUpdates ? 1 : 0,
+					wantsEmailUpdates ? now : null,
+					wantsSmsUpdates ? now : null,
+					COMMUNICATION_CONSENT_VERSION,
+					now
+				)
 				.run();
+
+			const consentBusinessId = businessInvite?.business_id ?? null;
+			await db.batch([
+				db
+					.prepare(
+						`INSERT INTO communication_consent_events (
+							id, user_id, business_id, channel, granted, disclosure_version, source, recorded_at
+						) VALUES (?, ?, ?, 'email', ?, ?, 'registration', ?)`
+					)
+					.bind(
+						crypto.randomUUID(),
+						userId,
+						consentBusinessId,
+						wantsEmailUpdates ? 1 : 0,
+						COMMUNICATION_CONSENT_VERSION,
+						now
+					),
+				db
+					.prepare(
+						`INSERT INTO communication_consent_events (
+							id, user_id, business_id, channel, granted, disclosure_version, source, recorded_at
+						) VALUES (?, ?, ?, 'sms', ?, ?, 'registration', ?)`
+					)
+					.bind(
+						crypto.randomUUID(),
+						userId,
+						consentBusinessId,
+						wantsSmsUpdates ? 1 : 0,
+						COMMUNICATION_CONSENT_VERSION,
+						now
+					)
+			]);
 
 			registerPhase = inviteCode ? 'accept_invite' : 'create_business';
 			if (businessInvite) {

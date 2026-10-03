@@ -88,6 +88,41 @@ expect('src/lib/components/onboarding/EmployeeInviteRegistration.svelte', 'emplo
   !source.includes('liability_agreement_accepted')
 );
 
+expect('src/lib/components/onboarding/EmployeeInviteRegistration.svelte', 'employee communication consent is informed and affirmative', (source) =>
+  source.includes('May we send you optional operational email notifications?') &&
+  source.includes('May we send you optional operational text messages?') &&
+  source.includes('Consent is not a condition of employment or purchase.') &&
+  source.includes('Reply STOP to opt out or HELP for help.') &&
+  source.includes('type="radio" name="email_updates"') &&
+  source.includes('type="radio" name="sms_updates"') &&
+  !source.includes('type="checkbox" name="email_updates"') &&
+  !source.includes('type="checkbox" name="sms_updates"')
+);
+
+expect('src/lib/components/onboarding/OwnerRegistration.svelte', 'purchaser communication consent is informed and affirmative', (source) =>
+  source.includes('Consent is not a condition of purchase or employment.') &&
+  source.includes('Reply STOP to opt out or HELP for help.') &&
+  source.includes('type="radio" name="email_updates"') &&
+  source.includes('type="radio" name="sms_updates"')
+);
+
+expect('src/routes/register/+page.server.ts', 'registration records communication consent evidence', (source) =>
+  source.includes('email_updates_consented_at') &&
+  source.includes('sms_updates_consented_at') &&
+  source.includes('COMMUNICATION_CONSENT_VERSION') &&
+  source.includes("communication_consent_source") &&
+  source.includes("'registration'")
+);
+
+expect('migrations/0099_communication_consent_records.sql', 'communication consent evidence is persisted', (source) =>
+  source.includes('email_updates_consented_at') &&
+  source.includes('sms_updates_consented_at') &&
+  source.includes('communication_consent_version') &&
+	  source.includes('communication_consent_source') &&
+	  source.includes('CREATE TABLE IF NOT EXISTS communication_consent_events') &&
+	  source.includes('idx_communication_consent_user_channel')
+);
+
 expect('src/routes/register/+page.server.ts', 'invite registration saves personal information to the tenant employee profile', (source) =>
   source.includes('await ensureEmployeeProfilesTable(db)') &&
   source.includes('INSERT INTO employee_profiles') &&

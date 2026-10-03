@@ -247,6 +247,7 @@
             <input type="checkbox" name="email_updates" value="1" checked={data.preferences.emailUpdates} />
             <div>
               <strong>Email Notifications</strong>
+			  <small>Optional schedule, shift, onboarding status, and restaurant-operation messages. Essential account, security, and employment-record emails may still be sent when necessary.</small>
             </div>
           </label>
 
@@ -254,6 +255,7 @@
             <input type="checkbox" name="sms_updates" value="1" checked={data.preferences.smsUpdates} />
             <div>
               <strong>SMS Notifications</strong>
+			  <small>Allow automated operational texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</small>
             </div>
           </label>
 

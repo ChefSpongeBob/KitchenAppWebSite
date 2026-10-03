@@ -19,8 +19,8 @@
 		emergencyContactName: string;
 		emergencyContactPhone: string;
 		emergencyContactRelationship: string;
-		emailUpdates: boolean;
-		smsUpdates: boolean;
+		emailUpdates: boolean | null;
+		smsUpdates: boolean | null;
 		businessName: string;
 		planTier: string;
 		legalName: string;
@@ -85,8 +85,10 @@
 	let emergencyContactName = seeded.emergencyContactName ?? '';
 	let emergencyContactPhone = seeded.emergencyContactPhone ?? '';
 	let emergencyContactRelationship = seeded.emergencyContactRelationship ?? '';
-	let emailUpdates = seeded.emailUpdates ?? true;
-	let smsUpdates = seeded.smsUpdates ?? false;
+	let emailConsent: '' | '0' | '1' =
+		typeof seeded.emailUpdates === 'boolean' ? (seeded.emailUpdates ? '1' : '0') : '';
+	let smsConsent: '' | '0' | '1' =
+		typeof seeded.smsUpdates === 'boolean' ? (seeded.smsUpdates ? '1' : '0') : '';
 	let password = '';
 	let confirmPassword = '';
 	let showPassword = false;
@@ -144,6 +146,8 @@
 			password = ''; confirmPassword = ''; feedback = 'Use at least 10 characters with letters and numbers.'; return false;
 		}
 		if (password !== confirmPassword) { password = ''; confirmPassword = ''; feedback = 'Passwords do not match.'; return false; }
+		if (!emailConsent || !smsConsent) { feedback = 'Choose Yes or No for both notification options.'; return false; }
+		if (smsConsent === '1' && !userPhone.trim()) { feedback = 'Enter a phone number to allow text notifications.'; return false; }
 		return true;
 	}
 
@@ -224,8 +228,6 @@
 				<input type="hidden" name="emergency_contact_relationship" value={emergencyContactRelationship.trim()} />
 				<input type="hidden" name="password" value={password} />
 				<input type="hidden" name="confirm_password" value={confirmPassword} />
-				<input type="hidden" name="email_updates" value={emailUpdates ? '1' : '0'} />
-				<input type="hidden" name="sms_updates" value={smsUpdates ? '1' : '0'} />
 				<input type="hidden" name="business_name" value={businessName.trim()} />
 				<input type="hidden" name="address_line_1" value={addressLine1.trim()} />
 				<input type="hidden" name="address_line_2" value={addressLine2.trim()} />
@@ -270,7 +272,20 @@
 								<label><span>Password</span><div class="password-field"><input type={showPassword ? 'text' : 'password'} bind:value={password} autocomplete="new-password" required /><button type="button" on:click={() => (showPassword = !showPassword)}>{showPassword ? 'Hide' : 'Show'}</button></div></label>
 								<label><span>Confirm password</span><div class="password-field"><input type={showConfirmPassword ? 'text' : 'password'} bind:value={confirmPassword} autocomplete="new-password" required /><button type="button" on:click={() => (showConfirmPassword = !showConfirmPassword)}>{showConfirmPassword ? 'Hide' : 'Show'}</button></div></label>
 							</div>
-							<div class="consents"><label><input type="checkbox" bind:checked={emailUpdates} /><span>Email notifications</span></label><label><input type="checkbox" bind:checked={smsUpdates} /><span>Text notifications</span></label></div>
+							<section class="consents" aria-labelledby="owner-contact-permission-title">
+								<div class="consent-heading"><h2 id="owner-contact-permission-title">Notification permission</h2><p>Choose how Crimini may contact you about your workspace.</p></div>
+								<fieldset>
+									<legend>May we send you optional operational email notifications?</legend>
+									<p>These may include schedule activity, onboarding status, reports, and restaurant updates. Essential account, security, billing, and employment-record emails may still be sent when necessary.</p>
+									<div class="consent-options"><label><input type="radio" name="email_updates" value="1" bind:group={emailConsent} required /><span>Yes, allow email notifications</span></label><label><input type="radio" name="email_updates" value="0" bind:group={emailConsent} required /><span>No, do not send optional emails</span></label></div>
+								</fieldset>
+								<fieldset>
+									<legend>May we send you optional operational text messages?</legend>
+									<p>By choosing Yes, you agree to receive automated texts from Crimini at the number provided. Messages may include schedules, shifts, onboarding, and operational alerts. Consent is not a condition of purchase or employment. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</p>
+									<div class="consent-options"><label><input type="radio" name="sms_updates" value="1" bind:group={smsConsent} required /><span>Yes, allow text notifications</span></label><label><input type="radio" name="sms_updates" value="0" bind:group={smsConsent} required /><span>No, do not send text messages</span></label></div>
+								</fieldset>
+								<p class="consent-legal">You may change these choices later in Profile &amp; Settings. See our <a href="/terms" target="_blank" rel="noreferrer">Terms</a> and <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</p>
+							</section>
 						{:else if activeStep === 3}
 							<div class="field-grid">
 								<label><span>Display name</span><input bind:value={displayName} maxlength="120" /></label>
@@ -392,10 +407,17 @@
 	.password-field input { border-bottom: 0; }
 	.password-field button, .actions button { padding: 0.2rem 0; border: 0; border-bottom: 1px solid currentColor; border-radius: 0; background: transparent; color: #111214; cursor: pointer; font: inherit; font-size: 0.78rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
 	.password-field button { margin: 0 0.1rem 0.72rem 0.65rem; }
-	.consents { display: flex; gap: 0.85rem 1.5rem; flex-wrap: wrap; padding-top: 0.35rem; }
-	.consents label, .agreement { display: inline-flex; align-items: center; gap: 0.55rem; }
+	.consents { display: grid; gap: 1rem; padding-top: 0.5rem; }
+	.consent-heading { display: grid; gap: 0.2rem; }
+	.consent-heading h2 { margin: 0; color: #111214; font-size: 1rem; }
+	.consent-heading p, .consents fieldset > p, .consent-legal { margin: 0; color: rgba(17, 18, 20, 0.66); font-size: 0.78rem; line-height: 1.55; }
+	.consents fieldset { display: grid; gap: 0.55rem; margin: 0; padding: 0.85rem 0; border: 0; border-top: 1px solid rgba(17, 18, 20, 0.18); }
+	.consents legend { padding: 0; color: #111214; font-size: 0.88rem; font-weight: 750; }
+	.consent-options { display: flex; gap: 0.6rem 1.4rem; flex-wrap: wrap; }
+	.consent-options label, .agreement { display: inline-flex; align-items: center; gap: 0.55rem; cursor: pointer; }
 	.consents input, .agreement input { width: 1rem; height: 1rem; min-height: 0; accent-color: #111214; }
-	.consents label > span, .agreement > span { color: #111214; font-size: 0.82rem; letter-spacing: 0; text-transform: none; }
+	.consent-options label > span, .agreement > span { color: #111214; font-size: 0.82rem; letter-spacing: 0; text-transform: none; }
+	.consent-legal a { color: inherit; text-underline-offset: 0.16rem; }
 	.business-stage { position: relative; }
 	.business-lead { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: clamp(2rem, 5vw, 4rem); font-weight: 520; letter-spacing: -0.055em; text-align: center; pointer-events: none; animation: business-lead 1500ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 	.business-fields { opacity: 0; animation: business-fields 560ms ease 1250ms both; }

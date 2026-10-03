@@ -96,6 +96,7 @@ const approvedGlobalTables = new Map([
   ['trial_denials', 'global anti-abuse trial denial registry'],
   ['user_invites', 'legacy user invite table; active restaurant onboarding uses business_invites'],
   ['user_preferences', 'global per-user settings and tour completion state'],
+	['communication_consent_events', 'global per-user communication consent history with optional business context'],
   ['users', 'global identity table; tenant authority lives in business_users']
 ]);
 
