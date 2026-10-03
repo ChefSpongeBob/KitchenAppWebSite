@@ -77,28 +77,44 @@ expect('src/lib/server/email.ts', 'invite email copy matches packet requirement'
   source.includes("onboardingRequired ? 'Complete your setup and onboarding forms:' : 'Complete your setup:'")
 );
 
-expect('src/routes/register/+page.svelte', 'employee invite flow submits from personal information without purchase screen', (source) =>
-  source.includes('$: inviteMode = Boolean(data.inviteCode)') &&
-  source.includes('$: collectEmployeeDetails = !inviteMode || data.onboardingRequired') &&
-  source.includes('visibleSlides = inviteMode') &&
-  source.includes("slide.id !== 'tier' && slide.id !== 'business' && slide.id !== 'purchase'") &&
-  source.includes('form="registration-form" class="primary inline-continue"') &&
-  source.includes('>Create account</button') &&
-  source.includes('{#if !inviteMode}') &&
-  source.includes('payment-placeholder') &&
-  source.includes('{#if !inviteMode}')
+expect('src/lib/components/onboarding/EmployeeInviteRegistration.svelte', 'employee invite flow submits from personal information without purchase screen', (source) =>
+  source.includes('name="invite_code"') &&
+  source.includes('name="real_name"') &&
+  source.includes('name="user_address_line_1"') &&
+  source.includes('name="password"') &&
+  source.includes('Create account') &&
+  !source.includes('name="business_name"') &&
+  !source.includes('name="plan_tier"') &&
+  !source.includes('liability_agreement_accepted')
 );
 
 expect('src/routes/register/+page.server.ts', 'invite registration saves personal information to the tenant employee profile', (source) =>
   source.includes('await ensureEmployeeProfilesTable(db)') &&
   source.includes('INSERT INTO employee_profiles') &&
   source.includes('ON CONFLICT(business_id, user_id) DO UPDATE SET') &&
-  source.includes('realName || displayName ||') &&
+  source.includes('realName || accountDisplayName') &&
   source.includes('userPhone ||') &&
   source.includes('birthday ||') &&
   source.includes('userAddressLine1 ||') &&
   source.includes('emergencyContactName ||') &&
   source.includes('emergencyContactPhone ||')
+);
+
+expect('src/lib/components/onboarding/OwnerRegistration.svelte', 'owner registration separates optional profile setup from required account and business steps', (source) =>
+  source.includes('const optionalSteps = new Set([0, 1, 3, 5, 6, 7])') &&
+  source.includes('Contact & Login') &&
+  source.includes('Your Business') &&
+  source.includes('Choose a Plan') &&
+  source.includes('Create workspace')
+);
+
+expect('src/routes/register/+page.server.ts', 'owner registration uploads branding documents and menus into tenant-scoped storage', (source) =>
+  source.includes('businesses/${newBusinessId}/branding/') &&
+  source.includes('businesses/${newBusinessId}/documents/') &&
+  source.includes("section: 'Docs'") &&
+  source.includes("section: 'Menu'") &&
+  source.includes('creator_category_registry') &&
+  source.includes('uploadedBusinessLogoUrl')
 );
 
 expect('src/routes/register/+page.server.ts', 'completed invite registration opens the employee welcome step', (source) =>

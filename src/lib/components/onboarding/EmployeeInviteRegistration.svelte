@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 
 	type FormValues = {
 		displayName: string;
@@ -83,7 +83,7 @@
 	];
 
 	const seeded = form?.values ?? {};
-	let phase: 'welcome' | 'starting' | 'form' = form?.error ? 'form' : 'welcome';
+	let phase: 'intro' | 'form' = form?.error ? 'form' : 'intro';
 	let activeStep = form?.error ? 2 : 0;
 	let fullName = seeded.realName || seeded.displayName || '';
 	let birthday = seeded.birthday || '';
@@ -106,16 +106,13 @@
 	const steps = ['Name & Birthday', 'Address', 'Contact & Login', 'Welcome'];
 
 	onMount(() => {
-		let welcomeTimer: number | undefined;
-		let startTimer: number | undefined;
+		let introTimer: number | undefined;
 
 		if (!form?.error) {
-			welcomeTimer = window.setTimeout(() => {
-				phase = 'starting';
-				startTimer = window.setTimeout(() => {
-					phase = 'form';
-				}, 900);
-			}, 2000);
+			const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			introTimer = window.setTimeout(() => {
+				phase = 'form';
+			}, reducedMotion ? 120 : 3600);
 		}
 
 		try {
@@ -136,8 +133,7 @@
 		}
 
 		return () => {
-			if (welcomeTimer) window.clearTimeout(welcomeTimer);
-			if (startTimer) window.clearTimeout(startTimer);
+			if (introTimer) window.clearTimeout(introTimer);
 		};
 	});
 
@@ -200,20 +196,25 @@
 	<title>Join Your Team | Crimini</title>
 </svelte:head>
 
-<section class="invite-shell" aria-label="Employee registration">
+<section class="invite-shell" class:intro-state={phase === 'intro'} aria-label="Employee registration">
+	<div class="mushroom-field" aria-hidden="true">
+		<img class="mushroom-mark mushroom-mark-one" src="/crimini-mushrooms-only.svg" alt="" />
+		<img class="mushroom-mark mushroom-mark-two" src="/crimini-mushrooms-only.svg" alt="" />
+		<img class="mushroom-mark mushroom-mark-three" src="/crimini-mushrooms-only.svg" alt="" />
+		<img class="mushroom-mark mushroom-mark-four" src="/crimini-mushrooms-only.svg" alt="" />
+	</div>
 	<a class="home-link" href="/">Home</a>
 
-	{#if phase === 'welcome'}
-		<div class="intro" in:fade={{ duration: 500 }} out:fade={{ duration: 300 }}>
-			<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
-			<h1>Welcome!</h1>
-		</div>
-	{:else if phase === 'starting'}
-		<div class="intro starting" in:fade={{ duration: 350 }} out:fade={{ duration: 250 }}>
-			<h1>Let&rsquo;s get started.</h1>
+	{#if phase === 'intro'}
+		<div class="intro">
+			<img class="intro-logo" src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+			<div class="intro-copy" aria-live="polite">
+				<h1 class="welcome-message">Welcome!</h1>
+				<h1 class="starting-message">Let&rsquo;s get started.</h1>
+			</div>
 		</div>
 	{:else}
-		<div class="form-shell" in:fly={{ y: 24, duration: 420 }}>
+		<div class="form-shell" in:fade={{ duration: 520 }}>
 			<header class="flow-header">
 				<img src="/crimini-mushrooms-only.svg" alt="" aria-hidden="true" />
 				<div>
@@ -363,14 +364,33 @@
 </section>
 
 <style>
+	:global(html:has(.invite-shell)),
 	:global(body:has(.invite-shell)) {
+		width: 100%;
+		margin: 0 !important;
+		padding: 0 !important;
+		overflow-x: hidden;
 		background: #fbfaf7;
+	}
+
+	:global(.app-content.onboarding-content:has(.invite-shell)) {
+		width: 100vw !important;
+		max-width: 100vw !important;
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+
+	.invite-shell,
+	.invite-shell * {
+		box-sizing: border-box;
 	}
 
 	.invite-shell {
 		position: relative;
+		isolation: isolate;
 		min-height: 100dvh;
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		place-items: center;
 		padding: clamp(4.5rem, 8vw, 7rem) clamp(1.1rem, 5vw, 4rem) 3rem;
 		background:
@@ -379,9 +399,59 @@
 		color: #111214;
 	}
 
+	.invite-shell.intro-state {
+		background: #fff;
+	}
+
+	.mushroom-field {
+		position: absolute;
+		z-index: 0;
+		inset: 0;
+		overflow: hidden;
+		pointer-events: none;
+	}
+
+	.mushroom-mark {
+		position: absolute;
+		display: block;
+		height: auto;
+		opacity: 0.045;
+		filter: grayscale(1) contrast(1.15);
+		mix-blend-mode: multiply;
+	}
+
+	.mushroom-mark-one {
+		top: 5%;
+		left: -8rem;
+		width: clamp(15rem, 24vw, 24rem);
+		transform: rotate(-12deg);
+	}
+
+	.mushroom-mark-two {
+		top: 8%;
+		right: -9rem;
+		width: clamp(18rem, 30vw, 31rem);
+		transform: rotate(11deg);
+	}
+
+	.mushroom-mark-three {
+		bottom: -5rem;
+		left: 8%;
+		width: clamp(12rem, 19vw, 20rem);
+		transform: rotate(7deg);
+	}
+
+	.mushroom-mark-four {
+		right: 6%;
+		bottom: -3rem;
+		width: clamp(10rem, 16vw, 17rem);
+		transform: rotate(-9deg);
+	}
+
 	.invite-shell::after {
 		content: '';
 		position: absolute;
+		z-index: 2;
 		inset: auto 7vw 2.2rem;
 		height: 1px;
 		background: linear-gradient(90deg, transparent, rgba(17, 18, 20, 0.26), transparent);
@@ -391,7 +461,7 @@
 		position: absolute;
 		top: 1.35rem;
 		left: clamp(1.1rem, 4vw, 3rem);
-		z-index: 2;
+		z-index: 3;
 		padding-bottom: 0.22rem;
 		border-bottom: 1px solid rgba(17, 18, 20, 0.35);
 		color: #111214;
@@ -403,37 +473,112 @@
 	}
 
 	.intro {
+		position: relative;
+		z-index: 1;
 		display: grid;
+		grid-template-rows: minmax(15rem, 1fr) clamp(5.5rem, 12vw, 8rem);
+		align-items: end;
 		justify-items: center;
-		gap: 1.2rem;
-		width: min(34rem, 90vw);
+		gap: clamp(0.8rem, 2vw, 1.4rem);
+		width: min(38rem, 90vw);
+		min-height: min(36rem, 72dvh);
 		text-align: center;
 	}
 
-	.intro img {
+	.intro-logo {
 		display: block;
 		width: min(30rem, 82vw);
 		height: auto;
+		mix-blend-mode: multiply;
+		animation: intro-brand 3600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.intro-copy {
+		position: relative;
+		align-self: stretch;
+		width: 100%;
 	}
 
 	.intro h1 {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
 		margin: 0;
 		font-size: clamp(2.3rem, 7vw, 5.5rem);
 		font-weight: 500;
 		letter-spacing: -0.065em;
+		opacity: 0;
 	}
 
-	.starting h1 {
+	.welcome-message {
+		animation: intro-welcome 1900ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
+	}
+
+	.intro .starting-message {
 		font-size: clamp(2rem, 6vw, 4.7rem);
+		animation: intro-starting 1650ms cubic-bezier(0.22, 1, 0.36, 1) 1900ms both;
 	}
 
 	.form-shell {
+		position: relative;
+		z-index: 1;
+		justify-self: center;
 		width: min(48rem, 100%);
+		min-width: 0;
+	}
+
+	@keyframes intro-brand {
+		0% {
+			opacity: 0;
+			transform: translateY(0.65rem) scale(0.99);
+		}
+		16%,
+		76% {
+			opacity: 1;
+			transform: none;
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-1rem) scale(0.98);
+		}
+	}
+
+	@keyframes intro-welcome {
+		0% {
+			opacity: 0;
+			transform: translateY(0.65rem);
+		}
+		20%,
+		68% {
+			opacity: 1;
+			transform: none;
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-0.7rem);
+		}
+	}
+
+	@keyframes intro-starting {
+		0% {
+			opacity: 0;
+			transform: translateY(0.8rem);
+		}
+		24%,
+		70% {
+			opacity: 1;
+			transform: none;
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-1.3rem);
+		}
 	}
 
 	.flow-header {
 		display: grid;
-		grid-template-columns: auto 1fr auto;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 1rem;
 		padding-bottom: 1rem;
@@ -443,6 +588,7 @@
 		width: 4.25rem;
 		height: 3rem;
 		object-fit: contain;
+		mix-blend-mode: multiply;
 	}
 
 	.flow-header p,
@@ -630,7 +776,35 @@
 		}
 
 		.form-shell {
-			margin: auto 0;
+			margin: auto;
+		}
+
+		.intro {
+			grid-template-rows: minmax(12rem, 1fr) 6.5rem;
+			min-height: min(32rem, 70dvh);
+		}
+
+		.mushroom-mark {
+			opacity: 0.035;
+		}
+
+		.mushroom-mark-one {
+			top: 10%;
+			left: -9rem;
+		}
+
+		.mushroom-mark-two {
+			top: 24%;
+			right: -11rem;
+		}
+
+		.mushroom-mark-three {
+			left: -4rem;
+			bottom: -2rem;
+		}
+
+		.mushroom-mark-four {
+			display: none;
 		}
 
 		.flow-header {
@@ -657,6 +831,12 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
+		.intro-logo,
+		.welcome-message,
+		.intro .starting-message {
+			animation: none;
+		}
+
 		.progress span {
 			transition: none;
 		}

@@ -70,6 +70,15 @@ type RegisterFormValues = {
 	purchaseMode: 'trial' | 'buy_now';
 	storeBillingPreference: 'both' | 'google_play' | 'app_store';
 	liabilityAgreementAccepted: boolean;
+	menuTitle: string;
+};
+
+type RegistrationDocumentUpload = {
+	title: string;
+	slug: string;
+	section: 'Docs' | 'Menu';
+	category: 'General' | 'Menu';
+	url: string;
 };
 
 function parseInviteDepartments(value: string | null | undefined, fallback = '') {
@@ -213,6 +222,69 @@ function normalizeWebsite(raw: string) {
 	}
 }
 
+function fileExtension(name: string) {
+	const dot = name.trim().lastIndexOf('.');
+	return dot > 0 ? name.trim().slice(dot + 1).toLowerCase() : '';
+}
+
+function isPdfUpload(file: File) {
+	return file.type === 'application/pdf' && fileExtension(file.name) === 'pdf';
+}
+
+function isLogoUpload(file: File) {
+	const extension = fileExtension(file.name);
+	if (file.type === 'image/jpeg') return extension === 'jpg' || extension === 'jpeg';
+	if (file.type === 'image/png') return extension === 'png';
+	if (file.type === 'image/webp') return extension === 'webp';
+	return false;
+}
+
+async function hasPdfSignature(file: File) {
+	const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+	return bytes.length === 5 && String.fromCharCode(...bytes) === '%PDF-';
+}
+
+async function hasLogoSignature(file: File) {
+	const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+	if (file.type === 'image/jpeg') {
+		return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+	}
+	if (file.type === 'image/png') {
+		return bytes.length >= 8 && bytes.slice(0, 8).every((value, index) => value === [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a][index]);
+	}
+	if (file.type === 'image/webp') {
+		return bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
+	}
+	return false;
+}
+
+function uploadTitle(file: File, fallback: string) {
+	const withoutExtension = file.name.trim().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+	return (withoutExtension || fallback).slice(0, 180);
+}
+
+function mediaUrlForKey(key: string) {
+	return `/api/documents/media/${key
+		.split('/')
+		.map((part) => encodeURIComponent(part))
+		.join('/')}`;
+}
+
+async function uploadRegistrationFile(
+	bucket: NonNullable<App.Locals['MEDIA_BUCKET']>,
+	key: string,
+	file: File,
+	cacheControl = 'private, max-age=0'
+) {
+	await bucket.put(key, await file.arrayBuffer(), {
+		httpMetadata: {
+			contentType: file.type || 'application/octet-stream',
+			cacheControl
+		}
+	});
+	return mediaUrlForKey(key);
+}
+
 function registerFailure(
 	status: number,
 	error: string,
@@ -228,6 +300,8 @@ export const actions: Actions = {
 		let registerDb: App.Platform['env']['DB'] | null = null;
 		let registerEmail = '';
 		let registerPhase = 'start';
+		let registrationMediaCommitted = false;
+		const registrationMediaKeys: string[] = [];
 		try {
 			registerPhase = 'read_form';
 			const formData = await request.formData();
@@ -290,6 +364,15 @@ export const actions: Actions = {
 			const liabilityAgreementVersion = String(formData.get('liability_agreement_version') || '')
 				.trim()
 				.slice(0, 32);
+			const menuTitle = toOptionalString(formData, 'menu_title', 180);
+			const logoEntry = formData.get('business_logo');
+			const businessLogo = logoEntry instanceof File && logoEntry.size > 0 ? logoEntry : null;
+			const businessDocuments = formData
+				.getAll('business_documents')
+				.filter((entry): entry is File => entry instanceof File && entry.size > 0)
+				.slice(0, 6);
+			const menuEntry = formData.get('business_menu');
+			const businessMenu = menuEntry instanceof File && menuEntry.size > 0 ? menuEntry : null;
 
 			submittedValues = {
 				displayName,
@@ -325,12 +408,15 @@ export const actions: Actions = {
 				addressCountry,
 				purchaseMode,
 				storeBillingPreference: safeStoreBillingPreference,
-				liabilityAgreementAccepted
+				liabilityAgreementAccepted,
+				menuTitle
 			};
 
-			if (!displayName || !email || !confirmEmail || !password || !confirmPassword) {
+			if (!email || !confirmEmail || !password || !confirmPassword) {
 				return registerFailure(400, 'All fields required.', 'security', submittedValues);
 			}
+			const accountDisplayName =
+				displayName || realName || email.split('@')[0]?.slice(0, 120) || 'Owner';
 			if (
 				inviteCode &&
 				(!realName || !birthday || !userPhone || !userAddressLine1 || !userCity || !userState || !userPostalCode)
@@ -367,6 +453,42 @@ export const actions: Actions = {
 			}
 			if (!inviteCode && liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
 				return registerFailure(400, 'Please refresh and accept the latest liability agreement.', 'purchase', submittedValues);
+			}
+			if (
+				!inviteCode &&
+				businessLogo &&
+				(businessLogo.size > 5 * 1024 * 1024 ||
+					!isLogoUpload(businessLogo) ||
+					!(await hasLogoSignature(businessLogo)))
+			) {
+				return registerFailure(
+					400,
+					'Business logo must be a valid JPG, PNG, or WebP file under 5MB.',
+					'business',
+					submittedValues
+				);
+			}
+			const invalidBusinessDocument =
+				!inviteCode && businessDocuments.length > 0
+					? (
+							await Promise.all(
+								businessDocuments.map(async (file) =>
+									file.size > 15 * 1024 * 1024 || !isPdfUpload(file) || !(await hasPdfSignature(file))
+								)
+							)
+						).some(Boolean)
+					: false;
+			if (invalidBusinessDocument) {
+				return registerFailure(400, 'Business documents must be PDFs under 15MB each.', 'business', submittedValues);
+			}
+			if (
+				!inviteCode &&
+				businessMenu &&
+				(businessMenu.size > 15 * 1024 * 1024 ||
+					!isPdfUpload(businessMenu) ||
+					!(await hasPdfSignature(businessMenu)))
+			) {
+				return registerFailure(400, 'Menu upload must be a PDF under 15MB.', 'business', submittedValues);
 			}
 
 			const websiteUrl = normalizeWebsite(websiteRaw);
@@ -582,6 +704,57 @@ export const actions: Actions = {
 				}
 			}
 
+			const newBusinessId = inviteCode ? null : crypto.randomUUID();
+			let uploadedBusinessLogoUrl: string | null = null;
+			const uploadedBusinessDocuments: RegistrationDocumentUpload[] = [];
+
+			if (newBusinessId && (businessLogo || businessDocuments.length > 0 || businessMenu)) {
+				registerPhase = 'registration_media';
+				if (!locals.MEDIA_BUCKET) {
+					return registerFailure(503, 'File uploads are temporarily unavailable. Skip uploads or try again shortly.', 'business', submittedValues);
+				}
+
+				if (businessLogo) {
+					const extension = fileExtension(businessLogo.name) || 'jpg';
+					const key = `businesses/${newBusinessId}/branding/sidebar-logo-${crypto.randomUUID()}.${extension}`;
+					uploadedBusinessLogoUrl = await uploadRegistrationFile(
+						locals.MEDIA_BUCKET,
+						key,
+						businessLogo,
+						'public, max-age=31536000, immutable'
+					);
+					registrationMediaKeys.push(key);
+				}
+
+				for (const document of businessDocuments) {
+					const slug = `setup-${newBusinessId.slice(0, 8)}-${crypto.randomUUID().slice(0, 12)}`;
+					const key = `businesses/${newBusinessId}/documents/${slug}/${crypto.randomUUID()}.pdf`;
+					const uploadedUrl = await uploadRegistrationFile(locals.MEDIA_BUCKET, key, document);
+					registrationMediaKeys.push(key);
+					uploadedBusinessDocuments.push({
+						title: uploadTitle(document, 'Business document'),
+						slug,
+						section: 'Docs',
+						category: 'General',
+						url: uploadedUrl
+					});
+				}
+
+				if (businessMenu) {
+					const slug = `menu-${newBusinessId.slice(0, 8)}-${crypto.randomUUID().slice(0, 12)}`;
+					const key = `businesses/${newBusinessId}/documents/${slug}/${crypto.randomUUID()}.pdf`;
+					const uploadedUrl = await uploadRegistrationFile(locals.MEDIA_BUCKET, key, businessMenu);
+					registrationMediaKeys.push(key);
+					uploadedBusinessDocuments.push({
+						title: menuTitle || uploadTitle(businessMenu, 'Menu'),
+						slug,
+						section: 'Menu',
+						category: 'Menu',
+						url: uploadedUrl
+					});
+				}
+			}
+
 			registerPhase = 'password_hash';
 			const userId = crypto.randomUUID();
 			const passwordHash = await hashPassword(password, platform?.env);
@@ -623,13 +796,13 @@ export const actions: Actions = {
 		`;
 				const stmt = db.prepare(sql);
 				if (hasIsActive && hasRole) {
-					await stmt.bind(userId, email, email, passwordHash, displayName, roleValue, now, now).run();
+					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, roleValue, now, now).run();
 				} else if (hasIsActive) {
-					await stmt.bind(userId, email, email, passwordHash, displayName, now, now).run();
+					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, now, now).run();
 				} else if (hasRole) {
-					await stmt.bind(userId, email, email, passwordHash, displayName, roleValue, now, now).run();
+					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, roleValue, now, now).run();
 				} else {
-					await stmt.bind(userId, email, email, passwordHash, displayName, now, now).run();
+					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, now, now).run();
 				}
 			} else {
 				const sql = hasIsActive
@@ -660,13 +833,13 @@ export const actions: Actions = {
 		`;
 				const stmt = db.prepare(sql);
 				if (hasIsActive && hasRole) {
-					await stmt.bind(userId, email, passwordHash, displayName, roleValue, now, now).run();
+					await stmt.bind(userId, email, passwordHash, accountDisplayName, roleValue, now, now).run();
 				} else if (hasIsActive) {
-					await stmt.bind(userId, email, passwordHash, displayName, now, now).run();
+					await stmt.bind(userId, email, passwordHash, accountDisplayName, now, now).run();
 				} else if (hasRole) {
-					await stmt.bind(userId, email, passwordHash, displayName, roleValue, now, now).run();
+					await stmt.bind(userId, email, passwordHash, accountDisplayName, roleValue, now, now).run();
 				} else {
-					await stmt.bind(userId, email, passwordHash, displayName, now, now).run();
+					await stmt.bind(userId, email, passwordHash, accountDisplayName, now, now).run();
 				}
 			}
 
@@ -874,7 +1047,7 @@ export const actions: Actions = {
 					}
 				}
 			} else {
-				const businessId = crypto.randomUUID();
+				const businessId = newBusinessId!;
 				const businessSlug = await reserveBusinessSlug(db, requestedBusinessSlug || businessName);
 				const initialBusinessStatus = 'pending_payment';
 				await db
@@ -886,6 +1059,7 @@ export const actions: Actions = {
 					slug,
 					plan_tier,
 					status,
+					sidebar_logo_url,
 					legal_business_name,
 					registry_id,
 					contact_email,
@@ -901,7 +1075,7 @@ export const actions: Actions = {
 					created_at,
 					updated_at
 				)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`
 					)
 					.bind(
@@ -910,6 +1084,7 @@ export const actions: Actions = {
 						businessSlug,
 						planTier,
 						initialBusinessStatus,
+						uploadedBusinessLogoUrl,
 						legalName || null,
 						registryId || null,
 						contactEmail || null,
@@ -926,6 +1101,45 @@ export const actions: Actions = {
 						now
 					)
 					.run();
+
+				if (uploadedBusinessDocuments.some((document) => document.section === 'Docs')) {
+					await db
+						.prepare(
+							`
+							INSERT OR IGNORE INTO creator_category_registry (
+								id, business_id, editor_type, category, created_at
+							)
+							VALUES (?, ?, 'document', 'General', ?)
+							`
+						)
+						.bind(crypto.randomUUID(), businessId, now)
+						.run();
+				}
+
+				for (const document of uploadedBusinessDocuments) {
+					await db
+						.prepare(
+							`
+							INSERT INTO documents (
+								id, slug, title, section, category, content, file_url,
+								is_active, created_at, updated_at, business_id
+							)
+							VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?, ?)
+							`
+						)
+						.bind(
+							crypto.randomUUID(),
+							document.slug,
+							document.title,
+							document.section,
+							document.category,
+							document.url,
+							now,
+							now,
+							businessId
+						)
+						.run();
+				}
 				await db
 					.prepare(
 						`
@@ -984,6 +1198,7 @@ export const actions: Actions = {
 					},
 					now
 				});
+				registrationMediaCommitted = true;
 			}
 
 			registerPhase = 'employee_profile';
@@ -1036,7 +1251,7 @@ export const actions: Actions = {
 				.bind(
 					resolvedBusinessId,
 					userId,
-					realName || displayName || '',
+					realName || accountDisplayName,
 					userPhone || '',
 					birthday || '',
 					userAddressLine1 || '',
@@ -1107,7 +1322,7 @@ export const actions: Actions = {
 					env: platform?.env,
 					origin: url.origin,
 					ownerEmail: email,
-					ownerName: displayName,
+					ownerName: accountDisplayName,
 					ownerTitle: ownerTitle || 'Owner',
 					businessName,
 					planTier
@@ -1148,6 +1363,9 @@ export const actions: Actions = {
 					: '/welcome/admin'
 			);
 		} catch (err) {
+			if (!registrationMediaCommitted && registrationMediaKeys.length > 0 && locals.MEDIA_BUCKET) {
+				await Promise.allSettled(registrationMediaKeys.map((key) => locals.MEDIA_BUCKET!.delete(key)));
+			}
 			if (isRedirect(err)) {
 				throw err;
 			}
