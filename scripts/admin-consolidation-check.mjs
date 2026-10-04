@@ -79,6 +79,9 @@ expectMissing(
 
 expect('src/lib/components/ui/AdminEditorMenu.svelte', 'admin dropdown has one content editor entry', (source) =>
   source.includes("label: 'Creator Studio'") &&
+  source.includes("href: '/admin/business-registry'") &&
+  source.includes("href: '/admin/feature-matrix'") &&
+  !source.includes('/admin/app-editor#business-registry') &&
   !source.includes("label: 'Category Creator'") &&
   !source.includes("label: 'Documents'") &&
   !source.includes("label: 'Lists'") &&
@@ -104,6 +107,29 @@ expect('src/routes/admin/+page.svelte', 'manager dashboard keeps navigation and 
   source.includes('href="/admin/users"') &&
   source.includes('href="/admin/onboarding#employee-packets"') &&
   source.includes('href="/admin/onboarding#packet-builder"')
+);
+
+expect('src/routes/admin/+page.svelte', 'manager dashboard links separate registry and feature workspaces', (source) =>
+  source.includes('href="/admin/business-registry"') &&
+  source.includes('href="/admin/feature-matrix"') &&
+  !source.includes('/admin/app-editor#business-registry')
+);
+
+expect('src/routes/admin/business-registry/+page.svelte', 'business registry owns billing access', (source) =>
+  source.includes('<PageHeader title="Business Registry"') &&
+  source.includes('href="/billing"') &&
+  source.includes('Manage Billing')
+);
+
+expect('src/routes/admin/feature-matrix/+page.svelte', 'feature matrix has a dedicated workspace', (source) =>
+  source.includes('<PageHeader title="Feature Matrix"') &&
+  source.includes('Save Feature Matrix')
+);
+
+expect('src/routes/admin/app-editor/+page.svelte', 'app editor is limited to sidebar branding', (source) =>
+  source.includes('Sidebar Branding') &&
+  !source.includes('Business Registry') &&
+  !source.includes('Feature Visibility')
 );
 
 expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes requests and owns announcement history', (source) =>

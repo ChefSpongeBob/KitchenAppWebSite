@@ -189,14 +189,30 @@ expect('src/routes/vendors/+page.server.ts', 'vendor viewer is business scoped',
   includesAll(source, ['loadVendors', 'requireBusinessId(locals)'])
 );
 
-expect('src/routes/admin/app-editor/+page.server.ts', 'app editor persists branding registry and feature modes', (source) =>
+expect('src/routes/admin/app-editor/+page.server.ts', 'app editor persists sidebar branding', (source) =>
   includesAll(source, [
     'save_branding',
-    'save_registry',
-    'saveAppFeatureModes',
     'locals.businessId',
     'sidebar_logo_url',
     'uploadBrandLogo'
+  ])
+);
+
+expect('src/routes/admin/business-registry/+page.server.ts', 'business registry persists tenant business information', (source) =>
+  includesAll(source, [
+    'save_registry',
+    'locals.businessId',
+    'legal_business_name',
+    'registry_id',
+    'manage_billing'
+  ])
+);
+
+expect('src/routes/admin/feature-matrix/+page.server.ts', 'feature matrix persists tenant feature modes', (source) =>
+  includesAll(source, [
+    'saveAppFeatureModes',
+    'appFeatureDefinitions',
+    'locals.businessId'
   ])
 );
 

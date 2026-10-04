@@ -43,7 +43,9 @@ const privateRoutes = [
 const adminRoutes = [
   ['/admin', 'Admin dashboard'],
   ['/admin/app-editor', 'App editor'],
+  ['/admin/business-registry', 'Business registry'],
   ['/admin/creator', 'Creator'],
+  ['/admin/feature-matrix', 'Feature matrix'],
   ['/admin/schedule', 'Admin schedule builder'],
   ['/admin/schedule?tool=approvals', 'Schedule approvals'],
   ['/admin/schedule?tool=setup', 'Schedule setup'],

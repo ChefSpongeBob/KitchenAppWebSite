@@ -147,6 +147,8 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/admin/sensors` -> `manage_devices`
 - `/admin/vendors` -> `manage_vendors`
 - `/admin/app-editor` -> `manage_workspace`
+- `/admin/business-registry` -> `manage_workspace`
+- `/admin/feature-matrix` -> `manage_workspace`
 - `/admin/creator` -> `manage_content`
 - `/reports` -> `view_reports`
 - `/vendors` -> `view_vendors`
@@ -162,7 +164,9 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/account-deletion/+page.svelte` -> `src/routes/account-deletion/+page.svelte` -> `users` (reference)
 - `/admin` -> `src/routes/admin/+page.server.ts` -> `announcement_history` (delete, select), `announcements` (reference), `business_users` (select), `employee_spotlight` (reference), `schedule_shifts` (select), `temperature_alert_events` (select), `temps` (select), `todos` (select), `user_schedule_availability_requests` (select, update), `user_schedule_time_off_requests` (select, update), `users` (select)
 - `/admin/+page.svelte` -> `src/routes/admin/+page.svelte` -> `announcements` (reference), `employee_spotlight` (reference), `recipes` (reference), `temps` (reference), `todos` (reference), `users` (reference)
-- `/admin/app-editor` -> `src/routes/admin/app-editor/+page.server.ts` -> `businesses` (select/update), `documents` (reference)
+- `/admin/app-editor` -> `src/routes/admin/app-editor/+page.server.ts` -> `businesses` (select/update branding)
+- `/admin/business-registry` -> `src/routes/admin/business-registry/+page.server.ts` -> `businesses` (select/update registry)
+- `/admin/feature-matrix` -> `src/routes/admin/feature-matrix/+page.server.ts` -> `app_feature_modes` (select/update)
 - `/admin/creator` -> `src/routes/admin/creator/+page.server.ts` -> `documents` (reference), `recipes` (reference)
 - `/admin/creator/+page.svelte` -> `src/routes/admin/creator/+page.svelte` -> `documents` (reference), `recipes` (reference)
 - `/admin/onboarding` -> `src/routes/admin/onboarding/+page.server.ts` -> `users` (reference)
@@ -579,6 +583,7 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `/+layout.svelte` `src/routes/+layout.svelte` [reference]
   - `/` `src/routes/+layout.server.ts` [reference]
   - `/admin/app-editor` `src/routes/admin/app-editor/+page.server.ts` [select, update]
+  - `/admin/business-registry` `src/routes/admin/business-registry/+page.server.ts` [select, update]
   - `/api/documents/media/*key` `src/routes/api/documents/media/[...key]/+server.ts` [select]
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
   - `/billing` `src/routes/billing/+page.server.ts` [select]
@@ -736,7 +741,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 
 **Code Usage**
   - `/+page.svelte` `src/routes/+page.svelte` [reference]
-  - `/admin/app-editor` `src/routes/admin/app-editor/+page.server.ts` [reference]
   - `/admin/creator/+page.svelte` `src/routes/admin/creator/+page.svelte` [reference]
   - `/admin/creator` `src/routes/admin/creator/+page.server.ts` [reference]
   - `/api/documents/media/*key` `src/routes/api/documents/media/[...key]/+server.ts` [select]

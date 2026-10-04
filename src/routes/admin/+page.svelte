@@ -610,12 +610,12 @@
     <section class="workspace-section" data-guide="admin-workspaces">
       <header class="workspace-heading"><span>Management</span><h2>Workspace Setup</h2></header>
       <nav class="workspace-links" aria-label="Manager workspaces">
-        <a href="/admin/app-editor#business-registry">
+        <a href="/admin/business-registry">
           <span class="workspace-icon material-icons" aria-hidden="true">storefront</span>
           <span class="workspace-copy"><small>Ownership</small><strong>Business Registry</strong><p>Business details and registration.</p></span>
           <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
         </a>
-        <a href="/admin/app-editor">
+        <a href="/admin/feature-matrix">
           <span class="workspace-icon material-icons" aria-hidden="true">tune</span>
           <span class="workspace-copy"><small>App Editor</small><strong>Feature Matrix</strong><p>Control which modules are available.</p></span>
           <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>

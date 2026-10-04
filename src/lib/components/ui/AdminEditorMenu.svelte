@@ -26,21 +26,21 @@
 
   const menuItems: AdminRoute[] = [
     { href: '/admin/app-editor', label: 'App Editor', matches: prefix('/admin/app-editor') },
-    { href: '/admin/app-editor#business-registry', label: 'Business Registry', matches: prefix('/admin/app-editor') },
+    { href: '/admin/business-registry', label: 'Business Registry', matches: prefix('/admin/business-registry') },
     { href: '/admin/creator', label: 'Creator Studio', matches: prefix('/admin/creator') },
     { href: '/admin', label: 'Dashboard', matches: exact('/admin') },
     { href: '/admin/onboarding', label: 'Employee Onboarding', matches: prefix('/admin/onboarding') },
     { href: '/admin/users', label: 'Employees', matches: prefix('/admin/users') },
+    { href: '/admin/feature-matrix', label: 'Feature Matrix', matches: prefix('/admin/feature-matrix') },
     { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
     { href: '/admin/sensors', label: 'Temperature Sensors', matches: prefix('/admin/sensors') }
   ];
 
   $: currentPath = $page.url.pathname;
-  $: currentHash = $page.url.hash;
   $: featureModes = $page.data?.featureModes ?? defaultAppFeatureModes;
   $: activeUser = $page.data?.user;
   $: visibleMenuItems = menuItems.filter((item) => {
-    const requiredCapability = resolveBusinessCapabilityForPath(item.href.split('#')[0]);
+    const requiredCapability = resolveBusinessCapabilityForPath(item.href);
     if (
       requiredCapability &&
       !hasBusinessCapability(
@@ -62,15 +62,12 @@
         )
       : true;
   });
-  $: selectedHref =
-    currentPath === '/admin/app-editor' && currentHash === '#business-registry'
-      ? '/admin/app-editor#business-registry'
-      : visibleMenuItems.find((item) => item.matches(currentPath))?.href ?? '/admin';
+  $: selectedHref = visibleMenuItems.find((item) => item.matches(currentPath))?.href ?? '/admin';
 
   async function openAdminEditor(event: Event) {
     const target = event.currentTarget as HTMLSelectElement | null;
     const href = target?.value ?? '';
-    if (!href || href === `${currentPath}${currentHash}`) return;
+    if (!href || href === currentPath) return;
     await goto(href);
   }
 </script>

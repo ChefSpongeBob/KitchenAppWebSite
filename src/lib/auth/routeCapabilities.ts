@@ -12,6 +12,8 @@ const ROUTE_CAPABILITIES: ReadonlyArray<{
   { prefix: '/admin/sensors', capability: 'manage_devices' },
   { prefix: '/admin/vendors', capability: 'manage_vendors' },
   { prefix: '/admin/app-editor', capability: 'manage_workspace' },
+  { prefix: '/admin/business-registry', capability: 'manage_workspace' },
+  { prefix: '/admin/feature-matrix', capability: 'manage_workspace' },
   { prefix: '/admin/creator', capability: 'manage_content' },
   { prefix: '/reports', capability: 'view_reports' },
   { prefix: '/vendors', capability: 'view_vendors' },
