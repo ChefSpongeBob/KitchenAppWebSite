@@ -5,11 +5,17 @@ import {
   applyScheduleTemplateToWeek,
   buildWeekDays,
   approveScheduleShiftOffer,
+  approveScheduleAvailabilityRequest,
   approveScheduleOpenShiftRequest,
   approveScheduleTimeOffRequest,
   copyPreviousScheduleWeek,
+  createScheduleDepartment,
   createScheduleOpenShift,
+  createScheduleRoleDefinition,
+  deleteScheduleDepartment,
   deleteScheduleOpenShift,
+  deleteScheduleRoleDefinition,
+  declineScheduleAvailabilityRequest,
   declineScheduleTimeOffRequest,
   declineScheduleShiftOffer,
   declineScheduleOpenShiftRequest,
@@ -20,6 +26,8 @@ import {
   loadScheduleManagerDepartments,
   loadScheduleOpenShiftRequestsForWeek,
   loadScheduleOpenShiftsForWeek,
+  loadPendingScheduleAvailabilityRequests,
+  loadScheduleRoleDefinitions,
   loadScheduleSettings,
   loadScheduleShiftOffersForWeek,
   loadScheduleTemplates,
@@ -37,6 +45,10 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   depends('app:admin-schedule');
   const db = locals.DB;
   const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
+  const requestedTool = (url.searchParams.get('tool') ?? '').trim();
+  const initialTool = ['approvals', 'open-shifts', 'labor', 'templates', 'setup'].includes(requestedTool)
+    ? requestedTool
+    : 'builder';
 
   if (!db) {
     return {
@@ -51,8 +63,11 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       openShifts: [],
       openShiftRequests: [],
       timeOffRequests: [],
+      pendingAvailability: [],
       templates: [],
       laborTargets: [],
+      roleDefinitions: [],
+      initialTool,
       settings: {
         autofillNewWeeks: false,
         departments: ['General'],
@@ -64,7 +79,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     };
   }
 
-  const [users, schedule, offers, openShifts, openShiftRequests, settings, timeOffRequests, templates, laborTargets] = await Promise.all([
+  const [users, schedule, offers, openShifts, openShiftRequests, settings, timeOffRequests, templates, laborTargets, roleDefinitions] = await Promise.all([
     loadScheduleAssignableUsers(db, locals.businessId),
     loadScheduleWeek(db, weekStart, { ensureWeek: true, userId: locals.userId ?? null, businessId: locals.businessId }),
     loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
@@ -73,7 +88,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     loadScheduleSettings(db, locals.businessId),
     loadScheduleTimeOffRequestsForRange(db, weekStart, addDays(weekStart, 6), locals.businessId),
     loadScheduleTemplates(db, locals.businessId),
-    loadScheduleLaborTargets(db, weekStart, locals.businessId)
+    loadScheduleLaborTargets(db, weekStart, locals.businessId),
+    loadScheduleRoleDefinitions(db, locals.businessId)
   ]);
   const allowedDepartments = await loadScheduleManagerDepartments(db, locals, locals.businessId ?? '');
   const allowedDepartmentSet = new Set(allowedDepartments);
@@ -93,11 +109,14 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     )
   };
 
-  const availabilityByUser = await loadScheduleAvailabilityByUser(
-    db,
-    visibleUsers.map((user) => user.id),
-    locals.businessId
-  );
+  const [availabilityByUser, pendingAvailability] = await Promise.all([
+    loadScheduleAvailabilityByUser(
+      db,
+      visibleUsers.map((user) => user.id),
+      locals.businessId
+    ),
+    loadPendingScheduleAvailabilityRequests(db, locals.businessId ?? '', Array.from(visibleUserIds))
+  ]);
 
   return {
     weekStart,
@@ -158,6 +177,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       note: request.note,
       status: request.status
     })),
+    pendingAvailability,
     templates: templates.filter((template) =>
       allowedDepartmentSet.has(template.department) || (hasAllDepartmentAccess && !template.department)
     ).map((template) => ({
@@ -172,7 +192,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       averageHourlyRate: target.averageHourlyRate
     })),
     settings: visibleSettings,
-    availabilityByUser: Object.fromEntries(availabilityByUser)
+    availabilityByUser: Object.fromEntries(availabilityByUser),
+    roleDefinitions: roleDefinitions.filter((role) => allowedDepartmentSet.has(role.department)),
+    initialTool
   };
 };
 
@@ -189,7 +211,13 @@ export const actions: Actions = {
   decline_open_shift: ({ request, locals }) => declineScheduleOpenShiftRequest(request, locals),
   approve_time_off: ({ request, locals }) => approveScheduleTimeOffRequest(request, locals),
   decline_time_off: ({ request, locals }) => declineScheduleTimeOffRequest(request, locals),
+  approve_availability: ({ request, locals }) => approveScheduleAvailabilityRequest(request, locals),
+  decline_availability: ({ request, locals }) => declineScheduleAvailabilityRequest(request, locals),
   save_labor_targets: ({ request, locals }) => saveScheduleLaborTargets(request, locals),
   save_template: ({ request, locals }) => saveScheduleTemplateFromWeek(request, locals),
-  apply_template: ({ request, locals }) => applyScheduleTemplateToWeek(request, locals)
+  apply_template: ({ request, locals }) => applyScheduleTemplateToWeek(request, locals),
+  create_department: ({ request, locals }) => createScheduleDepartment(request, locals),
+  create_role: ({ request, locals }) => createScheduleRoleDefinition(request, locals),
+  delete_department: ({ request, locals }) => deleteScheduleDepartment(request, locals),
+  delete_role: ({ request, locals }) => deleteScheduleRoleDefinition(request, locals)
 };

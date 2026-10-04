@@ -45,8 +45,8 @@ const adminRoutes = [
   ['/admin/app-editor', 'App editor'],
   ['/admin/creator', 'Creator'],
   ['/admin/schedule', 'Admin schedule builder'],
-  ['/admin/schedule-roles', 'Schedule roles'],
-  ['/admin/schedule-settings', 'Schedule settings'],
+  ['/admin/schedule?tool=approvals', 'Schedule approvals'],
+  ['/admin/schedule?tool=setup', 'Schedule setup'],
   ['/admin/users', 'Admin users'],
   ['/admin/sensors', 'Temperature sensors']
 ];

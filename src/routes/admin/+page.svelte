@@ -29,7 +29,6 @@
     submitted_email?: string | null;
   };
   type SavedReminder = { id: string; content: string; created_at: number; updated_at: number };
-  type AvailabilityEntry = { weekday: number; isAvailable: boolean; startTime: string; endTime: string };
   type GuidedStep = {
     selector: string;
     title: string;
@@ -54,28 +53,13 @@
     }>;
     employeeSpotlight: { employeeName: string; shoutout: string; updatedAt: number };
     featureAccess: AppFeatureAccess;
+    workspaceAccess: {
+      vendors: boolean;
+      reports: boolean;
+    };
     analytics: {
       windowDays: number;
       staffingSeries: Array<{ day: string; label: string; staffed: number; target: number }>;
-    };
-    schedule: {
-      pendingTimeOff: Array<{
-        id: string;
-        userId: string;
-        userName: string | null;
-        userEmail: string;
-        startDate: string;
-        endDate: string;
-        note: string;
-      }>;
-      pendingAvailability: Array<{
-        id: string;
-        userId: string;
-        userName: string | null;
-        userEmail: string;
-        availability: AvailabilityEntry[];
-        updatedAt: number;
-      }>;
     };
     temperatureAnomalies: Array<{
       id: string;
@@ -103,7 +87,6 @@
   let showGuidedTour = data.guided ?? false;
   const chartWidth = 520;
   const chartHeight = 150;
-  const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const windowOptions = [
     { value: 1, label: '24H' },
     { value: 7, label: '7D' },
@@ -263,23 +246,6 @@
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  function formatTime(value: string) {
-    const [hours, minutes] = value.split(':').map(Number);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
-    return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  }
-
-  function availabilitySummary(entries: AvailabilityEntry[]) {
-    const available = entries.filter((entry) => entry.isAvailable);
-    if (available.length === 0) return 'Unavailable all week';
-    return available
-      .map((entry) => `${weekdayLabels[entry.weekday]} ${formatTime(entry.startTime)}-${formatTime(entry.endTime)}`)
-      .join(' | ');
-  }
-
   function taskAgeDays(createdAt: number) {
     return Math.max(0, Math.floor((Date.now() / 1000 - createdAt) / 86400));
   }
@@ -410,73 +376,9 @@
 
           <nav class="schedule-actions" aria-label="Scheduling workspaces">
             <a href="/admin/schedule" class="module-button"><span class="material-icons" aria-hidden="true">calendar_month</span>Schedule Builder</a>
-            <a href="/admin/schedule-settings" class="module-button secondary"><span class="material-icons" aria-hidden="true">settings</span>Schedule Settings</a>
+            <a href="/admin/schedule?tool=approvals" class="module-button secondary"><span class="material-icons" aria-hidden="true">task_alt</span>Requests ({data.summary.schedulePending})</a>
+            <a href="/admin/schedule?tool=setup" class="module-button secondary"><span class="material-icons" aria-hidden="true">settings</span>Schedule Setup</a>
           </nav>
-
-          <div class="request-drawers">
-            <details>
-              <summary>
-                <span><span class="material-icons" aria-hidden="true">event_busy</span>Time Off</span>
-                <span class="summary-meta"><strong>{data.schedule.pendingTimeOff.length}</strong><span class="material-icons chevron" aria-hidden="true">expand_more</span></span>
-              </summary>
-              <div class="request-list">
-                {#if data.schedule.pendingTimeOff.length === 0}
-                  <p class="compact-empty">No pending requests.</p>
-                {:else}
-                  {#each data.schedule.pendingTimeOff as request}
-                    <article class="request-item">
-                      <div>
-                        <strong>{request.userName ?? request.userEmail}</strong>
-                        <small>{formatDate(request.startDate)}{request.endDate !== request.startDate ? ` - ${formatDate(request.endDate)}` : ''}</small>
-                        {#if request.note}<small>{request.note}</small>{/if}
-                      </div>
-                      <div class="inline-actions">
-                        <form method="POST" action="?/approve_time_off" use:enhance={withAdminFeedback}>
-                          <input type="hidden" name="request_id" value={request.id} />
-                          <button type="submit" class="compact-action approve">Approve</button>
-                        </form>
-                        <form method="POST" action="?/decline_time_off" use:enhance={withAdminFeedback}>
-                          <input type="hidden" name="request_id" value={request.id} />
-                          <button type="submit" class="compact-action danger-text">Decline</button>
-                        </form>
-                      </div>
-                    </article>
-                  {/each}
-                {/if}
-              </div>
-            </details>
-
-            <details>
-              <summary>
-                <span><span class="material-icons" aria-hidden="true">schedule</span>Availability</span>
-                <span class="summary-meta"><strong>{data.schedule.pendingAvailability.length}</strong><span class="material-icons chevron" aria-hidden="true">expand_more</span></span>
-              </summary>
-              <div class="request-list">
-                {#if data.schedule.pendingAvailability.length === 0}
-                  <p class="compact-empty">No pending changes.</p>
-                {:else}
-                  {#each data.schedule.pendingAvailability as request}
-                    <article class="request-item">
-                      <div>
-                        <strong>{request.userName ?? request.userEmail}</strong>
-                        <small>{availabilitySummary(request.availability)}</small>
-                      </div>
-                      <div class="inline-actions">
-                        <form method="POST" action="?/approve_availability" use:enhance={withAdminFeedback}>
-                          <input type="hidden" name="request_id" value={request.id} />
-                          <button type="submit" class="compact-action approve">Approve</button>
-                        </form>
-                        <form method="POST" action="?/decline_availability" use:enhance={withAdminFeedback}>
-                          <input type="hidden" name="request_id" value={request.id} />
-                          <button type="submit" class="compact-action danger-text">Decline</button>
-                        </form>
-                      </div>
-                    </article>
-                  {/each}
-                {/if}
-              </div>
-            </details>
-          </div>
         {/if}
 
         <nav class="people-links" aria-label="Employee management">
@@ -723,6 +625,20 @@
           <span class="workspace-copy"><small>Builder</small><strong>Creator Studio</strong><p>Build lists, recipes, documents, and menus.</p></span>
           <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
         </a>
+        {#if data.workspaceAccess.vendors}
+          <a href="/admin/vendors">
+            <span class="workspace-icon material-icons" aria-hidden="true">local_shipping</span>
+            <span class="workspace-copy"><small>Operations</small><strong>Vendor Manager</strong><p>Add and maintain vendor contacts.</p></span>
+            <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
+          </a>
+        {/if}
+        {#if data.workspaceAccess.reports}
+          <a href="/reports">
+            <span class="workspace-icon material-icons" aria-hidden="true">analytics</span>
+            <span class="workspace-copy"><small>Exports</small><strong>Reports</strong><p>Open operational history and downloads.</p></span>
+            <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
+          </a>
+        {/if}
       </nav>
     </section>
   </div>
@@ -1131,10 +1047,6 @@
     color: color-mix(in srgb, var(--color-error) 80%, var(--color-text));
   }
 
-  .approve {
-    border-color: color-mix(in srgb, var(--color-success) 45%, var(--admin-border));
-  }
-
   .active-action {
     border-color: var(--color-text);
     background: var(--color-text);
@@ -1142,13 +1054,6 @@
     font-weight: var(--weight-bold);
   }
 
-  .request-drawers {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
-  }
-
-  .request-drawers details,
   .management-drawer {
     min-width: 0;
     border: 1px solid var(--admin-border);
@@ -1164,7 +1069,6 @@
     display: none;
   }
 
-  .request-drawers summary,
   .management-drawer > summary {
     min-height: 2.65rem;
     padding: 0.55rem 0.65rem;
@@ -1178,24 +1082,6 @@
     font-weight: var(--weight-semibold);
   }
 
-  .request-drawers summary > span:first-child {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
-  .request-drawers summary .material-icons {
-    color: var(--color-text-muted);
-    font-size: 0.95rem;
-  }
-
-  .summary-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .summary-meta strong,
   .count-badge {
     min-width: 1.45rem;
     min-height: 1.45rem;
@@ -1208,10 +1094,6 @@
     font-weight: var(--weight-bold);
   }
 
-  .request-drawers .summary-meta strong {
-    background: var(--color-surface);
-  }
-
   .chevron {
     color: var(--color-text-muted);
     font-size: 1rem;
@@ -1222,46 +1104,9 @@
     transform: rotate(180deg);
   }
 
-  .request-list,
   .drawer-content,
   .history-list {
     padding: 0 0.6rem 0.6rem;
-  }
-
-  .request-list {
-    max-height: 250px;
-    overflow: auto;
-  }
-
-  .request-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.65rem;
-    align-items: center;
-    padding: 0.6rem;
-    border-radius: 8px;
-    background: var(--color-surface);
-  }
-
-  .request-item + .request-item {
-    margin-top: 0.4rem;
-  }
-
-  .request-item > div:first-child {
-    min-width: 0;
-    display: grid;
-    gap: 0.1rem;
-  }
-
-  .request-item strong {
-    font-size: 0.73rem;
-  }
-
-  .request-item small {
-    color: var(--color-text-muted);
-    font-size: 0.64rem;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
   }
 
   .inline-actions {
@@ -1819,6 +1664,96 @@
     font-size: 1rem;
   }
 
+  .temperature-panel,
+  .reminders-panel,
+  .announcement-manager {
+    position: relative;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .temperature-panel::before,
+  .temperature-panel::after,
+  .reminders-panel::before,
+  .reminders-panel::after,
+  .announcement-manager::before,
+  .announcement-manager::after,
+  .workspace-links::before,
+  .workspace-links::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-text) 34%, transparent),
+      color-mix(in srgb, var(--color-text) 12%, transparent) 58%,
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  .temperature-panel::before,
+  .reminders-panel::before,
+  .announcement-manager::before,
+  .workspace-links::before {
+    top: 0;
+  }
+
+  .temperature-panel::after,
+  .reminders-panel::after,
+  .announcement-manager::after,
+  .workspace-links::after {
+    bottom: 0;
+  }
+
+  .workspace-links {
+    position: relative;
+    padding: 1px 0;
+  }
+
+  .workspace-links a {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .workspace-links a:hover,
+  .workspace-links a:focus-visible {
+    border: 0;
+  }
+
+  .command-strip,
+  .saas-panel,
+  .snapshot-grid div,
+  .calm-state,
+  .sensor-signal,
+  .window-switch,
+  .window-switch a,
+  .module-button,
+  .compact-action,
+  .management-drawer,
+  .people-links a,
+  .announcement-copy,
+  .reminder-preview p,
+  input,
+  textarea,
+  select,
+  .idea-row,
+  .status-label,
+  .todo-assignment,
+  .task-row,
+  .current-announcement,
+  .history-list article,
+  .workspace-links a,
+  .workspace-icon {
+    border-radius: 0;
+  }
+
   @media (max-width: 1040px) {
     .operations-grid {
       grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.28fr);
@@ -1870,14 +1805,13 @@
 
     .saas-panel {
       padding: 0.8rem;
-      border-radius: 11px;
+      border-radius: 0;
     }
 
     .snapshot-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .request-drawers,
     .people-links,
     .workspace-links {
       grid-template-columns: 1fr;
@@ -1893,8 +1827,7 @@
     }
 
     .idea-row,
-    .task-row,
-    .request-item {
+    .task-row {
       grid-template-columns: 1fr;
     }
 

@@ -1,9 +1,19 @@
-import type { PageServerLoad, Actions } from './$types';
-import { redirect, fail } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
+import { redirect } from '@sveltejs/kit';
+import { hasBusinessCapability } from '$lib/server/permissions';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
+function canManageTodoHistory(locals: App.Locals) {
+	return hasBusinessCapability(
+		locals.businessRole,
+		locals.businessPermissionTemplate,
+		'manage_content',
+		locals.businessCapabilities
+	);
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
-	if (locals.userRole !== 'admin') {
+	if (!canManageTodoHistory(locals)) {
 		throw redirect(303, '/app');
 	}
 
@@ -22,6 +32,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		LEFT JOIN users u ON u.id = l.completed_by
 		WHERE l.business_id = ?
 		ORDER BY l.completed_at DESC
+		LIMIT 250
 	`)
 	.bind(businessId)
 	.all();
@@ -29,30 +40,4 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		logs: logs.results
 	};
-};
-
-export const actions: Actions = {
-	delete: async ({ request, locals }) => {
-		if (locals.userRole !== 'admin') {
-			throw redirect(303, '/app');
-		}
-
-		const db = locals.DB;
-		if (!db) return fail(503, { error: 'Database not configured.' });
-		await ensureTenantSchema(db);
-		const businessId = requireBusinessId(locals);
-		const formData = await request.formData();
-		const id = String(formData.get('id') || '');
-
-		if (!id) return fail(400);
-
-		await db.prepare(`
-			DELETE FROM todo_completion_log
-			WHERE id = ? AND business_id = ?
-		`)
-		.bind(id, businessId)
-		.run();
-
-		return { success: true };
-	}
 };

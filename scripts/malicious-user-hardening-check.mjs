@@ -296,8 +296,9 @@ expect('src/lib/server/admin.ts', 'admin creator stored text uses shared plain-t
   source.includes("formMultilineString(formData, 'content', 2000)")
 );
 
-expect('src/routes/announcements/+page.server.ts', 'announcement editor stores normalized multiline text', (source) =>
-  source.includes("normalizeFormText(formData, 'content', { maxLength: 2000, multiline: true })")
+expect('src/lib/server/admin.ts', 'manager dashboard announcement editor stores normalized multiline text', (source) =>
+  source.includes('export async function saveAnnouncement') &&
+  source.includes("formMultilineString(formData, 'content', 2000)")
 );
 
 expect('src/routes/tools/waste/+page.server.ts', 'waste tracker stores normalized plain text', (source) =>

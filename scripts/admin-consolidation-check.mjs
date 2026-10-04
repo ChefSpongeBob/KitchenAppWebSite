@@ -98,22 +98,56 @@ expect('src/routes/+layout.svelte', 'admin sidebar has one content editor entry'
 expect('src/routes/admin/+page.svelte', 'manager dashboard keeps navigation and groups scheduling with people tools', (source) =>
   source.includes('<PageHeader title="Manager Dashboard" />') &&
   source.includes('<h2>Schedule & People</h2>') &&
-  source.includes('href="/admin/schedule-settings"') &&
   source.includes('href="/admin/schedule"') &&
+  source.includes('href="/admin/schedule?tool=approvals"') &&
+  source.includes('href="/admin/schedule?tool=setup"') &&
   source.includes('href="/admin/users"') &&
   source.includes('href="/admin/onboarding#employee-packets"') &&
   source.includes('href="/admin/onboarding#packet-builder"')
 );
 
-expect('src/routes/admin/+page.server.ts', 'manager dashboard wires approvals and announcement history', (source) =>
-  source.includes('loadPendingScheduleTimeOffRequests') &&
-  source.includes('loadPendingScheduleAvailabilityRequests') &&
-  source.includes('approve_time_off') &&
-  source.includes('decline_time_off') &&
-  source.includes('approve_availability') &&
-  source.includes('decline_availability') &&
+expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes requests and owns announcement history', (source) =>
+  source.includes('countPendingScheduleRequests') &&
+  !source.includes('loadPendingScheduleTimeOffRequests') &&
+  !source.includes('loadPendingScheduleAvailabilityRequests') &&
+  !source.includes('approve_time_off:') &&
+  !source.includes('approve_availability:') &&
+  !source.includes('make_user_admin:') &&
+  !source.includes('delete_user:') &&
+  !source.includes('toggle_specials_access:') &&
   source.includes('loadAdminAnnouncementHistory') &&
   source.includes('delete_announcement_history')
+);
+
+expect('src/routes/admin/schedule/+page.server.ts', 'schedule builder owns requests and setup actions', (source) =>
+  source.includes('loadPendingScheduleAvailabilityRequests') &&
+  source.includes('approve_time_off:') &&
+  source.includes('approve_availability:') &&
+  source.includes('create_department:') &&
+  source.includes('create_role:') &&
+  source.includes('delete_department:') &&
+  source.includes('delete_role:')
+);
+
+expect('src/routes/admin/schedule/+page.svelte', 'schedule builder exposes consolidated tools', (source) =>
+  source.includes('<option value="approvals">') &&
+  source.includes('<option value="setup">Schedule Setup</option>') &&
+  source.includes('action="?/approve_availability"') &&
+  source.includes('action="?/create_department"') &&
+  source.includes('action="?/create_role"')
+);
+
+expect('src/routes/announcements/+page.svelte', 'shared announcements page is view only', (source) =>
+  source.includes('<PageHeader title="Announcements" />') &&
+  !source.includes('save_announcement') &&
+  !source.includes('<textarea')
+);
+
+expect('src/routes/todo/log/+page.server.ts', 'ToDo history uses current capability access without hidden mutations', (source) =>
+  source.includes("'manage_content'") &&
+  source.includes('LIMIT 250') &&
+  !source.includes("locals.userRole !== 'admin'") &&
+  !source.includes('export const actions')
 );
 
 expect('migrations/0100_admin_dashboard_workflows.sql', 'dashboard workflow storage is tenant scoped and indexed', (source) =>

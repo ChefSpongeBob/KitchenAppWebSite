@@ -1,7 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import {
-  approveUser,
   approveWhiteboard,
   cleanupExpiredRejectedWhiteboardIdeas,
   createAdminReminder,
@@ -9,9 +8,7 @@ import {
   deleteAdminReminder,
   deleteAnnouncementHistory,
   deleteTodo,
-  deleteUser,
   deleteWhiteboard,
-  denyUser,
   loadAdminAnnouncement,
   loadAdminAnnouncementHistory,
   loadAdminAssignableUsers,
@@ -20,12 +17,10 @@ import {
   loadAdminReminders,
   loadAdminTodos,
   loadAdminWhiteboardIdeas,
-  makeUserAdmin,
   rejectWhiteboard,
   requireAdmin,
   saveAnnouncement,
   saveEmployeeSpotlight,
-  toggleSpecialsAccess,
   updateAdminReminder,
   usersHasIsActiveColumn
 } from '$lib/server/admin';
@@ -40,12 +35,7 @@ import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/
 import { requireBusinessId } from '$lib/server/tenant';
 import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
 import {
-  approveScheduleAvailabilityRequest,
-  approveScheduleTimeOffRequest,
-  declineScheduleAvailabilityRequest,
-  declineScheduleTimeOffRequest,
-  loadPendingScheduleAvailabilityRequests,
-  loadPendingScheduleTimeOffRequests,
+  countPendingScheduleRequests,
   loadScheduleAssignableUsers,
   loadScheduleManagerDepartments,
   loadScheduleSettings
@@ -94,13 +84,13 @@ function emptyDashboard(guided: boolean, featureAccess: ReturnType<typeof buildF
     announcementHistory: [],
     employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
     featureAccess,
+    workspaceAccess: {
+      vendors: false,
+      reports: false
+    },
     analytics: {
       windowDays,
       staffingSeries: dayKeys.map((day) => ({ day, label: dayLabel(day), staffed: 0, target: 0 }))
-    },
-    schedule: {
-      pendingTimeOff: [],
-      pendingAvailability: []
     },
     temperatureAnomalies: [],
     summary: {
@@ -190,8 +180,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const dayKeys = Array.from({ length: windowDays }, (_, index) => isoDate(addDays(startDate, index)));
   const staffingByDay = new Map<string, number>(dayKeys.map((day) => [day, 0]));
   let visibleScheduleUsers: Awaited<ReturnType<typeof loadScheduleAssignableUsers>> = [];
-  let pendingTimeOff: Awaited<ReturnType<typeof loadPendingScheduleTimeOffRequests>> = [];
-  let pendingAvailability: Awaited<ReturnType<typeof loadPendingScheduleAvailabilityRequests>> = [];
+  let schedulePending = 0;
 
   if (featureAccess.scheduling) {
     const [scheduleUsers, allowedDepartments, scheduleSettings] = await Promise.all([
@@ -209,10 +198,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     const visibleUserIds = hasAllDepartmentAccess
       ? users.map((user) => user.id)
       : visibleScheduleUsers.map((user) => user.id);
-    [pendingTimeOff, pendingAvailability] = await Promise.all([
-      loadPendingScheduleTimeOffRequests(db, businessId, visibleUserIds),
-      loadPendingScheduleAvailabilityRequests(db, businessId, visibleUserIds)
-    ]);
+    schedulePending = await countPendingScheduleRequests(db, businessId, visibleUserIds);
 
     if (allowedDepartments.length > 0) {
       const departmentPlaceholders = allowedDepartments.map(() => '?').join(', ');
@@ -293,13 +279,25 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     announcementHistory,
     employeeSpotlight,
     featureAccess,
+    workspaceAccess: {
+      vendors:
+        featureAccess.vendors &&
+        hasBusinessCapability(
+          locals.businessRole,
+          locals.businessPermissionTemplate,
+          'manage_vendors',
+          locals.businessCapabilities
+        ),
+      reports: hasBusinessCapability(
+        locals.businessRole,
+        locals.businessPermissionTemplate,
+        'view_reports',
+        locals.businessCapabilities
+      )
+    },
     analytics: {
       windowDays,
       staffingSeries
-    },
-    schedule: {
-      pendingTimeOff,
-      pendingAvailability
     },
     temperatureAnomalies,
     summary: {
@@ -310,7 +308,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       todoCompleted,
       nodesOperational,
       nodesTracked: nodeNames.length,
-      schedulePending: pendingTimeOff.length + pendingAvailability.length,
+      schedulePending,
       temperatureAnomalies: temperatureAnomalies.length
     }
   };
@@ -386,23 +384,5 @@ export const actions: Actions = {
     actionCapabilityFailure(locals, 'manage_people') ??
     (adminFeatureEnabled(locals, 'employee_spotlight')
       ? saveEmployeeSpotlight(request, locals)
-      : blockedFeatureError('Employee Spotlight')),
-  approve_time_off: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_schedule') ?? approveScheduleTimeOffRequest(request, locals),
-  decline_time_off: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_schedule') ?? declineScheduleTimeOffRequest(request, locals),
-  approve_availability: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_schedule') ?? approveScheduleAvailabilityRequest(request, locals),
-  decline_availability: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_schedule') ?? declineScheduleAvailabilityRequest(request, locals),
-  make_user_admin: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_permissions') ?? makeUserAdmin(request, locals),
-  approve_user: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_people') ?? approveUser(request, locals),
-  deny_user: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_people') ?? denyUser(request, locals),
-  delete_user: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_people') ?? deleteUser(request, locals),
-  toggle_specials_access: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_permissions') ?? toggleSpecialsAccess(request, locals)
+      : blockedFeatureError('Employee Spotlight'))
 };

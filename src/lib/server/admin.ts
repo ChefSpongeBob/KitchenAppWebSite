@@ -8,7 +8,6 @@ import {
   loadHomepageAnnouncement,
   saveHomepageAnnouncement
 } from '$lib/server/announcements';
-import { ensureDailySpecialsSchema } from '$lib/server/dailySpecials';
 import {
   ensureEmployeeSpotlightSchema,
   getEmployeeSpotlightId,
@@ -24,7 +23,7 @@ import {
   isValidScheduleDepartment,
   type ScheduleDepartment
 } from '$lib/assets/schedule';
-import { isEmailConfigured, sendApprovalEmail, sendInviteEmail } from '$lib/server/email';
+import { isEmailConfigured, sendInviteEmail } from '$lib/server/email';
 import { ensureBusinessSchema } from '$lib/server/business';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 import {
@@ -178,8 +177,6 @@ export type AdminUser = {
   role: string;
   permission_template: string;
   is_active: number;
-  can_manage_specials: number;
-  can_manage_announcements: number;
   approved_departments: ScheduleDepartment[];
   capability_overrides: BusinessCapabilityOverrides;
   effective_capabilities: BusinessCapability[];
@@ -1371,8 +1368,6 @@ export async function loadAdminReminders(db: D1, businessId: string) {
 
 export async function loadAdminUsers(db: D1, businessId: string) {
   await ensureBusinessSchema(db);
-  await ensureAnnouncementsSchema(db);
-  await ensureDailySpecialsSchema(db);
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
 
@@ -1387,18 +1382,14 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.email,
             COALESCE(bu.role, 'staff') AS role,
             COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
-            CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active,
-            CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials,
-            CASE WHEN ae.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_announcements
+            CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
-          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND dse.business_id = ?
-          LEFT JOIN announcement_editors ae ON ae.user_id = u.id AND ae.business_id = ?
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
-        .bind(businessId, businessId, businessId)
+        .bind(businessId)
         .all<AdminUser>()
     : await db
         .prepare(
@@ -1409,18 +1400,14 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.email,
             COALESCE(bu.role, 'staff') AS role,
             COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
-            COALESCE(bu.is_active, 1) AS is_active,
-            CASE WHEN dse.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_specials,
-            CASE WHEN ae.user_id IS NULL THEN 0 ELSE 1 END AS can_manage_announcements
+            COALESCE(bu.is_active, 1) AS is_active
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
-          LEFT JOIN daily_specials_editors dse ON dse.user_id = u.id AND dse.business_id = ?
-          LEFT JOIN announcement_editors ae ON ae.user_id = u.id AND ae.business_id = ?
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
         )
-        .bind(businessId, businessId, businessId)
+        .bind(businessId)
         .all<AdminUser>();
 
   const users = result.results ?? [];
@@ -5368,49 +5355,6 @@ export async function saveEmployeeSpotlight(request: Request, locals: App.Locals
   return { success: true };
 }
 
-export async function makeUserAdmin(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
-
-  const target = await db
-    .prepare(`SELECT id, COALESCE(role, 'user') AS role FROM users WHERE id = ? LIMIT 1`)
-    .bind(userId)
-    .first<{ id: string; role: string }>();
-
-  if (!target) return fail(404, { error: 'User not found.' });
-
-  await db
-    .prepare(
-      `
-      UPDATE business_users
-      SET role = 'manager', permission_template = 'general_manager', is_active = 1, updated_at = ?
-      WHERE business_id = ? AND user_id = ?
-      `
-    )
-    .bind(Math.floor(Date.now() / 1000), businessId, userId)
-    .run();
-
-  await writeAuditLog(db, {
-    action: 'admin_role_granted',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: userId
-  });
-
-  return { success: true };
-}
-
 export async function deleteAnnouncementHistory(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -5421,55 +5365,6 @@ export async function deleteAnnouncementHistory(request: Request, locals: App.Lo
   if (!historyId) return fail(400, { error: 'Missing announcement history id.' });
 
   await deleteAnnouncementHistoryEntry(db, businessId, historyId);
-  return { success: true };
-}
-
-export async function removeUserAdmin(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (userId === locals.userId) return fail(400, { error: 'You cannot restrict your own manager access.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
-
-  const businessUser = await db
-    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
-    .bind(businessId, userId)
-    .first<{ role: string }>();
-
-  if (!businessUser) return fail(404, { error: 'User not found in this business.' });
-  if (businessUser.role === 'owner') return fail(400, { error: 'Owner access cannot be restricted here.' });
-  if (!isBusinessAdminRole(businessUser.role)) return { success: true };
-  if ((await countAdmins(db, businessId)) <= 1) {
-    return fail(400, { error: 'At least one management account must remain active.' });
-  }
-
-  await db
-    .prepare(
-      `
-      UPDATE business_users
-      SET role = 'staff', permission_template = 'staff', updated_at = ?
-      WHERE business_id = ? AND user_id = ?
-      `
-    )
-    .bind(Math.floor(Date.now() / 1000), businessId, userId)
-    .run();
-
-  await writeAuditLog(db, {
-    action: 'admin_role_restricted',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: userId
-  });
-
   return { success: true };
 }
 
@@ -5637,70 +5532,6 @@ export async function updateUserCapabilityOverrides(request: Request, locals: Ap
   return { success: true, message: 'Permissions updated.' };
 }
 
-export async function approveUser(
-  request: Request,
-  locals: App.Locals,
-  origin?: string,
-  env?: EmailEnv | null
-) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
-  if (!(await usersHasIsActiveColumn(db))) {
-    return fail(400, { error: 'users.is_active column missing. Run auth migration first.' });
-  }
-
-  await db
-    .prepare(`UPDATE users SET is_active = 1, updated_at = ? WHERE id = ?`)
-    .bind(Math.floor(Date.now() / 1000), userId)
-    .run();
-  await db
-    .prepare(`UPDATE business_users SET is_active = 1, updated_at = ? WHERE business_id = ? AND user_id = ?`)
-    .bind(Math.floor(Date.now() / 1000), businessId, userId)
-    .run();
-
-  await writeAuditLog(db, {
-    action: 'user_access_approved',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: userId
-  });
-
-  await ensureEmployeeOnboardingRequirement(db, businessId, userId, locals.userId ?? null);
-
-  const approvedUser = await db
-    .prepare(`SELECT email, display_name FROM users WHERE id = ? LIMIT 1`)
-    .bind(userId)
-    .first<{ email: string; display_name: string | null }>();
-
-  if (!approvedUser) {
-    return { success: true, message: 'User approved.' };
-  }
-
-  const emailResult = await sendApprovalEmail({
-    env,
-    origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
-    userEmail: approvedUser.email,
-    displayName: approvedUser.display_name
-  });
-
-  return {
-    success: true,
-    message: emailResult.sent
-      ? 'Access restored and approval email sent.'
-      : `Access restored. ${emailResult.reason ?? 'Approval email was not sent.'}`
-  };
-}
-
 async function getUserById(db: D1, userId: string) {
   return db
     .prepare(
@@ -5732,24 +5563,6 @@ async function countAdmins(db: D1, businessId: string) {
   return result?.count ?? 0;
 }
 
-async function hasOtherActiveBusinessMembership(db: D1, userId: string, businessId: string) {
-  await ensureBusinessSchema(db);
-  const row = await db
-    .prepare(
-      `
-      SELECT business_id
-      FROM business_users
-      WHERE user_id = ?
-        AND business_id != ?
-        AND COALESCE(is_active, 1) = 1
-      LIMIT 1
-      `
-    )
-    .bind(userId, businessId)
-    .first<{ business_id: string }>();
-  return Boolean(row?.business_id);
-}
-
 async function hasOtherBusinessMembership(db: D1, userId: string, businessId: string) {
   await ensureBusinessSchema(db);
   const row = await db
@@ -5764,67 +5577,6 @@ async function hasOtherBusinessMembership(db: D1, userId: string, businessId: st
     .bind(userId, businessId)
     .first<{ business_id: string }>();
   return Boolean(row?.business_id);
-}
-
-async function revokeUserAccess(db: D1, userId: string, now: number) {
-  void now;
-  await revokeUserSessions(db, userId, { revokeDevices: true });
-}
-
-export async function denyUser(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!(await usersHasIsActiveColumn(db))) {
-    return fail(400, { error: 'users.is_active column missing. Run auth migration first.' });
-  }
-  if (userId === locals.userId) {
-    return fail(400, { error: 'You cannot deny your own account.' });
-  }
-
-  const target = await getUserById(db, userId);
-  if (!target) return fail(404, { error: 'User not found.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
-  if ((await countAdmins(db, businessId)) <= 1) {
-    const businessUser = await db
-      .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
-      .bind(businessId, userId)
-      .first<{ role: string }>();
-    if (isBusinessAdminRole(businessUser?.role)) {
-      return fail(400, { error: 'At least one management account must remain active.' });
-    }
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(`UPDATE business_users SET is_active = 0, updated_at = ? WHERE business_id = ? AND user_id = ?`)
-    .bind(now, businessId, userId)
-    .run();
-
-  if (!(await hasOtherActiveBusinessMembership(db, userId, businessId))) {
-    await db
-      .prepare(`UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?`)
-      .bind(now, userId)
-      .run();
-    await revokeUserAccess(db, userId, now);
-  }
-
-  await writeAuditLog(db, {
-    action: 'user_access_restricted',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: userId
-  });
-
-  return { success: true };
 }
 
 export async function deleteUser(request: Request, locals: App.Locals) {
@@ -5889,104 +5641,6 @@ export async function deleteUser(request: Request, locals: App.Locals) {
   });
 
   throw redirect(303, '/admin/users');
-}
-
-export async function toggleSpecialsAccess(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  await ensureDailySpecialsSchema(db);
-  await ensureTenantSchema(db, true);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
-
-  const existing = await db
-    .prepare(
-      `
-      SELECT user_id
-      FROM daily_specials_editors
-      WHERE user_id = ? AND business_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(userId, businessId)
-    .first<{ user_id: string }>();
-
-  if (existing) {
-    await db
-      .prepare(`DELETE FROM daily_specials_editors WHERE user_id = ? AND business_id = ?`)
-      .bind(userId, businessId)
-      .run();
-    return { success: true };
-  }
-
-  await db
-    .prepare(
-      `
-      INSERT INTO daily_specials_editors (user_id, granted_by, updated_at, business_id)
-      VALUES (?, ?, ?, ?)
-      `
-    )
-    .bind(userId, locals.userId ?? null, Math.floor(Date.now() / 1000), businessId)
-    .run();
-
-  return { success: true };
-}
-
-export async function toggleAnnouncementAccess(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  await ensureAnnouncementsSchema(db);
-  await ensureTenantSchema(db, true);
-
-  const formData = await request.formData();
-  const userId = String(formData.get('user_id') ?? '').trim();
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
-
-  const existing = await db
-    .prepare(
-      `
-      SELECT user_id
-      FROM announcement_editors
-      WHERE business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ user_id: string }>();
-
-  if (existing) {
-    await db
-      .prepare(`DELETE FROM announcement_editors WHERE business_id = ? AND user_id = ?`)
-      .bind(businessId, userId)
-      .run();
-    return { success: true };
-  }
-
-  await db
-    .prepare(
-      `
-      INSERT INTO announcement_editors (business_id, user_id, granted_by, updated_at)
-      VALUES (?, ?, ?, ?)
-      `
-    )
-    .bind(businessId, userId, locals.userId ?? null, Math.floor(Date.now() / 1000))
-    .run();
-
-  return { success: true };
 }
 
 export async function toggleScheduleDepartmentApproval(request: Request, locals: App.Locals) {

@@ -27,11 +27,9 @@ expect('src/lib/server/email.ts', 'central email helper uses Resend safely', (so
 
 expect('src/lib/server/email.ts', 'direct user emails are branded and wired', (source) =>
   source.includes('sendInviteEmail') &&
-  source.includes('sendApprovalEmail') &&
   source.includes('sendPasswordResetEmail') &&
   source.includes('sendAccountDeletionRequestEmail') &&
   source.includes('Employee Onboarding') &&
-  source.includes('Access Approved') &&
   source.includes('Password Reset') &&
   !source.includes('font-family: Arial')
 );
@@ -43,11 +41,16 @@ expect('src/routes/account-deletion/+page.server.ts', 'account deletion persists
   source.includes('Deletion confirmation email was not sent')
 );
 
-expect('src/lib/server/admin.ts', 'admin invite and approval emails use the central helper', (source) =>
+expect('src/lib/server/admin.ts', 'admin invite emails use the central helper', (source) =>
   source.includes('sendInviteEmail') &&
-  source.includes('sendApprovalEmail') &&
-  source.includes('Invite created and email sent.') &&
-  source.includes('Access restored and approval email sent.')
+  source.includes('Invite created and email sent.')
+);
+
+expect('src/lib/server/operationalEvents.ts', 'onboarding approval emails use the operational event pipeline', (source) =>
+  source.includes("case 'onboarding.package.approved'") &&
+  source.includes('loadTargetRecipient(db, event)') &&
+  source.includes('sendTransactionalEmail') &&
+  source.includes("event.event_type.startsWith('onboarding.')")
 );
 
 expect('src/routes/forgot-password/+page.server.ts', 'password reset requires successful email delivery', (source) =>

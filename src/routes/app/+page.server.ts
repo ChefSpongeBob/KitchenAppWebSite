@@ -1,12 +1,13 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { buildFeatureAccess, defaultAppFeatureModes } from '$lib/features/appFeatures';
-import { loadHomepageAnnouncement, userCanEditHomepageAnnouncement } from '$lib/server/announcements';
+import { loadHomepageAnnouncement } from '$lib/server/announcements';
 import { loadDailySpecials } from '$lib/server/dailySpecials';
 import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
 import { loadTodayShifts } from '$lib/server/schedules';
 import { requireBusinessId } from '$lib/server/tenant';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 type HomeTask = {
   id: string;
@@ -115,21 +116,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     { content: '', updatedAt: 0 },
     'announcement'
   );
-  const announcementEditorPromise =
-    featureAccess.announcements && locals.userId
-      ? safeHomeData(
-          userCanEditHomepageAnnouncement(
-            db,
-            locals.userId,
-            locals.businessRole ?? locals.userRole,
-            businessId,
-            locals.businessPermissionTemplate,
-            locals.businessCapabilities
-          ),
-          false,
-          'announcement access'
-        )
-      : Promise.resolve(false);
+  const announcementEditorPromise = Promise.resolve(
+    featureAccess.announcements &&
+      hasBusinessCapability(
+        locals.businessRole ?? locals.userRole,
+        locals.businessPermissionTemplate,
+        'manage_announcements',
+        locals.businessCapabilities
+      )
+  );
   const employeeSpotlightPromise = safeHomeData(
     featureAccess.employee_spotlight
       ? loadEmployeeSpotlight(db, businessId)

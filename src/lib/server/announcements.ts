@@ -1,4 +1,3 @@
-import { hasBusinessCapability, isBusinessAdminRole, type BusinessCapability } from '$lib/server/permissions';
 import { dev } from '$app/environment';
 
 export type HomepageAnnouncement = {
@@ -217,39 +216,6 @@ export async function loadHomepageAnnouncement(db: App.Platform['env']['DB'], bu
 
 export function getHomepageAnnouncementId(businessId?: string | null) {
   return homepageAnnouncementId(businessId);
-}
-
-export async function userCanEditHomepageAnnouncement(
-  db: App.Platform['env']['DB'],
-  userId?: string | null,
-  role?: string | null,
-  businessId?: string | null,
-  permissionTemplate?: string | null,
-  capabilities?: readonly BusinessCapability[] | null
-) {
-  if (
-    (capabilities
-      ? hasBusinessCapability(role, permissionTemplate, 'manage_announcements', capabilities)
-      : role === 'admin' || isBusinessAdminRole(role))
-  ) {
-    return true;
-  }
-  if (!userId || !businessId) return false;
-
-  await ensureAnnouncementsSchema(db);
-  const row = await db
-    .prepare(
-      `
-      SELECT user_id
-      FROM announcement_editors
-      WHERE business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ user_id: string }>();
-
-  return Boolean(row);
 }
 
 export async function saveHomepageAnnouncement(

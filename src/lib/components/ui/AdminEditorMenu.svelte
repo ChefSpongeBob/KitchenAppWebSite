@@ -32,8 +32,6 @@
     { href: '/admin/onboarding', label: 'Employee Onboarding', matches: prefix('/admin/onboarding') },
     { href: '/admin/users', label: 'Employees', matches: prefix('/admin/users') },
     { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
-    { href: '/admin/schedule-settings', label: 'Schedule Settings', matches: prefix('/admin/schedule-settings'), featureKey: 'scheduling' },
-    { href: '/admin/schedule-roles', label: 'Schedule Roles', matches: prefix('/admin/schedule-roles'), featureKey: 'scheduling' },
     { href: '/admin/sensors', label: 'Temperature Sensors', matches: prefix('/admin/sensors') }
   ];
 

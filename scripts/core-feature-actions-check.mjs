@@ -137,9 +137,13 @@ expect('src/routes/admin/+page.server.ts', 'admin dashboard owns ToDo reminders 
     'reject_whiteboard',
     'delete_whiteboard',
     'save_announcement',
-    'save_employee_spotlight',
-    'toggle_specials_access'
-  ])
+    'save_employee_spotlight'
+  ]) &&
+  !source.includes('make_user_admin') &&
+  !source.includes('approve_user') &&
+  !source.includes('deny_user') &&
+  !source.includes('delete_user') &&
+  !source.includes('toggle_specials_access')
 );
 
 expect('src/routes/api/whiteboard/+server.ts', 'whiteboard API supports business-scoped submit and vote', (source) =>
@@ -168,13 +172,13 @@ expect('src/routes/specials/+page.server.ts', 'specials save through permission 
   ])
 );
 
-expect('src/routes/announcements/+page.server.ts', 'announcements save through permission checked tenant storage', (source) =>
+expect('src/routes/announcements/+page.server.ts', 'shared announcements route is tenant-scoped and view only', (source) =>
   includesAll(source, [
-    'save_announcement',
-    'userCanEditHomepageAnnouncement',
-    'locals.businessId',
-    'ensureTenantSchema'
-  ])
+    'loadHomepageAnnouncement',
+    'locals.businessId'
+  ]) &&
+  !source.includes('save_announcement') &&
+  !source.includes('export const actions')
 );
 
 expect('src/routes/admin/vendors/+page.server.ts', 'admin vendors support create update delete', (source) =>

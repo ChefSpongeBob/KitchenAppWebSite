@@ -14,8 +14,6 @@
     role: string;
     permission_template: string;
     is_active: number;
-    can_manage_specials: number;
-    can_manage_announcements: number;
     approved_departments: string[];
   };
 

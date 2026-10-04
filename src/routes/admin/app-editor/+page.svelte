@@ -35,6 +35,7 @@
       logoUrl: string | null;
     };
     registry: RegistryData;
+    canManageBilling: boolean;
     features: FeatureRow[];
   };
 
@@ -261,6 +262,9 @@
         </div>
 
         <div class="form-actions">
+          {#if data.canManageBilling}
+            <a href="/billing">Billing</a>
+          {/if}
           <button type="submit">Save Business Registry</button>
         </div>
       </form>
@@ -580,6 +584,18 @@
   .form-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .form-actions a {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+    padding: 0.44rem 0.72rem;
+    font-size: 0.79rem;
+    font-weight: var(--weight-semibold);
+    text-decoration: none;
   }
 
   button {

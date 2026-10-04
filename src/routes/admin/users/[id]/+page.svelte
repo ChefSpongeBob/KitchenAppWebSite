@@ -25,8 +25,6 @@
     role: string;
     permission_template: string;
     is_active: number;
-    can_manage_specials: number;
-    can_manage_announcements: number;
     approved_departments: ScheduleDepartment[];
     capability_overrides: BusinessCapabilityOverrides;
     effective_capabilities: BusinessCapability[];

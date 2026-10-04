@@ -81,6 +81,15 @@
     status: 'pending' | 'approved' | 'declined';
   };
 
+  type AvailabilityRequest = {
+    id: string;
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    availability: AvailabilityEntry[];
+    status: 'pending' | 'approved' | 'declined';
+  };
+
   type OpenShift = {
     id: string;
     shiftDate: string;
@@ -116,7 +125,15 @@
     averageHourlyRate: number;
   };
 
-  type ScheduleTool = 'builder' | 'approvals' | 'open-shifts' | 'labor' | 'templates';
+  type RoleDefinition = {
+    id: string;
+    department: ScheduleDepartment;
+    roleName: string;
+    sortOrder: number;
+    isDefault?: boolean;
+  };
+
+  type ScheduleTool = 'builder' | 'approvals' | 'open-shifts' | 'labor' | 'templates' | 'setup';
 
   type DraftShift = {
     clientId: string;
@@ -155,8 +172,11 @@
     openShifts: OpenShift[];
     openShiftRequests: OpenShiftRequest[];
     timeOffRequests: TimeOffRequest[];
+    pendingAvailability: AvailabilityRequest[];
     templates: ScheduleTemplate[];
     laborTargets: LaborTarget[];
+    roleDefinitions: RoleDefinition[];
+    initialTool: ScheduleTool;
     settings: {
       departments: ScheduleDepartment[];
       autofillNewWeeks: boolean;
@@ -196,7 +216,8 @@
   let openShiftEndLabel = '';
   let openShiftTimeEditor: '' | 'start' | 'end' = '';
   let selectedTemplateId = data.templates[0]?.id ?? '';
-  let selectedScheduleTool: ScheduleTool = 'builder';
+  let selectedScheduleTool: ScheduleTool = data.initialTool ?? 'builder';
+  let newRoleDepartment: ScheduleDepartment = data.settings.departments[0] ?? 'General';
   let userOptionsById = new Map<string, UserOption>();
   let timeOffRequestsByUser = new Map<string, TimeOffRequest[]>();
   let employeeHourTotals = new Map<string, number>();
@@ -210,6 +231,9 @@
       ? [...data.settings.departments]
       : (['General'] as ScheduleDepartment[]);
   $: defaultDepartment = availableDepartments[0] as ScheduleDepartment;
+  $: if (!availableDepartments.includes(newRoleDepartment)) {
+    newRoleDepartment = defaultDepartment;
+  }
 
   function normalizeDepartment(value: string): ScheduleDepartment {
     return (availableDepartments.includes(value as ScheduleDepartment)
@@ -359,7 +383,11 @@
   $: pendingOffers = data.offers.filter((offer) => offer.requestedByUserId);
   $: pendingOpenShiftRequests = data.openShiftRequests.filter((request) => request.status === 'pending');
   $: pendingTimeOffRequests = data.timeOffRequests.filter((request) => request.status === 'pending');
-  $: pendingApprovalCount = pendingOffers.length + pendingOpenShiftRequests.length + pendingTimeOffRequests.length;
+  $: pendingApprovalCount =
+    pendingOffers.length +
+    pendingOpenShiftRequests.length +
+    pendingTimeOffRequests.length +
+    data.pendingAvailability.length;
   $: visibleOpenShiftCount = data.openShifts.filter(
     (shift) => selectedSection === 'All' || shift.department === selectedSection
   ).length;
@@ -447,6 +475,7 @@
     pendingOffers.length +
     pendingOpenShiftRequests.length +
     pendingTimeOffRequests.length +
+    data.pendingAvailability.length +
     visibleOpenShiftCount;
   $: readinessState =
     scheduleIssueCount > 0
@@ -924,6 +953,22 @@
     return Math.max(0, diff - (shift.breakMinutes ?? 0)) / 60;
   }
 
+  function availabilityRequestSummary(entries: AvailabilityEntry[]) {
+    const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const available = entries.filter((entry) => entry.isAvailable);
+    if (available.length === 0) return 'Unavailable all week';
+    return available
+      .map(
+        (entry) =>
+          `${weekdayLabels[entry.weekday] ?? 'Day'} ${formatScheduleTimeLabel(entry.startTime)}-${formatScheduleTimeLabel(entry.endTime)}`
+      )
+      .join(' | ');
+  }
+
+  function setupRolesFor(department: ScheduleDepartment) {
+    return data.roleDefinitions.filter((role) => role.department === department);
+  }
+
   function formatHours(value: number) {
     const rounded = Math.round(value * 100) / 100;
     return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2).replace(/0$/, '');
@@ -1168,6 +1213,7 @@
                   <option value="approvals">Approvals ({pendingApprovalCount})</option>
                   <option value="labor">Labor Targets</option>
                   <option value="templates">Templates ({data.templates.length})</option>
+                  <option value="setup">Schedule Setup</option>
                 </select>
               </label>
               <details class="action-menu">
@@ -1193,8 +1239,7 @@
                         {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
                       </button>
                     </form>
-                  <a href="/admin/schedule-settings" class="menu-item menu-link">Schedule Settings</a>
-                  <a href="/admin/schedule-roles" class="menu-item menu-link">Department Roles</a>
+                  <a href={`/admin/schedule?week=${data.weekStart}&tool=setup`} class="menu-item menu-link">Schedule Setup</a>
                   <a href="/admin/users" class="menu-item menu-link">Employees</a>
                     <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate" on:submit={preparePublishPayload}>
                       <input type="hidden" name="week_start" value={data.weekStart} />
@@ -1305,6 +1350,27 @@
                         <button type="submit" class="create-shift-btn">Approve</button>
                       </form>
                       <form method="POST" action="?/decline_time_off" use:enhance={withFeedback}>
+                        <input type="hidden" name="request_id" value={request.id} />
+                        <button type="submit" class="remove-btn request-decline-btn">Decline</button>
+                      </form>
+                    </div>
+                  </article>
+                {/each}
+
+                {#each data.pendingAvailability as request}
+                  <article class="request-card">
+                    <div class="request-main">
+                      <span class="request-type">Availability</span>
+                      <strong>{request.userName ?? request.userEmail}</strong>
+                      <p class="request-detail">{availabilityRequestSummary(request.availability)}</p>
+                    </div>
+
+                    <div class="request-actions">
+                      <form method="POST" action="?/approve_availability" use:enhance={withFeedback}>
+                        <input type="hidden" name="request_id" value={request.id} />
+                        <button type="submit" class="create-shift-btn">Approve</button>
+                      </form>
+                      <form method="POST" action="?/decline_availability" use:enhance={withFeedback}>
                         <input type="hidden" name="request_id" value={request.id} />
                         <button type="submit" class="remove-btn request-decline-btn">Decline</button>
                       </form>
@@ -1470,7 +1536,7 @@
           </div>
           <button type="submit" class="create-shift-btn">Save Targets</button>
         </form>
-        {:else}
+        {:else if selectedScheduleTool === 'templates'}
           <section class="tool-section">
           <div class="tool-section-head">
             <div>
@@ -1508,6 +1574,85 @@
             </button>
           </form>
         </section>
+        {:else}
+          <section class="tool-section schedule-setup" aria-label="Schedule setup">
+            <div class="tool-section-head">
+              <div>
+                <h2>Schedule Setup</h2>
+              </div>
+            </div>
+
+            <div class="setup-row autofill-row">
+              <div>
+                <strong>Autofill New Weeks</strong>
+                <span>{data.settings.autofillNewWeeks ? 'Enabled' : 'Disabled'}</span>
+              </div>
+              <form method="POST" action="?/save_autofill" use:enhance={withFeedback}>
+                <input type="hidden" name="autofill_new_weeks" value={data.settings.autofillNewWeeks ? '0' : '1'} />
+                <button type="submit" class:setup-enabled={data.settings.autofillNewWeeks}>
+                  {data.settings.autofillNewWeeks ? 'Disable' : 'Enable'}
+                </button>
+              </form>
+            </div>
+
+            <div class="setup-create-grid">
+              <form method="POST" action="?/create_department" use:enhance={withFeedback} class="setup-form">
+                <label>
+                  <span>New Department</span>
+                  <input name="department_name" placeholder="Department name" required />
+                </label>
+                <button type="submit">Add Department</button>
+              </form>
+
+              <form method="POST" action="?/create_role" use:enhance={withFeedback} class="setup-form role-setup-form">
+                <label>
+                  <span>Department</span>
+                  <select name="department" bind:value={newRoleDepartment}>
+                    {#each availableDepartments as department}
+                      <option value={department}>{department}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>New Role</span>
+                  <input name="role_name" placeholder="Role name" required />
+                </label>
+                <button type="submit">Add Role</button>
+              </form>
+            </div>
+
+            <div class="department-setup-list">
+              {#each availableDepartments as department}
+                <article class="department-setup-row">
+                  <header>
+                    <div>
+                      <strong>{department}</strong>
+                      <span>{setupRolesFor(department).length} roles</span>
+                    </div>
+                    <form method="POST" action="?/delete_department" use:enhance={withFeedback}>
+                      <input type="hidden" name="department_name" value={department} />
+                      <button type="submit" class="remove-btn">Delete Department</button>
+                    </form>
+                  </header>
+                  <div class="setup-role-list">
+                    {#each setupRolesFor(department) as role}
+                      <div>
+                        <span>{role.roleName}</span>
+                        {#if role.isDefault}
+                          <small>Built in</small>
+                        {:else}
+                          <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
+                            <input type="hidden" name="role_id" value={role.id} />
+                            <button type="submit" class="remove-btn">Delete</button>
+                          </form>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </article>
+              {/each}
+            </div>
+          </section>
         {/if}
       </section>
       {/if}
@@ -1966,6 +2111,93 @@
     margin: 0;
     color: var(--color-text-muted);
     line-height: 1.45;
+  }
+
+  .schedule-setup {
+    gap: 0.9rem;
+  }
+
+  .setup-row,
+  .department-setup-row {
+    padding: 0.7rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .autofill-row,
+  .department-setup-row > header,
+  .setup-role-list > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .autofill-row > div,
+  .department-setup-row header > div {
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  .autofill-row span,
+  .department-setup-row header span,
+  .setup-role-list small {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .setup-create-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+    gap: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .setup-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.6rem;
+    align-items: end;
+  }
+
+  .role-setup-form {
+    grid-template-columns: minmax(8rem, 0.7fr) minmax(0, 1fr) auto;
+  }
+
+  .setup-form label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .setup-form label > span {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+  }
+
+  .department-setup-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .setup-role-list {
+    display: grid;
+    margin-top: 0.55rem;
+  }
+
+  .setup-role-list > div {
+    min-height: 2.35rem;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .setup-role-list form,
+  .department-setup-row form,
+  .autofill-row form {
+    margin: 0;
+  }
+
+  .setup-enabled {
+    font-weight: var(--weight-bold);
   }
 
   .planner-shell {
@@ -2821,6 +3053,15 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .setup-create-grid,
+    .department-setup-list {
+      grid-template-columns: 1fr;
+    }
+
+    .role-setup-form {
+      grid-template-columns: 1fr;
+    }
+
     .menu-panel {
       left: 0;
       right: auto;
@@ -2846,8 +3087,15 @@
 
     .planning-fields,
     .target-list article,
-    .template-row {
+    .template-row,
+    .setup-form {
       grid-template-columns: 1fr;
+    }
+
+    .autofill-row,
+    .department-setup-row > header {
+      align-items: stretch;
+      flex-direction: column;
     }
 
     .template-row,

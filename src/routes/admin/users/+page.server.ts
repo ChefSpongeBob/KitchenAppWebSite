@@ -1,10 +1,7 @@
-import type { Actions, PageServerLoad } from './$types';
+import type { PageServerLoad } from './$types';
 import {
-  deleteUser,
   loadAdminUsers,
-  requireAdmin,
-  toggleScheduleDepartmentApproval,
-  toggleSpecialsAccess
+  requireAdmin
 } from '$lib/server/admin';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -24,10 +21,4 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     users: await loadAdminUsers(db, locals.businessId)
   };
-};
-
-export const actions: Actions = {
-  delete_user: ({ request, locals }) => deleteUser(request, locals),
-  toggle_specials_access: ({ request, locals }) => toggleSpecialsAccess(request, locals),
-  toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals)
 };

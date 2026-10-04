@@ -353,42 +353,6 @@ export async function sendSignupConfirmationEmail({
   });
 }
 
-export async function sendApprovalEmail({
-  env,
-  origin,
-  userEmail,
-  displayName
-}: {
-  env?: EmailEnv | null;
-  origin: string;
-  userEmail: string;
-  displayName?: string | null;
-}) {
-  const baseUrl = getAppBaseUrl(origin, env);
-  const loginUrl = `${baseUrl}/login`;
-  const name = displayName?.trim() || 'there';
-
-  return sendTransactionalEmail({
-    env,
-    to: userEmail,
-    subject: 'Your Crimini access has been approved',
-    html: renderCriminiEmail({
-      eyebrow: 'Access Approved',
-      title: 'Your Crimini access is ready',
-      body: `Hi ${name}, your account is approved and ready to use.`,
-      actionLabel: 'Sign in',
-      actionUrl: loginUrl
-    }),
-    text: [
-      `Hi ${displayName?.trim() || 'there'},`,
-      '',
-      'Your Crimini account is now approved and ready to use.',
-      `Sign in here: ${loginUrl}`
-    ].join('\n'),
-    idempotencyKey: `approval/${userEmail.toLowerCase()}`
-  });
-}
-
 export async function sendPasswordResetEmail({
   env,
   origin,

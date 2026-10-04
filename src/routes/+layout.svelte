@@ -107,9 +107,7 @@
       label: "Scheduling",
       icon: "calendar_view_week",
       items: [
-        { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" },
-        { label: "Schedule Settings", route: "/admin/schedule-settings", icon: "settings", featureKey: "scheduling" },
-        { label: "Schedule Roles", route: "/admin/schedule-roles", icon: "badge", featureKey: "scheduling" }
+        { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" }
       ]
     },
     {

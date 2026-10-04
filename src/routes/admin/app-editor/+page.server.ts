@@ -10,6 +10,7 @@ import { requireAdmin } from '$lib/server/admin';
 import { loadAppFeatureModes, saveAppFeatureModes } from '$lib/server/appFeatures';
 import { ensureBusinessSchema } from '$lib/server/business';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 const BRAND_MEDIA_PREFIX = '/api/documents/media/';
 
@@ -126,6 +127,12 @@ export const load: PageServerLoad = async ({ locals }) => {
         addressPostalCode: '',
         addressCountry: ''
       } satisfies RegistryPayload,
+      canManageBilling: hasBusinessCapability(
+        locals.businessRole,
+        locals.businessPermissionTemplate,
+        'manage_billing',
+        locals.businessCapabilities
+      ),
       features: appFeatureDefinitions.map((feature) => ({
         ...feature,
         mode: 'all' as AppFeatureMode
@@ -194,6 +201,12 @@ export const load: PageServerLoad = async ({ locals }) => {
       addressPostalCode: branding?.address_postal_code ?? '',
       addressCountry: branding?.address_country ?? ''
     } satisfies RegistryPayload,
+    canManageBilling: hasBusinessCapability(
+      locals.businessRole,
+      locals.businessPermissionTemplate,
+      'manage_billing',
+      locals.businessCapabilities
+    ),
     features: appFeatureDefinitions.map((feature) => ({
       ...feature,
       mode: featureModes[feature.key]

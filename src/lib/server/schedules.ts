@@ -588,6 +588,46 @@ export async function loadPendingScheduleAvailabilityRequests(
   });
 }
 
+export async function countPendingScheduleRequests(
+  db: DB,
+  businessId: string,
+  userIds?: string[]
+) {
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+
+  const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
+  if (requestedUserIds && requestedUserIds.length === 0) return 0;
+  const userFilter = requestedUserIds
+    ? `AND user_id IN (${requestedUserIds.map(() => '?').join(', ')})`
+    : '';
+  const bindings = [businessId, ...(requestedUserIds ?? [])];
+  const [timeOff, availability] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT COUNT(*) AS count
+        FROM user_schedule_time_off_requests
+        WHERE business_id = ? AND status = 'pending' ${userFilter}
+        `
+      )
+      .bind(...bindings)
+      .first<{ count: number }>(),
+    db
+      .prepare(
+        `
+        SELECT COUNT(*) AS count
+        FROM user_schedule_availability_requests
+        WHERE business_id = ? AND status = 'pending' ${userFilter}
+        `
+      )
+      .bind(...bindings)
+      .first<{ count: number }>()
+  ]);
+
+  return (timeOff?.count ?? 0) + (availability?.count ?? 0);
+}
+
 export async function loadUserPendingScheduleAvailabilityRequest(
   db: DB,
   userId: string,
