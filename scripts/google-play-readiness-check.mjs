@@ -66,6 +66,21 @@ expectExists('src/routes/privacy/+page.svelte', 'privacy policy URL route exists
 expectExists('src/routes/support/+page.svelte', 'support URL route exists');
 expectExists('src/routes/account-deletion/+page.svelte', 'account deletion URL route exists');
 
+expect('src/routes/privacy/+page.svelte', 'Google Play privacy disclosure matches account employee billing and device data', (source) =>
+  source.includes('Employee and onboarding data') &&
+  source.includes('Billing data') &&
+  source.includes('Device and technical data') &&
+  source.includes('We do not sell personal data') &&
+  source.includes('Account Deletion')
+);
+
+expect('src/routes/account-deletion/+page.svelte', 'Google Play external deletion path is functional and explains retained data', (source) =>
+  source.includes('method="POST"') &&
+  source.includes('My user account') &&
+  source.includes('What May Be Retained') &&
+  source.includes('Deleting an account does not automatically cancel')
+);
+
 expect('src/routes/+layout.svelte', 'public footer links Play review URLs', (source) =>
   source.includes('href="/support"') &&
   source.includes('href="/privacy"') &&

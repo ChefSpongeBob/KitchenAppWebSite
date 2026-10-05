@@ -31,10 +31,6 @@ const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	enterprise: 'enterprise'
 };
 
-function tempMonitoringIncludedForPlan(planTier: 'starter' | 'growth' | 'enterprise') {
-	return planTier === 'growth' || planTier === 'enterprise';
-}
-
 function clearSessionCookies(
 	cookies: Parameters<Actions['convert']>[0]['cookies'],
 	request: Request
@@ -86,6 +82,20 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	const storeBillingPlaceholder = await readStoreBillingPlaceholder(locals.DB, locals.businessId);
 	const storeProducts = await readStoreProducts(locals.DB);
 	const storeEntitlements = await readBusinessEntitlements(locals.DB, locals.businessId);
+	let registeredSensorCount = 0;
+	try {
+		const sensorCount = await locals.DB
+			.prepare(
+				`SELECT COUNT(*) AS count
+				 FROM temperature_sensor_nodes
+				 WHERE business_id = ? AND is_active = 1`
+			)
+			.bind(locals.businessId)
+			.first<{ count: number }>();
+		registeredSensorCount = Number(sensorCount?.count ?? 0);
+	} catch {
+		registeredSensorCount = 0;
+	}
 	const activeEntitlements = storeEntitlements.filter((entitlement) => entitlement.status === 'active');
 	const activePlanEntitlement = activeEntitlements.find((entitlement) => entitlement.plan_tier);
 	const appStoreProductId =
@@ -115,6 +125,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 			addOnTempMonitoring: business.addon_temp_monitoring === 1
 		},
 		trial,
+		registeredSensorCount,
 		canManageBilling: canManageBilling(
 			locals.businessRole,
 			locals.businessPermissionTemplate,
@@ -181,7 +192,7 @@ export const actions: Actions = {
 				.trim()
 				.toLowerCase();
 			const planTier = PLAN_TIER_MAP[planRaw] ?? 'starter';
-			const addOnTempMonitoring = tempMonitoringIncludedForPlan(planTier);
+			const addOnTempMonitoring = String(form.get('addon_temp_monitoring') ?? '') === '1';
 
 			if (!dev) {
 				logOperationalEvent({

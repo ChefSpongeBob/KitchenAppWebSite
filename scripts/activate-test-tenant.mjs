@@ -26,7 +26,9 @@ function usage(exitCode = 1) {
 		'  --email=<owner email>             Required. Must match exactly one active owner membership.',
 		'  --plan=small|medium|large         Optional. Defaults to medium.',
 		'  --business-id=<business id>        Optional disambiguation if the owner email owns more than one tenant.',
-		'  --confirm=activate-test-tenant    Required safety confirmation.'
+		'  --confirm=activate-test-tenant    Required safety confirmation.',
+		'',
+		'Temperature monitoring is enabled for this billing-exempt test tenant.'
 	].join('\n'));
 	process.exit(exitCode);
 }
@@ -60,7 +62,7 @@ function sqlString(value) {
 	return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-const addonTempMonitoring = planTier === 'growth' || planTier === 'enterprise' ? 1 : 0;
+const addonTempMonitoring = 1;
 const businessFilter = businessId ? `AND b.id = ${sqlString(businessId)}` : '';
 
 const sql = `

@@ -2,20 +2,63 @@
 	import Layout from '$lib/components/ui/Layout.svelte';
 </script>
 
+<svelte:head>
+	<title>Support | Crimini</title>
+	<meta
+		name="description"
+		content="Contact Crimini support for account, workspace, billing, onboarding, privacy, security, or sensor-monitoring help."
+	/>
+</svelte:head>
+
 <Layout>
 	<section class="support-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Support</h1>
-		<p class="updated">Last updated June 14, 2026</p>
+		<p class="updated">Updated October 5, 2026</p>
 
 		<div class="support-section">
-			<h2>Account Help</h2>
-			<p>For access, billing, onboarding, or workspace issues, contact support@criminiops.com.</p>
+			<h2>Contact</h2>
+			<p>
+				Email <a href="mailto:support@criminiops.com">support@criminiops.com</a> for account, workspace,
+				onboarding, billing, or sensor-monitoring help.
+			</p>
 		</div>
 
 		<div class="support-section">
-			<h2>Review Access</h2>
-			<p>App review accounts must be active, connected to a test workspace, and able to access billing, onboarding, scheduling, lists, docs, reports, and settings.</p>
+			<h2>Include With Your Request</h2>
+			<p>
+				Include the workspace name, account email, device type, and a short description of the
+				issue. Do not email passwords, complete bank details, tax identification numbers, or
+				identity documents.
+			</p>
+		</div>
+
+		<div class="support-section">
+			<h2>Billing</h2>
+			<p>
+				Apple and Google control payment methods, subscription cancellation, and refunds for
+				purchases made through their stores. Crimini support can help identify the purchase channel
+				and review workspace entitlement status.
+			</p>
+			<nav aria-label="Subscription management links">
+				<a href="https://apps.apple.com/account/subscriptions" target="_blank" rel="noreferrer"
+					>Apple Subscriptions</a
+				>
+				<a
+					href="https://play.google.com/store/account/subscriptions"
+					target="_blank"
+					rel="noreferrer">Google Play Subscriptions</a
+				>
+				<a href="/billing-terms">Billing Terms</a>
+			</nav>
+		</div>
+
+		<div class="support-section">
+			<h2>Security And Privacy</h2>
+			<p>
+				Report suspected unauthorized access promptly. Privacy and deletion requests can use the
+				links below so they are recorded through the correct process.
+			</p>
 		</div>
 
 		<div class="support-section">
@@ -77,6 +120,10 @@
 		margin: 0;
 		color: rgba(17, 18, 20, 0.72);
 		line-height: 1.65;
+	}
+
+	p + nav {
+		margin-top: 0.65rem;
 	}
 
 	nav {

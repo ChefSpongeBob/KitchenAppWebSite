@@ -12,77 +12,126 @@
 		| undefined;
 </script>
 
+<svelte:head>
+	<title>Account Deletion | Crimini</title>
+	<meta
+		name="description"
+		content="Request deletion of a Crimini user account or an authorized business workspace."
+	/>
+</svelte:head>
+
 <Layout>
 	<section class="legal-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Account Deletion</h1>
-		<p class="updated">Last updated May 10, 2026</p>
+		<p class="updated">Updated October 5, 2026</p>
+
+		<div class="legal-section intro-section">
+			<h2>Delete An Account Or Workspace</h2>
+			<p>
+				Use this form to start deletion from the web. Signed-in users can also open <strong
+					>Profile & Settings</strong
+				> and choose Account Deletion.
+			</p>
+		</div>
 
 		<form method="POST" class="request-form" use:enhance>
 			{#if form?.success}
-				<p class="notice success">Request received.</p>
+				<p class="notice success">Request received. Check your email for confirmation.</p>
 			{:else if form?.error}
 				<p class="notice error">{form.error}</p>
 			{/if}
 
 			<label>
 				<span>Email</span>
-				<input name="email" type="email" value={form?.email ?? ''} required />
+				<input name="email" type="email" value={form?.email ?? ''} autocomplete="email" required />
 			</label>
 
 			<label>
 				<span>Workspace</span>
-				<input name="workspace_name" value={form?.workspaceName ?? ''} />
+				<input
+					name="workspace_name"
+					value={form?.workspaceName ?? ''}
+					autocomplete="organization"
+				/>
 			</label>
 
 			<label>
 				<span>Request Type</span>
 				<select name="request_scope">
-					<option value="user">User account</option>
-					<option value="workspace">Full workspace</option>
+					<option value="user">My user account</option>
+					<option value="workspace">Entire business workspace</option>
 				</select>
 			</label>
 
 			<label>
 				<span>Details</span>
-				<textarea name="details" rows="4"></textarea>
+				<textarea
+					name="details"
+					rows="4"
+					placeholder="Optional information that will help verify the request"
+				></textarea>
 			</label>
 
 			<button type="submit">Submit Request</button>
 		</form>
 
 		<div class="legal-section">
-			<h2>Request Deletion</h2>
+			<h2>Verification And Timing</h2>
 			<p>
-				Use this page to request deletion for one user account or a full business workspace.
-			</p>
-			<p>
-				Logged-in users can also open <strong>Profile & Settings</strong> and use the Account Deletion
-				link from inside the app.
+				We may verify identity, account access, and authority before deletion. Only an authorized
+				workspace owner may request deletion of an entire business workspace. Approved requests are
+				normally completed within 30 days; we will notify the requester if law or technical recovery
+				safeguards require more time.
 			</p>
 		</div>
 
 		<div class="legal-section">
 			<h2>What Gets Deleted</h2>
 			<p>
-				Approved deletion requests remove the account and associated workspace data where deletion is
-				legally and operationally allowed, including profile, invite, schedule, list, task, document,
-				recipe, onboarding, and session data tied to the account or workspace.
+				A user-account request removes the account, access credentials, sessions, and personal data
+				Crimini is permitted to delete. It does not automatically delete a restaurant's records that
+				the business controls or must lawfully retain.
+			</p>
+			<p>
+				An approved full-workspace request removes the business workspace and associated users,
+				schedules, lists, recipes, documents, onboarding records, reports, device assignments, and
+				other tenant data where deletion is legally and operationally allowed.
 			</p>
 		</div>
 
 		<div class="legal-section">
 			<h2>What May Be Retained</h2>
 			<p>
-				Some records may be retained for security, fraud prevention, legal, tax, billing, abuse
-				prevention, or compliance reasons.
+				Limited billing, transaction, security, fraud-prevention, audit, tax, employment, or legal
+				records may be retained when required or permitted. Retained data is restricted to the
+				applicable purpose and deleted or de-identified when that purpose ends. Backup copies may
+				remain until the normal backup cycle completes.
+			</p>
+		</div>
+
+		<div class="legal-section">
+			<h2>Subscriptions Are Separate</h2>
+			<p>
+				Deleting an account does not automatically cancel an Apple App Store or Google Play
+				subscription. Cancel recurring billing separately through
+				<a href="https://apps.apple.com/account/subscriptions" target="_blank" rel="noreferrer"
+					>Apple Subscriptions</a
+				>
+				or
+				<a
+					href="https://play.google.com/store/account/subscriptions"
+					target="_blank"
+					rel="noreferrer">Google Play Subscriptions</a
+				>.
 			</p>
 		</div>
 
 		<div class="legal-section">
 			<h2>Contact</h2>
 			<p>
-				Send deletion questions to support@criminiops.com.
+				Send deletion questions to <a href="mailto:support@criminiops.com">support@criminiops.com</a
+				>.
 			</p>
 		</div>
 	</section>
@@ -131,6 +180,11 @@
 		margin: 1.3rem 0 0.65rem;
 		padding-bottom: 1.2rem;
 		border-bottom: 1px solid rgba(17, 18, 20, 0.16);
+	}
+
+	.intro-section {
+		padding-bottom: 0;
+		border-bottom: 0;
 	}
 
 	label {
@@ -191,5 +245,10 @@
 
 	p + p {
 		margin-top: 0.65rem;
+	}
+
+	a {
+		color: #111214;
+		text-underline-offset: 0.16rem;
 	}
 </style>

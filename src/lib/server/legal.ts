@@ -2,8 +2,8 @@ import { dev } from '$app/environment';
 
 type D1 = App.Platform['env']['DB'];
 
-export const LIABILITY_AGREEMENT_KEY = 'liability_release';
-export const LIABILITY_AGREEMENT_VERSION = '2026-04-25';
+export const LIABILITY_AGREEMENT_KEY = 'terms_of_service';
+export const LIABILITY_AGREEMENT_VERSION = '2026-10-05';
 let legalAgreementSchemaEnsured = false;
 
 export async function ensureLegalAgreementSchema(db: D1) {

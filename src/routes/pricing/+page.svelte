@@ -1,39 +1,40 @@
 ﻿<script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
+	import { PLAN_PRICES, SENSOR_PRICING } from '$lib/billing/pricing';
 
 	const plans = [
 		{
 			name: 'Small',
-			price: '$30/mo',
+			price: `$${PLAN_PRICES.starter}/mo`,
 			target: 'Lean team launch',
 			description: 'Built for focused teams getting live quickly.',
 			items: [
 				'Up to 20 employees',
 				'Core scheduling, todo, and lists',
-				'Temperature monitoring starts at Medium'
+				'Temperature monitoring available separately'
 			]
 		},
 		{
 			name: 'Medium',
-			price: '$65/mo',
+			price: `$${PLAN_PRICES.growth}/mo`,
 			target: 'Growing operations',
 			description: 'For active teams needing stronger control tooling.',
 			recommended: true,
 			items: [
 				'Up to 75 users',
 				'Advanced admin and editor controls',
-				'Temperature monitoring included'
+				'Temperature monitoring available separately'
 			]
 		},
 		{
 			name: 'Large',
-			price: '$90/mo',
+			price: `$${PLAN_PRICES.enterprise}/mo`,
 			target: 'Scaled service teams',
 			description: 'For high-capacity teams running full platform coverage.',
 			items: [
 				'Up to 250 employees',
 				'Full platform + multi-team scale',
-				'Temperature monitoring included'
+				'Temperature monitoring available separately'
 			]
 		}
 	];
@@ -59,9 +60,9 @@
 		},
 		{
 			label: 'Temperature Sensors',
-			starter: 'Not included',
-			growth: 'Included',
-			enterprise: 'Included'
+			starter: 'Add-on',
+			growth: 'Add-on',
+			enterprise: 'Add-on'
 		}
 	];
 
@@ -70,7 +71,7 @@
 		'Prep lists, checklists, inventory, and orders',
 		'Recipes, document library, and SOP pages',
 		'Todo assignments, whiteboard, and announcements',
-		'Monitoring dashboards on eligible tiers'
+		'Monitoring dashboards with the sensor add-on'
 	];
 
 	const launchNotes = [
@@ -85,27 +86,25 @@
 		<p class="eyebrow">Pricing</p>
 		<h1>Straightforward pricing for active kitchen teams.</h1>
 		<p>
-			Choose a plan by team size and operational complexity. Temperature monitoring is included with Medium and Large.
+			Choose a monthly plan by team size. Add temperature monitoring when the operation needs it.
 		</p>
 		<div class="head-actions">
-			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Trial</a>
+			<a href="/register#onboarding-slideshow" class="btn btn-primary">Get Started</a>
 			<a href="/features" class="btn">See Features</a>
-		</div>
-		<div class="store-badge-row" aria-label="Supported store billing platforms">
-			<img src="/store-badges/google-play-badge.svg" alt="Get it on Google Play" class="store-badge" loading="lazy" />
-			<img src="/store-badges/app-store-badge.svg" alt="Download on the App Store" class="store-badge" loading="lazy" />
 		</div>
 	</section>
 
 	<section class="pricing-band" data-reveal>
 		<figure class="pricing-media">
-			<img src="/marketing/app/scheduling-builder.png" alt="Schedule builder interface in active use" loading="lazy" />
+			<img
+				src="/marketing/app/scheduling-builder.png"
+				alt="Schedule builder interface in active use"
+				loading="lazy"
+			/>
 		</figure>
 		<div class="pricing-copy">
 			<h2>From first launch to scaled operations</h2>
-			<p>
-				Plans cover the same core product, then expand with user capacity and management depth.
-			</p>
+			<p>Plans cover the same core product, then expand with user capacity and management depth.</p>
 			<ul>
 				{#each launchNotes as note}
 					<li>{note}</li>
@@ -129,11 +128,20 @@
 						<li>{item}</li>
 					{/each}
 				</ul>
-				<a href="/register#onboarding-slideshow" class="plan-btn">
-					{plan.name === 'Large' ? 'Contact Sales' : 'Start Trial'}
-				</a>
+				<a href="/register#onboarding-slideshow" class="plan-btn">Choose {plan.name}</a>
 			</article>
 		{/each}
+	</section>
+
+	<section class="sensor-plan" data-reveal>
+		<div>
+			<p class="eyebrow">Temperature Monitoring</p>
+			<h2>${SENSOR_PRICING.baseMonthly}/month</h2>
+		</div>
+		<p>
+			Includes up to {SENSOR_PRICING.includedSensors} sensors. Each additional sensor is ${SENSOR_PRICING.additionalSensorMonthly}/month.
+			There is no sensor ceiling. Sensor hardware is separate.
+		</p>
 	</section>
 
 	<section class="module-strip" data-reveal>
@@ -182,6 +190,10 @@
 		<a href="/login" class="btn btn-ghost">Sign In</a>
 		<a href="/how-it-works" class="btn btn-ghost">How It Works</a>
 	</section>
+	<p class="price-note">
+		Prices are in U.S. dollars. Taxes and localized store pricing may apply. Subscriptions renew
+		monthly until canceled.
+	</p>
 </Layout>
 
 <style>
@@ -237,23 +249,6 @@
 		gap: 0.5rem;
 	}
 
-	.store-badge-row {
-		margin-top: 0.55rem;
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0.52rem;
-		width: min(100%, 24rem);
-	}
-
-	.store-badge {
-		width: 100%;
-		height: auto;
-		display: block;
-		border-radius: 0;
-		border: 1px solid rgba(17, 18, 20, 0.12);
-		background: #ffffff;
-	}
-
 	.btn {
 		display: inline-flex;
 		align-items: center;
@@ -269,7 +264,9 @@
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		font-size: 0.78rem;
-		transition: border-color 140ms ease, color 140ms ease;
+		transition:
+			border-color 140ms ease,
+			color 140ms ease;
 	}
 
 	.btn:hover {
@@ -347,6 +344,7 @@
 	}
 
 	.plans,
+	.sensor-plan,
 	.module-strip,
 	.compare,
 	.cta {
@@ -427,6 +425,28 @@
 		font-size: 0.78rem;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
+	}
+
+	.sensor-plan {
+		display: grid;
+		grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+		gap: 1rem;
+		align-items: end;
+		padding: 1rem 0;
+		border-top: 1px solid rgba(17, 18, 20, 0.14);
+		border-bottom: 1px solid rgba(17, 18, 20, 0.14);
+	}
+
+	.sensor-plan p,
+	.price-note {
+		margin: 0;
+		color: rgba(17, 18, 20, 0.64);
+		line-height: 1.5;
+	}
+
+	.price-note {
+		margin-top: 0.9rem;
+		font-size: 0.76rem;
 	}
 
 	.section-head {
@@ -512,12 +532,12 @@
 			border-bottom: 0;
 		}
 
-		.store-badge-row {
-			width: min(100%, 22rem);
-		}
-
 		.pricing-media {
 			max-height: 210px;
+		}
+
+		.sensor-plan {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

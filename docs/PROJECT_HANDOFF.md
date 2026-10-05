@@ -120,7 +120,7 @@ Before production migrations, Create/confirm backup before migrations.
 
 - Native app id / bundle id: `com.nexusnorthsystems.crimini`.
 - Store products must be created in App Store Connect and Google Play before sandbox tests.
-- Product IDs currently expected by the launch app/store plan include `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`. Temperature monitoring is included with Medium and Large, not sold as a standalone Small add-on. Camera monitoring products are deferred post-launch.
+- Product IDs currently expected by the launch app/store plan include `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, `crimini.plan.large.monthly`, and the standalone `crimini.addon.temps.monthly`. Camera monitoring products are deferred post-launch.
 - Cloudflare Secrets must include App Store, Google Play, and billing webhook values before real purchase testing.
 - Native purchase submissions stay pending until Apple/Google verification succeeds.
 - Restore purchases path is wired but needs real device/store testing.
@@ -140,7 +140,7 @@ Before production migrations, Create/confirm backup before migrations.
 - Current hold: public production launch and live-domain customer onboarding still wait for trademark/LLC timing, final legal/payroll review, store setup, and live operational integrations.
 - Phase status: Phases 1-18 and code-readiness parts of 20-22 are locally validated by scripts. Store, native-device, legal, live-domain, hardware, and edge-dashboard items remain manual/external.
 - Camera shelving remains complete locally: camera UI is hidden, camera purchase paths are blocked, marketing treats cameras as planned expansion, and beta-gated camera routes stay unavailable unless explicitly enabled.
-- Launch pricing remains aligned: Small `$30/mo`, Medium `$65/mo`, Large `$90/mo`, with temperature monitoring included only with Medium and Large.
+- Launch pricing remains aligned: Small `$29/mo`, Medium `$49/mo`, and Large `$69/mo`. Temperature monitoring is an optional `$17/mo` add-on for up to 12 active sensors, plus `$2/mo` for every active sensor above 12 with no ceiling.
 - Turnstile login hardening is wired: login challenge appears only when `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are present, and server validation is fail-closed when configured.
 - The only project completion/checklist file is this handoff. Do not create scattered task lists.
 
@@ -236,9 +236,13 @@ This is the only active completion list. Work it in order and do not create scat
 - Confirm rate limits, Turnstile behavior, same-origin mutation protection, audit logs, and stale cookie cleanup.
 
 11. Billing and store subscriptions
-- Create App Store Connect and Google Play products for `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, and `crimini.plan.large.monthly`.
+- Create App Store Connect and Google Play products for `crimini.plan.small.monthly`, `crimini.plan.medium.monthly`, `crimini.plan.large.monthly`, and `crimini.addon.temps.monthly`.
 - Test sandbox purchase, restore, cancel, refund, renewal, grace, hold, past-due, webhook reconciliation, tenant activation, and entitlement changes.
-- Confirm Small is `$30/mo`, Medium `$65/mo`, Large `$90/mo`, and temperature monitoring is Medium/Large only.
+- Confirm Small is `$29/mo`, Medium `$49/mo`, and Large `$69/mo`; confirm temperature monitoring is `$17/mo` for up to 12 active sensors plus `$2/mo` for every active sensor above 12.
+- Deferred until current tenant testing is complete: change Large to `$79/mo` and include temperature monitoring for up to 12 sensors; keep Small at `$29/mo` and Medium at `$49/mo`, with the `$17/mo` monitoring add-on for up to 12 sensors on those tiers.
+- Deferred sensor checkout: cap standard self-service deployments at 25 sensors per location, charge `$2/mo` for each sensor above 12 through 25, and route requests above 25 to Crimini support for equipment, gateway-placement, and possible onsite review.
+- Deferred store catalog: generate approved Apple and Google subscription variants for each plan/sensor-price combination, map the owner's plan and requested sensor count to one verified store product, show only the calculated selection and final monthly total in Crimini, and derive tenant entitlements from the verified receipt rather than client input.
+- Deferred onboarding: ask whether monitoring is needed, collect 1-12 sensors, reveal a total-sensor field for 13-25 when requested, show hardware/installation separately, and block self-service checkout above 25 with the larger-deployment contact path.
 
 12. Native app release
 - Configure JDK/JAVA_HOME, Android signing, iOS/TestFlight, and Capacitor sync.

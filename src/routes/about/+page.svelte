@@ -2,12 +2,17 @@
   import Layout from '$lib/components/ui/Layout.svelte';
 </script>
 
+<svelte:head>
+  <title>About Crimini</title>
+  <meta name="description" content="Crimini brings restaurant scheduling, employee workflows, kitchen execution, documents, reporting, and connected temperature monitoring into one workspace." />
+</svelte:head>
+
 <Layout>
   <section class="about-hero" data-reveal>
     <p class="eyebrow">Crimini by NNS, LLC</p>
     <h1>Restaurant operations, kept in one clear system.</h1>
     <p class="lead">
-      Crimini connects scheduling, kitchen execution, employee workflows, documents, and monitoring without separating the team across disconnected tools.
+      Crimini connects scheduling, employee workflows, kitchen execution, documents, reporting, and optional temperature monitoring without separating the team across disconnected tools.
     </p>
   </section>
 
@@ -20,7 +25,7 @@
     <article data-reveal>
       <span>02</span>
       <h2>One Business, One Workspace</h2>
-      <p>Each restaurant keeps its people, schedules, lists, documents, reports, and devices within its own workspace.</p>
+      <p>Each restaurant operates in a tenant-scoped workspace with role and permission controls for its people, schedules, records, reports, and registered devices.</p>
     </article>
     <article data-reveal>
       <span>03</span>

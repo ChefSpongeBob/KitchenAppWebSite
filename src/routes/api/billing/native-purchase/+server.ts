@@ -58,10 +58,6 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 		if (!product) {
 			return json({ ok: false, error: 'Unknown store product.' }, { status: 400 });
 		}
-		if (product.addon_temp_monitoring === 1 && !product.plan_tier) {
-			return json({ ok: false, error: 'Temperature monitoring is included with Medium and Large.' }, { status: 400 });
-		}
-
 		const sensitiveToken = purchaseToken || originalTransactionId || transactionId;
 		const tokenHash = sensitiveToken ? await sha256Hex(sensitiveToken) : null;
 		const eventPayload = {

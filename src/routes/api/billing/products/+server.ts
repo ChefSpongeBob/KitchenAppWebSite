@@ -24,9 +24,7 @@ export const GET: RequestHandler = async ({ locals, url, request }) => {
 		return json(
 			{
 				ok: true,
-				products: products
-					.filter((product) => !(product.addon_temp_monitoring === 1 && !product.plan_tier))
-					.map((product) => ({
+				products: products.map((product) => ({
 						store: product.store,
 						productId: product.product_id,
 						displayName: product.display_name,

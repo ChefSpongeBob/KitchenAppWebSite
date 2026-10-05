@@ -9,6 +9,7 @@
 		type NativeBillingProduct,
 		type NativeStore
 	} from '$lib/billing/nativeBilling';
+	import { SENSOR_PRICING, sensorMonthlyPrice } from '$lib/billing/pricing';
 
 	export let data: {
 		business: {
@@ -63,6 +64,7 @@
 			addOnTempMonitoring: boolean;
 		} | null;
 		storeStatus: string | null;
+		registeredSensorCount: number;
 	};
 
 	export let form:
@@ -71,30 +73,49 @@
 		  }
 		| undefined;
 
-	let selectedPlan = data.business.planTier === 'enterprise' ? 'large' : data.business.planTier === 'growth' ? 'medium' : 'small';
+	let selectedPlan =
+		data.business.planTier === 'enterprise'
+			? 'large'
+			: data.business.planTier === 'growth'
+				? 'medium'
+				: 'small';
 	let storeBillingPreference: 'both' | 'google_play' | 'app_store' =
 		data.storeBillingPlaceholder?.preferredStore ?? 'both';
 	let clientFingerprint = '';
 	let nativeStore: NativeStore | null = null;
 	let nativeProducts: NativeBillingProduct[] = [];
 	let selectedProductId = '';
+	let addOnTempMonitoring = data.business.addOnTempMonitoring;
 	let purchaseStatus = '';
 	let purchaseBusy = false;
 
-	$: availableProducts = data.storeProducts.filter(
-		(product) =>
-			!(product.addOnTempMonitoring && !product.planTier) &&
-			(nativeStore ? product.store === nativeStore : product.store === 'google_play')
+	$: availableProducts = data.storeProducts.filter((product) =>
+		nativeStore ? product.store === nativeStore : product.store === 'google_play'
 	);
-	$: addOnTempMonitoring = selectedPlan === 'medium' || selectedPlan === 'large';
 	$: if (!selectedProductId && availableProducts.length) {
 		selectedProductId =
 			availableProducts.find((product) => product.planTier === 'starter')?.productId ??
 			availableProducts[0].productId;
 	}
-	$: selectedStoreProduct = availableProducts.find((product) => product.productId === selectedProductId);
+	$: selectedStoreProduct = availableProducts.find(
+		(product) => product.productId === selectedProductId
+	);
 	$: nativeProduct = nativeProducts.find((product) => product.productId === selectedProductId);
-	$: activeEntitlement = data.storeEntitlements.find((entitlement) => entitlement.status === 'active');
+	$: if (selectedStoreProduct?.planTier) {
+		selectedPlan =
+			selectedStoreProduct.planTier === 'enterprise'
+				? 'large'
+				: selectedStoreProduct.planTier === 'growth'
+					? 'medium'
+					: 'small';
+	}
+	$: selectedProductIsSensor = Boolean(
+		selectedStoreProduct?.addOnTempMonitoring && !selectedStoreProduct?.planTier
+	);
+	$: sensorEstimate = sensorMonthlyPrice(data.registeredSensorCount);
+	$: activeEntitlement = data.storeEntitlements.find(
+		(entitlement) => entitlement.status === 'active'
+	);
 	$: manageUrl =
 		activeEntitlement?.store === 'app_store'
 			? data.manageLinks.appStore
@@ -183,7 +204,6 @@
 		nativeStore = nativeStoreForPlatform();
 		if (nativeStore) {
 			const productIds = data.storeProducts
-				.filter((product) => !(product.addOnTempMonitoring && !product.planTier))
 				.filter((product) => product.store === nativeStore)
 				.map((product) => product.productId);
 			CriminiBilling.getProducts({ productIds })
@@ -203,7 +223,7 @@
 	<section class="billing-shell">
 		<article class="panel">
 			<h2>{data.business.name}</h2>
-			<p class="notice">Billing provider: app stores.</p>
+			<p class="notice">Monthly subscriptions are managed through your purchase channel.</p>
 			{#if data.storeStatus === 'queued'}
 				<p class="notice">Store activation queued.</p>
 			{/if}
@@ -213,11 +233,13 @@
 					{billingStatusLabel(data.storeBillingPlaceholder.status)}
 				</p>
 			{/if}
-			{#if data.storeEntitlements.length}
-				<p class="muted">Entitlement: {data.storeEntitlements[0].status}</p>
-			{/if}
+			{#each data.storeEntitlements.filter((entitlement) => entitlement.status === 'active') as entitlement}
+				<p class="muted">{entitlement.planTier ? 'Plan' : 'Temperature monitoring'}: active</p>
+			{/each}
 			{#if activeEntitlement}
-				<a class="manage-link" href={manageUrl} target="_blank" rel="noreferrer">Manage subscription</a>
+				<a class="manage-link" href={manageUrl} target="_blank" rel="noreferrer"
+					>Manage subscription</a
+				>
 			{/if}
 		</article>
 
@@ -227,9 +249,9 @@
 			</article>
 		{:else}
 			<article class="panel">
-				<h3>Plans</h3>
+				<h3>Subscriptions</h3>
 				<div class="stack">
-					<label for="store-product">Plan</label>
+					<label for="store-product">Choose a plan or add-on</label>
 					<select id="store-product" bind:value={selectedProductId}>
 						{#each availableProducts as product}
 							<option value={product.productId}>
@@ -244,19 +266,47 @@
 						<div class="subscription-summary" aria-live="polite">
 							<strong>{selectedStoreProduct.displayName}</strong>
 							<span>
-								{nativeProducts.length && nativeProduct?.price ? nativeProduct.price : priceLabel(selectedStoreProduct)}
+								{nativeProducts.length && nativeProduct?.price
+									? nativeProduct.price
+									: priceLabel(selectedStoreProduct)}
 								/month
 							</span>
 							<small>Renews monthly until canceled.</small>
+							{#if selectedProductIsSensor}
+								<small>
+									Includes up to {SENSOR_PRICING.includedSensors} sensors, then ${SENSOR_PRICING.additionalSensorMonthly}/month
+									per additional sensor, with no sensor ceiling.
+								</small>
+							{/if}
 							<small>Restore is available for existing App Store or Google Play purchases.</small>
 						</div>
 					{/if}
 
+					<div class="sensor-usage">
+						<strong>Temperature monitoring</strong>
+						<span
+							>{data.registeredSensorCount} active {data.registeredSensorCount === 1
+								? 'sensor'
+								: 'sensors'}</span
+						>
+						<small>Add-on monthly rate at this count: ${sensorEstimate}.</small>
+					</div>
+
 					<div class="button-row">
-						<button type="button" class="primary" disabled={purchaseBusy} on:click={purchaseSelectedProduct}>
+						<button
+							type="button"
+							class="primary"
+							disabled={purchaseBusy}
+							on:click={purchaseSelectedProduct}
+						>
 							{purchaseBusy ? 'Working...' : 'Purchase'}
 						</button>
-						<button type="button" class="secondary" disabled={purchaseBusy} on:click={restorePurchases}>
+						<button
+							type="button"
+							class="secondary"
+							disabled={purchaseBusy}
+							on:click={restorePurchases}
+						>
 							Restore
 						</button>
 					</div>
@@ -278,7 +328,15 @@
 				{#if data.localMode}
 					<form method="POST" action="?/convert" class="dev-convert" use:enhance>
 						<input type="hidden" name="plan_tier" value={selectedPlan} />
-						<input type="hidden" name="addon_temp_monitoring" value={addOnTempMonitoring ? '1' : '0'} />
+						<label class="local-addon">
+							<input type="checkbox" bind:checked={addOnTempMonitoring} />
+							<span>Activate temperature monitoring locally</span>
+						</label>
+						<input
+							type="hidden"
+							name="addon_temp_monitoring"
+							value={addOnTempMonitoring ? '1' : '0'}
+						/>
 						<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
 						<button type="submit" class="secondary">Local activate</button>
 					</form>
@@ -287,9 +345,7 @@
 
 			<article class="panel danger">
 				<h3>Cancel Workspace Setup</h3>
-				<p>
-					This permanently removes workspace data before activation.
-				</p>
+				<p>This permanently removes workspace data before activation.</p>
 				<form method="POST" action="?/cancel" use:enhance>
 					<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
 					<button type="submit" class="danger-btn">Cancel And Delete Workspace</button>
@@ -362,6 +418,18 @@
 		border-bottom: 1px solid var(--color-divider);
 	}
 
+	.sensor-usage {
+		display: grid;
+		gap: 0.18rem;
+		padding: 0.7rem 0;
+		border-bottom: 1px solid var(--color-divider);
+	}
+
+	.sensor-usage span,
+	.sensor-usage small {
+		color: var(--color-text-muted);
+	}
+
 	.subscription-summary strong,
 	.subscription-summary span {
 		color: var(--color-text);
@@ -393,6 +461,19 @@
 
 	.dev-convert {
 		margin-top: 0.8rem;
+	}
+
+	.local-addon {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.65rem;
+	}
+
+	.local-addon input {
+		width: 1rem;
+		height: 1rem;
+		accent-color: var(--color-text);
 	}
 
 	.danger {

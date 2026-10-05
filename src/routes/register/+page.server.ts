@@ -105,10 +105,6 @@ const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	enterprise: 'enterprise'
 };
 
-function tempMonitoringIncludedForPlan(planTier: 'starter' | 'growth' | 'enterprise') {
-	return planTier === 'growth' || planTier === 'enterprise';
-}
-
 async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
 	return hasColumn(db, 'users', 'email_normalized');
 }
@@ -323,7 +319,7 @@ export const actions: Actions = {
 			const requestedBusinessSlug = String(formData.get('business_slug') || '').trim();
 			const planTierRaw = String(formData.get('plan_tier') || 'starter').trim().toLowerCase();
 			const planTier = PLAN_TIER_MAP[planTierRaw] ?? 'starter';
-			const addOnTempMonitoring = tempMonitoringIncludedForPlan(planTier);
+			const addOnTempMonitoring = false;
 			const legalName = toOptionalString(formData, 'legal_name', 120);
 			const registryId = toOptionalString(formData, 'registry_id', 80);
 			const contactEmail = toOptionalString(formData, 'contact_email', 120).toLowerCase();
@@ -449,7 +445,7 @@ export const actions: Actions = {
 				return registerFailure(400, 'Enter a valid business contact email.', 'business', submittedValues);
 			}
 			if (!inviteCode && !liabilityAgreementAccepted) {
-				return registerFailure(400, 'You must accept the liability agreement to continue.', 'purchase', submittedValues);
+				return registerFailure(400, 'You must accept the Terms and Billing Terms to continue.', 'purchase', submittedValues);
 			}
 			if (!inviteCode && purchaseMode !== 'buy_now') {
 				return registerFailure(403, 'Trial signup is not available right now. Choose purchase to continue.', 'purchase', {
@@ -461,7 +457,7 @@ export const actions: Actions = {
 				return registerFailure(403, 'Public signup is not available right now.', 'security', submittedValues);
 			}
 			if (!inviteCode && liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
-				return registerFailure(400, 'Please refresh and accept the latest liability agreement.', 'purchase', submittedValues);
+				return registerFailure(400, 'Please refresh and accept the latest Terms and Billing Terms.', 'purchase', submittedValues);
 			}
 			if (
 				!inviteCode &&

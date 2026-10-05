@@ -1,9 +1,11 @@
-﻿type EmailEnv = Partial<App.Platform['env']> & {
+type EmailEnv = Partial<App.Platform['env']> & {
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   RESEND_REPLY_TO_EMAIL?: string;
   APP_BASE_URL?: string;
 };
+
+import { PLAN_PRICES } from '$lib/billing/pricing';
 
 export type EmailSendResult = {
   sent: boolean;
@@ -251,20 +253,20 @@ function signupPlanDetails(planTier: string) {
   if (normalized === 'growth' || normalized === 'medium') {
     return {
       label: 'Medium',
-      price: '$65/mo',
-      features: 'Up to 75 employees, scheduling, lists, recipes, docs, ToDo, whiteboard, reports, vendors, tools, and temperature monitoring.'
+      price: `$${PLAN_PRICES.growth}/mo`,
+      features: 'Up to 75 employees with scheduling, lists, recipes, docs, ToDo, whiteboard, reports, vendors, and tools.'
     };
   }
   if (normalized === 'enterprise' || normalized === 'large') {
     return {
       label: 'Large',
-      price: '$90/mo',
-      features: 'Up to 250 employees, full workspace tools, multi-team operations, reporting, vendors, and temperature monitoring.'
+      price: `$${PLAN_PRICES.enterprise}/mo`,
+      features: 'Up to 250 employees with full workspace tools, multi-team operations, reporting, vendors, and tools.'
     };
   }
   return {
     label: 'Small',
-    price: '$30/mo',
+    price: `$${PLAN_PRICES.starter}/mo`,
     features: 'Up to 20 employees with core scheduling, lists, recipes, docs, ToDo, whiteboard, reports, vendors, and tools.'
   };
 }

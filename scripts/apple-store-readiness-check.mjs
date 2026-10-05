@@ -57,6 +57,7 @@ expect('ios/App/App/PrivacyInfo.xcprivacy', 'iOS privacy manifest declares app d
   source.includes('NSPrivacyCollectedDataTypeEmailAddress') &&
   source.includes('NSPrivacyCollectedDataTypeSensitiveInfo') &&
   source.includes('NSPrivacyCollectedDataTypeOtherFinancialInfo') &&
+  source.includes('NSPrivacyCollectedDataTypeDeviceID') &&
   source.includes('NSPrivacyCollectedDataTypePurposeAppFunctionality')
 );
 

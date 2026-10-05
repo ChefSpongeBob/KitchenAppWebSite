@@ -127,41 +127,48 @@ expect('migrations/0081_billing_webhook_lifecycle_indexes.sql', 'billing webhook
   source.includes('idx_store_webhook_events_processed_created')
 );
 
-expect('migrations/0082_update_launch_plan_prices.sql', 'launch store prices are the current approved tiers', (source) =>
-  source.includes("WHEN 'crimini.plan.small.monthly' THEN 3000") &&
-  source.includes("WHEN 'crimini.plan.medium.monthly' THEN 6500") &&
-  source.includes("WHEN 'crimini.plan.large.monthly' THEN 9000")
+expect('migrations/0101_billing_prices_and_sensor_addon.sql', 'launch store prices are the current approved tiers', (source) =>
+  source.includes("WHEN 'crimini.plan.small.monthly' THEN 2900") &&
+  source.includes("WHEN 'crimini.plan.medium.monthly' THEN 4900") &&
+  source.includes("WHEN 'crimini.plan.large.monthly' THEN 6900")
 );
 
-expect('migrations/0083_temperature_tier_entitlements.sql', 'temperature monitoring is tier-gated to medium and large', (source) =>
+expect('migrations/0101_billing_prices_and_sensor_addon.sql', 'temperature monitoring is an active standalone add-on', (source) =>
   source.includes("WHERE product_id = 'crimini.addon.temps.monthly'") &&
-  source.includes('SET active = 0') &&
-  source.includes("WHEN 'growth' THEN 1") &&
-  source.includes("WHEN 'enterprise' THEN 1") &&
-  source.includes('ELSE 0')
+  source.includes('price_cents = 1700') &&
+  source.includes('addon_temp_monitoring = 1') &&
+  source.includes('active = 1')
 );
 
-expect('src/routes/register/+page.server.ts', 'registration derives temperature monitoring from plan tier only', (source) =>
-  source.includes('tempMonitoringIncludedForPlan(planTier)') &&
-  !source.includes("formData.get('addon_temp_monitoring')")
+expect('migrations/0101_billing_prices_and_sensor_addon.sql', 'temperature monitoring is separated from plan entitlements', (source) =>
+  source.includes('SET addon_temp_monitoring = 0') &&
+  source.includes("'crimini.plan.small.monthly'") &&
+  source.includes("'crimini.plan.medium.monthly'") &&
+  source.includes("'crimini.plan.large.monthly'")
 );
 
-expect('src/routes/billing/+page.server.ts', 'billing conversion derives temperature monitoring from plan tier only', (source) =>
-  source.includes('tempMonitoringIncludedForPlan(planTier)') &&
-  !source.includes("form.get('addon_temp_monitoring')")
+expect('src/routes/register/+page.server.ts', 'registration leaves the optional sensor add-on disabled until purchased', (source) =>
+  source.includes('const addOnTempMonitoring = false') &&
+  !source.includes('tempMonitoringIncludedForPlan')
 );
 
-expect('src/routes/api/billing/products/+server.ts', 'billing products API hides standalone temperature add-ons', (source) =>
-  source.includes('product.addon_temp_monitoring === 1 && !product.plan_tier')
+expect('src/routes/billing/+page.server.ts', 'local billing conversion accepts the explicit sensor add-on selection', (source) =>
+  source.includes("form.get('addon_temp_monitoring')") &&
+  !source.includes('tempMonitoringIncludedForPlan')
 );
 
-expect('src/routes/api/billing/native-purchase/+server.ts', 'native purchase rejects standalone temperature add-ons', (source) =>
-  source.includes('product.addon_temp_monitoring === 1 && !product.plan_tier')
+expect('src/routes/api/billing/products/+server.ts', 'billing products API exposes active standalone add-ons', (source) =>
+  source.includes('products.map((product)') &&
+  !source.includes('product.addon_temp_monitoring === 1 && !product.plan_tier')
 );
 
-expect('src/lib/server/storeBilling.ts', 'verified entitlements apply temperature monitoring by active plan tier', (source) =>
-  source.includes("activePlan.plan_tier === 'growth' || activePlan.plan_tier === 'enterprise'") &&
-  !source.includes('active.some((entitlement) => entitlement.addon_temp_monitoring === 1)')
+expect('src/routes/api/billing/native-purchase/+server.ts', 'native purchase accepts the standalone temperature product', (source) =>
+  !source.includes('product.addon_temp_monitoring === 1 && !product.plan_tier')
+);
+
+expect('src/lib/server/storeBilling.ts', 'verified standalone entitlement controls temperature monitoring', (source) =>
+  source.includes('entitlement.addon_temp_monitoring === 1 && !entitlement.plan_tier') &&
+  !source.includes("activePlan.plan_tier === 'growth' || activePlan.plan_tier === 'enterprise'")
 );
 
 expect('src/routes/api/billing/app-store-notifications/+server.ts', 'app store webhook requires exact configured token', (source) =>

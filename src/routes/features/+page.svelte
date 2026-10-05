@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 
 	type CapabilityRow = {
@@ -88,7 +88,7 @@
 		{
 			title: 'Communication + Monitoring',
 			summary:
-				'Keep managers and staff aligned with live homepage context, announcements, specials, whiteboard ideas, vendors, and tier-based monitoring.',
+				'Keep managers and staff aligned with live homepage context, announcements, specials, whiteboard ideas, vendors, and optional temperature monitoring.',
 			items: [
 				'Announcements and specials',
 				'Whiteboard ideas and voting',
@@ -184,9 +184,9 @@
 		},
 		{
 			module: 'Temperature monitoring',
-			starter: 'Medium+',
-			growth: 'Included',
-			enterprise: 'Included'
+			starter: 'Add-on',
+			growth: 'Add-on',
+			enterprise: 'Add-on'
 		}
 	];
 
@@ -200,7 +200,7 @@
 			Crimini connects business setup, employee onboarding, scheduling, daily execution, knowledge, communication, and monitoring in one operating flow.
 		</p>
 		<div class="head-actions">
-			<a href="/register#onboarding-slideshow" class="btn btn-primary">Start Trial</a>
+			<a href="/register#onboarding-slideshow" class="btn btn-primary">Get Started</a>
 			<a href="/pricing" class="btn">View Pricing</a>
 		</div>
 	</section>

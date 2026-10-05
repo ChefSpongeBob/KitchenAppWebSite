@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { PLAN_PRICES, SENSOR_PRICING } from '$lib/billing/pricing';
 
 	type FormValues = {
 		displayName: string;
@@ -117,8 +118,11 @@
 	let clientFingerprint = '';
 	let shellElement: HTMLElement;
 
-	$: basePlanPrice = planTier === 'large' ? 90 : planTier === 'medium' ? 65 : 30;
-	$: tempMonitoringIncluded = planTier === 'medium' || planTier === 'large';
+	$: basePlanPrice = planTier === 'large'
+		? PLAN_PRICES.enterprise
+		: planTier === 'medium'
+			? PLAN_PRICES.growth
+			: PLAN_PRICES.starter;
 
 	onMount(() => {
 		let introTimer: number | undefined;
@@ -166,7 +170,7 @@
 		feedback = '';
 		if (!passwordIsValid()) { activeStep = 2; return false; }
 		if (!businessName.trim()) { feedback = 'Enter your restaurant or business name.'; activeStep = 4; return false; }
-		if (!liabilityAgreementAccepted) { feedback = 'Accept the agreement to create your workspace.'; return false; }
+		if (!liabilityAgreementAccepted) { feedback = 'Accept the Terms and Billing Terms to create your workspace.'; return false; }
 		return true;
 	}
 </script>
@@ -241,7 +245,7 @@
 				<input type="hidden" name="registry_id" value={registryId.trim()} />
 				<input type="hidden" name="website_url" value={websiteUrl.trim()} />
 				<input type="hidden" name="plan_tier" value={planTier} />
-				<input type="hidden" name="addon_temp_monitoring" value={tempMonitoringIncluded ? '1' : '0'} />
+				<input type="hidden" name="addon_temp_monitoring" value="0" />
 				<input type="hidden" name="purchase_mode" value="buy_now" />
 				<input type="hidden" name="store_billing_preference" value={storeBillingPreference} />
 				<input type="hidden" name="liability_agreement_accepted" value={liabilityAgreementAccepted ? '1' : '0'} />
@@ -325,10 +329,11 @@
 							</div>
 						{:else if activeStep === 8}
 							<div class="plan-list" role="radiogroup" aria-label="Plan size">
-								<button type="button" class:active={planTier === 'small'} on:click={() => (planTier = 'small')} aria-pressed={planTier === 'small'}><span><strong>Small</strong><small>Up to 20 employees</small></span><b>$30/mo</b></button>
-								<button type="button" class:active={planTier === 'medium'} on:click={() => (planTier = 'medium')} aria-pressed={planTier === 'medium'}><span><strong>Medium</strong><small>Up to 75 users + temperature monitoring</small></span><b>$65/mo</b></button>
-								<button type="button" class:active={planTier === 'large'} on:click={() => (planTier = 'large')} aria-pressed={planTier === 'large'}><span><strong>Large</strong><small>Up to 250 users + full platform</small></span><b>$90/mo</b></button>
+								<button type="button" class:active={planTier === 'small'} on:click={() => (planTier = 'small')} aria-pressed={planTier === 'small'}><span><strong>Small</strong><small>Up to 20 employees</small></span><b>${PLAN_PRICES.starter}/mo</b></button>
+								<button type="button" class:active={planTier === 'medium'} on:click={() => (planTier = 'medium')} aria-pressed={planTier === 'medium'}><span><strong>Medium</strong><small>Up to 75 employees</small></span><b>${PLAN_PRICES.growth}/mo</b></button>
+								<button type="button" class:active={planTier === 'large'} on:click={() => (planTier = 'large')} aria-pressed={planTier === 'large'}><span><strong>Large</strong><small>Up to 250 employees</small></span><b>${PLAN_PRICES.enterprise}/mo</b></button>
 							</div>
+							<p class="plan-note">Temperature monitoring is optional: ${SENSOR_PRICING.baseMonthly}/month for up to {SENSOR_PRICING.includedSensors} sensors, then ${SENSOR_PRICING.additionalSensorMonthly}/month per additional sensor, with no sensor ceiling.</p>
 						{:else}
 							<div class="final-step">
 								<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
@@ -340,7 +345,7 @@
 								</div>
 								<p class="web-note">Use criminiops.com for scheduling, reports, and large-screen work. Every feature remains available in the app.</p>
 								<div class="purchase-summary"><span>{businessName}</span><strong>${basePlanPrice}/month</strong></div>
-								<label class="agreement"><input type="checkbox" bind:checked={liabilityAgreementAccepted} /><span>I agree to the <a href="/legal/liability-agreement" target="_blank" rel="noreferrer">Crimini agreement</a>.</span></label>
+								<label class="agreement"><input type="checkbox" bind:checked={liabilityAgreementAccepted} /><span>I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/billing-terms" target="_blank" rel="noreferrer">Billing Terms</a>.</span></label>
 							</div>
 						{/if}
 					</div>
@@ -428,6 +433,7 @@
 	.plan-list button > span { display: grid; gap: 0.18rem; }
 	.plan-list small { color: rgba(17, 18, 20, 0.58); }
 	.plan-list button.active { font-weight: 850; background: linear-gradient(90deg, rgba(182, 155, 104, 0.13), transparent 68%); }
+	.plan-note { margin: 0.85rem 0 0; color: rgba(17, 18, 20, 0.64); font-size: 0.82rem; line-height: 1.5; }
 	.final-step { display: grid; justify-items: center; gap: 1.2rem; text-align: center; }
 	.final-step > img { width: min(18rem, 70vw); height: auto; mix-blend-mode: multiply; }
 	.final-step > p { margin: 0; }
