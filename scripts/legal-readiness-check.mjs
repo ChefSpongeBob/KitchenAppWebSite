@@ -33,6 +33,28 @@ expect('src/routes/+layout.svelte', 'footer exposes public legal and support lin
   source.includes('Crimini by NNS, LLC')
 );
 
+expect('src/hooks.server.ts', 'public footer destinations do not require an app session', (source) =>
+  source.includes("pathname === '/support'") &&
+  source.includes("pathname === '/privacy'") &&
+  source.includes("pathname === '/terms'") &&
+  source.includes("pathname === '/billing-terms'") &&
+  source.includes("pathname === '/account-deletion'")
+);
+
+expect('src/routes/+layout.svelte', 'footer access routes match paid-or-invited signup policy', (source) =>
+  source.includes('<a href="/login">Sign In</a>') &&
+  !source.includes('Start Free') &&
+  source.includes('<a href="/support">Support</a>') &&
+  !source.includes('<a href="/settings">Support</a>')
+);
+
+expect('src/routes/about/+page.svelte', 'marketing About destination contains branded page content', (source) =>
+  source.includes('Crimini by NNS, LLC') &&
+  source.includes('Built Around Service') &&
+  source.includes('One Business, One Workspace') &&
+  source.includes('href="/features"')
+);
+
 expect('src/routes/support/+page.svelte', 'support page has a launch support contact and legal links', (source) =>
   source.includes('support@criminiops.com') &&
   source.includes('href="/privacy"') &&

@@ -450,7 +450,7 @@
 
       <div class="marketing-actions">
         <a href="/login" class="marketing-btn marketing-btn-ghost">Sign In</a>
-        <a href="/register#onboarding-slideshow" class="marketing-btn marketing-btn-primary">Start Free</a>
+        <a href="/pricing" class="marketing-btn marketing-btn-primary">Get Started</a>
         <button
           class="marketing-menu-btn tap"
           on:click={toggleMarketingMenu}
@@ -468,7 +468,7 @@
         {/each}
         <div class="marketing-mobile-cta">
           <a href="/login" on:click={() => (marketingMenuOpen = false)}>Sign In</a>
-          <a href="/register#onboarding-slideshow" class="primary" on:click={() => (marketingMenuOpen = false)}>Start Free</a>
+          <a href="/pricing" class="primary" on:click={() => (marketingMenuOpen = false)}>Get Started</a>
         </div>
       </div>
     {/if}
@@ -674,11 +674,11 @@
           <a href="/terms">Terms</a>
           <a href="/billing-terms">Billing Terms</a>
           <a href="/account-deletion">Account Deletion</a>
-          <a href="/register#onboarding-slideshow">Start Free</a>
+          <a href="/login">Sign In</a>
         {:else if data.user}
           <a href="/app/about">About App</a>
-          <a href="/docs">Documentation</a>
-          <a href="/settings">Support</a>
+          <a href="/docs">Documents</a>
+          <a href="/support">Support</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/billing-terms">Billing Terms</a>

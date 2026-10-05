@@ -161,7 +161,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		pathname === '/features' ||
 		pathname === '/how-it-works' ||
 		pathname === '/pricing' ||
+		pathname === '/support' ||
 		pathname === '/privacy' ||
+		pathname === '/terms' ||
+		pathname === '/billing-terms' ||
 		pathname === '/account-deletion';
 
 	const isPublicApiRoute =
