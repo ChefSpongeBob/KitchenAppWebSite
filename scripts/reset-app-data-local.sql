@@ -38,6 +38,8 @@ DELETE FROM user_invites;
 DELETE FROM user_preferences;
 DELETE FROM user_schedule_availability;
 DELETE FROM user_schedule_departments;
+DELETE FROM user_schedule_roles;
+DELETE FROM user_schedule_role_settings;
 DELETE FROM user_schedule_time_off_requests;
 DELETE FROM whiteboard_posts;
 DELETE FROM whiteboard_review;

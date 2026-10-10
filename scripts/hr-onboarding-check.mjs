@@ -136,9 +136,10 @@ expect('src/routes/register/+page.server.ts', 'invite registration saves persona
 );
 
 expect('src/lib/components/onboarding/OwnerRegistration.svelte', 'owner registration separates optional profile setup from required account and business steps', (source) =>
-  source.includes('const optionalSteps = new Set([0, 1, 3, 5, 6, 7])') &&
+  source.includes('const optionalSteps = new Set([0, 1, 3, 5, 6, 7, 8])') &&
   source.includes('Contact & Login') &&
   source.includes('Your Business') &&
+  source.includes('Departments & Roles') &&
   source.includes('Choose a Plan') &&
   source.includes('Create workspace')
 );

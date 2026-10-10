@@ -48,6 +48,8 @@ const TENANT_TABLES = [
   'schedule_publish_history',
   'schedule_shift_history',
   'user_schedule_departments',
+  'user_schedule_role_settings',
+  'user_schedule_roles',
   'user_schedule_availability',
   'user_schedule_availability_requests',
   'user_schedule_time_off_requests',

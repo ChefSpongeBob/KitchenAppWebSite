@@ -22,10 +22,13 @@ const char API_URL[] = "https://criminiops.com/api/temps";
 constexpr uint8_t RADIO_CHANNEL = 20;
 constexpr uint16_t RADIO_PAN = 0xC110;
 constexpr uint16_t GATEWAY_ADDRESS = 0x0001;
-constexpr size_t MAX_PENDING_NODES = 16;
+constexpr size_t MAX_PENDING_NODES = 25;
 constexpr size_t AUTH_TAG_SIZE = 16;
 constexpr size_t RECENT_PACKET_COUNT = 128;
-constexpr uint32_t UPLOAD_INTERVAL_MS = 10000;
+constexpr size_t RADIO_QUEUE_DEPTH = 64;
+constexpr size_t MAX_FRAMES_PER_LOOP = 32;
+constexpr uint32_t BATCH_WINDOW_MS = 120000;
+constexpr uint32_t RADIO_QUIET_PERIOD_MS = 1500;
 constexpr uint32_t RETRY_INTERVAL_MS = 60000;
 constexpr uint32_t RADIO_SILENCE_RECOVERY_MS = 720000;
 
@@ -64,8 +67,9 @@ struct QueuedReading {
 
 QueuedReading readings[MAX_PENDING_NODES] = {};
 size_t readingCount = 0;
-uint32_t lastUpload = 0;
-uint32_t uploadInterval = UPLOAD_INTERVAL_MS;
+uint32_t batchStartedAt = 0;
+uint32_t retryAt = 0;
+bool retryScheduled = false;
 uint32_t lastAuthenticatedPacket = 0;
 uint32_t lastRadioRecovery = 0;
 uint8_t consecutiveRadioRecoveries = 0;
@@ -178,6 +182,7 @@ void retainLatestReading(const TemperaturePacket& packet, int8_t rssi, uint8_t l
   }
 
   if (readingCount < MAX_PENDING_NODES) {
+    if (!readingCount) batchStartedAt = millis();
     readings[readingCount++] = reading;
     return;
   }
@@ -206,17 +211,22 @@ extern "C" void IRAM_ATTR esp_ieee802154_receive_done(uint8_t* frame, esp_ieee80
 void receiveReading(const RadioFrame& incoming) {
   const size_t headerSize = 9;
   const size_t expectedLength = headerSize + sizeof(TemperaturePacket) + 2;
-  if (incoming.length != expectedLength + 1) {
-    reportRadioIssue("ignored unexpected frame length");
-    return;
-  }
+  if (incoming.length < headerSize + 1) return;
   if ((incoming.bytes[1] != 0x41 && incoming.bytes[1] != 0x61) || incoming.bytes[2] != 0x88) {
-    reportRadioIssue("ignored unsupported frame type");
     return;
   }
   if (incoming.bytes[4] != (RADIO_PAN & 0xFF) || incoming.bytes[5] != (RADIO_PAN >> 8) ||
       incoming.bytes[6] != (GATEWAY_ADDRESS & 0xFF) || incoming.bytes[7] != (GATEWAY_ADDRESS >> 8)) {
-    reportRadioIssue("ignored wrong PAN or destination");
+    return;
+  }
+  if (incoming.length != expectedLength + 1) {
+    const uint32_t now = millis();
+    if (now - lastRadioDiagnostic >= 1000) {
+      lastRadioDiagnostic = now;
+      Serial.printf("Radio: Crimini frame length %u, expected %u\n",
+                    static_cast<unsigned>(incoming.length),
+                    static_cast<unsigned>(expectedLength + 1));
+    }
     return;
   }
 
@@ -288,7 +298,15 @@ esp_err_t onHttpEvent(esp_http_client_event_t* event) {
 bool uploadReadings() {
   const size_t submittedCount = readingCount;
   if (!submittedCount) return true;
-  if (!pauseRadioForWifi()) reportRadioIssue("receiver did not pause for upload");
+  if (!pauseRadioForWifi()) {
+    reportRadioIssue("receiver did not pause for upload");
+    if (!resetRadioReceiver()) {
+      Serial.println("Radio: recovery failed; restarting gateway");
+      delay(100);
+      ESP.restart();
+    }
+    return false;
+  }
 
   bool uploaded = false;
   if (connectWifi()) {
@@ -330,7 +348,12 @@ bool uploadReadings() {
   }
   WiFi.disconnect(true, false);
   WiFi.mode(WIFI_OFF);
-  if (uploaded && submittedCount) readingCount = 0;
+  if (uploaded && submittedCount) {
+    readingCount = 0;
+    batchStartedAt = 0;
+    retryAt = 0;
+    retryScheduled = false;
+  }
   delay(20);
   if (!resumeRadioReceiver() && !resetRadioReceiver()) {
     Serial.println("Radio: recovery failed; restarting gateway");
@@ -356,14 +379,13 @@ void setup() {
   pinMode(WIFI_ANT_CONFIG, OUTPUT);
   digitalWrite(WIFI_ANT_CONFIG, HIGH);
 
-  receivedFrames = xQueueCreate(16, sizeof(RadioFrame));
+  receivedFrames = xQueueCreate(RADIO_QUEUE_DEPTH, sizeof(RadioFrame));
   if (!receivedFrames) return;
   if (!resumeRadioReceiver()) {
     Serial.println("Radio: receiver failed to start");
     return;
   }
   const uint32_t now = millis();
-  lastUpload = now;
   lastAuthenticatedPacket = now;
   lastRadioRecovery = now;
   Serial.printf("Gateway %s listening on channel %u\n", GATEWAY_SERIAL, RADIO_CHANNEL);
@@ -371,14 +393,24 @@ void setup() {
 
 void loop() {
   RadioFrame incoming = {};
-  if (receivedFrames && xQueueReceive(receivedFrames, &incoming, pdMS_TO_TICKS(20)) == pdTRUE) {
+  size_t processedFrames = 0;
+  while (receivedFrames && processedFrames < MAX_FRAMES_PER_LOOP &&
+         xQueueReceive(receivedFrames, &incoming, processedFrames ? 0 : pdMS_TO_TICKS(20)) == pdTRUE) {
     receiveReading(incoming);
     if (!resumeRadioReceiver()) reportRadioIssue("receiver did not continue after frame");
+    ++processedFrames;
   }
   const uint32_t now = millis();
-  if (readingCount && now - lastUpload >= uploadInterval) {
-    uploadInterval = uploadReadings() ? UPLOAD_INTERVAL_MS : RETRY_INTERVAL_MS;
-    lastUpload = millis();
+  const bool retryDue = retryScheduled && static_cast<int32_t>(now - retryAt) >= 0;
+  const bool batchDue = readingCount && now - batchStartedAt >= BATCH_WINDOW_MS;
+  const bool batchFull = readingCount >= MAX_PENDING_NODES;
+  const bool radioQuiet = now - lastAuthenticatedPacket >= RADIO_QUIET_PERIOD_MS;
+  const bool uploadDue = retryScheduled ? retryDue : (batchDue || batchFull);
+  if (readingCount && uploadDue && radioQuiet) {
+    if (!uploadReadings()) {
+      retryAt = millis() + RETRY_INTERVAL_MS;
+      retryScheduled = true;
+    }
   }
   if (now - lastAuthenticatedPacket >= RADIO_SILENCE_RECOVERY_MS &&
       now - lastRadioRecovery >= RADIO_SILENCE_RECOVERY_MS) {

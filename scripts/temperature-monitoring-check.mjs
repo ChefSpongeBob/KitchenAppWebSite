@@ -103,20 +103,27 @@ expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'standalone
   source.includes('"x-device-key"') && !source.includes('setInsecure')
 );
 
-expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway verifies radio packets before deduplication and upload', (source) =>
-  source.includes('packet.version') &&
-  source.includes('mbedtls_md_hmac') &&
-  source.includes('verifyPacket(packet)') &&
-  source.includes('seenRecently(packet)') &&
-  source.includes('retainLatestReading') &&
-  source.includes('MAX_PENDING_NODES = 16') &&
-  source.includes('UPLOAD_INTERVAL_MS = 10000') &&
-  source.includes('0x41') &&
-  source.includes('0x61') &&
-  !source.includes('HEARTBEAT_INTERVAL_MS') &&
-  !source.includes('restartGateway()') &&
-  source.includes('RETRY_INTERVAL_MS = 60000')
-);
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway verifies radio packets before deduplication and upload', (source) => {
+  const verifiedAt = source.indexOf('if (!verifyPacket(packet))');
+  const deduplicatedAt = source.indexOf('if (seenRecently(packet))');
+  const retainedAt = source.indexOf('retainLatestReading(packet');
+  const destinationFilterAt = source.indexOf('incoming.bytes[6] != (GATEWAY_ADDRESS & 0xFF)');
+  const exactLengthFilterAt = source.indexOf('if (incoming.length != expectedLength + 1)');
+  return source.includes('packet.version') &&
+    source.includes('mbedtls_md_hmac') &&
+    verifiedAt >= 0 && deduplicatedAt > verifiedAt && retainedAt > deduplicatedAt &&
+    destinationFilterAt >= 0 && exactLengthFilterAt > destinationFilterAt &&
+    source.includes('MAX_PENDING_NODES = 25') &&
+    source.includes('BATCH_WINDOW_MS = 120000') &&
+    source.includes('RADIO_QUIET_PERIOD_MS = 1500') &&
+    source.includes('retryScheduled') &&
+    source.includes('MAX_FRAMES_PER_LOOP = 32') &&
+    source.includes('0x41') &&
+    source.includes('0x61') &&
+    !source.includes('HEARTBEAT_INTERVAL_MS') &&
+    !source.includes('restartGateway()') &&
+    source.includes('RETRY_INTERVAL_MS = 60000');
+});
 
 expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute status and requested refrigeration colors', (source) =>
   source.includes('ONLINE_WINDOW_MS = 10 * 60 * 1000') &&

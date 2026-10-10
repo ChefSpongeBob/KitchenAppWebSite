@@ -5678,6 +5678,15 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
     return fail(404, { error: 'That user could not be found in this business.' });
   }
 
+  const target = await db
+    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+    .bind(businessId, userId)
+    .first<{ role: string }>();
+  const actorIsOwner = isOwnerRole(locals.businessRole);
+  if (!actorIsOwner && (isOwnerRole(target?.role) || isManagerRole(target?.role))) {
+    return fail(403, { error: 'Only the owner can change management schedule access.' });
+  }
+
   const existing = await db
     .prepare(
       `
@@ -5691,17 +5700,30 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
     .first<{ department: string }>();
 
   if (existing) {
-    await db
-      .prepare(
-        `
-        DELETE FROM user_schedule_departments
-        WHERE user_id = ? AND department = ? AND COALESCE(business_id, ?) = ?
-        `
-      )
-      .bind(userId, department, businessId, businessId)
-      .run();
+    await db.batch([
+      db
+        .prepare(
+          `
+          DELETE FROM user_schedule_departments
+          WHERE user_id = ? AND department = ? AND COALESCE(business_id, ?) = ?
+          `
+        )
+        .bind(userId, department, businessId, businessId),
+      db
+        .prepare(
+          `
+          DELETE FROM user_schedule_roles
+          WHERE business_id = ? AND user_id = ?
+            AND role_definition_id IN (
+              SELECT id FROM schedule_role_definitions
+              WHERE business_id = ? AND department = ?
+            )
+          `
+        )
+        .bind(businessId, userId, businessId, department)
+    ]);
 
-    return { success: true };
+    return { success: true, message: 'Schedule department removed.' };
   }
 
   await db
@@ -5714,7 +5736,7 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
     .bind(userId, department, Math.floor(Date.now() / 1000), businessId)
     .run();
 
-  return { success: true };
+  return { success: true, message: 'Schedule department assigned.' };
 }
 
 async function canManageEmployeeHrPos(db: D1, locals: App.Locals, businessId: string, targetUserId: string) {

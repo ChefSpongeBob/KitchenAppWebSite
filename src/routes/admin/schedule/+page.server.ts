@@ -1,5 +1,16 @@
 import type { Actions, PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
+import {
+  loadAdminUsers,
+  requireAdmin,
+  toggleScheduleDepartmentApproval,
+  updateUserBusinessPermissions,
+  updateUserCapabilityOverrides
+} from '$lib/server/admin';
+import {
+  ALL_BUSINESS_CAPABILITIES,
+  hasBusinessCapability,
+  normalizeBusinessRole
+} from '$lib/server/permissions';
 import {
   addDays,
   applyScheduleTemplateToWeek,
@@ -28,6 +39,7 @@ import {
   loadScheduleOpenShiftsForWeek,
   loadPendingScheduleAvailabilityRequests,
   loadScheduleRoleDefinitions,
+  loadScheduleRoleAccessByUser,
   loadScheduleSettings,
   loadScheduleShiftOffersForWeek,
   loadScheduleTemplates,
@@ -37,6 +49,7 @@ import {
   saveScheduleLaborTargets,
   saveScheduleTemplateFromWeek,
   saveScheduleAutofillPreference,
+  saveUserScheduleRoleAccess,
   saveScheduleWeekDraft
 } from '$lib/server/schedules';
 
@@ -46,7 +59,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   const db = locals.DB;
   const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
   const requestedTool = (url.searchParams.get('tool') ?? '').trim();
-  const initialTool = ['approvals', 'open-shifts', 'labor', 'templates', 'setup'].includes(requestedTool)
+  const initialTool = ['approvals', 'team', 'open-shifts', 'labor', 'templates', 'setup'].includes(requestedTool)
     ? requestedTool
     : 'builder';
 
@@ -67,21 +80,25 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       templates: [],
       laborTargets: [],
       roleDefinitions: [],
+      teamUsers: [],
+      roleAccessByUser: {},
+      canManagePermissions: false,
+      actorIsOwner: false,
+      currentUserId: locals.userId ?? null,
+      editableCapabilities: [],
       initialTool,
       settings: {
         autofillNewWeeks: false,
-        departments: ['General'],
-        roleOptionsByDepartment: {
-          General: ['Shift']
-        }
+        departments: [],
+        roleOptionsByDepartment: {}
       },
       availabilityByUser: {}
     };
   }
 
-  const [users, schedule, offers, openShifts, openShiftRequests, settings, timeOffRequests, templates, laborTargets, roleDefinitions] = await Promise.all([
+  const [users, schedule, offers, openShifts, openShiftRequests, settings, timeOffRequests, templates, laborTargets, roleDefinitions, adminUsers] = await Promise.all([
     loadScheduleAssignableUsers(db, locals.businessId),
-    loadScheduleWeek(db, weekStart, { ensureWeek: true, userId: locals.userId ?? null, businessId: locals.businessId }),
+    loadScheduleWeek(db, weekStart, { userId: locals.userId ?? null, businessId: locals.businessId }),
     loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
     loadScheduleOpenShiftsForWeek(db, weekStart, locals.businessId),
     loadScheduleOpenShiftRequestsForWeek(db, weekStart, locals.businessId),
@@ -89,7 +106,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     loadScheduleTimeOffRequestsForRange(db, weekStart, addDays(weekStart, 6), locals.businessId),
     loadScheduleTemplates(db, locals.businessId),
     loadScheduleLaborTargets(db, weekStart, locals.businessId),
-    loadScheduleRoleDefinitions(db, locals.businessId)
+    loadScheduleRoleDefinitions(db, locals.businessId),
+    loadAdminUsers(db, locals.businessId ?? '')
   ]);
   const allowedDepartments = await loadScheduleManagerDepartments(db, locals, locals.businessId ?? '');
   const allowedDepartmentSet = new Set(allowedDepartments);
@@ -99,6 +117,11 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   );
   const visibleShifts = schedule.shifts.filter((shift) => allowedDepartmentSet.has(shift.department));
   const visibleUserIds = new Set(visibleUsers.map((user) => user.id));
+  const teamUsers = adminUsers.filter(
+    (user) =>
+      hasAllDepartmentAccess ||
+      user.approved_departments.some((department) => allowedDepartmentSet.has(department))
+  );
   const visibleSettings = {
     ...settings,
     departments: settings.departments.filter((department) => allowedDepartmentSet.has(department)),
@@ -109,14 +132,23 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     )
   };
 
-  const [availabilityByUser, pendingAvailability] = await Promise.all([
+  const [availabilityByUser, pendingAvailability, roleAccessByUser] = await Promise.all([
     loadScheduleAvailabilityByUser(
       db,
       visibleUsers.map((user) => user.id),
       locals.businessId
     ),
-    loadPendingScheduleAvailabilityRequests(db, locals.businessId ?? '', Array.from(visibleUserIds))
+    loadPendingScheduleAvailabilityRequests(db, locals.businessId ?? '', Array.from(visibleUserIds)),
+    loadScheduleRoleAccessByUser(db, locals.businessId ?? '', teamUsers.map((user) => user.id))
   ]);
+
+  const actorIsOwner = normalizeBusinessRole(locals.businessRole) === 'owner';
+  const canManagePermissions = hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    'manage_permissions',
+    locals.businessCapabilities
+  );
 
   return {
     weekStart,
@@ -194,6 +226,16 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     settings: visibleSettings,
     availabilityByUser: Object.fromEntries(availabilityByUser),
     roleDefinitions: roleDefinitions.filter((role) => allowedDepartmentSet.has(role.department)),
+    teamUsers,
+    roleAccessByUser: Object.fromEntries(roleAccessByUser),
+    canManagePermissions,
+    actorIsOwner,
+    currentUserId: locals.userId ?? null,
+    editableCapabilities: actorIsOwner
+      ? ALL_BUSINESS_CAPABILITIES
+      : (locals.businessCapabilities ?? []).filter(
+          (capability) => capability !== 'admin_access' && capability !== 'manage_permissions'
+        ),
     initialTool
   };
 };
@@ -219,5 +261,9 @@ export const actions: Actions = {
   create_department: ({ request, locals }) => createScheduleDepartment(request, locals),
   create_role: ({ request, locals }) => createScheduleRoleDefinition(request, locals),
   delete_department: ({ request, locals }) => deleteScheduleDepartment(request, locals),
-  delete_role: ({ request, locals }) => deleteScheduleRoleDefinition(request, locals)
+  delete_role: ({ request, locals }) => deleteScheduleRoleDefinition(request, locals),
+  update_permissions: ({ request, locals }) => updateUserBusinessPermissions(request, locals),
+  update_capabilities: ({ request, locals }) => updateUserCapabilityOverrides(request, locals),
+  toggle_schedule_department: ({ request, locals }) => toggleScheduleDepartmentApproval(request, locals),
+  save_schedule_roles: ({ request, locals }) => saveUserScheduleRoleAccess(request, locals)
 };

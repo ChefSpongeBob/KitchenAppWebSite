@@ -2,6 +2,7 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
+  import AvailabilityEditor from '$lib/components/ui/AvailabilityEditor.svelte';
   import {
     formatScheduleTimeLabel,
     formatScheduleWeekRange,
@@ -81,6 +82,27 @@
       id: string;
       status: 'pending' | 'approved' | 'declined';
     }>;
+    availability: Array<{
+      weekday: number;
+      isAvailable: boolean;
+      startTime: string;
+      endTime: string;
+    }>;
+    pendingAvailability: {
+      id: string;
+      status: 'pending' | 'approved' | 'declined';
+    } | null;
+    timeOffRequests: Array<{
+      id: string;
+      startDate: string;
+      endDate: string;
+      note: string;
+      status: 'pending' | 'approved' | 'declined';
+      managerNote: string;
+    }>;
+    roleAccessByUser: Record<string, { restrictToSelected: boolean; roleDefinitionIds: string[] }>;
+    roleDefinitions: Array<{ id: string; department: string; roleName: string; sortOrder: number }>;
+    initialView: 'week' | 'pool' | 'availability' | 'time-off';
   };
 
   type ShiftSummary = {
@@ -95,6 +117,8 @@
 
   let activeOfferShift: ShiftSummary | null = null;
   let activeOfferTargetUserId = '';
+  let activeView = data.initialView;
+  let availabilityEntries = data.availability.map((entry) => ({ ...entry }));
 
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
@@ -103,7 +127,7 @@
         await invalidate('app:my-schedule');
       }
       if (result.type === 'success') {
-        pushToast('Shift update saved.', 'success');
+        pushToast(result.data?.message ?? 'Schedule updated.', 'success');
       } else if (result.type === 'failure') {
         pushToast(result.data?.error ?? 'That shift update could not be saved.', 'error');
       }
@@ -151,10 +175,18 @@
     return Boolean(requestedByUserId && requestedByUserId !== data.userId);
   }
 
-  function employeeOptionsForShift(department: string) {
+  function employeeOptionsForShift(department: string, roleName: string) {
     if (!isValidScheduleDepartment(department)) return [];
     return data.employees.filter(
-      (employee) => employee.id !== data.userId && employee.approvedDepartments.includes(department)
+      (employee) => {
+        if (employee.id === data.userId || !employee.approvedDepartments.includes(department)) return false;
+        const access = data.roleAccessByUser[employee.id];
+        if (!access?.restrictToSelected) return true;
+        return access.roleDefinitionIds.some((roleId) => {
+          const role = data.roleDefinitions.find((entry) => entry.id === roleId);
+          return role?.department === department && role.roleName === roleName;
+        });
+      }
     );
   }
 
@@ -235,6 +267,14 @@
       </nav>
     </section>
 
+    <nav class="schedule-view-nav" aria-label="Schedule sections">
+      <button type="button" class:active={activeView === 'week'} on:click={() => (activeView = 'week')}>My Week</button>
+      <button type="button" class:active={activeView === 'pool'} on:click={() => (activeView = 'pool')}>Shift Pool</button>
+      <button type="button" class:active={activeView === 'availability'} on:click={() => (activeView = 'availability')}>Availability</button>
+      <button type="button" class:active={activeView === 'time-off'} on:click={() => (activeView = 'time-off')}>Time Off</button>
+    </nav>
+
+    {#if activeView === 'week'}
     <section class="days-stack" aria-label="My scheduled week">
       {#each data.days as day}
         <article class="day-card">
@@ -309,6 +349,7 @@
       {/each}
     </section>
 
+    {:else if activeView === 'pool'}
     <div class="coverage-grid">
       <section class="offers-shell" aria-label="Manager open shifts">
         <header class="offers-head">
@@ -410,6 +451,54 @@
       {/if}
       </section>
     </div>
+    {:else if activeView === 'availability'}
+      <section class="self-service-panel" aria-label="Availability">
+        <header>
+          <div><span class="eyebrow">Weekly Availability</span><h3>When You Can Work</h3></div>
+          {#if data.pendingAvailability}<small>Pending manager approval</small>{/if}
+        </header>
+        <AvailabilityEditor
+          entries={availabilityEntries}
+          action="?/save_availability"
+          enhanceFn={withFeedback}
+          submitLabel={data.pendingAvailability ? 'Update Pending Availability' : 'Submit Availability'}
+        />
+      </section>
+    {:else}
+      <section class="self-service-panel" aria-label="Time off">
+        <header><div><span class="eyebrow">Time Off</span><h3>Requests</h3></div></header>
+        <form method="POST" action="?/create_time_off" use:enhance={withFeedback} class="time-off-form">
+          <label><span>Start</span><input type="date" name="start_date" min={todayIso()} required /></label>
+          <label><span>End</span><input type="date" name="end_date" min={todayIso()} required /></label>
+          <label class="time-off-note"><span>Note</span><input name="note" maxlength="500" placeholder="Optional" /></label>
+          <button type="submit">Submit Request</button>
+        </form>
+        {#if data.timeOffRequests.length === 0}
+          <p class="offers-empty">No time off requests yet.</p>
+        {:else}
+          <div class="time-off-list">
+            {#each data.timeOffRequests as request}
+              <article>
+                <div>
+                  <strong>{new Date(`${request.startDate}T00:00:00`).toLocaleDateString()} - {new Date(`${request.endDate}T00:00:00`).toLocaleDateString()}</strong>
+                  {#if request.note}<p>{request.note}</p>{/if}
+                  {#if request.managerNote}<small>{request.managerNote}</small>{/if}
+                </div>
+                <div class="time-off-status">
+                  <span class={`status-${request.status}`}>{request.status}</span>
+                  {#if request.status === 'pending'}
+                    <form method="POST" action="?/cancel_time_off" use:enhance={withFeedback}>
+                      <input type="hidden" name="request_id" value={request.id} />
+                      <button type="submit">Cancel</button>
+                    </form>
+                  {/if}
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
   </div>
 </Layout>
 
@@ -453,7 +542,7 @@
           <span>Offer To</span>
           <select bind:value={activeOfferTargetUserId} name="target_user_id">
             <option value="">Everyone</option>
-            {#each employeeOptionsForShift(activeOfferShift.department) as employee}
+            {#each employeeOptionsForShift(activeOfferShift.department, activeOfferShift.role) as employee}
               <option value={employee.id}>{employee.displayName ?? employee.email}</option>
             {/each}
           </select>
@@ -513,6 +602,136 @@
     background: transparent;
     font-size: 0.78rem;
   }
+
+  .schedule-view-nav {
+    display: flex;
+    gap: clamp(0.8rem, 2vw, 1.6rem);
+    margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--color-divider);
+    overflow-x: auto;
+  }
+
+  .schedule-view-nav button,
+  .time-off-form > button,
+  .time-off-status button {
+    flex: 0 0 auto;
+    padding: 0.25rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider-strong);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: 0.76rem;
+    cursor: pointer;
+  }
+
+  .schedule-view-nav button.active {
+    border-bottom-width: 2px;
+    color: var(--color-text);
+    font-weight: var(--weight-bold);
+  }
+
+  .self-service-panel {
+    display: grid;
+    gap: 1rem;
+    margin-inline: clamp(0.75rem, 2.6vw, var(--space-4));
+    padding: 1rem 0;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .self-service-panel > header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .self-service-panel h3,
+  .self-service-panel p {
+    margin: 0;
+  }
+
+  .self-service-panel > header small {
+    color: var(--color-text-muted);
+  }
+
+  .time-off-form {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.6fr) minmax(8rem, 0.6fr) minmax(12rem, 1fr) auto;
+    align-items: end;
+    gap: 1rem;
+    padding: 0.8rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .time-off-form label {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .time-off-form label > span {
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    font-weight: var(--weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .time-off-form input {
+    min-height: 2.45rem;
+    padding: 0.45rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider-strong);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  .time-off-form > button,
+  .time-off-status button {
+    color: var(--color-text);
+    font-weight: var(--weight-bold);
+    text-transform: uppercase;
+  }
+
+  .time-off-list {
+    display: grid;
+  }
+
+  .time-off-list > article {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .time-off-list p,
+  .time-off-list small {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+  }
+
+  .time-off-status {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .time-off-status > span {
+    font-size: 0.68rem;
+    font-weight: var(--weight-bold);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .status-approved { color: var(--color-success-strong); }
+  .status-declined { color: var(--color-danger-strong); }
+  .status-pending { color: var(--color-text-muted); }
 
   .eyebrow,
   .day-head small,
@@ -804,6 +1023,16 @@
 
     .coverage-grid {
       grid-template-columns: 1fr;
+    }
+
+    .time-off-form {
+      grid-template-columns: 1fr;
+    }
+
+    .time-off-list > article,
+    .self-service-panel > header {
+      align-items: stretch;
+      flex-direction: column;
     }
   }
 </style>

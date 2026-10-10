@@ -1,9 +1,7 @@
 import { dev } from '$app/environment';
 import { fail } from '@sveltejs/kit';
 import {
-  scheduleDepartments,
   isValidScheduleDepartment,
-  scheduleRolesByDepartment,
   scheduleEndLabels,
   weekdayIndexFromDate,
   type ScheduleDepartment
@@ -134,7 +132,11 @@ export type ScheduleRoleDefinition = {
   department: ScheduleDepartment;
   roleName: string;
   sortOrder: number;
-  isDefault?: boolean;
+};
+
+export type UserScheduleRoleAccess = {
+  restrictToSelected: boolean;
+  roleDefinitionIds: string[];
 };
 
 export type UserScheduleAvailability = {
@@ -226,12 +228,6 @@ type PublishShiftRow = {
 
 let scheduleSchemaEnsured = false;
 let scheduleSchemaPromise: Promise<void> | null = null;
-
-function defaultRoleOptionsByDepartment(): ScheduleRoleOptionsByDepartment {
-  return Object.fromEntries(
-    Object.entries(scheduleRolesByDepartment).map(([department, roles]) => [department, [...roles]])
-  );
-}
 
 function requireScheduleManager(locals: App.Locals) {
   return Boolean(
@@ -360,49 +356,22 @@ async function scheduleAllDepartmentAccessFailure(db: DB, locals: App.Locals, bu
 
 async function loadScheduleDepartmentsFromTable(db: DB, businessId?: string | null): Promise<ScheduleDepartment[]> {
   const businessFilter = businessId ? `AND business_id = ?` : `AND business_id IS NOT NULL`;
-  const [rows, hiddenRows] = await Promise.all([
-    db
-      .prepare(
-        `
-        SELECT name
-        FROM schedule_departments
-        WHERE is_active = 1
-          ${businessFilter}
-        ORDER BY sort_order ASC, name ASC
-        `
-      )
-      .bind(...(businessId ? [businessId] : []))
-      .all<{ name: string }>(),
-    businessId
-      ? db
-          .prepare(
-            `
-            SELECT name
-            FROM schedule_departments
-            WHERE is_active = 0
-              AND business_id = ?
-            `
-          )
-          .bind(businessId)
-          .all<{ name: string }>()
-      : Promise.resolve({ results: [] as { name: string }[] })
-  ]);
+  const rows = await db
+    .prepare(
+      `
+      SELECT name
+      FROM schedule_departments
+      WHERE is_active = 1
+        ${businessFilter}
+      ORDER BY sort_order ASC, name ASC
+      `
+    )
+    .bind(...(businessId ? [businessId] : []))
+    .all<{ name: string }>();
 
-  const departments = (rows.results ?? [])
+  return (rows.results ?? [])
     .map((row) => String(row.name ?? '').trim())
     .filter((department) => department.length > 0);
-  const hiddenDepartments = new Set(
-    (hiddenRows.results ?? []).map((row) => String(row.name ?? '').trim()).filter(Boolean)
-  );
-
-  const merged: ScheduleDepartment[] = scheduleDepartments.filter(
-    (department) => !hiddenDepartments.has(department)
-  );
-  for (const department of departments) {
-    if (!hiddenDepartments.has(department) && !merged.includes(department)) merged.push(department);
-  }
-
-  return merged;
 }
 
 export async function loadScheduleDepartments(db: DB, businessId?: string | null): Promise<ScheduleDepartment[]> {
@@ -686,6 +655,7 @@ async function loadScheduleAssignableUsersById(db: DB, userIds: string[], busine
 type ScheduleAssignmentCandidate = {
   userId: string;
   department: ScheduleDepartment;
+  role?: string;
   shiftDate?: string;
 };
 
@@ -699,6 +669,13 @@ async function validateScheduleAssignments(
     assignments.map((assignment) => assignment.userId),
     businessId
   );
+  const roleAccessByUser = await loadScheduleRoleAccessByUser(
+    db,
+    businessId ?? '',
+    assignments.map((assignment) => assignment.userId)
+  );
+  const roleDefinitions = await loadScheduleRoleDefinitions(db, businessId);
+  const roleDefinitionsById = new Map(roleDefinitions.map((role) => [role.id, role]));
 
   for (const assignment of assignments) {
     const user = usersById.get(assignment.userId);
@@ -708,6 +685,16 @@ async function validateScheduleAssignments(
     }
     if (!user.approvedDepartments.includes(assignment.department)) {
       return `${formatAssignableUserLabel(user)} is not approved for ${assignment.department}${dateLabel}.`;
+    }
+    const roleAccess = roleAccessByUser.get(assignment.userId);
+    if (assignment.role && roleAccess?.restrictToSelected) {
+      const isAllowed = roleAccess.roleDefinitionIds.some((roleId) => {
+        const definition = roleDefinitionsById.get(roleId);
+        return definition?.department === assignment.department && definition.roleName === assignment.role;
+      });
+      if (!isAllowed) {
+        return `${formatAssignableUserLabel(user)} is not approved for the ${assignment.role} role${dateLabel}.`;
+      }
     }
   }
 
@@ -1063,6 +1050,41 @@ export async function ensureScheduleSchema(db: DB) {
     await db
       .prepare(
         `
+        CREATE TABLE IF NOT EXISTS user_schedule_role_settings (
+          business_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          restrict_to_selected INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL,
+          updated_by TEXT,
+          PRIMARY KEY (business_id, user_id),
+          FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS user_schedule_roles (
+          business_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          role_definition_id TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (business_id, user_id, role_definition_id),
+          FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (role_definition_id) REFERENCES schedule_role_definitions(id) ON DELETE CASCADE
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
         CREATE TABLE IF NOT EXISTS user_schedule_availability_requests (
           id TEXT PRIMARY KEY,
           business_id TEXT NOT NULL,
@@ -1333,10 +1355,7 @@ export async function loadScheduleRoleOptionsByDepartment(
 ): Promise<ScheduleRoleOptionsByDepartment> {
   await ensureScheduleSchema(db);
 
-  const [departments, defaults] = await Promise.all([
-    loadScheduleDepartments(db, businessId),
-    Promise.resolve(defaultRoleOptionsByDepartment())
-  ]);
+  const departments = await loadScheduleDepartments(db, businessId);
   const businessFilter = businessId ? `AND business_id = ?` : `AND business_id IS NOT NULL`;
   const rows = await db
     .prepare(
@@ -1362,15 +1381,7 @@ export async function loadScheduleRoleOptionsByDepartment(
     if (!configured[row.department].includes(row.role_name)) configured[row.department].push(row.role_name);
   }
 
-  return Object.fromEntries(
-    departments.map((department) => {
-      const merged = [...(defaults[department] ?? [])];
-      for (const roleName of configured[department] ?? []) {
-        if (!merged.includes(roleName)) merged.push(roleName);
-      }
-      return [department, merged];
-    })
-  );
+  return Object.fromEntries(departments.map((department) => [department, configured[department] ?? []]));
 }
 
 export async function loadScheduleSettings(db: DB, businessId?: string | null): Promise<ScheduleSettings> {
@@ -1401,17 +1412,6 @@ export async function loadScheduleSettings(db: DB, businessId?: string | null): 
 
 export async function loadScheduleRoleDefinitions(db: DB, businessId?: string | null): Promise<ScheduleRoleDefinition[]> {
   await ensureScheduleSchema(db);
-  const departments = await loadScheduleDepartments(db, businessId);
-  const defaults = defaultRoleOptionsByDepartment();
-  const defaultDefinitions = departments.flatMap((department) =>
-    (defaults[department] ?? []).map((roleName, index) => ({
-      id: `default:${department}:${roleName}`,
-      department,
-      roleName,
-      sortOrder: index,
-      isDefault: true
-    }))
-  );
   const businessFilter = businessId ? `AND business_id = ?` : `AND business_id IS NOT NULL`;
 
   const rows = await db
@@ -1427,22 +1427,69 @@ export async function loadScheduleRoleDefinitions(db: DB, businessId?: string | 
     .bind(...(businessId ? [businessId] : []))
     .all<{ id: string; department: string; role_name: string; sort_order: number }>();
 
-  const customDefinitions = (rows.results ?? [])
-    .map((row) => ({
-      id: row.id,
-      department: row.department,
-      roleName: row.role_name,
-      sortOrder: row.sort_order,
-      isDefault: false
-    }));
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    department: row.department,
+    roleName: row.role_name,
+    sortOrder: row.sort_order
+  }));
+}
 
-  return [...defaultDefinitions, ...customDefinitions].sort(
-    (a, b) =>
-      a.department.localeCompare(b.department) ||
-      a.sortOrder - b.sortOrder ||
-      Number(a.isDefault === false) - Number(b.isDefault === false) ||
-      a.roleName.localeCompare(b.roleName)
-  );
+export async function loadScheduleRoleAccessByUser(
+  db: DB,
+  businessId: string,
+  userIds?: string[]
+): Promise<Map<string, UserScheduleRoleAccess>> {
+  await ensureScheduleSchema(db);
+  const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
+  if (requestedUserIds && requestedUserIds.length === 0) return new Map();
+  const placeholders = requestedUserIds?.map(() => '?').join(', ');
+
+  const [settings, selectedRoles] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT user_id, restrict_to_selected
+        FROM user_schedule_role_settings
+        WHERE business_id = ? ${requestedUserIds ? `AND user_id IN (${placeholders})` : ''}
+        `
+      )
+      .bind(businessId, ...(requestedUserIds ?? []))
+      .all<{ user_id: string; restrict_to_selected: number }>(),
+    db
+      .prepare(
+        `
+        SELECT access.user_id, access.role_definition_id
+        FROM user_schedule_roles access
+        JOIN schedule_role_definitions roles
+          ON roles.id = access.role_definition_id
+         AND roles.business_id = access.business_id
+         AND roles.is_active = 1
+        WHERE access.business_id = ?
+          ${requestedUserIds ? `AND access.user_id IN (${placeholders})` : ''}
+        ORDER BY roles.department ASC, roles.sort_order ASC, roles.role_name ASC
+        `
+      )
+      .bind(businessId, ...(requestedUserIds ?? []))
+      .all<{ user_id: string; role_definition_id: string }>()
+  ]);
+
+  const access = new Map<string, UserScheduleRoleAccess>();
+  for (const userId of requestedUserIds ?? []) {
+    access.set(userId, { restrictToSelected: false, roleDefinitionIds: [] });
+  }
+  for (const row of settings.results ?? []) {
+    access.set(row.user_id, {
+      restrictToSelected: row.restrict_to_selected === 1,
+      roleDefinitionIds: access.get(row.user_id)?.roleDefinitionIds ?? []
+    });
+  }
+  for (const row of selectedRoles.results ?? []) {
+    const current = access.get(row.user_id) ?? { restrictToSelected: false, roleDefinitionIds: [] };
+    current.roleDefinitionIds.push(row.role_definition_id);
+    access.set(row.user_id, current);
+  }
+  return access;
 }
 
 function roleIsAllowed(
@@ -1450,7 +1497,7 @@ function roleIsAllowed(
   department: ScheduleDepartment,
   role: string
 ) {
-  return roleOptionsByDepartment[department].includes(role);
+  return (roleOptionsByDepartment[department] ?? []).includes(role);
 }
 
 export async function loadScheduleWeek(
@@ -2224,6 +2271,7 @@ async function loadOwnedShift(db: DB, shiftId: string, businessId?: string | nul
         s.shift_date,
         s.user_id,
         s.department,
+        s.role,
         s.start_time,
         w.week_start
       FROM schedule_shifts s
@@ -2241,6 +2289,7 @@ async function loadOwnedShift(db: DB, shiftId: string, businessId?: string | nul
       shift_date: string;
       user_id: string;
       department: string;
+      role: string;
       start_time: string;
       week_start: string;
     }>();
@@ -2416,6 +2465,7 @@ async function validatePublishWeek(db: DB, weekId: string, weekStart: string, bu
     shifts.map((shift) => ({
       userId: shift.user_id,
       department: shift.department as ScheduleDepartment,
+      role: shift.role,
       shiftDate: shift.shift_date
     })),
     businessId
@@ -2444,6 +2494,26 @@ async function validatePublishWeek(db: DB, weekId: string, weekStart: string, bu
     if (endLabel && !isTimeLabel(endLabel) && !scheduleEndLabels.includes(endLabel as (typeof scheduleEndLabels)[number])) {
       errors.push(`${employee} has an invalid shift end label${onDate}.`);
     }
+  }
+
+  const availabilityByUser = await loadScheduleAvailabilityByUser(
+    db,
+    shifts.map((shift) => shift.user_id),
+    businessId
+  );
+  const availabilityConflicts = shifts.filter((shift) => {
+    const availability = (availabilityByUser.get(shift.user_id) ?? []).find(
+      (entry) => entry.weekday === weekdayIndexFromDate(shift.shift_date)
+    );
+    if (!availability) return false;
+    if (!availability.isAvailable) return true;
+    if (shift.start_time < availability.startTime) return true;
+    return isTimeLabel(shift.end_label) && shift.end_label > availability.endTime;
+  });
+  if (availabilityConflicts.length > 0) {
+    warnings.push(
+      `${availabilityConflicts.length} shift${availabilityConflicts.length === 1 ? '' : 's'} fall outside employee availability.`
+    );
   }
 
   const byEmployeeDate = new Map<string, PublishShiftRow[]>();
@@ -2840,19 +2910,12 @@ export async function offerScheduleShift(request: Request, locals: App.Locals) {
       return fail(400, { error: 'You cannot offer a shift to yourself.' });
     }
 
-    const targetUser = await loadAssignableUserById(db, targetUserId, businessId);
-    if (!targetUser) {
-      return fail(400, { error: 'That employee could not be selected.' });
-    }
-    const departments = await loadScheduleDepartments(db, businessId);
-    if (!isValidScheduleDepartment(shift.department, departments)) {
-      return fail(400, { error: 'That shift has an invalid department.' });
-    }
-    if (!targetUser.approvedDepartments.includes(shift.department)) {
-      return fail(400, {
-        error: `${formatAssignableUserLabel(targetUser)} is not approved for ${shift.department}.`
-      });
-    }
+    const assignmentError = await validateScheduleAssignments(
+      db,
+      [{ userId: targetUserId, department: shift.department, role: shift.role }],
+      businessId
+    );
+    if (assignmentError) return fail(400, { error: assignmentError });
   }
 
   const existing = await db
@@ -2937,7 +3000,8 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
         o.target_user_id,
         o.requested_by_user_id,
         s.user_id,
-        s.department
+        s.department,
+        s.role
       FROM schedule_shift_offers o
       JOIN schedule_shifts s ON s.id = o.shift_id
       JOIN schedule_weeks w ON w.id = s.week_id
@@ -2956,6 +3020,7 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
       requested_by_user_id: string | null;
       user_id: string;
       department: string;
+      role: string;
     }>();
 
   if (!offer) return fail(404, { error: 'That shift is no longer available.' });
@@ -2973,13 +3038,12 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
     return fail(400, { error: 'That shift has an invalid department.' });
   }
 
-  const requester = await loadAssignableUserById(db, locals.userId, businessId);
-  if (!requester) {
-    return fail(400, { error: 'Your account is not active for scheduling right now.' });
-  }
-  if (!requester.approvedDepartments.includes(offer.department)) {
-    return fail(400, { error: `You are not approved for ${offer.department} shifts.` });
-  }
+  const assignmentError = await validateScheduleAssignments(
+    db,
+    [{ userId: locals.userId, department: offer.department, role: offer.role }],
+    businessId
+  );
+  if (assignmentError) return fail(400, { error: assignmentError });
 
   await db
     .prepare(`UPDATE schedule_shift_offers SET requested_by_user_id = ?, updated_at = ? WHERE shift_id = ? AND business_id = ?`)
@@ -3047,7 +3111,7 @@ export async function requestScheduleOpenShift(request: Request, locals: App.Loc
   const openShift = await db
     .prepare(
       `
-      SELECT o.id, o.department
+      SELECT o.id, o.department, o.role
       FROM schedule_open_shifts o
       JOIN schedule_weeks w ON w.id = o.week_id
       WHERE o.id = ?
@@ -3058,14 +3122,15 @@ export async function requestScheduleOpenShift(request: Request, locals: App.Loc
       `
     )
     .bind(openShiftId, businessId, businessId)
-    .first<{ id: string; department: string }>();
+    .first<{ id: string; department: string; role: string }>();
   if (!openShift) return fail(404, { error: 'That open shift is no longer available.' });
 
-  const requester = await loadAssignableUserById(db, locals.userId, businessId);
-  if (!requester) return fail(400, { error: 'Your account is not active for scheduling right now.' });
-  if (!requester.approvedDepartments.includes(openShift.department)) {
-    return fail(400, { error: `You are not approved for ${openShift.department} shifts.` });
-  }
+  const assignmentError = await validateScheduleAssignments(
+    db,
+    [{ userId: locals.userId, department: openShift.department, role: openShift.role }],
+    businessId
+  );
+  if (assignmentError) return fail(400, { error: assignmentError });
 
   const now = Math.floor(Date.now() / 1000);
   const openShiftRequestId = crypto.randomUUID();
@@ -3142,7 +3207,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
   const offer = await db
     .prepare(
       `
-      SELECT o.requested_by_user_id, s.week_id, s.department
+      SELECT o.requested_by_user_id, s.week_id, s.department, s.role
       FROM schedule_shift_offers o
       JOIN schedule_shifts s ON s.id = o.shift_id
       WHERE o.shift_id = ? AND o.business_id = ? AND s.business_id = ?
@@ -3150,7 +3215,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
       `
     )
     .bind(shiftId, businessId, businessId)
-    .first<{ requested_by_user_id: string | null; week_id: string; department: string }>();
+    .first<{ requested_by_user_id: string | null; week_id: string; department: string; role: string }>();
 
   if (!offer?.requested_by_user_id) {
     return fail(400, { error: 'That shift does not have a pending taker yet.' });
@@ -3167,15 +3232,12 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
     return fail(400, { error: 'That shift has an invalid department.' });
   }
 
-  const requestedUser = await loadAssignableUserById(db, offer.requested_by_user_id, businessId);
-  if (!requestedUser) {
-    return fail(400, { error: 'That requested employee is no longer active.' });
-  }
-  if (!requestedUser.approvedDepartments.includes(offer.department)) {
-    return fail(400, {
-      error: `${formatAssignableUserLabel(requestedUser)} is not approved for ${offer.department}.`
-    });
-  }
+  const assignmentError = await validateScheduleAssignments(
+    db,
+    [{ userId: offer.requested_by_user_id, department: offer.department, role: offer.role }],
+    businessId
+  );
+  if (assignmentError) return fail(400, { error: assignmentError });
 
   const now = Math.floor(Date.now() / 1000);
   await db
@@ -3333,7 +3395,7 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
 
   const assignmentError = await validateScheduleAssignments(
     db,
-    [{ userId: row.requested_by_user_id, department: row.department, shiftDate: row.shift_date }],
+    [{ userId: row.requested_by_user_id, department: row.department, role: row.role, shiftDate: row.shift_date }],
     businessId
   );
   if (assignmentError) return fail(400, { error: assignmentError });
@@ -3731,7 +3793,7 @@ export async function saveScheduleShift(request: Request, locals: App.Locals) {
     return fail(400, { error: 'Invalid role for that department.' });
   }
 
-  const assignmentError = await validateScheduleAssignments(db, [{ userId, department, shiftDate }], businessId);
+  const assignmentError = await validateScheduleAssignments(db, [{ userId, department, role, shiftDate }], businessId);
   if (assignmentError) {
     return fail(400, { error: assignmentError });
   }
@@ -3888,6 +3950,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     rows.map((row) => ({
       userId: row.userId,
       department: row.department as ScheduleDepartment,
+      role: row.role,
       shiftDate: row.shiftDate
     })),
     businessId
@@ -4050,6 +4113,7 @@ async function saveScheduleWeekDraftFromForm(
     rows.map((row) => ({
       userId: row.userId,
       department: row.department as ScheduleDepartment,
+      role: row.role,
       shiftDate: row.shiftDate
     })),
     businessId
@@ -4386,6 +4450,7 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
       return {
         userId: shift.userId,
         department: shift.department as ScheduleDepartment,
+        role: shift.role,
         shiftDate: addDays(weekStart, dayOffset)
       };
     });
@@ -4775,7 +4840,8 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
     .map((row) => ({
       shiftDate: addDays(weekStart, row.weekday),
       userId: row.user_id as string,
-      department: row.department as ScheduleDepartment
+      department: row.department as ScheduleDepartment,
+      role: row.role
     }));
   const assignmentError = await validateScheduleAssignments(db, assignedRows, businessId);
   if (assignmentError) return fail(400, { error: assignmentError });
@@ -4865,6 +4931,139 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
   return { success: true, message: mode === 'replace' ? 'Template replaced this week.' : 'Template merged into this week.' };
 }
 
+export async function saveUserScheduleRoleAccess(request: Request, locals: App.Locals) {
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  if (!requireScheduleManager(locals)) return fail(403, { error: 'Schedule access required.' });
+
+  await ensureScheduleSchema(db);
+  await ensureTenantSchema(db, true);
+  const businessId = requireBusinessId(locals);
+  const form = await request.formData();
+  const userId = String(form.get('user_id') ?? '').trim();
+  const restrictToSelected = String(form.get('restrict_to_selected') ?? '0') === '1';
+  const selectedRoleIds = Array.from(
+    new Set(form.getAll('role_ids').map((value) => String(value ?? '').trim()).filter(Boolean))
+  );
+  if (!userId) return fail(400, { error: 'Select an employee.' });
+
+  const target = await db
+    .prepare(
+      `
+      SELECT bu.role
+      FROM business_users bu
+      JOIN users u ON u.id = bu.user_id
+      WHERE bu.business_id = ? AND bu.user_id = ?
+        AND COALESCE(bu.is_active, 1) = 1
+        AND COALESCE(u.is_active, 1) = 1
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<{ role: string }>();
+  if (!target) return fail(404, { error: 'That employee is not active in this business.' });
+
+  const actorRole = normalizeBusinessRole(locals.businessRole);
+  const targetRole = normalizeBusinessRole(target.role);
+  if (actorRole !== 'owner' && (targetRole === 'owner' || targetRole === 'manager')) {
+    return fail(403, { error: 'Only the owner can change management schedule roles.' });
+  }
+
+  const [managerDepartments, assignableUsers] = await Promise.all([
+    loadScheduleManagerDepartments(db, locals, businessId),
+    loadScheduleAssignableUsersById(db, [userId], businessId)
+  ]);
+  const targetUser = assignableUsers.get(userId);
+  if (!targetUser) return fail(404, { error: 'That employee is not available for scheduling.' });
+
+  let selectedDefinitions: ScheduleRoleDefinition[] = [];
+  if (selectedRoleIds.length > 0) {
+    const placeholders = selectedRoleIds.map(() => '?').join(', ');
+    const rows = await db
+      .prepare(
+        `
+        SELECT id, department, role_name, sort_order
+        FROM schedule_role_definitions
+        WHERE business_id = ? AND is_active = 1 AND id IN (${placeholders})
+        `
+      )
+      .bind(businessId, ...selectedRoleIds)
+      .all<{ id: string; department: string; role_name: string; sort_order: number }>();
+    selectedDefinitions = (rows.results ?? []).map((row) => ({
+      id: row.id,
+      department: row.department,
+      roleName: row.role_name,
+      sortOrder: row.sort_order
+    }));
+    if (selectedDefinitions.length !== selectedRoleIds.length) {
+      return fail(400, { error: 'One or more selected schedule roles are no longer available.' });
+    }
+    const invalidRole = selectedDefinitions.find(
+      (role) =>
+        !managerDepartments.includes(role.department) ||
+        !targetUser.approvedDepartments.includes(role.department)
+    );
+    if (invalidRole) {
+      return fail(403, { error: `${invalidRole.roleName} is outside the employee or manager department scope.` });
+    }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const statements: Array<ReturnType<DB['prepare']>> = [
+    db
+      .prepare(`DELETE FROM user_schedule_roles WHERE business_id = ? AND user_id = ?`)
+      .bind(businessId, userId),
+    db
+      .prepare(
+        `
+        INSERT INTO user_schedule_role_settings (
+          business_id, user_id, restrict_to_selected, updated_at, updated_by
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(business_id, user_id) DO UPDATE SET
+          restrict_to_selected = excluded.restrict_to_selected,
+          updated_at = excluded.updated_at,
+          updated_by = excluded.updated_by
+        `
+      )
+      .bind(businessId, userId, restrictToSelected ? 1 : 0, now, locals.userId ?? null)
+  ];
+  if (restrictToSelected) {
+    for (const role of selectedDefinitions) {
+      statements.push(
+        db
+          .prepare(
+            `
+            INSERT INTO user_schedule_roles (
+              business_id, user_id, role_definition_id, updated_at
+            ) VALUES (?, ?, ?, ?)
+            `
+          )
+          .bind(businessId, userId, role.id, now)
+      );
+    }
+  }
+  await db.batch(statements);
+
+  await recordOperationalEventBestEffort(
+    db,
+    {
+      businessId,
+      eventType: 'schedule.role_access.updated',
+      category: 'schedule',
+      targetUserId: userId,
+      subjectType: 'user',
+      subjectId: userId,
+      title: 'Schedule role access updated',
+      body: restrictToSelected
+        ? `${selectedDefinitions.length} schedule role${selectedDefinitions.length === 1 ? '' : 's'} selected.`
+        : 'All roles in assigned departments allowed.'
+    },
+    request
+  );
+
+  return { success: true, message: 'Schedule role access updated.' };
+}
+
 export async function createScheduleRoleDefinition(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4885,11 +5084,6 @@ export async function createScheduleRoleDefinition(request: Request, locals: App
   if (departmentAccessFailure) return departmentAccessFailure;
   if (!roleName) {
     return fail(400, { error: 'Role name is required.' });
-  }
-
-  const defaultRoles = defaultRoleOptionsByDepartment()[department] ?? [];
-  if (defaultRoles.some((defaultRole) => defaultRole.toLowerCase() === roleName.toLowerCase())) {
-    return fail(400, { error: 'That role already exists in this department.' });
   }
 
   const existing = await db
@@ -4918,8 +5112,6 @@ export async function createScheduleRoleDefinition(request: Request, locals: App
     )
     .bind(department, businessId)
     .first<{ max_sort: number }>();
-  const defaultSortFloor = Math.max(-1, defaultRoles.length - 1);
-
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
@@ -4931,7 +5123,7 @@ export async function createScheduleRoleDefinition(request: Request, locals: App
       VALUES (?, ?, ?, ?, 1, ?, ?, ?)
       `
     )
-    .bind(crypto.randomUUID(), department, roleName, Math.max(maxSort?.max_sort ?? -1, defaultSortFloor) + 1, now, now, businessId)
+    .bind(crypto.randomUUID(), department, roleName, (maxSort?.max_sort ?? -1) + 1, now, now, businessId)
     .run();
 
   return { success: true, message: 'Schedule role added.' };
@@ -4995,8 +5187,6 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
     )
     .bind(businessId)
     .first<{ max_sort: number }>();
-  const defaultDepartmentSortFloor = scheduleDepartments.length - 1;
-
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
@@ -5007,7 +5197,7 @@ export async function createScheduleDepartment(request: Request, locals: App.Loc
       VALUES (?, ?, ?, 1, ?, ?, ?)
       `
     )
-    .bind(crypto.randomUUID(), departmentName, Math.max(maxSort?.max_sort ?? -1, defaultDepartmentSortFloor) + 1, now, now, businessId)
+    .bind(crypto.randomUUID(), departmentName, (maxSort?.max_sort ?? -1) + 1, now, now, businessId)
     .run();
 
   return { success: true, message: 'Department added.' };
@@ -5149,19 +5339,23 @@ export async function deleteScheduleRoleDefinition(request: Request, locals: App
   const departmentAccessFailure = await scheduleDepartmentAccessFailure(db, locals, businessId, role.department);
   if (departmentAccessFailure) return departmentAccessFailure;
 
-  const activeUsage = await db
-    .prepare(
-      `
-      SELECT COUNT(*) AS count
-      FROM schedule_shifts
-      WHERE department = ? AND role = ? AND business_id = ?
-      `
-    )
-    .bind(role.department, role.role_name, businessId)
-    .first<{ count: number }>();
+  const usageChecks = await Promise.all([
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_shifts WHERE department = ? AND role = ? AND business_id = ?`)
+      .bind(role.department, role.role_name, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_open_shifts WHERE department = ? AND role = ? AND business_id = ?`)
+      .bind(role.department, role.role_name, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_template_shifts WHERE department = ? AND role = ? AND business_id = ?`)
+      .bind(role.department, role.role_name, businessId)
+      .first<{ count: number }>()
+  ]);
 
-  if ((activeUsage?.count ?? 0) > 0) {
-    return fail(400, { error: 'That role is still used on the schedule. Reassign those shifts first.' });
+  if (usageChecks.some((row) => (row?.count ?? 0) > 0)) {
+    return fail(400, { error: 'That role is still used by a schedule, open shift, or template. Reassign those entries first.' });
   }
 
   const roleCount = await db
@@ -5175,9 +5369,7 @@ export async function deleteScheduleRoleDefinition(request: Request, locals: App
     )
     .bind(role.department, businessId)
     .first<{ count: number }>();
-  const defaultRoleCount = defaultRoleOptionsByDepartment()[role.department as ScheduleDepartment]?.length ?? 0;
-
-  if ((roleCount?.count ?? 0) + defaultRoleCount <= 1) {
+  if ((roleCount?.count ?? 0) <= 1) {
     return fail(400, { error: `At least one ${role.department} role must remain.` });
   }
 

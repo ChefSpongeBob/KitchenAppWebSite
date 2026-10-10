@@ -3,6 +3,7 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
   import ScheduleBuilderCell from '$lib/components/ui/ScheduleBuilderCell.svelte';
+  import ScheduleTeamAccess from '$lib/components/ui/ScheduleTeamAccess.svelte';
   import { applyAction, deserialize, enhance } from '$app/forms';
   import { invalidate } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -15,6 +16,7 @@
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
+  import type { BusinessCapability, BusinessCapabilityOverrides } from '$lib/auth/roles';
   import { onDestroy } from 'svelte';
 
   type UserOption = {
@@ -130,10 +132,21 @@
     department: ScheduleDepartment;
     roleName: string;
     sortOrder: number;
-    isDefault?: boolean;
   };
 
-  type ScheduleTool = 'builder' | 'approvals' | 'open-shifts' | 'labor' | 'templates' | 'setup';
+  type ScheduleTool = 'builder' | 'approvals' | 'team' | 'open-shifts' | 'labor' | 'templates' | 'setup';
+
+  type TeamUser = {
+    id: string;
+    display_name: string | null;
+    email: string;
+    role: string;
+    permission_template: string;
+    is_active: number;
+    approved_departments: ScheduleDepartment[];
+    capability_overrides: BusinessCapabilityOverrides;
+    effective_capabilities: BusinessCapability[];
+  };
 
   type DraftShift = {
     clientId: string;
@@ -176,6 +189,12 @@
     templates: ScheduleTemplate[];
     laborTargets: LaborTarget[];
     roleDefinitions: RoleDefinition[];
+    teamUsers: TeamUser[];
+    roleAccessByUser: Record<string, { restrictToSelected: boolean; roleDefinitionIds: string[] }>;
+    canManagePermissions: boolean;
+    actorIsOwner: boolean;
+    currentUserId: string | null;
+    editableCapabilities: BusinessCapability[];
     initialTool: ScheduleTool;
     settings: {
       departments: ScheduleDepartment[];
@@ -217,20 +236,15 @@
   let openShiftTimeEditor: '' | 'start' | 'end' = '';
   let selectedTemplateId = data.templates[0]?.id ?? '';
   let selectedScheduleTool: ScheduleTool = data.initialTool ?? 'builder';
-  let newRoleDepartment: ScheduleDepartment = data.settings.departments[0] ?? 'General';
+  let newRoleDepartment: ScheduleDepartment = data.settings.departments[0] ?? '';
   let userOptionsById = new Map<string, UserOption>();
   let timeOffRequestsByUser = new Map<string, TimeOffRequest[]>();
   let employeeHourTotals = new Map<string, number>();
-  let availableDepartments: ScheduleDepartment[] =
-    data.settings.departments.length > 0
-      ? [...data.settings.departments]
-      : (['General'] as ScheduleDepartment[]);
-  let defaultDepartment = availableDepartments[0] as ScheduleDepartment;
-  $: availableDepartments =
-    data.settings.departments.length > 0
-      ? [...data.settings.departments]
-      : (['General'] as ScheduleDepartment[]);
-  $: defaultDepartment = availableDepartments[0] as ScheduleDepartment;
+  let availableDepartments: ScheduleDepartment[] = [...data.settings.departments];
+  let defaultDepartment = (availableDepartments[0] ?? '') as ScheduleDepartment;
+  $: availableDepartments = [...data.settings.departments];
+  $: defaultDepartment = (availableDepartments[0] ?? '') as ScheduleDepartment;
+  $: if (availableDepartments.length === 0) selectedScheduleTool = 'setup';
   $: if (!availableDepartments.includes(newRoleDepartment)) {
     newRoleDepartment = defaultDepartment;
   }
@@ -257,9 +271,17 @@
     return userOption(userId)?.approvedDepartments ?? [];
   }
 
-  function rolesFor(department: ScheduleDepartment) {
-    const options = data.settings.roleOptionsByDepartment[department] ?? [];
-    return options.length > 0 ? options : ['Shift'];
+  function rolesFor(department: ScheduleDepartment, userId = '') {
+    const roles = data.settings.roleOptionsByDepartment[department] ?? [];
+    if (!userId) return roles;
+    const access = data.roleAccessByUser[userId];
+    if (!access?.restrictToSelected) return roles;
+    const allowedNames = new Set(
+      data.roleDefinitions
+        .filter((role) => role.department === department && access.roleDefinitionIds.includes(role.id))
+        .map((role) => role.roleName)
+    );
+    return roles.filter((role) => allowedNames.has(role));
   }
 
   $: if (!openShiftDepartment || !availableDepartments.includes(openShiftDepartment as ScheduleDepartment)) {
@@ -267,7 +289,7 @@
   }
   $: openShiftRoles = rolesFor(normalizeDepartment(openShiftDepartment));
   $: if (!openShiftRole || !openShiftRoles.includes(openShiftRole)) {
-    openShiftRole = openShiftRoles[0] ?? 'Shift';
+    openShiftRole = openShiftRoles[0] ?? '';
   }
   $: if (!selectedTemplateId && data.templates.length > 0) {
     selectedTemplateId = data.templates[0].id;
@@ -275,16 +297,19 @@
 
   function createShift(userId: string, shiftDate: string): DraftShift {
     const approvedDepartments = approvedDepartmentsForUser(userId);
+    const schedulableDepartments = approvedDepartments.filter(
+      (department) => rolesFor(department, userId).length > 0
+    );
     const startingDepartment =
-      selectedSection !== 'All' && approvedDepartments.includes(selectedSection)
+      selectedSection !== 'All' && schedulableDepartments.includes(selectedSection)
         ? selectedSection
-        : approvedDepartments[0] ?? defaultDepartment;
+        : schedulableDepartments[0] ?? defaultDepartment;
     return {
       clientId: crypto.randomUUID(),
       shiftDate,
       userId,
       department: startingDepartment,
-      role: rolesFor(startingDepartment)[0],
+      role: rolesFor(startingDepartment, userId)[0] ?? '',
       detail: '',
       startTime: '',
       endLabel: '',
@@ -309,13 +334,13 @@
 
   function draftFromShift(shift: Shift): DraftShift {
     const department = normalizeDepartment(shift.department);
-    const roles = rolesFor(department);
+    const roles = rolesFor(department, shift.userId);
     return {
       clientId: shift.id,
       shiftDate: shift.shiftDate,
       userId: shift.userId,
       department,
-      role: roles.includes(shift.role) ? shift.role : roles[0],
+      role: roles.includes(shift.role) ? shift.role : (roles[0] ?? ''),
       detail: shift.detail,
       startTime: shift.startTime,
       endLabel: shift.endLabel,
@@ -728,8 +753,10 @@
   function canAddShift(userId: string) {
     const approved = approvedDepartmentsForUser(userId);
     if (approved.length === 0) return false;
-    if (selectedSection === 'All') return true;
-    return approved.includes(selectedSection);
+    if (selectedSection === 'All') {
+      return approved.some((department) => rolesFor(department, userId).length > 0);
+    }
+    return approved.includes(selectedSection) && rolesFor(selectedSection, userId).length > 0;
   }
 
   function departmentOptionsForUser(userId: string, currentDepartment: ScheduleDepartment) {
@@ -904,11 +931,11 @@
     const nextDepartment = availableDepartments.includes(department)
       ? department
       : availableDepartments[0] ?? editorDraft.department;
-    const roles = rolesFor(nextDepartment);
+    const roles = rolesFor(nextDepartment, userId);
     editorDraft = {
       ...editorDraft,
       department: nextDepartment,
-      role: roles.includes(editorDraft.role) ? editorDraft.role : roles[0]
+      role: roles.includes(editorDraft.role) ? editorDraft.role : (roles[0] ?? '')
     };
   }
 
@@ -951,6 +978,33 @@
     let diff = end - start;
     if (diff < 0) diff += 24 * 60;
     return Math.max(0, diff - (shift.breakMinutes ?? 0)) / 60;
+  }
+
+  function availabilityStateForDate(userId: string, date: string): 'open' | 'limited' | 'unavailable' | 'unset' {
+    if (timeOffRequestsForUser(userId, 'approved').some((request) => request.startDate <= date && request.endDate >= date)) {
+      return 'unavailable';
+    }
+    const availability = availabilityForDate(userId, date);
+    if (!availability) return 'unset';
+    if (!availability.isAvailable) return 'unavailable';
+    return availability.startTime <= '00:00' && availability.endTime >= '23:45' ? 'open' : 'limited';
+  }
+
+  function availabilityLabelForDate(userId: string, date: string) {
+    if (timeOffRequestsForUser(userId, 'approved').some((request) => request.startDate <= date && request.endDate >= date)) {
+      return 'Approved time off';
+    }
+    const availability = availabilityForDate(userId, date);
+    if (!availability) return 'Availability not set';
+    if (!availability.isAvailable) return 'Unavailable';
+    if (availability.startTime <= '00:00' && availability.endTime >= '23:45') return 'Open availability';
+    return `Limited: ${formatScheduleTimeLabel(availability.startTime)} - ${formatScheduleTimeLabel(availability.endTime)}`;
+  }
+
+  function hasPendingTimeOff(userId: string, date: string) {
+    return timeOffRequestsForUser(userId, 'pending').some(
+      (request) => request.startDate <= date && request.endDate >= date
+    );
   }
 
   function availabilityRequestSummary(entries: AvailabilityEntry[]) {
@@ -1209,11 +1263,12 @@
                 <span>Tool</span>
                 <select bind:value={selectedScheduleTool}>
                   <option value="builder">Schedule Builder</option>
-                  <option value="open-shifts">Open Shifts ({data.openShifts.length})</option>
-                  <option value="approvals">Approvals ({pendingApprovalCount})</option>
+                  <option value="approvals">Requests &amp; Availability ({pendingApprovalCount})</option>
+                  <option value="team">Team &amp; Access</option>
+                  <option value="open-shifts">Coverage &amp; Open Shifts ({data.openShifts.length})</option>
                   <option value="labor">Labor Targets</option>
                   <option value="templates">Templates ({data.templates.length})</option>
-                  <option value="setup">Schedule Setup</option>
+                  <option value="setup">Roles &amp; Departments</option>
                 </select>
               </label>
               <details class="action-menu">
@@ -1239,8 +1294,8 @@
                         {data.settings.autofillNewWeeks ? 'Autofill From Last Week' : 'Paste Last Week'}
                       </button>
                     </form>
-                  <a href={`/admin/schedule?week=${data.weekStart}&tool=setup`} class="menu-item menu-link">Schedule Setup</a>
-                  <a href="/admin/users" class="menu-item menu-link">Employees</a>
+                  <a href={`/admin/schedule?week=${data.weekStart}&tool=setup`} class="menu-item menu-link">Roles &amp; Departments</a>
+                  <a href={`/admin/schedule?week=${data.weekStart}&tool=team`} class="menu-item menu-link">Team &amp; Access</a>
                     <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate" on:submit={preparePublishPayload}>
                       <input type="hidden" name="week_start" value={data.weekStart} />
                       <input type="hidden" name="payload" value={weekPayload} />
@@ -1261,7 +1316,18 @@
 
       {#if selectedScheduleTool !== 'builder'}
       <section class="toolbox-shell" aria-label="Schedule tools">
-        {#if selectedScheduleTool === 'approvals'}
+        {#if selectedScheduleTool === 'team'}
+          <ScheduleTeamAccess
+            users={data.teamUsers}
+            departments={availableDepartments}
+            roleDefinitions={data.roleDefinitions}
+            roleAccessByUser={data.roleAccessByUser}
+            canManagePermissions={data.canManagePermissions}
+            actorIsOwner={data.actorIsOwner}
+            currentUserId={data.currentUserId}
+            editableCapabilities={data.editableCapabilities}
+          />
+        {:else if selectedScheduleTool === 'approvals'}
           <div class="tool-section">
             {#if pendingApprovalCount === 0}
               <p class="tool-empty">No approvals are waiting right now.</p>
@@ -1578,7 +1644,7 @@
           <section class="tool-section schedule-setup" aria-label="Schedule setup">
             <div class="tool-section-head">
               <div>
-                <h2>Schedule Setup</h2>
+                <h2>Roles &amp; Departments</h2>
               </div>
             </div>
 
@@ -1607,7 +1673,7 @@
               <form method="POST" action="?/create_role" use:enhance={withFeedback} class="setup-form role-setup-form">
                 <label>
                   <span>Department</span>
-                  <select name="department" bind:value={newRoleDepartment}>
+                  <select name="department" bind:value={newRoleDepartment} disabled={availableDepartments.length === 0} required>
                     {#each availableDepartments as department}
                       <option value={department}>{department}</option>
                     {/each}
@@ -1617,11 +1683,14 @@
                   <span>New Role</span>
                   <input name="role_name" placeholder="Role name" required />
                 </label>
-                <button type="submit">Add Role</button>
+                <button type="submit" disabled={availableDepartments.length === 0}>Add Role</button>
               </form>
             </div>
 
             <div class="department-setup-list">
+              {#if availableDepartments.length === 0}
+                <p class="tool-empty">Create your first department to begin scheduling your team.</p>
+              {/if}
               {#each availableDepartments as department}
                 <article class="department-setup-row">
                   <header>
@@ -1638,14 +1707,10 @@
                     {#each setupRolesFor(department) as role}
                       <div>
                         <span>{role.roleName}</span>
-                        {#if role.isDefault}
-                          <small>Built in</small>
-                        {:else}
-                          <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
-                            <input type="hidden" name="role_id" value={role.id} />
-                            <button type="submit" class="remove-btn">Delete</button>
-                          </form>
-                        {/if}
+                        <form method="POST" action="?/delete_role" use:enhance={withFeedback}>
+                          <input type="hidden" name="role_id" value={role.id} />
+                          <button type="submit" class="remove-btn">Delete</button>
+                        </form>
                       </div>
                     {/each}
                   </div>
@@ -1664,8 +1729,15 @@
       <input type="hidden" name="team_payload" value={teamPayload} />
 
         <div class="planner-head">
-          <div>
+          <div class="planner-title-block">
             <h2>Team Schedule</h2>
+            <div class="availability-legend" aria-label="Availability status legend">
+              <span><i class="legend-dot legend-open"></i>Open</span>
+              <span><i class="legend-dot legend-limited"></i>Limited</span>
+              <span><i class="legend-dot legend-unavailable"></i>Unavailable</span>
+              <span><i class="legend-dot legend-unset"></i>Not set</span>
+              <span><i class="legend-dot legend-pending"></i>Pending time off</span>
+            </div>
           </div>
           <div class="planner-hours-shell">
             <span class="planner-hours">
@@ -1828,6 +1900,9 @@
                 {cellIndex}
                 {selectedSection}
                 canAdd={canAddShift(row.userId)}
+                availabilityState={availabilityStateForDate(row.userId, cell.date)}
+                availabilityLabel={availabilityLabelForDate(row.userId, cell.date)}
+                pendingTimeOff={hasPendingTimeOff(row.userId, cell.date)}
                 on:addshift={(event) =>
                   addShift(
                     event.detail.rowIndex,
@@ -1884,7 +1959,7 @@
               <label>
                 <span>Role</span>
                 <select bind:value={editorDraft.role} on:change={touchDraft}>
-                  {#each rolesFor(editorDraft.department) as role}
+                  {#each rolesFor(editorDraft.department, editorDraft.userId) as role}
                     <option value={role}>{role}</option>
                   {/each}
                 </select>
@@ -2139,8 +2214,7 @@
   }
 
   .autofill-row span,
-  .department-setup-row header span,
-  .setup-role-list small {
+  .department-setup-row header span {
     color: var(--color-text-muted);
     font-size: 0.72rem;
   }
@@ -2272,6 +2346,45 @@
 
   .planner-head h2 {
     margin: 0;
+  }
+
+  .planner-title-block {
+    display: grid;
+    gap: 0.38rem;
+    align-content: start;
+  }
+
+  .availability-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem 0.65rem;
+    color: var(--color-text-muted);
+    font-size: 0.66rem;
+  }
+
+  .availability-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+  }
+
+  .legend-dot {
+    width: 0.46rem;
+    height: 0.46rem;
+    flex: 0 0 auto;
+    border: 1px solid var(--color-divider-strong);
+    border-radius: 50%;
+    background: var(--color-text-muted);
+  }
+
+  .legend-open { background: #3f7b57; }
+  .legend-limited { background: #bd8a2d; }
+  .legend-unavailable { background: #a63d35; }
+  .legend-unset { background: transparent; }
+  .legend-pending {
+    background: transparent;
+    box-shadow: 0 0 0 1px var(--color-surface), 0 0 0 2px #bd8a2d;
   }
 
   .week-title {

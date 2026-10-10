@@ -9,6 +9,9 @@
   export let cellIndex = 0;
   export let selectedSection: 'All' | ScheduleDepartment = 'All';
   export let canAdd = false;
+  export let availabilityState: 'open' | 'limited' | 'unavailable' | 'unset' = 'unset';
+  export let availabilityLabel = 'Availability not set';
+  export let pendingTimeOff = false;
 
   const dispatch = createEventDispatcher<{
     addshift: { rowIndex: number; cellIndex: number; userId: string; date: string };
@@ -32,6 +35,13 @@
 </script>
 
 <div class="shift-cell">
+  <span
+    class={`availability-marker availability-${availabilityState}`}
+    class:pending-time-off={pendingTimeOff}
+    role="img"
+    title={pendingTimeOff ? `${availabilityLabel}; pending time off request` : availabilityLabel}
+    aria-label={pendingTimeOff ? `${availabilityLabel}; pending time off request` : availabilityLabel}
+  ></span>
   <div class="cell-body">
     {#each visibleShifts() as shift (shift.clientId)}
       <button
@@ -61,12 +71,31 @@
 
 <style>
   .shift-cell {
+    position: relative;
     display: grid;
     gap: 0.6rem;
     padding: 0.7rem;
     align-content: start;
     min-height: 170px;
   }
+
+  .availability-marker {
+    position: absolute;
+    top: 0.38rem;
+    right: 0.38rem;
+    z-index: 1;
+    width: 0.52rem;
+    height: 0.52rem;
+    border: 1px solid var(--color-divider-strong);
+    border-radius: 50%;
+    background: var(--color-text-muted);
+  }
+
+  .availability-open { background: #3f7b57; }
+  .availability-limited { background: #bd8a2d; }
+  .availability-unavailable { background: #a63d35; }
+  .availability-unset { background: transparent; }
+  .availability-marker.pending-time-off { box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 3px #bd8a2d; }
 
   .cell-body {
     display: grid;

@@ -41,6 +41,8 @@ const tenantTables = [
   'schedule_role_definitions',
   'schedule_departments',
   'user_schedule_departments',
+  'user_schedule_role_settings',
+  'user_schedule_roles',
   'user_schedule_availability',
   'user_schedule_time_off_requests',
   'creator_category_registry',

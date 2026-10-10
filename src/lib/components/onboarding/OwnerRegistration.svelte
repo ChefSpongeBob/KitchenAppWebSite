@@ -38,7 +38,9 @@
 		storeBillingPreference: 'both' | 'google_play' | 'app_store';
 		liabilityAgreementAccepted: boolean;
 		menuTitle: string;
+		scheduleSetup: string;
 	};
+	type ScheduleSetupRow = { name: string; roles: string };
 
 	export let agreementVersion: string;
 	export let form:
@@ -63,11 +65,26 @@
 	const COUNTRIES = [['United States', 'United States'], ['Canada', 'Canada'], ['Mexico', 'Mexico']];
 	const steps = [
 		'Name & Birthday', 'Address', 'Contact & Login', 'Profile Details', 'Your Business',
-		'Business Contact', 'Menu', 'Business Details', 'Choose a Plan', 'Welcome to Crimini'
+		'Business Contact', 'Menu', 'Business Details', 'Departments & Roles', 'Choose a Plan', 'Welcome to Crimini'
 	];
-	const optionalSteps = new Set([0, 1, 3, 5, 6, 7]);
+	const optionalSteps = new Set([0, 1, 3, 5, 6, 7, 8]);
 	const seeded = form?.values ?? {};
-	const errorStep = form?.activeSlideId === 'security' ? 2 : form?.activeSlideId === 'business' ? 4 : form?.activeSlideId === 'tier' ? 8 : form?.activeSlideId === 'purchase' ? 9 : 0;
+	const errorStep = form?.activeSlideId === 'security' ? 2 : form?.activeSlideId === 'business' ? 4 : form?.activeSlideId === 'schedule' ? 8 : form?.activeSlideId === 'tier' ? 9 : form?.activeSlideId === 'purchase' ? 10 : 0;
+
+	function readSeededScheduleSetup(value: string | undefined): ScheduleSetupRow[] {
+		if (!value) return [{ name: '', roles: '' }];
+		try {
+			const parsed = JSON.parse(value) as Array<{ name?: unknown; roles?: unknown }>;
+			if (!Array.isArray(parsed)) return [{ name: '', roles: '' }];
+			const rows = parsed.map((entry) => ({
+				name: String(entry?.name ?? ''),
+				roles: Array.isArray(entry?.roles) ? entry.roles.map(String).join(', ') : ''
+			}));
+			return rows.length > 0 ? rows : [{ name: '', roles: '' }];
+		} catch {
+			return [{ name: '', roles: '' }];
+		}
+	}
 
 	let phase: 'intro' | 'form' = form?.error ? 'form' : 'intro';
 	let activeStep = form?.error ? errorStep : 0;
@@ -111,6 +128,15 @@
 	let storeBillingPreference = seeded.storeBillingPreference ?? 'both';
 	let liabilityAgreementAccepted = seeded.liabilityAgreementAccepted ?? false;
 	let menuTitle = seeded.menuTitle ?? '';
+	let scheduleSetup = readSeededScheduleSetup(seeded.scheduleSetup);
+	$: scheduleSetupJson = JSON.stringify(
+		scheduleSetup
+			.map((department) => ({
+				name: department.name.trim(),
+				roles: department.roles.split(',').map((role) => role.trim()).filter(Boolean)
+			}))
+			.filter((department) => department.name)
+	);
 	let businessLogo: File | null = null;
 	let businessDocuments: File[] = [];
 	let menuFile: File | null = null;
@@ -159,11 +185,22 @@
 		feedback = '';
 		if (activeStep === 2 && !passwordIsValid()) return;
 		if (activeStep === 4 && !businessName.trim()) { feedback = 'Enter your restaurant or business name.'; return; }
+		if (activeStep === 8) {
+			const startedRows = scheduleSetup.filter((department) => department.name.trim() || department.roles.trim());
+			if (startedRows.some((department) => !department.name.trim() || !department.roles.split(',').some((role) => role.trim()))) {
+				feedback = 'Each department needs a name and at least one comma-separated role, or skip this step.';
+				return;
+			}
+		}
 		activeStep = Math.min(activeStep + 1, steps.length - 1);
 		requestAnimationFrame(() => shellElement?.scrollTo({ top: 0 }));
 	}
-	function skipStep() { feedback = ''; activeStep = Math.min(activeStep + 1, steps.length - 1); requestAnimationFrame(() => shellElement?.scrollTo({ top: 0 })); }
+	function skipStep() { feedback = ''; if (activeStep === 8) scheduleSetup = [{ name: '', roles: '' }]; activeStep = Math.min(activeStep + 1, steps.length - 1); requestAnimationFrame(() => shellElement?.scrollTo({ top: 0 })); }
 	function previousStep() { feedback = ''; activeStep = Math.max(activeStep - 1, 0); requestAnimationFrame(() => shellElement?.scrollTo({ top: 0 })); }
+	function addScheduleDepartment() { scheduleSetup = [...scheduleSetup, { name: '', roles: '' }]; }
+	function removeScheduleDepartment(index: number) {
+		scheduleSetup = scheduleSetup.length === 1 ? [{ name: '', roles: '' }] : scheduleSetup.filter((_, rowIndex) => rowIndex !== index);
+	}
 	function firstFile(event: Event) { return (event.currentTarget as HTMLInputElement).files?.[0] ?? null; }
 	function selectedFiles(event: Event) { return Array.from((event.currentTarget as HTMLInputElement).files ?? []).slice(0, 6); }
 	function validateSubmission() {
@@ -252,6 +289,7 @@
 				<input type="hidden" name="liability_agreement_version" value={agreementVersion} />
 				<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
 				<input type="hidden" name="menu_title" value={menuTitle.trim()} />
+				<input type="hidden" name="schedule_setup" value={scheduleSetupJson} />
 
 				{#key activeStep}
 					<div class:business-stage={activeStep === 4} class="step" in:fade={{ duration: 220 }}>
@@ -328,6 +366,18 @@
 								<label class="wide"><span>Website</span><input type="url" bind:value={websiteUrl} placeholder="https://" maxlength="180" /></label>
 							</div>
 						{:else if activeStep === 8}
+							<div class="schedule-setup">
+								<p>Add the departments your team schedules by, then list the job roles used in each one.</p>
+								{#each scheduleSetup as department, index}
+									<div class="schedule-setup-row">
+										<label><span>Department</span><input bind:value={department.name} placeholder="Kitchen" maxlength="80" /></label>
+										<label><span>Job roles</span><input bind:value={department.roles} placeholder="Line Cook, Prep Cook, Dishwasher" maxlength="500" /></label>
+										<button type="button" on:click={() => removeScheduleDepartment(index)}>Remove</button>
+									</div>
+								{/each}
+								<button type="button" class="add-department" on:click={addScheduleDepartment}>+ Add department</button>
+							</div>
+						{:else if activeStep === 9}
 							<div class="plan-list" role="radiogroup" aria-label="Plan size">
 								<button type="button" class:active={planTier === 'small'} on:click={() => (planTier = 'small')} aria-pressed={planTier === 'small'}><span><strong>Small</strong><small>Up to 20 employees</small></span><b>${PLAN_PRICES.starter}/mo</b></button>
 								<button type="button" class:active={planTier === 'medium'} on:click={() => (planTier = 'medium')} aria-pressed={planTier === 'medium'}><span><strong>Medium</strong><small>Up to 75 employees</small></span><b>${PLAN_PRICES.growth}/mo</b></button>
@@ -428,6 +478,12 @@
 	.business-fields { opacity: 0; animation: business-fields 560ms ease 1250ms both; }
 	@keyframes business-lead { 0% { opacity: 0; transform: translateY(1rem); } 25%, 66% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-1.8rem); } }
 	@keyframes business-fields { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: none; } }
+	.schedule-setup { display: grid; gap: 1rem; }
+	.schedule-setup > p { margin: 0; color: rgba(17, 18, 20, 0.64); font-size: 0.9rem; line-height: 1.55; }
+	.schedule-setup-row { display: grid; grid-template-columns: minmax(9rem, 0.7fr) minmax(15rem, 1.3fr) auto; align-items: end; gap: 1rem; padding: 0.65rem 0; border-bottom: 1px solid rgba(17, 18, 20, 0.16); }
+	.schedule-setup-row button, .add-department { padding: 0.25rem 0; border: 0; border-bottom: 1px solid currentColor; border-radius: 0; background: transparent; color: #111214; cursor: pointer; font: inherit; font-size: 0.76rem; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase; }
+	.schedule-setup-row button { margin-bottom: 0.78rem; color: rgba(116, 38, 29, 0.78); }
+	.add-department { justify-self: start; }
 	.plan-list { border-top: 1px solid rgba(17, 18, 20, 0.18); }
 	.plan-list button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.15rem 0.2rem; border: 0; border-bottom: 1px solid rgba(17, 18, 20, 0.18); background: transparent; color: #111214; text-align: left; cursor: pointer; }
 	.plan-list button > span { display: grid; gap: 0.18rem; }
@@ -459,6 +515,8 @@
 		.flow-header > span { font-size: 0.64rem; }
 		.field-grid { grid-template-columns: 1fr; }
 		.field-grid .wide { grid-column: auto; }
+		.schedule-setup-row { grid-template-columns: 1fr; gap: 0.65rem; }
+		.schedule-setup-row button { justify-self: start; margin-bottom: 0.35rem; }
 		.step { min-height: 22rem; }
 		.actions { align-items: flex-end; }
 		.forward-actions { flex-direction: column-reverse; align-items: flex-end; gap: 0.65rem; }

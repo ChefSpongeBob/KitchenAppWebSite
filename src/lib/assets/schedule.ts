@@ -1,5 +1,3 @@
-export const scheduleDepartments = ['FOH', 'BOH', 'Management'] as const;
-
 export const scheduleWeekdays = [
   { value: 0, label: 'Monday', shortLabel: 'Mon' },
   { value: 1, label: 'Tuesday', shortLabel: 'Tue' },
@@ -9,12 +7,6 @@ export const scheduleWeekdays = [
   { value: 5, label: 'Saturday', shortLabel: 'Sat' },
   { value: 6, label: 'Sunday', shortLabel: 'Sun' }
 ] as const;
-
-export const scheduleRolesByDepartment = {
-  FOH: ['Server', 'Host', 'Runner'],
-  BOH: ['Cook', 'Prep', 'Dish'],
-  Management: ['BOH MGR', 'FOH MGR', 'GM']
-} as const;
 
 export const scheduleEndLabels = ['BD', 'Close'] as const;
 
@@ -49,10 +41,11 @@ export function isValidScheduleDepartment(
   return allowedDepartments ? allowedDepartments.includes(normalized) : true;
 }
 
-export function isValidScheduleRole(department: string, role: string) {
+export function isValidScheduleRole(department: string, role: string, allowedRoles?: readonly string[]) {
   if (!isValidScheduleDepartment(department)) return false;
-  const roles = scheduleRolesByDepartment[department as keyof typeof scheduleRolesByDepartment];
-  return roles ? (roles as readonly string[]).includes(role) : role.trim().length > 0;
+  const normalized = role.trim();
+  if (!normalized) return false;
+  return allowedRoles ? allowedRoles.includes(normalized) : true;
 }
 
 export function formatScheduleTimeLabel(value: string) {

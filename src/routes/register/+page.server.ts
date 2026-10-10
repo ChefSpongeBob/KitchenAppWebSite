@@ -31,10 +31,16 @@ import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/se
 import { sendSignupConfirmationEmail } from '$lib/server/email';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { ensureScheduleSchema } from '$lib/server/schedules';
 import { COMMUNICATION_CONSENT_VERSION } from '$lib/communicationConsent';
 import type { PageServerLoad } from './$types';
 
-type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'purchase';
+type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'schedule' | 'purchase';
+
+type RegistrationScheduleDepartment = {
+	name: string;
+	roles: string[];
+};
 
 type RegisterFormValues = {
 	displayName: string;
@@ -72,6 +78,7 @@ type RegisterFormValues = {
 	storeBillingPreference: 'both' | 'google_play' | 'app_store';
 	liabilityAgreementAccepted: boolean;
 	menuTitle: string;
+	scheduleSetup: string;
 };
 
 type RegistrationDocumentUpload = {
@@ -191,6 +198,65 @@ function toOptionalString(form: FormData, key: string, maxLength: number) {
 
 function looksLikeEmail(value: string) {
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function parseRegistrationScheduleSetup(value: string): {
+	departments: RegistrationScheduleDepartment[];
+	error: string | null;
+} {
+	if (!value.trim()) return { departments: [], error: null };
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(value);
+	} catch {
+		return { departments: [], error: 'Schedule setup could not be read. Review your departments and roles.' };
+	}
+	if (!Array.isArray(parsed) || parsed.length > 24) {
+		return { departments: [], error: 'Add no more than 24 schedule departments.' };
+	}
+
+	const departments: RegistrationScheduleDepartment[] = [];
+	const departmentNames = new Set<string>();
+	for (const entry of parsed) {
+		if (!entry || typeof entry !== 'object') {
+			return { departments: [], error: 'Each schedule department needs a name and roles.' };
+		}
+		const raw = entry as { name?: unknown; roles?: unknown };
+		const name = String(raw.name ?? '').trim().replace(/\s+/g, ' ');
+		if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
+			return { departments: [], error: 'Department names must be 1 to 80 readable characters.' };
+		}
+		const normalizedName = name.toLowerCase();
+		if (departmentNames.has(normalizedName)) {
+			return { departments: [], error: `The ${name} department is listed more than once.` };
+		}
+		departmentNames.add(normalizedName);
+
+		const sourceRoles = Array.isArray(raw.roles) ? raw.roles : [];
+		if (sourceRoles.length > 40) {
+			return { departments: [], error: `Add no more than 40 roles to ${name}.` };
+		}
+		const roleNames = new Set<string>();
+		const roles: string[] = [];
+		for (const roleEntry of sourceRoles) {
+			const role = String(roleEntry ?? '').trim().replace(/\s+/g, ' ');
+			if (!role || role.length > 100 || /[\u0000-\u001f\u007f]/.test(role)) {
+				return { departments: [], error: `Every ${name} role must be 1 to 100 readable characters.` };
+			}
+			const normalizedRole = role.toLowerCase();
+			if (roleNames.has(normalizedRole)) {
+				return { departments: [], error: `${role} is listed more than once in ${name}.` };
+			}
+			roleNames.add(normalizedRole);
+			roles.push(role);
+		}
+		if (roles.length === 0) {
+			return { departments: [], error: `Add at least one job role to ${name}, or skip schedule setup for now.` };
+		}
+		departments.push({ name, roles });
+	}
+
+	return { departments, error: null };
 }
 
 function isPublicSignupEnabled(env: App.Platform['env'] | undefined) {
@@ -364,6 +430,8 @@ export const actions: Actions = {
 				.trim()
 				.slice(0, 32);
 			const menuTitle = toOptionalString(formData, 'menu_title', 180);
+			const scheduleSetupRaw = String(formData.get('schedule_setup') ?? '').trim();
+			const scheduleSetup = parseRegistrationScheduleSetup(scheduleSetupRaw);
 			const logoEntry = formData.get('business_logo');
 			const businessLogo = logoEntry instanceof File && logoEntry.size > 0 ? logoEntry : null;
 			const businessDocuments = formData
@@ -408,7 +476,8 @@ export const actions: Actions = {
 				purchaseMode,
 				storeBillingPreference: safeStoreBillingPreference,
 				liabilityAgreementAccepted,
-				menuTitle
+				menuTitle,
+				scheduleSetup: scheduleSetupRaw
 			};
 
 			if (!email || !confirmEmail || !password || !confirmPassword) {
@@ -430,6 +499,9 @@ export const actions: Actions = {
 			}
 			if (!inviteCode && !businessName) {
 				return registerFailure(400, 'Business name is required to create your workspace.', 'business', submittedValues);
+			}
+			if (!inviteCode && scheduleSetup.error) {
+				return registerFailure(400, scheduleSetup.error, 'schedule', submittedValues);
 			}
 			if (email !== confirmEmail) {
 				return registerFailure(400, 'Emails do not match.', 'security', submittedValues);
@@ -511,6 +583,7 @@ export const actions: Actions = {
 
 			registerPhase = 'schema';
 			await ensureBusinessSchema(db);
+			await ensureScheduleSchema(db);
 
 			registerPhase = 'rate_limit';
 			const signupIp = getRequestIpAddress(request);
@@ -1209,6 +1282,35 @@ export const actions: Actions = {
 					)
 					.bind(businessId, userId, now, now)
 					.run();
+
+				for (const [departmentIndex, department] of scheduleSetup.departments.entries()) {
+					await db
+						.prepare(
+							`INSERT INTO schedule_departments (
+								id, name, sort_order, is_active, created_at, updated_at, business_id
+							) VALUES (?, ?, ?, 1, ?, ?, ?)`
+						)
+						.bind(crypto.randomUUID(), department.name, departmentIndex, now, now, businessId)
+						.run();
+					await db
+						.prepare(
+							`INSERT INTO user_schedule_departments (
+								business_id, user_id, department, updated_at
+							) VALUES (?, ?, ?, ?)`
+						)
+						.bind(businessId, userId, department.name, now)
+						.run();
+					for (const [roleIndex, roleName] of department.roles.entries()) {
+						await db
+							.prepare(
+								`INSERT INTO schedule_role_definitions (
+									id, department, role_name, sort_order, is_active, created_at, updated_at, business_id
+								) VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
+							)
+							.bind(crypto.randomUUID(), department.name, roleName, roleIndex, now, now, businessId)
+							.run();
+					}
+				}
 				await db
 					.prepare(
 						`

@@ -145,22 +145,36 @@ expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes request
   source.includes('delete_announcement_history')
 );
 
-expect('src/routes/admin/schedule/+page.server.ts', 'schedule builder owns requests and setup actions', (source) =>
+expect('src/routes/admin/schedule/+page.server.ts', 'schedule workspace owns requests, setup, and team access actions', (source) =>
   source.includes('loadPendingScheduleAvailabilityRequests') &&
   source.includes('approve_time_off:') &&
   source.includes('approve_availability:') &&
   source.includes('create_department:') &&
   source.includes('create_role:') &&
   source.includes('delete_department:') &&
-  source.includes('delete_role:')
+  source.includes('delete_role:') &&
+  source.includes('update_permissions:') &&
+  source.includes('update_capabilities:') &&
+  source.includes('toggle_schedule_department:') &&
+  source.includes('save_schedule_roles:')
 );
 
 expect('src/routes/admin/schedule/+page.svelte', 'schedule builder exposes consolidated tools', (source) =>
   source.includes('<option value="approvals">') &&
-  source.includes('<option value="setup">Schedule Setup</option>') &&
+  source.includes('<option value="team">Team &amp; Access</option>') &&
+  source.includes('<option value="setup">Roles &amp; Departments</option>') &&
   source.includes('action="?/approve_availability"') &&
   source.includes('action="?/create_department"') &&
   source.includes('action="?/create_role"')
+);
+
+expect('src/lib/components/ui/ScheduleTeamAccess.svelte', 'schedule team access keeps HR records separate and exposes schedule controls', (source) =>
+  source.includes('action="?/update_permissions"') &&
+  source.includes('action="?/update_capabilities"') &&
+  source.includes('action="?/toggle_schedule_department"') &&
+  source.includes('action="?/save_schedule_roles"') &&
+  source.includes('/admin/users/${selectedUser.id}') &&
+  !source.includes('employee_sensitive_record_vault')
 );
 
 expect('src/routes/announcements/+page.svelte', 'shared announcements page is view only', (source) =>

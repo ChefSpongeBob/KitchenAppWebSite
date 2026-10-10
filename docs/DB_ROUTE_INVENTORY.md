@@ -1,16 +1,16 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-10-02
+Updated: 2026-10-08
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
 ## Summary
 
-- Tables inventoried: 98
-- Tables with `business_id`: 82
+- Tables inventoried: 102
+- Tables with `business_id`: 86
 - Tables with approved alternate tenant columns: 2
-- Approved global/system/root tables: 14
-- Tables with `user_id`: 35
+- Approved global/system/root tables: 15
+- Tables with `user_id`: 37
 
 ## Inventory Caveats
 
@@ -104,6 +104,8 @@ Use these column names exactly when scoping business data:
 - `trial_identity_claims.business_id`
 - `user_schedule_availability.business_id`
 - `user_schedule_departments.business_id`
+- `user_schedule_role_settings.business_id`
+- `user_schedule_roles.business_id`
 - `user_schedule_time_off_requests.business_id`
 - `vendor_resources.business_id`
 - `waste_logs.business_id`
@@ -127,9 +129,9 @@ Known nonstandard tenant columns:
 
 Validated by `npm.cmd run test:db-governance`.
 
-- `tenant_data`: 79 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
+- `tenant_data`: 86 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
 - `alternate_tenant_column`: `account_deletion_requests.requester_business_id`, `iot_device_inventory.claimed_business_id`.
-- `approved_global_system`: `app_feature_flags`, `businesses`, `d1_migrations`, `devices`, `iot_ingest_guard`, `password_resets`, `security_rate_limits`, `sessions`, `store_products`, `store_webhook_events`, `trial_denials`, `user_invites`, `user_preferences`, `users`.
+- `approved_global_system`: `app_feature_flags`, `businesses`, `communication_consent_events`, `d1_migrations`, `devices`, `iot_ingest_guard`, `password_resets`, `security_rate_limits`, `sessions`, `store_products`, `store_webhook_events`, `trial_denials`, `user_invites`, `user_preferences`, `users`.
 
 Notes:
 
@@ -2275,6 +2277,34 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/admin.ts` [delete, insert, select]
   - `src/lib/server/operationalEvents.ts` [select]
   - `src/lib/server/schedules.ts` [ddl, delete, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### user_schedule_role_settings
+
+**Columns**
+  - `business_id` TEXT (PK, NOT NULL)
+  - `user_id` TEXT (PK, NOT NULL)
+  - `restrict_to_selected` INTEGER (NOT NULL, DEFAULT 0)
+  - `updated_at` INTEGER (NOT NULL)
+  - `updated_by` TEXT
+
+**Code Usage**
+  - `scripts/ensure-tenant-columns.mjs` [reference]
+  - `src/lib/server/schedules.ts` [ddl, insert, select, update]
+  - `src/lib/server/tenant.ts` [reference]
+
+### user_schedule_roles
+
+**Columns**
+  - `business_id` TEXT (PK, NOT NULL)
+  - `user_id` TEXT (PK, NOT NULL)
+  - `role_definition_id` TEXT (PK, NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+
+**Code Usage**
+  - `scripts/ensure-tenant-columns.mjs` [reference]
+  - `src/lib/server/admin.ts` [delete]
+  - `src/lib/server/schedules.ts` [ddl, delete, insert, select]
   - `src/lib/server/tenant.ts` [reference]
 
 ### user_schedule_time_off_requests

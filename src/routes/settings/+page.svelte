@@ -2,7 +2,6 @@
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
-  import AvailabilityEditor from '$lib/components/ui/AvailabilityEditor.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -75,9 +74,6 @@
 
   let activeTab: TabKey = normalizeTab(data.activeTab);
 
-  let availabilityEntries = data.availability.map((entry) => ({ ...entry }));
-  let availabilitySeed = JSON.stringify(data.availability);
-
   const withFeedback: SubmitFunction = () => {
     return async ({ result }) => {
       await applyAction(result);
@@ -89,11 +85,6 @@
       }
     };
   };
-
-  $: if (JSON.stringify(data.availability) !== availabilitySeed) {
-    availabilitySeed = JSON.stringify(data.availability);
-    availabilityEntries = data.availability.map((entry) => ({ ...entry }));
-  }
 
   const departmentSummary =
     data.approvedDepartments.length > 0 ? data.approvedDepartments.join(', ') : 'No schedule departments';
@@ -172,16 +163,12 @@
         </div>
       </header>
 
-      {#if data.pendingAvailability}
-        <p class="pending-note">Your latest availability change is waiting for manager approval.</p>
-      {/if}
-
-      <AvailabilityEditor
-        entries={availabilityEntries}
-        action="?/save_availability"
-        enhanceFn={withFeedback}
-        submitLabel={data.pendingAvailability ? 'Update Pending Availability' : 'Submit Availability'}
-      />
+      <p class="pending-note">
+        {data.pendingAvailability
+          ? 'Your latest availability change is waiting for manager approval.'
+          : 'Availability and time off are managed with your schedule.'}
+      </p>
+      <a class="schedule-settings-link" href="/my-schedule?view=availability">Open Schedule Availability</a>
     </section>
   {/if}
 
@@ -331,6 +318,17 @@
     border-bottom: 1px solid var(--color-divider);
     color: var(--color-text-muted);
     font-size: 0.8rem;
+  }
+
+  .schedule-settings-link {
+    justify-self: start;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid currentColor;
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: var(--weight-bold);
+    text-decoration: none;
+    text-transform: uppercase;
   }
 
   .profile-header,
