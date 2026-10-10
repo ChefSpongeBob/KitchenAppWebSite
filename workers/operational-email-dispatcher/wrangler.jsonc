@@ -7,6 +7,13 @@
   "vars": {
     "APP_BASE_URL": "https://criminiops.com"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "crimini-production",
+      "database_id": "ae576972-bfc0-49fa-8fa2-80ddcffa2f5c"
+    }
+  ],
   "triggers": {
     "crons": ["* * * * *"]
   },

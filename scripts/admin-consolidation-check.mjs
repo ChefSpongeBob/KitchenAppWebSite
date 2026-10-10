@@ -77,6 +77,17 @@ expectMissing(
   'legacy content-editor redirect routes are removed'
 );
 
+expectMissing(
+  [
+    'src/routes/admin/schedule-settings/+page.server.ts',
+    'src/routes/admin/schedule-roles/+page.server.ts',
+    'src/routes/docs/about/+page.svelte',
+    'src/routes/announcements/+page.server.ts',
+    'src/routes/announcements/+page.svelte'
+  ],
+  'dead aliases and redundant viewer routes are removed'
+);
+
 expect('src/lib/components/ui/AdminEditorMenu.svelte', 'admin dropdown has one content editor entry', (source) =>
   source.includes("label: 'Creator Studio'") &&
   source.includes("href: '/admin/business-registry'") &&
@@ -185,10 +196,10 @@ expect('src/routes/admin/users/+page.svelte', 'People and HR owns tenant positio
   source.includes('action="?/toggle_position"')
 );
 
-expect('src/routes/announcements/+page.svelte', 'shared announcements page is view only', (source) =>
-  source.includes('<PageHeader title="Announcements" />') &&
-  !source.includes('save_announcement') &&
-  !source.includes('<textarea')
+expect('src/routes/app/+page.svelte', 'announcements are viewed on the workspace dashboard', (source) =>
+  source.includes('{#if featureAccess.announcements}') &&
+  source.includes('class="announcement-copy"') &&
+  source.includes('href="/admin#announcement-manager"')
 );
 
 expect('src/routes/todo/log/+page.server.ts', 'ToDo history uses current capability access without hidden mutations', (source) =>
@@ -196,6 +207,11 @@ expect('src/routes/todo/log/+page.server.ts', 'ToDo history uses current capabil
   source.includes('LIMIT 250') &&
   !source.includes("locals.userRole !== 'admin'") &&
   !source.includes('export const actions')
+);
+
+expect('src/routes/todo/+page.svelte', 'ToDo managers can reach the completion log', (source) =>
+  source.includes("href=\"/todo/log\"") &&
+  source.includes('data.canViewHistory')
 );
 
 expect('migrations/0100_admin_dashboard_workflows.sql', 'dashboard workflow storage is tenant scoped and indexed', (source) =>

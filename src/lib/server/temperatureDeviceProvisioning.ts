@@ -489,30 +489,6 @@ export async function claimTemperatureSensorNode(
     .run();
   if ((saved.meta?.changes ?? 0) !== 1) throw new Error('Sensor serial is already assigned.');
 
-  await db
-    .prepare(
-      `
-      UPDATE sensor_nodes
-      SET name = ?,
-          updated_at = ?,
-          business_id = ?
-      WHERE sensor_id = ?
-        AND (business_id = ? OR business_id IS NULL)
-      `
-    )
-    .bind(displayName, now, input.businessId, sensorId, input.businessId)
-    .run();
-
-  await db
-    .prepare(
-      `
-      INSERT OR IGNORE INTO sensor_nodes (sensor_id, name, updated_at, business_id)
-      VALUES (?, ?, ?, ?)
-      `
-    )
-    .bind(sensorId, displayName, now, input.businessId)
-    .run();
-
   return { id: nodeId, nodeSerial, sensorId };
 }
 

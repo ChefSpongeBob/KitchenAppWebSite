@@ -8,8 +8,7 @@ import {
 import {
   loadScheduleDepartmentApprovalsByUser,
   loadUserPendingScheduleAvailabilityRequest,
-  loadUserScheduleAvailability,
-  saveUserScheduleAvailability
+  loadUserScheduleAvailability
 } from '$lib/server/schedules';
 import type { ScheduleDepartment } from '$lib/assets/schedule';
 import { getSessionCookieName } from '$lib/server/authCookies';
@@ -154,8 +153,6 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 };
 
 export const actions: Actions = {
-  save_availability: ({ request, locals }) => saveUserScheduleAvailability(request, locals),
-
   save_personal_info: async ({ request, locals }) => {
     if (!locals.userId) throw redirect(303, '/login');
     const db = locals.DB;

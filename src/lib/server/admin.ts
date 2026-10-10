@@ -4193,14 +4193,16 @@ export async function loadEmployeeOnboardingDashboard(
 }
 
 export async function loadAdminNodeNames(db: D1, businessId: string) {
-  if (!(await tableExists(db, 'sensor_nodes'))) return [];
+  if (!(await tableExists(db, 'temperature_sensor_nodes'))) return [];
   await ensureTenantSchema(db, true);
   const nodeResult = await db
     .prepare(
       `
-      SELECT sensor_id, name
-      FROM sensor_nodes
+      SELECT sensor_id, display_name AS name
+      FROM temperature_sensor_nodes
       WHERE business_id = ?
+        AND is_active = 1
+        AND revoked_at IS NULL
       ORDER BY sensor_id ASC
       `
     )
@@ -5250,56 +5252,6 @@ export async function deleteAdminReminder(request: Request, locals: App.Locals) 
   if (!id) return fail(400, { error: 'Missing reminder id.' });
 
   await db.prepare(`DELETE FROM admin_reminders WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
-  return { success: true };
-}
-
-export async function addNodeName(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-  if (!(await tableExists(db, 'sensor_nodes'))) {
-    return fail(400, { error: 'sensor_nodes table missing. Run db:migrate:nodenames first.' });
-  }
-  await ensureTenantSchema(db, true);
-
-  const formData = await request.formData();
-  const sensorId = Number(formData.get('sensor_id'));
-  const name = String(formData.get('name') ?? '').trim();
-  if (!Number.isFinite(sensorId) || sensorId <= 0 || !name) {
-    return fail(400, { error: 'Invalid node name input.' });
-  }
-
-  await db
-    .prepare(
-      `
-      INSERT OR REPLACE INTO sensor_nodes (sensor_id, name, updated_at, business_id)
-      VALUES (?, ?, ?, ?)
-      `
-    )
-    .bind(sensorId, name, Math.floor(Date.now() / 1000), businessId)
-    .run();
-
-  return { success: true };
-}
-
-export async function deleteNodeName(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-  if (!(await tableExists(db, 'sensor_nodes'))) {
-    return fail(400, { error: 'sensor_nodes table missing. Run db:migrate:nodenames first.' });
-  }
-  await ensureTenantSchema(db, true);
-
-  const formData = await request.formData();
-  const sensorId = Number(formData.get('sensor_id'));
-  if (!Number.isFinite(sensorId) || sensorId <= 0) {
-    return fail(400, { error: 'Invalid sensor id.' });
-  }
-
-  await db.prepare(`DELETE FROM sensor_nodes WHERE sensor_id = ? AND business_id = ?`).bind(sensorId, businessId).run();
   return { success: true };
 }
 

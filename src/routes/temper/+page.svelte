@@ -73,8 +73,8 @@
 
   onMount(() => {
     const stopPolling = startVisiblePolling(load, {
-      intervalMs: 45000,
-      maxIntervalMs: 5 * 60 * 1000,
+      intervalMs: 2 * 60 * 1000,
+      maxIntervalMs: 10 * 60 * 1000,
       runImmediately: true,
       refreshOnVisible: true,
       jitterMs: 8000

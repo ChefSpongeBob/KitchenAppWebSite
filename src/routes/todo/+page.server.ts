@@ -2,6 +2,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
 import { hasTable } from '$lib/server/dbSchema';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { hasBusinessCapability } from '$lib/server/permissions';
 
 type TodoRow = {
 	id: string;
@@ -18,10 +19,19 @@ type TodoRow = {
 const TODO_CLEANUP_BATCH_SIZE = 100;
 let lastTodoCleanupAt = 0;
 
+function canViewTodoHistory(locals: App.Locals) {
+	return hasBusinessCapability(
+		locals.businessRole,
+		locals.businessPermissionTemplate,
+		'manage_content',
+		locals.businessCapabilities
+	);
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
 	const db = locals.DB;
 	if (!db) {
-		return { active: [], completed: [] };
+		return { active: [], completed: [], canViewHistory: canViewTodoHistory(locals) };
 	}
 	await ensureTenantSchema(db);
 	const businessId = requireBusinessId(locals);
@@ -141,7 +151,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	return {
 		active: active.results ?? [],
-		completed: completed.results ?? []
+		completed: completed.results ?? [],
+		canViewHistory: canViewTodoHistory(locals)
 	};
 };
 

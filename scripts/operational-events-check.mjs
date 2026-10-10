@@ -82,6 +82,11 @@ expect('src/lib/server/operationalEvents.ts', 'schedule event email routing targ
   source.includes('uniqueRecipients(')
 );
 
+expect('src/lib/server/operationalEvents.ts', 'onboarding review emails open the employee onboarding section', (source) =>
+  source.includes('?section=onboarding') &&
+  !source.includes('?tab=onboarding')
+);
+
 expect('src/lib/server/preplist.ts', 'list workflow records submission and completion events', (source) =>
   source.includes('list.${domain}.submitted') &&
   source.includes('list.${domain}.item_completed') &&

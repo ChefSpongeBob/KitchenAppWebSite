@@ -208,14 +208,16 @@ expect('src/lib/client/polling.ts', 'shared polling is visibility aware with bac
 
 expect('src/routes/app/+page.svelte', 'homepage polling uses the shared visibility-aware helper', (source) =>
   source.includes('startVisiblePolling') &&
-  source.includes('intervalMs: 90000') &&
+  source.includes('intervalMs: 3 * 60 * 1000') &&
+  source.includes('maxIntervalMs: 10 * 60 * 1000') &&
   source.includes('jitterMs: 10000') &&
   source.includes('featureAccess.temps || featureAccess.whiteboard')
 );
 
 expect('src/routes/temper/+page.svelte', 'temperature page polling uses the shared visibility-aware helper', (source) =>
   source.includes('startVisiblePolling') &&
-  source.includes('intervalMs: 45000') &&
+  source.includes('intervalMs: 2 * 60 * 1000') &&
+  source.includes('maxIntervalMs: 10 * 60 * 1000') &&
   source.includes('jitterMs: 8000')
 );
 

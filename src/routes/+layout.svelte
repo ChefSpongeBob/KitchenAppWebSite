@@ -250,7 +250,6 @@
     "/recipes",
     "/todo",
     "/docs",
-    "/announcements",
     "/whiteboard",
     "/temper",
     "/conversions",

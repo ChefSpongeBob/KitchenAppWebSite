@@ -234,7 +234,7 @@ export async function loadTemperatureReport(
       SELECT
         'reading' AS row_type,
         t.sensor_id,
-        COALESCE(sn.name, 'Sensor ' || t.sensor_id) AS sensor_name,
+        COALESCE(sn.display_name, 'Sensor ' || t.sensor_id) AS sensor_name,
         date(t.ts, 'unixepoch') AS event_date,
         t.ts AS event_time,
         t.temperature,
@@ -245,7 +245,7 @@ export async function loadTemperatureReport(
         '' AS acknowledged_by_name,
         NULL AS recovered_at
       FROM temps t
-      LEFT JOIN sensor_nodes sn
+      LEFT JOIN temperature_sensor_nodes sn
         ON sn.business_id = t.business_id
         AND sn.sensor_id = t.sensor_id
       WHERE t.business_id = ?
@@ -263,7 +263,7 @@ export async function loadTemperatureReport(
       SELECT
         'alert' AS row_type,
         a.sensor_id,
-        COALESCE(sn.name, 'Sensor ' || a.sensor_id) AS sensor_name,
+        COALESCE(sn.display_name, 'Sensor ' || a.sensor_id) AS sensor_name,
         date(a.last_seen_at, 'unixepoch') AS event_date,
         a.last_seen_at AS event_time,
         a.temperature,
@@ -274,7 +274,7 @@ export async function loadTemperatureReport(
         COALESCE(u.display_name, u.email, '') AS acknowledged_by_name,
         a.recovered_at
       FROM temperature_alert_events a
-      LEFT JOIN sensor_nodes sn
+      LEFT JOIN temperature_sensor_nodes sn
         ON sn.business_id = a.business_id
         AND sn.sensor_id = a.sensor_id
       LEFT JOIN users u ON u.id = a.acknowledged_by
@@ -309,7 +309,7 @@ export async function loadTemperatureHourlyAverageReport(
         date(t.ts, 'unixepoch') AS event_date,
         strftime('%H:00', t.ts, 'unixepoch') AS event_hour,
         t.sensor_id,
-        COALESCE(sn.name, 'Sensor ' || t.sensor_id) AS sensor_name,
+        COALESCE(sn.display_name, 'Sensor ' || t.sensor_id) AS sensor_name,
         ROUND(AVG(t.temperature), 2) AS avg_temperature,
         ROUND(MIN(t.temperature), 2) AS min_temperature,
         ROUND(MAX(t.temperature), 2) AS max_temperature,
@@ -318,7 +318,7 @@ export async function loadTemperatureHourlyAverageReport(
         ROUND(MAX(t.humidity_pct), 2) AS max_humidity_pct,
         COUNT(*) AS reading_count
       FROM temps t
-      LEFT JOIN sensor_nodes sn
+      LEFT JOIN temperature_sensor_nodes sn
         ON sn.business_id = t.business_id
         AND sn.sensor_id = t.sensor_id
       WHERE t.business_id = ?

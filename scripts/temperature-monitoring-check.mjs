@@ -60,7 +60,22 @@ expect('src/lib/server/temperatureDeviceProvisioning.ts', 'temperature provision
 
 expect('src/lib/server/temperatureDeviceProvisioning.ts', 'node registration needs only a unique serial and tenant gateway', (source) =>
   !source.includes("loadInventory(db, nodeSerial, 'sensor_node')") &&
-  source.includes('WHERE temperature_sensor_nodes.business_id = excluded.business_id')
+  source.includes('WHERE temperature_sensor_nodes.business_id = excluded.business_id') &&
+  !source.includes('INSERT OR IGNORE INTO sensor_nodes') &&
+  !source.includes('UPDATE sensor_nodes')
+);
+
+expect('src/routes/temper/+page.server.ts', 'live temperature labels use the active sensor registry', (source) =>
+  source.includes('FROM temperature_sensor_nodes') &&
+  source.includes('is_active = 1') &&
+  source.includes('revoked_at IS NULL') &&
+  !source.includes('FROM sensor_nodes')
+);
+
+expect('src/lib/server/reports.ts', 'temperature reports use the authoritative sensor registry', (source) =>
+  source.includes('LEFT JOIN temperature_sensor_nodes sn') &&
+  source.includes('sn.display_name') &&
+  !source.includes('LEFT JOIN sensor_nodes sn')
 );
 
 expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'standalone node reads AHT20 and deep sleeps', (source) =>
@@ -225,7 +240,27 @@ expect('src/routes/admin/sensors/+page.svelte', 'sensor admin exposes thresholds
 expect('src/routes/api/internal/temperature-monitoring/process/+server.ts', 'stale processor is internal-token protected', (source) =>
   source.includes('SMOKE_INTERNAL_TOKEN') &&
   source.includes('processTemperatureStaleAlerts') &&
+  source.includes('MAX_BUSINESS_BATCH = 25') &&
+  source.includes('businessIds') &&
   source.includes('cache-control')
+);
+
+expect('workers/operational-email-dispatcher/index.js', 'scheduled dispatcher processes active temperature tenants in bounded batches', (source) =>
+  source.includes('/api/internal/temperature-monitoring/process') &&
+  source.includes('FROM temperature_sensor_nodes') &&
+  source.includes('offset += 25') &&
+  source.includes('scheduledMinute % 5 === 0')
+);
+
+expect('workers/operational-email-dispatcher/wrangler.jsonc', 'scheduled dispatcher has the production D1 binding', (source) =>
+  source.includes('"binding": "DB"') &&
+  source.includes('"database_name": "crimini-production"')
+);
+
+expect('src/hooks.server.ts', 'temperature service routes separate protected reads from device and scheduler posts', (source) =>
+  source.includes("pathname === '/api/internal/temperature-monitoring/process'") &&
+  source.includes("pathname === '/api/temps' && event.request.method === 'POST'") &&
+  !source.includes("pathname.startsWith('/api/temps')")
 );
 
 expect('src/lib/server/tenant.ts', 'tenant readiness tracks temperature monitoring tables', (source) =>

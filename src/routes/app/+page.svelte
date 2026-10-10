@@ -308,8 +308,8 @@
               await Promise.all(jobs);
             },
             {
-              intervalMs: 90000,
-              maxIntervalMs: 5 * 60 * 1000,
+              intervalMs: 3 * 60 * 1000,
+              maxIntervalMs: 10 * 60 * 1000,
               runImmediately: false,
               refreshOnVisible: true,
               jitterMs: 10000

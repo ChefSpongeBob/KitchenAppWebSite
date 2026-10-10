@@ -172,13 +172,11 @@ expect('src/routes/specials/+page.server.ts', 'specials save through permission 
   ])
 );
 
-expect('src/routes/announcements/+page.server.ts', 'shared announcements route is tenant-scoped and view only', (source) =>
+expect('src/routes/app/+page.server.ts', 'shared announcements are tenant-scoped on the dashboard', (source) =>
   includesAll(source, [
     'loadHomepageAnnouncement',
-    'locals.businessId'
-  ]) &&
-  !source.includes('save_announcement') &&
-  !source.includes('export const actions')
+    'businessId'
+  ])
 );
 
 expect('src/routes/admin/vendors/+page.server.ts', 'admin vendors support create update delete', (source) =>

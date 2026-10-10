@@ -20,6 +20,7 @@
     user?: { role?: string };
     active?: Todo[];
     completed?: Todo[];
+    canViewHistory?: boolean;
   };
 
   let activeTab: 'active' | 'completed' = 'active';
@@ -58,13 +59,18 @@
 <Layout>
   <PageHeader title="To Do" />
 
-  <div class="tabs" role="tablist">
-    <button role="tab" aria-selected={activeTab === 'active'} class:active={activeTab === 'active'} on:click={() => (activeTab = 'active')}>
-      Active
-    </button>
-    <button role="tab" aria-selected={activeTab === 'completed'} class:active={activeTab === 'completed'} on:click={() => (activeTab = 'completed')}>
-      Completed
-    </button>
+  <div class="todo-navigation">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected={activeTab === 'active'} class:active={activeTab === 'active'} on:click={() => (activeTab = 'active')}>
+        Active
+      </button>
+      <button role="tab" aria-selected={activeTab === 'completed'} class:active={activeTab === 'completed'} on:click={() => (activeTab = 'completed')}>
+        Completed
+      </button>
+    </div>
+    {#if data.canViewHistory}
+      <a class="history-link" href="/todo/log">Completion Log</a>
+    {/if}
   </div>
 
   {#if activeTab === 'active'}
@@ -120,6 +126,27 @@
 </Layout>
 
 <style>
+  .todo-navigation {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .history-link {
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--color-divider);
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
+    text-decoration: none;
+  }
+
+  .history-link:hover,
+  .history-link:focus-visible {
+    border-color: var(--color-text);
+  }
+
   .tabs {
     display: flex;
     gap: 0.5rem;

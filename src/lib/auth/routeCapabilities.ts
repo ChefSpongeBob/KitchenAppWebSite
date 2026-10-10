@@ -7,8 +7,6 @@ const ROUTE_CAPABILITIES: ReadonlyArray<{
   { prefix: '/admin/users', capability: 'view_people' },
   { prefix: '/admin/onboarding', capability: 'review_onboarding' },
   { prefix: '/admin/schedule', capability: 'manage_schedule' },
-  { prefix: '/admin/schedule-roles', capability: 'manage_schedule' },
-  { prefix: '/admin/schedule-settings', capability: 'manage_schedule' },
   { prefix: '/admin/sensors', capability: 'manage_devices' },
   { prefix: '/admin/vendors', capability: 'manage_vendors' },
   { prefix: '/admin/app-editor', capability: 'manage_workspace' },

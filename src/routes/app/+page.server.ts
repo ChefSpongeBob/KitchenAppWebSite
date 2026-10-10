@@ -243,7 +243,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     : Promise.resolve({ results: [] as IdeaRow[] });
   const sensorNamesPromise = featureAccess.temps
     ? safeRows(
-        db.prepare(`SELECT sensor_id, name FROM sensor_nodes WHERE business_id = ?`).bind(businessId).all<NodeNameRow>(),
+        db
+          .prepare(
+            `SELECT sensor_id, display_name AS name
+             FROM temperature_sensor_nodes
+             WHERE business_id = ? AND is_active = 1 AND revoked_at IS NULL`
+          )
+          .bind(businessId)
+          .all<NodeNameRow>(),
         'sensor labels'
       )
     : Promise.resolve({ results: [] as NodeNameRow[] });

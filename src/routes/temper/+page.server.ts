@@ -14,9 +14,11 @@ export const load: PageServerLoad = async ({ locals }) => {
   const result = await db
     .prepare(
       `
-      SELECT sensor_id, name
-      FROM sensor_nodes
+      SELECT sensor_id, display_name AS name
+      FROM temperature_sensor_nodes
       WHERE business_id = ?
+        AND is_active = 1
+        AND revoked_at IS NULL
       ORDER BY sensor_id ASC
       `
     )

@@ -797,7 +797,7 @@ function eventEmailAction(event: OperationalEventRow, env: Partial<App.Platform[
   if (event.event_type === 'onboarding.package.submitted' && event.target_user_id) {
     return {
       label: 'Review onboarding',
-      url: `${baseUrl}/admin/users/${encodeURIComponent(event.target_user_id)}?tab=onboarding`
+      url: `${baseUrl}/admin/users/${encodeURIComponent(event.target_user_id)}?section=onboarding`
     };
   }
   if (event.event_type.startsWith('onboarding.')) {

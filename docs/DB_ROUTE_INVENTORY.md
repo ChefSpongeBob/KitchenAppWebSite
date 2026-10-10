@@ -131,7 +131,7 @@ Known nonstandard tenant columns:
 
 Validated by `npm.cmd run test:db-governance`.
 
-- `tenant_data`: 86 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
+- `tenant_data`: 88 tables with direct `business_id`, all listed in `src/lib/server/tenant.ts`.
 - `alternate_tenant_column`: `account_deletion_requests.requester_business_id`, `iot_device_inventory.claimed_business_id`.
 - `approved_global_system`: `app_feature_flags`, `businesses`, `communication_consent_events`, `d1_migrations`, `devices`, `iot_ingest_guard`, `password_resets`, `security_rate_limits`, `sessions`, `store_products`, `store_webhook_events`, `trial_denials`, `user_invites`, `user_preferences`, `users`.
 
@@ -145,9 +145,9 @@ Notes:
 
 Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server.ts`.
 
-- `/admin/users` -> `manage_people`
-- `/admin/onboarding` -> `manage_onboarding`
-- `/admin/schedule`, `/admin/schedule-roles`, `/admin/schedule-settings` -> `manage_schedule`
+- `/admin/users` -> `view_people`
+- `/admin/onboarding` -> `review_onboarding`
+- `/admin/schedule` -> `manage_schedule`
 - `/admin/sensors` -> `manage_devices`
 - `/admin/vendors` -> `manage_vendors`
 - `/admin/app-editor` -> `manage_workspace`
@@ -180,15 +180,14 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/admin/users` -> `src/routes/admin/users/+page.server.ts` -> `users` (reference)
 - `/admin/users/:id` -> `src/routes/admin/users/[id]/+page.server.ts` -> `users` (reference)
 - `/admin/users/+page.svelte` -> `src/routes/admin/users/+page.svelte` -> `users` (reference)
-- `/announcements` -> `src/routes/announcements/+page.server.ts` -> `announcements` (reference)
-- `/announcements/+page.svelte` -> `src/routes/announcements/+page.svelte` -> `announcements` (reference)
 - `/api/billing/app-store-notifications` -> `src/routes/api/billing/app-store-notifications/+server.ts` -> `store_webhook_events` (insert/update)
 - `/api/billing/google-play-notifications` -> `src/routes/api/billing/google-play-notifications/+server.ts` -> `store_webhook_events` (insert/update)
 - `/api/documents/media/*key` -> `src/routes/api/documents/media/[...key]/+server.ts` -> `businesses` (select), `documents` (select), `employee_onboarding_items` (select), `employee_onboarding_template_items` (select)
 - `/api/internal/schema-readiness` -> `src/routes/api/internal/schema-readiness/+server.ts` -> `account_audit_logs` (reference), `account_deletion_requests` (reference), `business_invites` (reference), `business_lifecycle_snapshots` (reference), `business_users` (reference), `businesses` (reference), `devices` (reference), `employee_certifications` (reference), `employee_compliance_documents` (reference), `employee_compliance_requirements` (reference), `employee_document_access_audit` (reference), `employee_employment_records` (reference), `employee_onboarding_invite_requirements` (reference), `employee_onboarding_items` (reference), `employee_onboarding_packages` (reference), `employee_onboarding_sensitive_snapshots` (reference), `employee_onboarding_template_items` (reference), `employee_pos_permissions` (reference), `employee_role_permissions` (reference), `employee_sensitive_record_audit` (reference), `employee_sensitive_record_vault` (reference), `employee_verification_checks` (reference), `iot_device_inventory` (reference), `operational_event_delivery_attempts` (reference), `operational_events` (reference), `password_resets` (reference), `push_notification_devices` (reference), `security_rate_limits` (reference), `sessions` (reference), `store_products` (reference), `store_webhook_events` (reference), `temperature_alert_events` (reference), `temperature_sensor_nodes` (reference), `temperature_sensor_settings` (reference), `trial_identity_claims` (reference), `user_preferences` (reference), `users` (reference), `waste_logs` (reference)
+- `/api/internal/temperature-monitoring/process` -> `src/routes/api/internal/temperature-monitoring/process/+server.ts` -> `temperature_alert_events` (insert/update), `temperature_sensor_nodes` (select), `temperature_sensor_settings` (select), `temps` (select)
 - `/api/temps` -> `src/routes/api/temps/+server.ts` -> `temps` (insert/select)
 - `/api/whiteboard` -> `src/routes/api/whiteboard/+server.ts` -> `users` (reference), `whiteboard_posts` (insert/select/update), `whiteboard_review` (insert/select), `whiteboard_votes` (insert/select)
-- `/app` -> `src/routes/app/+page.server.ts` -> `announcements` (reference), `daily_specials` (reference), `documents` (select), `employee_spotlight` (reference), `sensor_nodes` (select), `temps` (select), `todo_assignments` (select), `todos` (select), `users` (select), `whiteboard_posts` (select), `whiteboard_review` (select)
+- `/app` -> `src/routes/app/+page.server.ts` -> `announcements` (reference), `daily_specials` (reference), `documents` (select), `employee_spotlight` (reference), `temperature_sensor_nodes` (select), `temps` (select), `todo_assignments` (select), `todos` (select), `users` (select), `whiteboard_posts` (select), `whiteboard_review` (select)
 - `/app/+page.svelte` -> `src/routes/app/+page.svelte` -> `announcements` (reference), `daily_specials` (reference), `employee_spotlight` (reference), `temps` (reference), `todos` (reference)
 - `/app/about` -> `src/routes/app/about/+page.server.ts` -> `documents` (select)
 - `/billing` -> `src/routes/billing/+page.server.ts` -> `businesses` (select), `users` (select)
@@ -217,7 +216,7 @@ Defined in `src/lib/auth/routeCapabilities.ts` and enforced in `src/hooks.server
 - `/settings` -> `src/routes/settings/+page.server.ts` -> `employee_profile_edit_requests` (insert/update), `employee_profiles` (insert), `sessions` (reference), `user_preferences` (insert/select), `users` (select/update)
 - `/settings/+page.svelte` -> `src/routes/settings/+page.svelte` -> `sessions` (reference)
 - `/specials` -> `src/routes/specials/+page.server.ts` -> `daily_specials` (insert)
-- `/temper` -> `src/routes/temper/+page.server.ts` -> `sensor_nodes` (select)
+- `/temper` -> `src/routes/temper/+page.server.ts` -> `temperature_sensor_nodes` (select)
 - `/temper/+page.svelte` -> `src/routes/temper/+page.svelte` -> `temps` (reference)
 - `/terms/+page.svelte` -> `src/routes/terms/+page.svelte` -> `businesses` (reference), `documents` (reference), `users` (reference)
 - `/todo` -> `src/routes/todo/+page.server.ts` -> `todo_assignments` (select), `todo_completion_log` (insert), `todos` (delete/select/update), `users` (select)
@@ -373,8 +372,6 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `/+page.svelte` `src/routes/+page.svelte` [reference]
   - `/admin/+page.svelte` `src/routes/admin/+page.svelte` [reference]
   - `/admin` `src/routes/admin/+page.server.ts` [reference]
-  - `/announcements/+page.svelte` `src/routes/announcements/+page.svelte` [reference]
-  - `/announcements` `src/routes/announcements/+page.server.ts` [reference]
   - `/app/+page.svelte` `src/routes/app/+page.svelte` [reference]
   - `/app` `src/routes/app/+page.server.ts` [reference]
   - `/features/+page.svelte` `src/routes/features/+page.svelte` [reference]
@@ -1898,13 +1895,8 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `business_id` TEXT
 
 **Code Usage**
-  - `/app` `src/routes/app/+page.server.ts` [select]
-  - `/temper` `src/routes/temper/+page.server.ts` [select]
+  - Legacy label table retained for migration compatibility; current live views and reports use `temperature_sensor_nodes`.
   - `scripts/ensure-tenant-columns.mjs` [reference]
-  - `src/lib/server/admin.ts` [delete, insert, select]
-  - `src/lib/server/reports.ts` [select]
-  - `src/lib/server/temperatureDeviceProvisioning.ts` [insert, update]
-  - `src/lib/server/temperatureMonitoring.ts` [select]
   - `src/lib/server/tenant.ts` [reference]
 
 ### sessions

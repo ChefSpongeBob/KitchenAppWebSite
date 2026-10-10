@@ -48,7 +48,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Scheduling',
     description: 'Shift calendar, weekly schedule views, and schedule builder tools.',
     userRoutePrefixes: ['/schedule', '/my-schedule'],
-    adminRoutePrefixes: ['/admin/schedule', '/admin/schedule-settings', '/admin/schedule-roles']
+    adminRoutePrefixes: ['/admin/schedule']
   },
   {
     key: 'todo',
@@ -75,7 +75,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     key: 'announcements',
     label: 'Announcements',
     description: 'Homepage announcement content block.',
-    userRoutePrefixes: ['/announcements'],
+    userRoutePrefixes: [],
     adminRoutePrefixes: []
   },
   {
@@ -229,6 +229,9 @@ export function resolveFeatureKeyForUrl(url: URL): AppFeatureKey | null {
 }
 
 export function resolveFeatureKeyForPath(pathname: string): AppFeatureKey | null {
+  if (pathname === '/api/whiteboard') return 'whiteboard';
+  if (pathname === '/api/temps') return 'temps';
+
   for (const feature of appFeatureDefinitions) {
     for (const prefix of feature.userRoutePrefixes) {
       if (routeMatchesPrefix(pathname, prefix)) return feature.key;

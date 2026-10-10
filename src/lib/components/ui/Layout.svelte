@@ -12,7 +12,6 @@
     pathname.startsWith('/todo') ||
     pathname.startsWith('/lists') ||
     pathname.startsWith('/docs') ||
-    pathname.startsWith('/announcements') ||
     pathname.startsWith('/whiteboard') ||
     pathname.startsWith('/temper') ||
     pathname.startsWith('/recipes') ||

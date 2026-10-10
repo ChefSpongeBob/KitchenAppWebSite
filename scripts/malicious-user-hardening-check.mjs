@@ -93,6 +93,11 @@ expect('src/hooks.server.ts', 'private route guard enforces tenant capabilities 
   source.includes('tenant_access_denied')
 );
 
+expect('src/lib/features/appFeatures.ts', 'feature gates cover direct whiteboard and temperature reads', (source) =>
+  source.includes("pathname === '/api/whiteboard'") &&
+  source.includes("pathname === '/api/temps'")
+);
+
 expect('src/lib/auth/routeCapabilities.ts', 'privileged route capability map covers billing admin reports vendors and devices', (source) =>
   source.includes("{ prefix: '/billing', capability: 'manage_billing' }") &&
   source.includes("{ prefix: '/admin/users', capability: 'view_people' }") &&

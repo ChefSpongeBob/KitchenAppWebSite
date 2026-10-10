@@ -170,7 +170,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isPublicApiRoute =
 		pathname.startsWith('/api/internal/schema-readiness') ||
 		pathname === '/api/internal/operational-events/process' ||
-		pathname.startsWith('/api/temps') ||
+		pathname === '/api/internal/temperature-monitoring/process' ||
+		(pathname === '/api/temps' && event.request.method === 'POST') ||
 		pathname.startsWith('/api/billing/app-store-notifications') ||
 		pathname.startsWith('/api/billing/google-play-notifications');
 	const isBillingRoute = pathname === '/billing' || pathname.startsWith('/billing/');

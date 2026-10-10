@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { addNodeName, deleteNodeName, loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
+import { loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
 import { revokeIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 import {
@@ -144,16 +144,6 @@ export const actions: Actions = {
       acknowledgedBy: locals.userId ?? null
     });
     return { success: true };
-  },
-
-  add_node_name: ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    return addNodeName(request, locals);
-  },
-
-  delete_node_name: ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    return deleteNodeName(request, locals);
   },
 
   revoke_iot_device: async ({ request, locals }) => {
