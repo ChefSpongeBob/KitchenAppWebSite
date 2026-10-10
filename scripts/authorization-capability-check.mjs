@@ -30,6 +30,7 @@ expect(
   'central capability vocabulary exists',
   roles.includes('export type BusinessCapability') &&
     roles.includes("'manage_permissions'") &&
+    roles.includes("'manage_managers'") &&
     roles.includes("'manage_schedule'") &&
     roles.includes("'manage_billing'") &&
     roles.includes("'view_reports'") &&
@@ -56,8 +57,21 @@ expect(
 expect(
   'business context loads effective individual capabilities',
   business.includes('loadBusinessCapabilityOverrides') &&
+    business.includes('loadPositionCapabilityOverrides') &&
     business.includes('businessCapabilities: resolveBusinessCapabilities('),
-  'Active business context must resolve individual permission overrides.'
+  'Active business context must resolve position defaults before individual permission overrides.'
+);
+
+expect(
+  'tenant positions are scoped and manager hierarchy is explicit',
+  business.includes('loadBusinessPositions') &&
+    admin.includes('canManageManagerAccounts') &&
+    admin.includes('validatePositionAssignmentAuthority') &&
+    admin.includes('You cannot assign a position containing access you do not hold.') &&
+    admin.includes("'manage_managers'") &&
+    admin.includes('The owner account cannot be removed.') &&
+    admin.includes('At least one management account must remain.'),
+  'Tenant positions and manager-removal authority must remain business scoped and owner controlled.'
 );
 
 expect(
@@ -71,7 +85,9 @@ expect(
 expect(
   'privileged route capability map exists',
   routeCapabilities.includes("'/admin/users'") &&
-    routeCapabilities.includes("'manage_people'") &&
+    routeCapabilities.includes("'view_people'") &&
+    routeCapabilities.includes("'/admin/onboarding'") &&
+    routeCapabilities.includes("'review_onboarding'") &&
     routeCapabilities.includes("'/admin/schedule'") &&
     routeCapabilities.includes("'manage_schedule'") &&
     routeCapabilities.includes("'/billing'") &&

@@ -1,13 +1,13 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-10-08
+Updated: 2026-10-10
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
 ## Summary
 
-- Tables inventoried: 102
-- Tables with `business_id`: 86
+- Tables inventoried: 104
+- Tables with `business_id`: 88
 - Tables with approved alternate tenant columns: 2
 - Approved global/system/root tables: 15
 - Tables with `user_id`: 37
@@ -34,6 +34,8 @@ Use these column names exactly when scoping business data:
 - `announcements.business_id`
 - `app_feature_flags_business.business_id`
 - `business_invites.business_id`
+- `business_position_permissions.business_id`
+- `business_positions.business_id`
 - `business_hr_settings.business_id`
 - `business_lifecycle_snapshots.business_id`
 - `business_store_entitlements.business_id`
@@ -453,12 +455,52 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `onboarding_required` INTEGER (NOT NULL, DEFAULT 1)
   - `permission_template` TEXT (NOT NULL, DEFAULT 'staff')
   - `schedule_departments_json` TEXT (NOT NULL, DEFAULT '[]')
+  - `position_id` TEXT
 
 **Code Usage**
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
   - `/register` `src/routes/register/+page.server.ts` [select, update]
   - `src/lib/server/admin.ts` [insert, select, update]
   - `src/lib/server/business.ts` [ddl]
+
+### business_position_permissions
+
+**Columns**
+  - `business_id` TEXT (NOT NULL)
+  - `position_id` TEXT (NOT NULL)
+  - `permission_key` TEXT (NOT NULL)
+  - `is_enabled` INTEGER (NOT NULL, DEFAULT 0)
+  - `updated_by` TEXT
+  - `updated_at` INTEGER (NOT NULL)
+
+**Code Usage**
+  - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `src/lib/server/admin.ts` [delete, insert, select]
+  - `src/lib/server/business.ts` [ddl, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### business_positions
+
+**Columns**
+  - `id` TEXT (PK)
+  - `business_id` TEXT (NOT NULL)
+  - `name` TEXT (NOT NULL)
+  - `description` TEXT (NOT NULL, DEFAULT '')
+  - `account_type` TEXT (NOT NULL)
+  - `base_template` TEXT (NOT NULL, DEFAULT 'staff')
+  - `is_active` INTEGER (NOT NULL, DEFAULT 1)
+  - `sort_order` INTEGER (NOT NULL, DEFAULT 0)
+  - `created_by` TEXT
+  - `created_at` INTEGER (NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+
+**Code Usage**
+  - `/admin/onboarding` `src/routes/admin/onboarding/+page.server.ts` [select]
+  - `/admin/users` `src/routes/admin/users/+page.server.ts` [select]
+  - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
+  - `src/lib/server/admin.ts` [insert, select, update]
+  - `src/lib/server/business.ts` [ddl, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
 
 ### business_lifecycle_snapshots
 
@@ -542,6 +584,7 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `created_at` INTEGER (NOT NULL)
   - `updated_at` INTEGER (NOT NULL)
   - `permission_template` TEXT (NOT NULL, DEFAULT 'staff')
+  - `position_id` TEXT
 
 **Code Usage**
   - `/admin` `src/routes/admin/+page.server.ts` [select]

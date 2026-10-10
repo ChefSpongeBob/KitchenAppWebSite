@@ -1,11 +1,12 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import PeopleHrNav from '$lib/components/ui/PeopleHrNav.svelte';
   import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
-  import { businessRoleLabel, inviteAccessOptions, permissionTemplateLabel, permissionTemplateOptions } from '$lib/auth/roles';
+  import { businessRoleLabel } from '$lib/auth/roles';
   import type { SubmitFunction } from '@sveltejs/kit';
 
   type OnboardingTemplateItem = {
@@ -53,6 +54,8 @@
     invite_code: string;
     role: string;
     permission_template: string;
+    position_id: string | null;
+    position_name: string | null;
     employment_type: string;
     job_title: string;
     department: string;
@@ -67,6 +70,13 @@
     revoked_at: number | null;
   };
 
+  type BusinessPosition = {
+    id: string;
+    name: string;
+    account_type: 'manager' | 'staff' | 'external';
+    is_active: number;
+  };
+
   type PacketRecommendation = {
     title: string;
     type: string;
@@ -79,6 +89,7 @@
     onboardingRows: OnboardingRow[];
     users: UserOption[];
     invites: InviteOption[];
+    positions: BusinessPosition[];
     departments: string[];
     recommendations: {
       state: string;
@@ -88,6 +99,13 @@
       retain_i9_document_copies: number;
       everify_participant: number;
     };
+    canReviewOnboarding: boolean;
+    canManageOnboarding: boolean;
+    canManageHrSetup: boolean;
+    canViewSensitive: boolean;
+    canManagePermissions: boolean;
+    canManageManagers: boolean;
+    actorIsOwner: boolean;
   };
 
   let feedbackMessage = '';
@@ -132,9 +150,6 @@
     return value ? new Date(value * 1000).toLocaleDateString() : 'Not started';
   }
 
-  const labelFor = (items: Array<{ value: string; label: string }>, value: string) =>
-    items.find((item) => item.value === value)?.label ?? value;
-
   const roleLabel = (role: string) => businessRoleLabel(role);
 
   const inviteDepartmentSummary = (invite: InviteOption) => {
@@ -155,6 +170,12 @@
   <PageHeader title="Employee Onboarding" />
 
   <section class="onboarding-console">
+    <PeopleHrNav
+      active="onboarding"
+      canReviewOnboarding={data.canReviewOnboarding}
+      canViewSensitive={data.canViewSensitive}
+      canManagePermissions={data.canManagePermissions}
+    />
     <div class="metric-strip" aria-label="Onboarding status">
       <div>
         <span>Needs Review</span>
@@ -178,8 +199,9 @@
       <p class="feedback-banner">{feedbackMessage}</p>
     {/if}
 
+    {#if data.canManageOnboarding}
     <div class="action-grid">
-      <section class="workspace-section invite-section" aria-label="Registration access">
+      <section class="workspace-section invite-section" id="invites" aria-label="Registration access">
         <header class="section-head">
           <div>
             <span class="section-kicker">Invites</span>
@@ -194,18 +216,12 @@
             <summary>Employment</summary>
             <div class="invite-context-grid">
               <label>
-                <span>Access</span>
-                <select name="access_type">
-                  {#each inviteAccessOptions as accessType}
-                    <option value={accessType.value}>{accessType.label}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Template</span>
-                <select name="permission_template">
-                  {#each permissionTemplateOptions as template}
-                    <option value={template.value}>{template.label}</option>
+                <span>Position</span>
+                <select name="position_id" required>
+                  <option value="">Choose position</option>
+                  {#if data.actorIsOwner}<option value="__owner__">Owner</option>{/if}
+                  {#each data.positions as position}
+                    <option value={position.id} disabled={position.account_type === 'manager' && !data.canManageManagers}>{position.name}</option>
                   {/each}
                 </select>
               </label>
@@ -215,10 +231,6 @@
                   <option value="employee">Employee</option>
                   <option value="contractor">Contractor</option>
                 </select>
-              </label>
-              <label>
-                <span>Job Title</span>
-                <input name="job_title" />
               </label>
               <label>
                 <span>Primary Department</span>
@@ -274,7 +286,7 @@
               <div class="invite-row">
                 <div>
                   <strong>{invite.email}</strong>
-                  <span>{[invite.job_title, permissionTemplateLabel(invite.permission_template), roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
+                  <span>{[invite.position_name || invite.job_title, roleLabel(invite.role)].filter(Boolean).join(' | ')}</span>
                   <span>{inviteDepartmentSummary(invite)}</span>
                   <span>Expires {formatDate(invite.expires_at)}</span>
                 </div>
@@ -302,7 +314,7 @@
         {/if}
       </section>
 
-      <section class="workspace-section send-panel" aria-label="Send onboarding packet">
+      <section class="workspace-section send-panel" id="packets" aria-label="Send onboarding packet">
         <header class="section-head">
           <div>
             <span class="section-kicker">Packet</span>
@@ -325,6 +337,7 @@
         </form>
       </section>
     </div>
+    {/if}
 
     <section class="workspace-section" id="employee-packets" aria-label="Employee onboarding packets">
       <header class="section-head">
@@ -356,13 +369,14 @@
               <span class="status-pill status-pill-{row.package_status}">{formatStatus(row.package_status)}</span>
               <span data-label="Progress">{progressText(row)}</span>
               <span data-label="Last Step">{row.approved_at ? `Approved ${formatDate(row.approved_at)}` : row.sent_at ? `Sent ${formatDate(row.sent_at)}` : 'Not started'}</span>
-              <a href={`/admin/users/${row.user_id}`} class="inline-link">Open</a>
+              <a href={`/admin/users/${row.user_id}?section=onboarding`} class="inline-link">Open</a>
             </div>
           {/each}
         {/if}
       </div>
     </section>
 
+    {#if data.canManageHrSetup}
     <details class="workspace-section packet-setup">
       <summary>
         <span>
@@ -595,6 +609,7 @@
         {/if}
       </div>
     </details>
+    {/if}
   </section>
 </Layout>
 

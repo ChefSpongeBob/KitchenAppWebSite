@@ -5,10 +5,14 @@ export type AppRole = 'admin' | 'user';
 export type BusinessCapability =
   | 'admin_access'
   | 'manage_permissions'
+  | 'manage_managers'
   | 'manage_workspace'
   | 'manage_content'
+  | 'view_people'
   | 'manage_people'
+  | 'review_onboarding'
   | 'manage_onboarding'
+  | 'manage_hr_setup'
   | 'manage_schedule'
   | 'manage_devices'
   | 'manage_billing'
@@ -37,7 +41,9 @@ export const permissionTemplateOptions = [
   { value: 'foh_manager', label: 'FOH Manager' },
   { value: 'boh_manager', label: 'BOH Manager' },
   { value: 'general_manager', label: 'General Manager' },
+  { value: 'hr_manager', label: 'HR Manager' },
   { value: 'owner', label: 'Owner' },
+  { value: 'hr_consultant', label: 'HR Consultant' },
   { value: 'consultant', label: 'Consultant' },
   { value: 'contractor', label: 'External Contractor' }
 ] as const;
@@ -51,9 +57,13 @@ export const businessCapabilityOptions: ReadonlyArray<{
 }> = [
   { value: 'admin_access', label: 'Manager Area', group: 'Management' },
   { value: 'manage_permissions', label: 'Employee Permissions', group: 'Management' },
+  { value: 'manage_managers', label: 'Manage Managers', group: 'Management' },
   { value: 'manage_workspace', label: 'Workspace Settings', group: 'Management' },
+  { value: 'view_people', label: 'Employee Directory', group: 'Management' },
   { value: 'manage_people', label: 'Employee Profiles', group: 'Management' },
+  { value: 'review_onboarding', label: 'Review Onboarding', group: 'Management' },
   { value: 'manage_onboarding', label: 'Employee Onboarding', group: 'Management' },
+  { value: 'manage_hr_setup', label: 'HR Forms and Policies', group: 'Management' },
   { value: 'view_sensitive_employee_data', label: 'Sensitive Employee Data', group: 'Management' },
   { value: 'manage_content', label: 'Lists, Recipes, Docs, and Menus', group: 'Operations' },
   { value: 'manage_schedule', label: 'Scheduling', group: 'Operations' },
@@ -69,7 +79,7 @@ export const businessCapabilityOptions: ReadonlyArray<{
 export const ALL_BUSINESS_CAPABILITIES = businessCapabilityOptions.map((option) => option.value);
 
 const MANAGER_BUSINESS_CAPABILITIES = ALL_BUSINESS_CAPABILITIES.filter(
-  (capability) => capability !== 'manage_billing'
+  (capability) => capability !== 'manage_billing' && capability !== 'manage_managers'
 );
 
 const SHIFT_LEAD_CAPABILITIES: BusinessCapability[] = [
@@ -80,6 +90,23 @@ const SHIFT_LEAD_CAPABILITIES: BusinessCapability[] = [
 ];
 
 const EXTERNAL_BUSINESS_CAPABILITIES: BusinessCapability[] = ['view_reports', 'view_vendors'];
+
+const HR_MANAGER_CAPABILITIES: BusinessCapability[] = [
+  'view_people',
+  'manage_people',
+  'review_onboarding',
+  'manage_onboarding',
+  'manage_hr_setup',
+  'view_sensitive_employee_data',
+  'view_reports'
+];
+
+const HR_CONSULTANT_CAPABILITIES: BusinessCapability[] = [
+  'view_people',
+  'review_onboarding',
+  'view_sensitive_employee_data',
+  'view_reports'
+];
 
 const BUSINESS_ROLE_DEFAULT_CAPABILITIES: Record<BusinessRole, readonly BusinessCapability[]> = {
   owner: ALL_BUSINESS_CAPABILITIES,
@@ -96,6 +123,8 @@ const PERMISSION_TEMPLATE_CAPABILITIES: Record<PermissionTemplate, readonly Busi
   boh_manager: MANAGER_BUSINESS_CAPABILITIES,
   hourly_manager: MANAGER_BUSINESS_CAPABILITIES,
   shift_lead: SHIFT_LEAD_CAPABILITIES,
+  hr_manager: HR_MANAGER_CAPABILITIES,
+  hr_consultant: HR_CONSULTANT_CAPABILITIES,
   consultant: EXTERNAL_BUSINESS_CAPABILITIES,
   contractor: EXTERNAL_BUSINESS_CAPABILITIES,
   staff: []
@@ -124,6 +153,7 @@ export function normalizeBusinessRole(role: string | null | undefined): Business
 export function normalizePermissionTemplate(value: string | null | undefined): PermissionTemplate {
   const normalized = String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   if (normalized === 'admin' || normalized === 'manager') return 'general_manager';
+  if (normalized === 'human_resources' || normalized === 'hr') return 'hr_manager';
   if (normalized === 'external') return 'contractor';
   const match = permissionTemplateOptions.find((option) => option.value === normalized);
   return match?.value ?? 'staff';
@@ -158,7 +188,8 @@ export function permissionTemplateCapabilities(template: string | null | undefin
 export function resolveBusinessCapabilities(
   role: string | null | undefined,
   permissionTemplate?: string | null,
-  overrides: BusinessCapabilityOverrides = {}
+  overrides: BusinessCapabilityOverrides = {},
+  positionOverrides: BusinessCapabilityOverrides = {}
 ) {
   const normalizedRole = normalizeBusinessRole(role);
   if (normalizedRole === 'owner') return [...ALL_BUSINESS_CAPABILITIES];
@@ -170,8 +201,18 @@ export function resolveBusinessCapabilities(
   const resolved = new Set<BusinessCapability>(defaults);
 
   for (const capability of ALL_BUSINESS_CAPABILITIES) {
+    if (positionOverrides[capability] === true) resolved.add(capability);
+    if (positionOverrides[capability] === false) resolved.delete(capability);
+  }
+
+  for (const capability of ALL_BUSINESS_CAPABILITIES) {
     if (overrides[capability] === true) resolved.add(capability);
     if (overrides[capability] === false) resolved.delete(capability);
+  }
+
+  if (resolved.has('manage_people')) resolved.add('view_people');
+  if (resolved.has('manage_onboarding') || resolved.has('manage_hr_setup')) {
+    resolved.add('review_onboarding');
   }
 
   if (Array.from(resolved).some((capability) => capability.startsWith('manage_'))) {

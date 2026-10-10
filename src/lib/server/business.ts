@@ -1,6 +1,8 @@
 import { dev } from '$app/environment';
 import {
   ALL_BUSINESS_CAPABILITIES,
+  defaultPermissionTemplateForRole,
+  effectiveAppRoleFromBusinessRole,
   resolveBusinessCapabilities,
   type BusinessCapability,
   type BusinessCapabilityOverrides
@@ -18,9 +20,24 @@ export type BusinessContext = {
   businessPlan: string;
   businessRole: string;
   businessPermissionTemplate: string;
+  businessPositionId: string | null;
+  businessPositionName: string | null;
   businessCapabilityOverrides: BusinessCapabilityOverrides;
   businessCapabilities: BusinessCapability[];
   businessLogoUrl: string | null;
+};
+
+export type BusinessPosition = {
+  id: string;
+  business_id: string;
+  name: string;
+  description: string;
+  account_type: 'manager' | 'staff' | 'external';
+  base_template: string;
+  is_active: number;
+  sort_order: number;
+  capability_overrides: BusinessCapabilityOverrides;
+  effective_capabilities: BusinessCapability[];
 };
 
 export type BusinessMembershipSummary = Omit<
@@ -140,6 +157,49 @@ export async function ensureBusinessSchema(db: D1) {
 
   await ensureOptionalColumn(db, 'business_users', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
   await ensureOptionalColumn(db, 'business_users', 'permission_template', "TEXT NOT NULL DEFAULT 'staff'");
+  await ensureOptionalColumn(db, 'business_users', 'position_id', 'TEXT');
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS business_positions (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL,
+        name TEXT NOT NULL COLLATE NOCASE,
+        description TEXT NOT NULL DEFAULT '',
+        account_type TEXT NOT NULL CHECK (account_type IN ('manager', 'staff', 'external')),
+        base_template TEXT NOT NULL DEFAULT 'staff',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (business_id, name),
+        FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS business_position_permissions (
+        business_id TEXT NOT NULL,
+        position_id TEXT NOT NULL,
+        permission_key TEXT NOT NULL,
+        is_enabled INTEGER NOT NULL DEFAULT 0,
+        updated_by TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (business_id, position_id, permission_key),
+        FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
+        FOREIGN KEY (position_id) REFERENCES business_positions(id) ON DELETE CASCADE,
+        FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+      `
+    )
+    .run();
 
   await db
     .prepare(
@@ -185,6 +245,7 @@ export async function ensureBusinessSchema(db: D1) {
   await ensureOptionalColumn(db, 'business_invites', 'pay_type', "TEXT NOT NULL DEFAULT ''");
   await ensureOptionalColumn(db, 'business_invites', 'manager_user_id', 'TEXT');
   await ensureOptionalColumn(db, 'business_invites', 'onboarding_required', 'INTEGER NOT NULL DEFAULT 1');
+  await ensureOptionalColumn(db, 'business_invites', 'position_id', 'TEXT');
 
   await db
     .prepare(
@@ -213,7 +274,43 @@ export async function ensureBusinessSchema(db: D1) {
     )
     .run();
 
-    businessSchemaEnsured = true;
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_business_positions_business_active
+      ON business_positions(business_id, is_active, sort_order, name)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_business_position_permissions_business_position
+      ON business_position_permissions(business_id, position_id, permission_key)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_business_users_business_position
+      ON business_users(business_id, position_id, is_active)
+      `
+    )
+    .run();
+
+  await db
+    .prepare(
+      `
+      CREATE INDEX IF NOT EXISTS idx_business_invites_business_position
+      ON business_invites(business_id, position_id, created_at)
+      `
+    )
+    .run();
+
+  businessSchemaEnsured = true;
   })();
 
   await businessSchemaPromise;
@@ -243,6 +340,8 @@ function mapBusinessContextRow(row: {
   business_logo_url: string | null;
   business_role: string;
   permission_template?: string | null;
+  position_id?: string | null;
+  position_name?: string | null;
 }) {
   return {
     businessId: row.business_id,
@@ -251,8 +350,127 @@ function mapBusinessContextRow(row: {
     businessPlan: row.business_plan,
     businessRole: row.business_role,
     businessPermissionTemplate: row.permission_template ?? row.business_role,
+    businessPositionId: row.position_id ?? null,
+    businessPositionName: row.position_name ?? null,
     businessLogoUrl: row.business_logo_url
   } satisfies BusinessMembershipSummary;
+}
+
+export async function loadPositionCapabilityOverrides(
+  db: D1,
+  businessId: string,
+  positionId: string | null | undefined
+): Promise<BusinessCapabilityOverrides> {
+  if (!positionId) return {};
+  const rows = await db
+    .prepare(
+      `
+      SELECT permission_key, is_enabled
+      FROM business_position_permissions
+      WHERE business_id = ? AND position_id = ?
+      `
+    )
+    .bind(businessId, positionId)
+    .all<{ permission_key: string; is_enabled: number }>();
+  const validCapabilities = new Set<string>(ALL_BUSINESS_CAPABILITIES);
+  const overrides: BusinessCapabilityOverrides = {};
+  for (const row of rows.results ?? []) {
+    if (!validCapabilities.has(row.permission_key)) continue;
+    overrides[row.permission_key as BusinessCapability] = row.is_enabled === 1;
+  }
+  return overrides;
+}
+
+export async function loadBusinessPositions(
+  db: D1,
+  businessId: string,
+  includeInactive = false
+): Promise<BusinessPosition[]> {
+  await ensureBusinessSchema(db);
+  const [positionRows, permissionRows] = await Promise.all([
+    db
+      .prepare(
+        `
+        SELECT id, business_id, name, description, account_type, base_template,
+          is_active, sort_order
+        FROM business_positions
+        WHERE business_id = ? ${includeInactive ? '' : 'AND is_active = 1'}
+        ORDER BY is_active DESC, sort_order ASC, name ASC
+        `
+      )
+      .bind(businessId)
+      .all<Omit<BusinessPosition, 'capability_overrides' | 'effective_capabilities'>>(),
+    db
+      .prepare(
+        `
+        SELECT position_id, permission_key, is_enabled
+        FROM business_position_permissions
+        WHERE business_id = ?
+        `
+      )
+      .bind(businessId)
+      .all<{ position_id: string; permission_key: string; is_enabled: number }>()
+  ]);
+  const validCapabilities = new Set<string>(ALL_BUSINESS_CAPABILITIES);
+  const overridesByPosition = new Map<string, BusinessCapabilityOverrides>();
+  for (const row of permissionRows.results ?? []) {
+    if (!validCapabilities.has(row.permission_key)) continue;
+    const overrides = overridesByPosition.get(row.position_id) ?? {};
+    overrides[row.permission_key as BusinessCapability] = row.is_enabled === 1;
+    overridesByPosition.set(row.position_id, overrides);
+  }
+  return (positionRows.results ?? []).map((position) => {
+    const capabilityOverrides = overridesByPosition.get(position.id) ?? {};
+    return {
+      ...position,
+      capability_overrides: capabilityOverrides,
+      effective_capabilities: resolveBusinessCapabilities(
+        position.account_type,
+        position.base_template,
+        {},
+        capabilityOverrides
+      )
+    };
+  });
+}
+
+export async function ensureDefaultBusinessPositions(
+  db: D1,
+  businessId: string,
+  actorUserId: string | null = null
+) {
+  await ensureBusinessSchema(db);
+  const now = Math.floor(Date.now() / 1000);
+  const defaults = [
+    { name: 'Team Member', accountType: 'staff', sortOrder: 10 },
+    { name: 'Manager', accountType: 'manager', sortOrder: 20 },
+    { name: 'External', accountType: 'external', sortOrder: 30 }
+  ] as const;
+  await db.batch(
+    defaults.map((position) =>
+      db
+        .prepare(
+          `
+          INSERT OR IGNORE INTO business_positions (
+            id, business_id, name, description, account_type, base_template,
+            is_active, sort_order, created_by, created_at, updated_at
+          )
+          VALUES (?, ?, ?, '', ?, ?, 1, ?, ?, ?, ?)
+          `
+        )
+        .bind(
+          crypto.randomUUID(),
+          businessId,
+          position.name,
+          position.accountType,
+          defaultPermissionTemplateForRole(position.accountType),
+          position.sortOrder,
+          actorUserId,
+          now,
+          now
+        )
+    )
+  );
 }
 
 export async function loadBusinessCapabilityOverrides(
@@ -287,14 +505,18 @@ async function attachBusinessCapabilities(
   userId: string,
   context: BusinessMembershipSummary
 ): Promise<BusinessContext> {
-  const businessCapabilityOverrides = await loadBusinessCapabilityOverrides(db, context.businessId, userId);
+  const [businessCapabilityOverrides, positionCapabilityOverrides] = await Promise.all([
+    loadBusinessCapabilityOverrides(db, context.businessId, userId),
+    loadPositionCapabilityOverrides(db, context.businessId, context.businessPositionId)
+  ]);
   return {
     ...context,
     businessCapabilityOverrides,
     businessCapabilities: resolveBusinessCapabilities(
       context.businessRole,
       context.businessPermissionTemplate,
-      businessCapabilityOverrides
+      businessCapabilityOverrides,
+      positionCapabilityOverrides
     )
   };
 }
@@ -314,9 +536,12 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
           b.plan_tier AS business_plan,
           b.sidebar_logo_url AS business_logo_url,
           bu.role AS business_role,
-          COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template
+          COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+          bp.id AS position_id,
+          bp.name AS position_name
         FROM business_users bu
         JOIN businesses b ON b.id = bu.business_id
+        LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
         WHERE bu.user_id = ?
           AND bu.business_id = ?
           AND COALESCE(bu.is_active, 1) = 1
@@ -333,6 +558,8 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         business_logo_url: string | null;
         business_role: string;
         permission_template: string;
+        position_id: string | null;
+        position_name: string | null;
       }>();
 
     if (selectedMembership) {
@@ -350,9 +577,12 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         b.plan_tier AS business_plan,
         b.sidebar_logo_url AS business_logo_url,
         bu.role AS business_role,
-          COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template
+        COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+        bp.id AS position_id,
+        bp.name AS position_name
       FROM business_users bu
       JOIN businesses b ON b.id = bu.business_id
+      LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
       WHERE bu.user_id = ?
         AND COALESCE(bu.is_active, 1) = 1
         AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')
@@ -379,7 +609,9 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
       business_plan: string;
       business_logo_url: string | null;
       business_role: string;
-        permission_template: string;
+      permission_template: string;
+      position_id: string | null;
+      position_name: string | null;
       }>();
 
   if (!membership) return null;
@@ -400,9 +632,12 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
         b.plan_tier AS business_plan,
         b.sidebar_logo_url AS business_logo_url,
         bu.role AS business_role,
-          COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template
+        COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+        bp.id AS position_id,
+        bp.name AS position_name
       FROM business_users bu
       JOIN businesses b ON b.id = bu.business_id
+      LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
       WHERE bu.user_id = ?
         AND COALESCE(bu.is_active, 1) = 1
         AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')
@@ -428,10 +663,60 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
       business_plan: string;
       business_logo_url: string | null;
       business_role: string;
-        permission_template: string;
+      permission_template: string;
+      position_id: string | null;
+      position_name: string | null;
       }>();
 
   return (rows.results ?? []).map(mapBusinessContextRow) satisfies BusinessMembershipSummary[];
+}
+
+export async function syncUserAppRoleFromMemberships(db: D1, userId: string) {
+  await ensureBusinessSchema(db);
+  const memberships = await db
+    .prepare(
+      `
+      SELECT bu.business_id, bu.role,
+        COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+        bp.id AS position_id
+      FROM business_users bu
+      LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
+      WHERE bu.user_id = ? AND COALESCE(bu.is_active, 1) = 1
+      `
+    )
+    .bind(userId)
+    .all<{
+      business_id: string;
+      role: string;
+      permission_template: string;
+      position_id: string | null;
+    }>();
+
+  let appRole: 'admin' | 'user' = 'user';
+  for (const membership of memberships.results ?? []) {
+    const [individualOverrides, positionOverrides] = await Promise.all([
+      loadBusinessCapabilityOverrides(db, membership.business_id, userId),
+      loadPositionCapabilityOverrides(db, membership.business_id, membership.position_id)
+    ]);
+    const capabilities = resolveBusinessCapabilities(
+      membership.role,
+      membership.permission_template,
+      individualOverrides,
+      positionOverrides
+    );
+    if (
+      effectiveAppRoleFromBusinessRole(
+        membership.role,
+        membership.permission_template,
+        capabilities
+      ) === 'admin'
+    ) {
+      appRole = 'admin';
+      break;
+    }
+  }
+  await db.prepare(`UPDATE users SET role = ? WHERE id = ?`).bind(appRole, userId).run();
+  return appRole;
 }
 
 export async function bootstrapBusinessForUser(
@@ -468,6 +753,8 @@ export async function bootstrapBusinessForUser(
     .bind(businessId, userId, businessRole, businessRole, now, now)
     .run();
 
+  await ensureDefaultBusinessPositions(db, businessId, userId);
+
   return {
     businessId,
     businessName: baseName,
@@ -475,6 +762,8 @@ export async function bootstrapBusinessForUser(
     businessPlan: 'starter',
     businessRole,
     businessPermissionTemplate: businessRole,
+    businessPositionId: null,
+    businessPositionName: null,
     businessCapabilityOverrides: {},
     businessCapabilities: resolveBusinessCapabilities(businessRole, businessRole),
     businessLogoUrl: null

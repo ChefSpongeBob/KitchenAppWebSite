@@ -63,6 +63,15 @@ expect('migrations/0061_employee_hr_compliance_foundation.sql', 'employee HR com
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0103_business_positions.sql', 'tenant position lookups use business-first indexes', (source) =>
+  [
+    'idx_business_positions_business_active',
+    'idx_business_position_permissions_business_position',
+    'idx_business_users_business_position',
+    'idx_business_invites_business_position'
+  ].every((indexName) => source.includes(indexName))
+);
+
 expect('migrations/0079_list_activity_lookup_index.sql', 'list activity lookup index supports executor history reports', (source) =>
   source.includes('idx_list_item_activity_lookup') &&
   source.includes('list_item_activity_events(business_id, domain, item_id, occurred_at)')

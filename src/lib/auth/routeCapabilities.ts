@@ -4,8 +4,8 @@ const ROUTE_CAPABILITIES: ReadonlyArray<{
   prefix: string;
   capability: BusinessCapability;
 }> = [
-  { prefix: '/admin/users', capability: 'manage_people' },
-  { prefix: '/admin/onboarding', capability: 'manage_onboarding' },
+  { prefix: '/admin/users', capability: 'view_people' },
+  { prefix: '/admin/onboarding', capability: 'review_onboarding' },
   { prefix: '/admin/schedule', capability: 'manage_schedule' },
   { prefix: '/admin/schedule-roles', capability: 'manage_schedule' },
   { prefix: '/admin/schedule-settings', capability: 'manage_schedule' },

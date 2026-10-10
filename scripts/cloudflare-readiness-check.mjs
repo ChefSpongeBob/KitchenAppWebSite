@@ -58,6 +58,7 @@ expect('Employee sensitive vault migration exists', migrations.includes('0062_em
 expect('Employee compliance onboarding link migration exists', migrations.includes('0063_employee_compliance_onboarding_link.sql'));
 expect('Account deletion migration exists', migrations.includes('0058_account_deletion_requests.sql'));
 expect('Todo foreign key repair migration exists', migrations.includes('0057_repair_todo_user_foreign_keys.sql'));
+expect('Tenant position and manager hierarchy migration exists', migrations.includes('0103_business_positions.sql'));
 
 const hooks = read('src/hooks.server.ts');
 expect('Schema guard is enabled around Cloudflare DB', hooks.includes('wrapProductionSchemaGuard'));

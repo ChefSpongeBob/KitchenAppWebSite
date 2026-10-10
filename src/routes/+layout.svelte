@@ -84,6 +84,11 @@
     route: "/onboarding",
     icon: "assignment_ind"
   };
+  const peopleHrNavItem: NavItem = {
+    label: "People & HR",
+    route: "/admin/users",
+    icon: "groups"
+  };
   const adminControlGroups: AdminControlGroup[] = [
     {
       label: "",
@@ -111,11 +116,10 @@
       ]
     },
     {
-      label: "People",
+      label: "People & HR",
       icon: "groups",
       items: [
-        { label: "Staff Manager", route: "/admin/users", icon: "groups" },
-        { label: "Employee Onboarding", route: "/admin/onboarding", icon: "assignment_ind" }
+        { label: "People & HR", route: "/admin/users", icon: "groups" }
       ]
     },
     {
@@ -346,9 +350,15 @@
   $: userBusinesses = data.user?.businesses ?? [];
   $: isAdminRoute = currentPath.startsWith("/admin");
   $: employeePacketNav = data.user?.hasEmployeeOnboarding ? [employeeOnboardingNavItem] : [];
+  $: peopleHrNav = hasBusinessCapability(
+    normalizedBusinessRole,
+    normalizedPermissionTemplate,
+    "view_people",
+    data.user?.businessCapabilities
+  ) ? [peopleHrNavItem] : [];
   $: navItems = isAdminAccount || isAdminRoute
     ? [...mainNavItems, ...employeePacketNav, adminNavItem]
-    : [...mainNavItems, ...employeePacketNav];
+    : [...mainNavItems, ...employeePacketNav, ...peopleHrNav];
   $: isAdminSidebar = isAdminRoute;
   $: if (currentPath) {
     sidebarOpen = false;

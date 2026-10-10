@@ -29,8 +29,11 @@
     { href: '/admin/business-registry', label: 'Business Registry', matches: prefix('/admin/business-registry') },
     { href: '/admin/creator', label: 'Creator Studio', matches: prefix('/admin/creator') },
     { href: '/admin', label: 'Dashboard', matches: exact('/admin') },
-    { href: '/admin/onboarding', label: 'Employee Onboarding', matches: prefix('/admin/onboarding') },
-    { href: '/admin/users', label: 'Employees', matches: prefix('/admin/users') },
+    {
+      href: '/admin/users',
+      label: 'People & HR',
+      matches: (path) => prefix('/admin/users')(path) || prefix('/admin/onboarding')(path)
+    },
     { href: '/admin/feature-matrix', label: 'Feature Matrix', matches: prefix('/admin/feature-matrix') },
     { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
     { href: '/admin/sensors', label: 'Temperature Sensors', matches: prefix('/admin/sensors') }

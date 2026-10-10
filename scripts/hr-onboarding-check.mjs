@@ -18,15 +18,18 @@ function expect(path, label, predicate) {
 }
 
 expect('src/routes/admin/onboarding/+page.server.ts', 'admin onboarding page is business-scoped', (source) =>
-  source.includes('requireAdmin(locals.userRole)') &&
-  source.includes('requireBusinessId(locals)') &&
+  source.includes('const businessId = requireBusinessId(locals)') &&
+  source.includes("'review_onboarding'") &&
+  source.includes("'manage_onboarding'") &&
+  source.includes("'manage_hr_setup'") &&
   source.includes('loadEmployeeOnboardingTemplate(db, businessId)') &&
   source.includes('loadEmployeeOnboardingDashboard(db, businessId)')
 );
 
-expect('src/lib/server/admin.ts', 'invites capture employment, permissions, and departments', (source) =>
+expect('src/lib/server/admin.ts', 'invites capture tenant position, employment, and departments', (source) =>
   source.includes('export async function createUserInvite') &&
-  source.includes('normalizeInviteAccessType') &&
+  source.includes("formData.get('position_id')") &&
+  source.includes('loadTenantPosition') &&
   source.includes('permission_template') &&
   source.includes('employment_type') &&
   source.includes('schedule_departments_json') &&
@@ -46,7 +49,8 @@ expect('src/routes/register/+page.server.ts', 'employee invite onboarding skips 
 );
 
 expect('src/lib/server/admin.ts', 'owner invites are owner-only with explicitly optional onboarding packets', (source) =>
-  source.includes("accessType === 'owner' && !isOwnerRole(locals.businessRole)") &&
+  source.includes("requestedPositionId === '__owner__'") &&
+  source.includes('invitingOwner && !isOwnerRole(locals.businessRole)') &&
   source.includes("Only the owner can invite another owner.") &&
   source.includes("formData.get('onboarding_required')") &&
   source.includes("onboardingRequested && employmentType !== 'contractor'") &&
@@ -250,7 +254,8 @@ expect('src/routes/api/documents/media/[...key]/+server.ts', 'employee onboardin
 );
 
 expect('src/routes/admin/users/[id]/+page.server.ts', 'employee profiles load onboarding with audited sensitive reads', (source) =>
-  source.includes('loadEmployeeOnboarding(db, employee.id, locals.businessId') &&
+  source.includes('loadEmployeeOnboarding(db, employee.id, businessId') &&
+  source.includes('shouldLoadOnboarding') &&
   source.includes('auditSensitiveRead: true') &&
   source.includes('verify_i9') &&
   source.includes('approve_onboarding_packet') &&

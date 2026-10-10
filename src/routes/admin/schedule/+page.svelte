@@ -3,7 +3,6 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
   import ScheduleBuilderCell from '$lib/components/ui/ScheduleBuilderCell.svelte';
-  import ScheduleTeamAccess from '$lib/components/ui/ScheduleTeamAccess.svelte';
   import { applyAction, deserialize, enhance } from '$app/forms';
   import { invalidate } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -16,7 +15,6 @@
     type ScheduleDepartment
   } from '$lib/assets/schedule';
   import type { SubmitFunction } from '@sveltejs/kit';
-  import type { BusinessCapability, BusinessCapabilityOverrides } from '$lib/auth/roles';
   import { onDestroy } from 'svelte';
 
   type UserOption = {
@@ -134,19 +132,7 @@
     sortOrder: number;
   };
 
-  type ScheduleTool = 'builder' | 'approvals' | 'team' | 'open-shifts' | 'labor' | 'templates' | 'setup';
-
-  type TeamUser = {
-    id: string;
-    display_name: string | null;
-    email: string;
-    role: string;
-    permission_template: string;
-    is_active: number;
-    approved_departments: ScheduleDepartment[];
-    capability_overrides: BusinessCapabilityOverrides;
-    effective_capabilities: BusinessCapability[];
-  };
+  type ScheduleTool = 'builder' | 'approvals' | 'open-shifts' | 'labor' | 'templates' | 'setup';
 
   type DraftShift = {
     clientId: string;
@@ -189,12 +175,7 @@
     templates: ScheduleTemplate[];
     laborTargets: LaborTarget[];
     roleDefinitions: RoleDefinition[];
-    teamUsers: TeamUser[];
     roleAccessByUser: Record<string, { restrictToSelected: boolean; roleDefinitionIds: string[] }>;
-    canManagePermissions: boolean;
-    actorIsOwner: boolean;
-    currentUserId: string | null;
-    editableCapabilities: BusinessCapability[];
     initialTool: ScheduleTool;
     settings: {
       departments: ScheduleDepartment[];
@@ -1264,7 +1245,6 @@
                 <select bind:value={selectedScheduleTool}>
                   <option value="builder">Schedule Builder</option>
                   <option value="approvals">Requests &amp; Availability ({pendingApprovalCount})</option>
-                  <option value="team">Team &amp; Access</option>
                   <option value="open-shifts">Coverage &amp; Open Shifts ({data.openShifts.length})</option>
                   <option value="labor">Labor Targets</option>
                   <option value="templates">Templates ({data.templates.length})</option>
@@ -1295,7 +1275,7 @@
                       </button>
                     </form>
                   <a href={`/admin/schedule?week=${data.weekStart}&tool=setup`} class="menu-item menu-link">Roles &amp; Departments</a>
-                  <a href={`/admin/schedule?week=${data.weekStart}&tool=team`} class="menu-item menu-link">Team &amp; Access</a>
+                  <a href="/admin/users?view=team" class="menu-item menu-link">People &amp; HR</a>
                     <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate" on:submit={preparePublishPayload}>
                       <input type="hidden" name="week_start" value={data.weekStart} />
                       <input type="hidden" name="payload" value={weekPayload} />
@@ -1316,18 +1296,7 @@
 
       {#if selectedScheduleTool !== 'builder'}
       <section class="toolbox-shell" aria-label="Schedule tools">
-        {#if selectedScheduleTool === 'team'}
-          <ScheduleTeamAccess
-            users={data.teamUsers}
-            departments={availableDepartments}
-            roleDefinitions={data.roleDefinitions}
-            roleAccessByUser={data.roleAccessByUser}
-            canManagePermissions={data.canManagePermissions}
-            actorIsOwner={data.actorIsOwner}
-            currentUserId={data.currentUserId}
-            editableCapabilities={data.editableCapabilities}
-          />
-        {:else if selectedScheduleTool === 'approvals'}
+        {#if selectedScheduleTool === 'approvals'}
           <div class="tool-section">
             {#if pendingApprovalCount === 0}
               <p class="tool-empty">No approvals are waiting right now.</p>

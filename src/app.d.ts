@@ -50,6 +50,8 @@ declare global {
 			businessPlan?: string;
 			businessRole?: string;
 			businessPermissionTemplate?: string;
+			businessPositionId?: string | null;
+			businessPositionName?: string | null;
 			businessCapabilityOverrides?: BusinessCapabilityOverrides;
 			businessCapabilities?: BusinessCapability[];
 			businessOnboardingComplete?: boolean;

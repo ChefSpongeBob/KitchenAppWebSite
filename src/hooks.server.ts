@@ -437,6 +437,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.businessPlan = businessContext.businessPlan;
 		event.locals.businessRole = businessContext.businessRole;
 		event.locals.businessPermissionTemplate = businessContext.businessPermissionTemplate;
+		event.locals.businessPositionId = businessContext.businessPositionId;
+		event.locals.businessPositionName = businessContext.businessPositionName;
 		event.locals.businessCapabilityOverrides = businessContext.businessCapabilityOverrides;
 		event.locals.businessCapabilities = businessContext.businessCapabilities;
 		event.locals.businessOnboardingComplete = await isBusinessOnboardingComplete(

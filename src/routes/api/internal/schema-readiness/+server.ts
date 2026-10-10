@@ -11,6 +11,8 @@ const REQUIRED_CORE_TABLES = [
 	'businesses',
 	'business_users',
 	'business_invites',
+	'business_positions',
+	'business_position_permissions',
 	'user_preferences',
 	'communication_consent_events',
 	'announcement_history',
@@ -55,6 +57,10 @@ const REQUIRED_CORE_TABLES = [
 
 const REQUIRED_CORE_INDEXES = [
 	'idx_business_users_business_active_role',
+	'idx_business_positions_business_active',
+	'idx_business_position_permissions_business_position',
+	'idx_business_users_business_position',
+	'idx_business_invites_business_position',
 	'idx_schedule_shifts_business_week_date',
 	'idx_schedule_open_shifts_business_week',
 	'idx_schedule_departments_business_active_order',

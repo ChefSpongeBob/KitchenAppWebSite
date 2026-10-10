@@ -24,7 +24,13 @@ import {
   type ScheduleDepartment
 } from '$lib/assets/schedule';
 import { isEmailConfigured, sendInviteEmail } from '$lib/server/email';
-import { ensureBusinessSchema } from '$lib/server/business';
+import {
+  ensureBusinessSchema,
+  loadBusinessPositions,
+  loadPositionCapabilityOverrides,
+  syncUserAppRoleFromMemberships,
+  type BusinessPosition
+} from '$lib/server/business';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 import {
   checkRateLimit,
@@ -176,6 +182,10 @@ export type AdminUser = {
   email: string;
   role: string;
   permission_template: string;
+  position_id: string | null;
+  position_name: string | null;
+  position_account_type: 'manager' | 'staff' | 'external' | null;
+  position_base_template: string | null;
   is_active: number;
   approved_departments: ScheduleDepartment[];
   capability_overrides: BusinessCapabilityOverrides;
@@ -188,6 +198,8 @@ export type AdminInvite = {
   invite_code: string;
   role: string;
   permission_template: string;
+  position_id: string | null;
+  position_name: string | null;
   employment_type: string;
   job_title: string;
   department: string;
@@ -1381,10 +1393,15 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.display_name,
             u.email,
             COALESCE(bu.role, 'staff') AS role,
-            COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
+            COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+            bp.id AS position_id,
+            bp.name AS position_name,
+            bp.account_type AS position_account_type,
+            bp.base_template AS position_base_template,
             CASE WHEN COALESCE(u.is_active, 1) = 1 AND COALESCE(bu.is_active, 1) = 1 THEN 1 ELSE 0 END AS is_active
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
+          LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
@@ -1399,10 +1416,15 @@ export async function loadAdminUsers(db: D1, businessId: string) {
             u.display_name,
             u.email,
             COALESCE(bu.role, 'staff') AS role,
-            COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
+            COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+            bp.id AS position_id,
+            bp.name AS position_name,
+            bp.account_type AS position_account_type,
+            bp.base_template AS position_base_template,
             COALESCE(bu.is_active, 1) AS is_active
           FROM business_users bu
           JOIN users u ON u.id = bu.user_id
+          LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
           WHERE bu.business_id = ?
           ORDER BY COALESCE(u.display_name, u.email) ASC
           `
@@ -1411,7 +1433,7 @@ export async function loadAdminUsers(db: D1, businessId: string) {
         .all<AdminUser>();
 
   const users = result.results ?? [];
-  const [approvalsByUser, departments, capabilityOverrideRows] = await Promise.all([
+  const [approvalsByUser, departments, capabilityOverrideRows, positions] = await Promise.all([
     loadScheduleDepartmentApprovalsByUser(
       db,
       users.map((user) => user.id),
@@ -1428,8 +1450,10 @@ export async function loadAdminUsers(db: D1, businessId: string) {
       )
       .bind(businessId)
       .all<{ user_id: string; permission_key: string; is_enabled: number }>()
-      .catch(() => ({ results: [] as Array<{ user_id: string; permission_key: string; is_enabled: number }> }))
+      .catch(() => ({ results: [] as Array<{ user_id: string; permission_key: string; is_enabled: number }> })),
+    loadBusinessPositions(db, businessId, true)
   ]);
+  const positionsById = new Map(positions.map((position) => [position.id, position]));
   const validCapabilities = new Set<string>(ALL_BUSINESS_CAPABILITIES);
   const capabilityOverridesByUser = new Map<string, BusinessCapabilityOverrides>();
   for (const row of capabilityOverrideRows.results ?? []) {
@@ -1449,7 +1473,8 @@ export async function loadAdminUsers(db: D1, businessId: string) {
     effective_capabilities: resolveBusinessCapabilities(
       user.role,
       user.permission_template,
-      capabilityOverridesByUser.get(user.id) ?? {}
+      capabilityOverridesByUser.get(user.id) ?? {},
+      user.position_id ? positionsById.get(user.position_id)?.capability_overrides ?? {} : {}
     )
   }));
 }
@@ -1461,32 +1486,35 @@ export async function loadAdminInvites(db: D1, businessId: string) {
     .prepare(
       `
       SELECT
-        id,
-        email,
-        invite_code,
-        role,
-        permission_template,
-        employment_type,
-        job_title,
-        department,
-        primary_schedule_department,
-        schedule_departments_json,
-        start_date,
-        pay_type,
-        onboarding_required,
-        created_at,
-        expires_at,
-        used_at,
-        revoked_at
-      FROM business_invites
-      WHERE business_id = ?
+        bi.id,
+        bi.email,
+        bi.invite_code,
+        bi.role,
+        COALESCE(bp.base_template, bi.permission_template, bi.role, 'staff') AS permission_template,
+        bp.id AS position_id,
+        bp.name AS position_name,
+        bi.employment_type,
+        bi.job_title,
+        bi.department,
+        bi.primary_schedule_department,
+        bi.schedule_departments_json,
+        bi.start_date,
+        bi.pay_type,
+        bi.onboarding_required,
+        bi.created_at,
+        bi.expires_at,
+        bi.used_at,
+        bi.revoked_at
+      FROM business_invites bi
+      LEFT JOIN business_positions bp ON bp.id = bi.position_id AND bp.business_id = bi.business_id
+      WHERE bi.business_id = ?
       ORDER BY
         CASE
-          WHEN revoked_at IS NULL AND used_at IS NULL THEN 0
-          WHEN used_at IS NOT NULL THEN 1
+          WHEN bi.revoked_at IS NULL AND bi.used_at IS NULL THEN 0
+          WHEN bi.used_at IS NOT NULL THEN 1
           ELSE 2
         END ASC,
-        created_at DESC
+        bi.created_at DESC
       `
     )
     .bind(businessId)
@@ -1515,11 +1543,167 @@ function canManageUserPermissions(locals: App.Locals) {
   );
 }
 
+function canManageManagerAccounts(locals: App.Locals) {
+  return (
+    isOwnerRole(locals.businessRole) ||
+    hasBusinessCapability(
+      locals.businessRole,
+      locals.businessPermissionTemplate,
+      'manage_managers',
+      locals.businessCapabilities
+    )
+  );
+}
+
+function normalizePositionAccountType(value: string): BusinessPosition['account_type'] {
+  const normalized = normalizeBusinessRole(value);
+  if (normalized === 'manager' || normalized === 'external') return normalized;
+  return 'staff';
+}
+
+async function loadTenantPosition(db: D1, businessId: string, positionId: string) {
+  return db
+    .prepare(
+      `
+      SELECT id, business_id, name, description, account_type, base_template,
+        is_active, sort_order
+      FROM business_positions
+      WHERE id = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(positionId, businessId)
+    .first<Omit<BusinessPosition, 'capability_overrides' | 'effective_capabilities'>>();
+}
+
+async function validatePositionAssignmentAuthority(
+  db: D1,
+  businessId: string,
+  position: Omit<BusinessPosition, 'capability_overrides' | 'effective_capabilities'>,
+  locals: App.Locals
+) {
+  if (isOwnerRole(locals.businessRole)) return null;
+  const positionOverrides = await loadPositionCapabilityOverrides(db, businessId, position.id);
+  const effectiveCapabilities = resolveBusinessCapabilities(
+    position.account_type,
+    position.base_template,
+    {},
+    positionOverrides
+  );
+  if (effectiveCapabilities.includes('manage_managers')) {
+    return 'Only the owner can assign Manage Managers access.';
+  }
+  const actorCapabilities = new Set(locals.businessCapabilities ?? []);
+  if (effectiveCapabilities.some((capability) => !actorCapabilities.has(capability))) {
+    return 'You cannot assign a position containing access you do not hold.';
+  }
+  return null;
+}
+
+function selectedPositionCapabilities(formData: FormData) {
+  return new Set(
+    formData
+      .getAll('capabilities')
+      .map((value) => String(value ?? '').trim())
+      .filter((value): value is BusinessCapability =>
+        ALL_BUSINESS_CAPABILITIES.includes(value as BusinessCapability)
+      )
+  );
+}
+
+async function savePositionCapabilityOverrides(
+  db: D1,
+  businessId: string,
+  positionId: string,
+  accountType: BusinessPosition['account_type'],
+  selected: Set<BusinessCapability>,
+  locals: App.Locals
+) {
+  const actorIsOwner = isOwnerRole(locals.businessRole);
+  if (!actorIsOwner && selected.has('manage_managers')) {
+    throw new Error('OWNER_MANAGER_PERMISSION_REQUIRED');
+  }
+  const actorCapabilities = new Set(locals.businessCapabilities ?? []);
+  const defaults = new Set(
+    resolveBusinessCapabilities(accountType, defaultPermissionTemplateForRole(accountType))
+  );
+  const now = Math.floor(Date.now() / 1000);
+  const statements: Array<ReturnType<D1['prepare']>> = [];
+  for (const capability of ALL_BUSINESS_CAPABILITIES) {
+    if (!actorIsOwner && (capability === 'manage_managers' || !actorCapabilities.has(capability))) {
+      continue;
+    }
+    const desired = selected.has(capability);
+    if (desired === defaults.has(capability)) {
+      statements.push(
+        db
+          .prepare(
+            `DELETE FROM business_position_permissions
+             WHERE business_id = ? AND position_id = ? AND permission_key = ?`
+          )
+          .bind(businessId, positionId, capability)
+      );
+    } else {
+      statements.push(
+        db
+          .prepare(
+            `
+            INSERT INTO business_position_permissions (
+              business_id, position_id, permission_key, is_enabled, updated_by, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(business_id, position_id, permission_key) DO UPDATE SET
+              is_enabled = excluded.is_enabled,
+              updated_by = excluded.updated_by,
+              updated_at = excluded.updated_at
+            `
+          )
+          .bind(
+            businessId,
+            positionId,
+            capability,
+            desired ? 1 : 0,
+            locals.userId ?? null,
+            now
+          )
+      );
+    }
+  }
+  if (statements.length > 0) await db.batch(statements);
+}
+
+function canManageEmployeeRecords(locals: App.Locals) {
+  return hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    'manage_people',
+    locals.businessCapabilities
+  );
+}
+
 function canManageEmployeeOnboarding(locals: App.Locals) {
   return hasBusinessCapability(
     locals.businessRole,
     locals.businessPermissionTemplate,
     'manage_onboarding',
+    locals.businessCapabilities
+  );
+}
+
+function canReviewEmployeeOnboarding(locals: App.Locals) {
+  return hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    'review_onboarding',
+    locals.businessCapabilities
+  );
+}
+
+function canManageHrSetup(locals: App.Locals) {
+  return hasBusinessCapability(
+    locals.businessRole,
+    locals.businessPermissionTemplate,
+    'manage_hr_setup',
     locals.businessCapabilities
   );
 }
@@ -1682,6 +1866,48 @@ export type EmployeeComplianceDocument = {
   locked_at: number | null;
   updated_at: number;
 };
+
+export type EmployeeEmploymentRecord = {
+  employment_status: string;
+  employment_type: string;
+  job_title: string;
+  department: string;
+  primary_schedule_department: string;
+  hire_date: string;
+  start_date: string;
+  termination_date: string;
+  pay_type: string;
+  manager_user_id: string | null;
+};
+
+export async function loadEmployeeEmploymentRecord(db: D1, userId: string, businessId: string) {
+  const record = await db
+    .prepare(
+      `
+      SELECT employment_status, employment_type, job_title, department,
+        primary_schedule_department, hire_date, start_date, termination_date,
+        pay_type, manager_user_id
+      FROM employee_employment_records
+      WHERE business_id = ? AND user_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(businessId, userId)
+    .first<EmployeeEmploymentRecord>();
+
+  return record ?? {
+    employment_status: 'active',
+    employment_type: 'employee',
+    job_title: '',
+    department: '',
+    primary_schedule_department: '',
+    hire_date: '',
+    start_date: '',
+    termination_date: '',
+    pay_type: '',
+    manager_user_id: null
+  };
+}
 
 function emptyEmployeePosPermissions(): EmployeePosPermissions {
   return {
@@ -2793,6 +3019,7 @@ export async function loadEmployeeOnboardingTemplate(db: D1, businessId: string)
 
 export async function createEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -2861,6 +3088,7 @@ export async function createEmployeeOnboardingTemplateItem(request: Request, loc
 
 export async function installStandardEmployeeOnboardingTemplate(_request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -2966,6 +3194,7 @@ export async function installStandardEmployeeOnboardingTemplate(_request: Reques
 
 export async function updateEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -3029,6 +3258,7 @@ export async function updateEmployeeOnboardingTemplateItem(request: Request, loc
 
 export async function deleteEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -5368,74 +5598,388 @@ export async function deleteAnnouncementHistory(request: Request, locals: App.Lo
   return { success: true };
 }
 
+export async function updateEmployeeEmploymentRecord(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  if (!canManageEmployeeRecords(locals)) return fail(403, { error: 'Employee profile access required.' });
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const userId = String(formData.get('user_id') ?? '').trim();
+  if (!userId || !(await userBelongsToBusiness(db, userId, businessId))) {
+    return fail(404, { error: 'Employee not found.' });
+  }
+
+  const target = await db
+    .prepare(
+      `SELECT bu.role, bp.name AS position_name
+       FROM business_users bu
+       LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
+       WHERE bu.business_id = ? AND bu.user_id = ?
+       LIMIT 1`
+    )
+    .bind(businessId, userId)
+    .first<{ role: string; position_name: string | null }>();
+  const actorIsOwner = isOwnerRole(locals.businessRole);
+  const targetRole = normalizeBusinessRole(target?.role);
+  if (targetRole === 'owner' && (!actorIsOwner || userId !== locals.userId)) {
+    return fail(403, { error: 'Only the owner can update the owner employment record.' });
+  }
+  if (targetRole === 'manager' && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to update manager employment records.' });
+  }
+
+  const employmentStatusRaw = formString(formData, 'employment_status', 32).toLowerCase();
+  const employmentTypeRaw = formString(formData, 'employment_type', 32).toLowerCase();
+  const payTypeRaw = formString(formData, 'pay_type', 32).toLowerCase();
+  const employmentStatus = ['onboarding', 'active', 'inactive', 'terminated'].includes(employmentStatusRaw)
+    ? employmentStatusRaw
+    : 'active';
+  const employmentType = ['employee', 'contractor', 'owner'].includes(employmentTypeRaw)
+    ? employmentTypeRaw
+    : 'employee';
+  const payType = ['', 'hourly', 'salary'].includes(payTypeRaw) ? payTypeRaw : '';
+  const jobTitle = target?.position_name || formString(formData, 'job_title', 120);
+  const primaryDepartment = formString(formData, 'primary_schedule_department', 120);
+  const hireDate = formString(formData, 'hire_date', 10);
+  const startDate = formString(formData, 'start_date', 10);
+  const terminationDate = formString(formData, 'termination_date', 10);
+  const managerUserId = String(formData.get('manager_user_id') ?? '').trim() || null;
+  const validDate = (value: string) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (![hireDate, startDate, terminationDate].every(validDate)) {
+    return fail(400, { error: 'Employment dates must use a valid date.' });
+  }
+  if (managerUserId === userId) return fail(400, { error: 'An employee cannot report to themselves.' });
+
+  const departments = await loadScheduleDepartments(db, businessId);
+  if (primaryDepartment && !departments.includes(primaryDepartment)) {
+    return fail(400, { error: 'Choose a valid schedule department.' });
+  }
+  if (managerUserId) {
+    const manager = await db
+      .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? AND COALESCE(is_active, 1) = 1 LIMIT 1`)
+      .bind(businessId, managerUserId)
+      .first<{ role: string }>();
+    if (!manager || !isBusinessAdminRole(manager.role)) {
+      return fail(400, { error: 'Choose an active manager from this business.' });
+    }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `
+      INSERT INTO employee_employment_records (
+        business_id, user_id, employment_status, employment_type, job_title,
+        department, primary_schedule_department, hire_date, start_date,
+        termination_date, pay_type, manager_user_id, created_at, updated_at, updated_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, user_id) DO UPDATE SET
+        employment_status = excluded.employment_status,
+        employment_type = excluded.employment_type,
+        job_title = excluded.job_title,
+        department = excluded.department,
+        primary_schedule_department = excluded.primary_schedule_department,
+        hire_date = excluded.hire_date,
+        start_date = excluded.start_date,
+        termination_date = excluded.termination_date,
+        pay_type = excluded.pay_type,
+        manager_user_id = excluded.manager_user_id,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by
+      `
+    )
+    .bind(
+      businessId,
+      userId,
+      employmentStatus,
+      employmentType,
+      jobTitle,
+      primaryDepartment,
+      primaryDepartment,
+      hireDate,
+      startDate,
+      terminationDate,
+      payType,
+      managerUserId,
+      now,
+      now,
+      locals.userId ?? null
+    )
+    .run();
+
+  await writeAuditLog(db, {
+    action: 'employee_employment_record_updated',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    targetUserId: userId,
+    metadata: { employmentStatus, employmentType, jobTitle, primaryDepartment }
+  });
+  return { success: true, message: 'Employment details saved.' };
+}
+
+export async function createBusinessPosition(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const name = formString(formData, 'name', 80);
+  const description = formString(formData, 'description', 240);
+  const accountType = normalizePositionAccountType(String(formData.get('account_type') ?? 'staff'));
+  const selected = selectedPositionCapabilities(formData);
+  if (!name) return fail(400, { error: 'Position name is required.' });
+  if (accountType === 'manager' && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to create a manager position.' });
+  }
+  if (selected.has('manage_managers') && accountType !== 'manager') {
+    return fail(400, { error: 'Manage Managers can only be assigned to a manager position.' });
+  }
+  if (!isOwnerRole(locals.businessRole) && selected.has('manage_managers')) {
+    return fail(403, { error: 'Only the owner can grant Manage Managers access.' });
+  }
+  const actorCapabilities = new Set(locals.businessCapabilities ?? []);
+  if (!isOwnerRole(locals.businessRole) && Array.from(selected).some((capability) => !actorCapabilities.has(capability))) {
+    return fail(403, { error: 'A position cannot grant access you do not hold.' });
+  }
+
+  await ensureBusinessSchema(db);
+  const positionId = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    await db
+      .prepare(
+        `
+        INSERT INTO business_positions (
+          id, business_id, name, description, account_type, base_template,
+          is_active, sort_order, created_by, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 1, 100, ?, ?, ?)
+        `
+      )
+      .bind(
+        positionId,
+        businessId,
+        name,
+        description,
+        accountType,
+        defaultPermissionTemplateForRole(accountType),
+        locals.userId ?? null,
+        now,
+        now
+      )
+      .run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (message.includes('unique')) return fail(400, { error: 'That position already exists.' });
+    throw error;
+  }
+  await savePositionCapabilityOverrides(db, businessId, positionId, accountType, selected, locals);
+  await writeAuditLog(db, {
+    action: 'business_position_created',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    metadata: { positionId, name, accountType }
+  });
+  return { success: true, message: 'Position created.' };
+}
+
+export async function updateBusinessPosition(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const positionId = String(formData.get('position_id') ?? '').trim();
+  const name = formString(formData, 'name', 80);
+  const description = formString(formData, 'description', 240);
+  const accountType = normalizePositionAccountType(String(formData.get('account_type') ?? 'staff'));
+  const selected = selectedPositionCapabilities(formData);
+  if (!positionId || !name) return fail(400, { error: 'Position and name are required.' });
+  const position = await loadTenantPosition(db, businessId, positionId);
+  if (!position) return fail(404, { error: 'Position not found.' });
+  if ((position.account_type === 'manager' || accountType === 'manager') && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to change a manager position.' });
+  }
+  if (selected.has('manage_managers') && accountType !== 'manager') {
+    return fail(400, { error: 'Manage Managers can only be assigned to a manager position.' });
+  }
+  if (!isOwnerRole(locals.businessRole) && selected.has('manage_managers')) {
+    return fail(403, { error: 'Only the owner can grant Manage Managers access.' });
+  }
+  const selfAssignment = locals.userId
+    ? await db
+        .prepare(`SELECT 1 AS found FROM business_users WHERE business_id = ? AND user_id = ? AND position_id = ? LIMIT 1`)
+        .bind(businessId, locals.userId, positionId)
+        .first<{ found: number }>()
+    : null;
+  if (selfAssignment && !isOwnerRole(locals.businessRole)) {
+    return fail(403, { error: 'You cannot modify the position assigned to your own account.' });
+  }
+  const actorCapabilities = new Set(locals.businessCapabilities ?? []);
+  if (!isOwnerRole(locals.businessRole) && Array.from(selected).some((capability) => !actorCapabilities.has(capability))) {
+    return fail(403, { error: 'A position cannot grant access you do not hold.' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const baseTemplate = defaultPermissionTemplateForRole(accountType);
+  try {
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE business_positions
+           SET name = ?, description = ?, account_type = ?, base_template = ?, updated_at = ?
+           WHERE id = ? AND business_id = ?`
+        )
+        .bind(name, description, accountType, baseTemplate, now, positionId, businessId),
+      db
+        .prepare(
+          `UPDATE business_users
+           SET role = ?, permission_template = ?, updated_at = ?
+           WHERE business_id = ? AND position_id = ?`
+        )
+        .bind(accountType, baseTemplate, now, businessId, positionId),
+      db
+        .prepare(
+          `UPDATE business_invites
+           SET role = ?, permission_template = ?, job_title = ?
+           WHERE business_id = ? AND position_id = ? AND used_at IS NULL AND revoked_at IS NULL`
+        )
+        .bind(accountType, baseTemplate, name, businessId, positionId),
+      db
+        .prepare(
+          `UPDATE employee_employment_records
+           SET job_title = ?, updated_at = ?, updated_by = ?
+           WHERE business_id = ? AND user_id IN (
+             SELECT user_id FROM business_users WHERE business_id = ? AND position_id = ?
+           )`
+        )
+        .bind(name, now, locals.userId ?? null, businessId, businessId, positionId)
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (message.includes('unique')) return fail(400, { error: 'That position already exists.' });
+    throw error;
+  }
+  await savePositionCapabilityOverrides(db, businessId, positionId, accountType, selected, locals);
+  const assignedUsers = await db
+    .prepare(`SELECT user_id FROM business_users WHERE business_id = ? AND position_id = ?`)
+    .bind(businessId, positionId)
+    .all<{ user_id: string }>();
+  await Promise.all(
+    (assignedUsers.results ?? []).map((membership) =>
+      syncUserAppRoleFromMemberships(db, membership.user_id)
+    )
+  );
+  await writeAuditLog(db, {
+    action: 'business_position_updated',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    metadata: { positionId, name, accountType }
+  });
+  return { success: true, message: 'Position updated.' };
+}
+
+export async function toggleBusinessPosition(request: Request, locals: App.Locals) {
+  requireAdmin(locals.userRole);
+  if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  const formData = await request.formData();
+  const positionId = String(formData.get('position_id') ?? '').trim();
+  const position = positionId ? await loadTenantPosition(db, businessId, positionId) : null;
+  if (!position) return fail(404, { error: 'Position not found.' });
+  if (position.account_type === 'manager' && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to change a manager position.' });
+  }
+  const nextActive = position.is_active === 1 ? 0 : 1;
+  await db
+    .prepare(`UPDATE business_positions SET is_active = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
+    .bind(nextActive, Math.floor(Date.now() / 1000), positionId, businessId)
+    .run();
+  await writeAuditLog(db, {
+    action: nextActive ? 'business_position_restored' : 'business_position_archived',
+    request,
+    businessId,
+    actorUserId: locals.userId ?? null,
+    metadata: { positionId, name: position.name }
+  });
+  return { success: true, message: nextActive ? 'Position restored.' : 'Position archived.' };
+}
+
 export async function updateUserBusinessPermissions(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   if (!canManageUserPermissions(locals)) return fail(403, { error: 'Permission access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
-
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
-  const role = normalizeInviteAccessType(String(formData.get('business_role') ?? 'staff'));
-  const permissionTemplate = normalizePermissionTemplate(String(formData.get('permission_template') ?? role));
-  if (!userId) return fail(400, { error: 'Missing user id.' });
-  if (userId === locals.userId && role !== 'owner' && (await countAdmins(db, businessId)) <= 1) {
+  const positionId = String(formData.get('position_id') ?? '').trim();
+  if (!userId || !positionId) return fail(400, { error: 'Employee and position are required.' });
+  if (userId === locals.userId) return fail(400, { error: 'You cannot change your own position.' });
+  const [current, position] = await Promise.all([
+    db
+      .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+      .bind(businessId, userId)
+      .first<{ role: string }>(),
+    loadTenantPosition(db, businessId, positionId)
+  ]);
+  if (!current) return fail(404, { error: 'User not found in this business.' });
+  if (!position || position.is_active !== 1) return fail(400, { error: 'Choose an active position.' });
+  if (isOwnerRole(current.role)) return fail(400, { error: 'Owner access cannot be changed here.' });
+  if (
+    (isManagerRole(current.role) || position.account_type === 'manager') &&
+    !canManageManagerAccounts(locals)
+  ) {
+    return fail(403, { error: 'Manage Managers access is required to change manager positions.' });
+  }
+  if (isManagerRole(current.role) && position.account_type !== 'manager' && (await countAdmins(db, businessId)) <= 1) {
     return fail(400, { error: 'At least one management account must remain active.' });
   }
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
-    return fail(404, { error: 'User not found in this business.' });
-  }
+  const assignmentAuthorityError = await validatePositionAssignmentAuthority(
+    db,
+    businessId,
+    position,
+    locals
+  );
+  if (assignmentAuthorityError) return fail(403, { error: assignmentAuthorityError });
 
-  const current = await db
-    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
-    .bind(businessId, userId)
-    .first<{ role: string }>();
-  if (!current) return fail(404, { error: 'User not found in this business.' });
-  const actorIsOwner = isOwnerRole(locals.businessRole);
-  if (isOwnerRole(current.role) && role !== 'owner') {
-    return fail(400, { error: 'Owner access cannot be changed here.' });
-  }
-  if (!actorIsOwner && (userId === locals.userId || isOwnerRole(current.role) || isManagerRole(current.role))) {
-    return fail(403, { error: 'Only the owner can change manager access.' });
-  }
-  if (!actorIsOwner && isManagerRole(role)) {
-    return fail(403, { error: 'Only the owner can grant manager access.' });
-  }
-  if (
-    !actorIsOwner &&
-    resolveBusinessCapabilities(role, permissionTemplate).some(
-      (capability) => capability === 'admin_access' || capability === 'manage_permissions'
-    )
-  ) {
-    return fail(403, { error: 'Only the owner can grant manager access.' });
-  }
-  if (role === 'owner' && !isOwnerRole(current.role)) {
-    return fail(400, { error: 'Owner access cannot be assigned here.' });
-  }
-
-  await ensureBusinessSchema(db);
-  await db
-    .prepare(
-      `
-      UPDATE business_users
-      SET role = ?, permission_template = ?, is_active = 1, updated_at = ?
-      WHERE business_id = ? AND user_id = ?
-      `
-    )
-    .bind(role, permissionTemplate, Math.floor(Date.now() / 1000), businessId, userId)
-    .run();
+  const now = Math.floor(Date.now() / 1000);
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE business_users
+         SET role = ?, permission_template = ?, position_id = ?, is_active = 1, updated_at = ?
+         WHERE business_id = ? AND user_id = ?`
+      )
+      .bind(position.account_type, position.base_template, position.id, now, businessId, userId),
+    db
+      .prepare(
+        `UPDATE employee_employment_records
+         SET job_title = ?, updated_at = ?, updated_by = ?
+         WHERE business_id = ? AND user_id = ?`
+      )
+      .bind(position.name, now, locals.userId ?? null, businessId, userId)
+  ]);
+  await syncUserAppRoleFromMemberships(db, userId);
 
   await writeAuditLog(db, {
-    action: 'business_permissions_updated',
+    action: 'business_position_assigned',
     request,
     businessId,
     actorUserId: locals.userId ?? null,
     targetUserId: userId,
-    metadata: { role, permissionTemplate }
+    metadata: { positionId: position.id, positionName: position.name, accountType: position.account_type }
   });
-
-  return { success: true, message: 'Permissions updated.' };
+  return { success: true, message: 'Position updated.' };
 }
 
 export async function updateUserCapabilityOverrides(request: Request, locals: App.Locals) {
@@ -5452,20 +5996,23 @@ export async function updateUserCapabilityOverrides(request: Request, locals: Ap
   const target = await db
     .prepare(
       `
-      SELECT role, COALESCE(permission_template, role, 'staff') AS permission_template
+      SELECT role, COALESCE(permission_template, role, 'staff') AS permission_template, position_id
       FROM business_users
       WHERE business_id = ? AND user_id = ?
       LIMIT 1
       `
     )
     .bind(businessId, userId)
-    .first<{ role: string; permission_template: string }>();
+    .first<{ role: string; permission_template: string; position_id: string | null }>();
   if (!target) return fail(404, { error: 'User not found in this business.' });
 
   const actorIsOwner = isOwnerRole(locals.businessRole);
   if (isOwnerRole(target.role)) return fail(400, { error: 'Owner permissions are locked.' });
-  if (!actorIsOwner && (userId === locals.userId || isManagerRole(target.role))) {
-    return fail(403, { error: 'Only the owner can change manager permissions.' });
+  if (!actorIsOwner && userId === locals.userId) {
+    return fail(403, { error: 'You cannot change your own permissions.' });
+  }
+  if (isManagerRole(target.role) && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to change manager permissions.' });
   }
 
   const selected = new Set(
@@ -5476,16 +6023,26 @@ export async function updateUserCapabilityOverrides(request: Request, locals: Ap
         ALL_BUSINESS_CAPABILITIES.includes(value as BusinessCapability)
       )
   );
-  if (!actorIsOwner && (selected.has('admin_access') || selected.has('manage_permissions'))) {
-    return fail(403, { error: 'Only the owner can grant manager access.' });
+  if (!actorIsOwner && selected.has('manage_managers')) {
+    return fail(403, { error: 'Only the owner can grant Manage Managers access.' });
+  }
+  if (selected.has('manage_managers') && !isManagerRole(target.role)) {
+    return fail(400, { error: 'Manage Managers can only be assigned to a manager.' });
   }
   const actorCapabilities = new Set(locals.businessCapabilities ?? []);
-  const targetDefaults = new Set(resolveBusinessCapabilities(target.role, target.permission_template));
+  const positionOverrides = await loadPositionCapabilityOverrides(
+    db,
+    businessId,
+    target.position_id
+  );
+  const targetDefaults = new Set(
+    resolveBusinessCapabilities(target.role, target.permission_template, {}, positionOverrides)
+  );
   const now = Math.floor(Date.now() / 1000);
   const statements: Array<ReturnType<D1['prepare']>> = [];
 
   for (const capability of ALL_BUSINESS_CAPABILITIES) {
-    if (!actorIsOwner && !actorCapabilities.has(capability)) continue;
+    if (!actorIsOwner && (capability === 'manage_managers' || !actorCapabilities.has(capability))) continue;
     const desired = selected.has(capability);
     const defaultEnabled = targetDefaults.has(capability);
     if (desired === defaultEnabled) {
@@ -5520,6 +6077,7 @@ export async function updateUserCapabilityOverrides(request: Request, locals: Ap
   }
 
   if (statements.length > 0) await db.batch(statements);
+  await syncUserAppRoleFromMemberships(db, userId);
   await writeAuditLog(db, {
     action: 'business_capabilities_updated',
     request,
@@ -5581,6 +6139,7 @@ async function hasOtherBusinessMembership(db: D1, userId: string, businessId: st
 
 export async function deleteUser(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
+  if (!canManageEmployeeRecords(locals)) return fail(403, { error: 'Employee profile access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -5597,11 +6156,17 @@ export async function deleteUser(request: Request, locals: App.Locals) {
   if (!(await userBelongsToBusiness(db, userId, businessId))) {
     return fail(404, { error: 'User not found in this business.' });
   }
+  const businessUser = await db
+    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
+    .bind(businessId, userId)
+    .first<{ role: string }>();
+  if (isOwnerRole(businessUser?.role)) {
+    return fail(403, { error: 'The owner account cannot be removed.' });
+  }
+  if (isManagerRole(businessUser?.role) && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to remove a manager.' });
+  }
   if ((await countAdmins(db, businessId)) <= 1) {
-    const businessUser = await db
-      .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
-      .bind(businessId, userId)
-      .first<{ role: string }>();
     if (isBusinessAdminRole(businessUser?.role)) {
       return fail(400, { error: 'At least one management account must remain.' });
     }
@@ -5626,6 +6191,8 @@ export async function deleteUser(request: Request, locals: App.Locals) {
   }
 
   await db.batch(statements);
+
+  if (hasOtherMembership) await syncUserAppRoleFromMemberships(db, userId);
 
   await writeAuditLogSafe(db, {
     action: 'user_deleted_from_business',
@@ -5683,8 +6250,11 @@ export async function toggleScheduleDepartmentApproval(request: Request, locals:
     .bind(businessId, userId)
     .first<{ role: string }>();
   const actorIsOwner = isOwnerRole(locals.businessRole);
-  if (!actorIsOwner && (isOwnerRole(target?.role) || isManagerRole(target?.role))) {
-    return fail(403, { error: 'Only the owner can change management schedule access.' });
+  if (isOwnerRole(target?.role) && !actorIsOwner) {
+    return fail(403, { error: 'Only the owner can change owner schedule access.' });
+  }
+  if (isManagerRole(target?.role) && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to change manager schedule access.' });
   }
 
   const existing = await db
@@ -6500,8 +7070,8 @@ export async function loadBusinessHrSettings(db: D1, businessId: string): Promis
 
 export async function saveBusinessHrSettings(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
-  if (!canManageEmployeeOnboarding(locals)) {
-    return fail(403, { error: 'Employee onboarding access required.' });
+  if (!canManageHrSetup(locals)) {
+    return fail(403, { error: 'HR setup access required.' });
   }
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -6544,7 +7114,7 @@ async function requireSensitiveOnboardingReviewer(
   targetUserId: string,
   locals: App.Locals
 ) {
-  if (!canManageEmployeeOnboarding(locals)) return false;
+  if (!canReviewEmployeeOnboarding(locals)) return false;
   return canAccessEmployeeSensitiveData(
     db,
     businessId,
@@ -6561,7 +7131,6 @@ function isPdfUpload(file: File) {
 }
 
 export async function verifyEmployeeI9(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -6760,7 +7329,6 @@ async function reviewEmployeeOnboardingPacket(
   locals: App.Locals,
   decision: 'approved' | 'returned'
 ) {
-  requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -7005,19 +7573,32 @@ export async function createUserInvite(
   const formData = await request.formData();
   const email = String(formData.get('email') ?? '').trim();
   const emailNormalized = email.toLowerCase();
-  const accessType = normalizeInviteAccessType(String(formData.get('access_type') ?? 'staff'));
-  if (accessType === 'owner' && !isOwnerRole(locals.businessRole)) {
+  const requestedPositionId = String(formData.get('position_id') ?? '').trim();
+  if (!requestedPositionId) return fail(400, { error: 'Choose a position.' });
+  const invitingOwner = requestedPositionId === '__owner__';
+  if (invitingOwner && !isOwnerRole(locals.businessRole)) {
     return fail(403, { error: 'Only the owner can invite another owner.' });
   }
-  const requestedPermissionTemplate = normalizePermissionTemplate(
-    String(formData.get('permission_template') ?? '')
-  );
-  const permissionTemplate =
-    requestedPermissionTemplate === 'staff' && accessType !== 'staff'
-      ? defaultPermissionTemplateForRole(accessType)
-      : requestedPermissionTemplate;
+  const position = invitingOwner ? null : await loadTenantPosition(db, businessId, requestedPositionId);
+  if (!invitingOwner && (!position || position.is_active !== 1)) {
+    return fail(400, { error: 'Choose an active position.' });
+  }
+  if (position?.account_type === 'manager' && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to invite a manager.' });
+  }
+  if (position) {
+    const assignmentAuthorityError = await validatePositionAssignmentAuthority(
+      db,
+      businessId,
+      position,
+      locals
+    );
+    if (assignmentAuthorityError) return fail(403, { error: assignmentAuthorityError });
+  }
+  const accessType = invitingOwner ? 'owner' : position!.account_type;
+  const permissionTemplate = invitingOwner ? 'owner' : position!.base_template;
   const employmentType = String(formData.get('employment_type') ?? 'employee') === 'contractor' ? 'contractor' : 'employee';
-  const jobTitle = formString(formData, 'job_title', 120);
+  const jobTitle = invitingOwner ? 'Owner' : position!.name;
   const primaryDepartment = formString(formData, 'primary_schedule_department', 120);
   const allowedDepartments = await loadScheduleDepartments(db, businessId);
   const scheduleDepartments = Array.from(
@@ -7097,6 +7678,7 @@ export async function createUserInvite(
         role,
         invited_by,
         permission_template,
+        position_id,
         employment_type,
         job_title,
         department,
@@ -7109,7 +7691,7 @@ export async function createUserInvite(
         expires_at,
         revoked_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `
     )
     .bind(
@@ -7121,6 +7703,7 @@ export async function createUserInvite(
       accessType,
       locals.userId ?? null,
       permissionTemplate,
+      position?.id ?? null,
       employmentType,
       jobTitle,
       department,
@@ -7144,6 +7727,7 @@ export async function createUserInvite(
       inviteId,
       accessType,
       permissionTemplate,
+      positionId: position?.id ?? null,
       employmentType,
       jobTitle: Boolean(jobTitle),
       department: Boolean(department),
@@ -7185,6 +7769,18 @@ export async function revokeUserInvite(request: Request, locals: App.Locals) {
   const formData = await request.formData();
   const inviteId = String(formData.get('invite_id') ?? '').trim();
   if (!inviteId) return fail(400, { error: 'Missing invite id.' });
+
+  const invite = await db
+    .prepare(`SELECT role FROM business_invites WHERE id = ? AND business_id = ? LIMIT 1`)
+    .bind(inviteId, businessId)
+    .first<{ role: string }>();
+  if (!invite) return fail(404, { error: 'Invite not found.' });
+  if (isOwnerRole(invite.role) && !isOwnerRole(locals.businessRole)) {
+    return fail(403, { error: 'Only the owner can revoke an owner invite.' });
+  }
+  if (isManagerRole(invite.role) && !canManageManagerAccounts(locals)) {
+    return fail(403, { error: 'Manage Managers access is required to revoke a manager invite.' });
+  }
 
   await db
     .prepare(`UPDATE business_invites SET revoked_at = ? WHERE id = ? AND business_id = ?`)

@@ -7,7 +7,12 @@ import {
 	getActiveBusinessCookieOptions
 } from '$lib/server/activeBusiness';
 import { hasColumn } from '$lib/server/dbSchema';
-import { ensureBusinessSchema, reserveBusinessSlug } from '$lib/server/business';
+import {
+	ensureBusinessSchema,
+	ensureDefaultBusinessPositions,
+	loadPositionCapabilityOverrides,
+	reserveBusinessSlug
+} from '$lib/server/business';
 import {
 	ensureEmployeeOnboardingRequirement,
 	ensureEmployeeProfilesTable,
@@ -27,7 +32,11 @@ import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
 import { validateNewPassword } from '$lib/server/passwordReset';
 import { checkRateLimit, writeAuditLog, writeAuditLogSafe } from '$lib/server/security';
 import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
-import { effectiveAppRoleFromBusinessRole, normalizeBusinessRole } from '$lib/server/permissions';
+import {
+	effectiveAppRoleFromBusinessRole,
+	normalizeBusinessRole,
+	resolveBusinessCapabilities
+} from '$lib/server/permissions';
 import { sendSignupConfirmationEmail } from '$lib/server/email';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
@@ -655,6 +664,7 @@ export const actions: Actions = {
 						email_normalized: string;
 						role: string;
 						permission_template: string;
+						position_id: string | null;
 						employment_type: string;
 						job_title: string;
 						department: string;
@@ -689,6 +699,7 @@ export const actions: Actions = {
 					email_normalized,
 					role,
 					permission_template,
+					position_id,
 					employment_type,
 					job_title,
 					department,
@@ -713,6 +724,7 @@ export const actions: Actions = {
 						email_normalized: string;
 						role: string;
 						permission_template: string;
+						position_id: string | null;
 						employment_type: string;
 						job_title: string;
 						department: string;
@@ -840,8 +852,23 @@ export const actions: Actions = {
 
 			registerPhase = 'create_user';
 			const invitedBusinessRole = normalizeBusinessRole(businessInvite?.role ?? '');
+			const invitedPositionOverrides = businessInvite?.position_id
+				? await loadPositionCapabilityOverrides(db, businessInvite.business_id, businessInvite.position_id)
+				: {};
+			const invitedCapabilities = businessInvite
+				? resolveBusinessCapabilities(
+						invitedBusinessRole,
+						businessInvite.permission_template,
+						{},
+						invitedPositionOverrides
+					)
+				: undefined;
 			const roleValue = inviteCode
-				? effectiveAppRoleFromBusinessRole(invitedBusinessRole, businessInvite?.permission_template)
+				? effectiveAppRoleFromBusinessRole(
+						invitedBusinessRole,
+						businessInvite?.permission_template,
+						invitedCapabilities
+					)
 				: 'admin';
 			if (hasNormalized) {
 				const sql = hasIsActive
@@ -1017,8 +1044,8 @@ export const actions: Actions = {
 				await db
 					.prepare(
 						`
-				INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?)
+				INSERT INTO business_users (business_id, user_id, role, permission_template, position_id, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
 			`
 					)
 					.bind(
@@ -1026,6 +1053,7 @@ export const actions: Actions = {
 						userId,
 						invitedBusinessRole === 'user' ? 'staff' : invitedBusinessRole,
 						businessInvite.permission_template || invitedBusinessRole || 'staff',
+						businessInvite.position_id,
 						now,
 						now
 					)
@@ -1282,6 +1310,7 @@ export const actions: Actions = {
 					)
 					.bind(businessId, userId, now, now)
 					.run();
+				await ensureDefaultBusinessPositions(db, businessId, userId);
 
 				for (const [departmentIndex, department] of scheduleSetup.departments.entries()) {
 					await db

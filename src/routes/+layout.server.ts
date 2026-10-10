@@ -57,6 +57,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			businessLogoUrl: locals.businessLogoUrl ?? null,
 			businessRole: locals.businessRole ?? null,
 			businessPermissionTemplate: locals.businessPermissionTemplate ?? null,
+			businessPositionId: locals.businessPositionId ?? null,
+			businessPositionName: locals.businessPositionName ?? null,
 			businessCapabilities: locals.businessCapabilities ?? [],
 			businessOnboardingComplete: locals.businessOnboardingComplete ?? false,
 			hasEmployeeOnboarding: Boolean(onboardingPacket?.id),

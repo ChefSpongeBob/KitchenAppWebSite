@@ -4965,8 +4965,20 @@ export async function saveUserScheduleRoleAccess(request: Request, locals: App.L
 
   const actorRole = normalizeBusinessRole(locals.businessRole);
   const targetRole = normalizeBusinessRole(target.role);
-  if (actorRole !== 'owner' && (targetRole === 'owner' || targetRole === 'manager')) {
-    return fail(403, { error: 'Only the owner can change management schedule roles.' });
+  if (targetRole === 'owner' && actorRole !== 'owner') {
+    return fail(403, { error: 'Only the owner can change owner schedule roles.' });
+  }
+  if (
+    targetRole === 'manager' &&
+    actorRole !== 'owner' &&
+    !hasBusinessCapability(
+      locals.businessRole,
+      locals.businessPermissionTemplate,
+      'manage_managers',
+      locals.businessCapabilities
+    )
+  ) {
+    return fail(403, { error: 'Manage Managers access is required to change manager schedule roles.' });
   }
 
   const [managerDepartments, assignableUsers] = await Promise.all([

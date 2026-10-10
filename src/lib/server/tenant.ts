@@ -55,6 +55,8 @@ const TENANT_TABLES = [
   'user_schedule_time_off_requests',
   'creator_category_registry',
   'business_invites',
+  'business_positions',
+  'business_position_permissions',
   'business_lifecycle_snapshots',
   'business_users',
   'employee_certifications',

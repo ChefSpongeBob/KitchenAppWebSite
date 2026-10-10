@@ -95,8 +95,8 @@ expect('src/hooks.server.ts', 'private route guard enforces tenant capabilities 
 
 expect('src/lib/auth/routeCapabilities.ts', 'privileged route capability map covers billing admin reports vendors and devices', (source) =>
   source.includes("{ prefix: '/billing', capability: 'manage_billing' }") &&
-  source.includes("{ prefix: '/admin/users', capability: 'manage_people' }") &&
-  source.includes("{ prefix: '/admin/onboarding', capability: 'manage_onboarding' }") &&
+  source.includes("{ prefix: '/admin/users', capability: 'view_people' }") &&
+  source.includes("{ prefix: '/admin/onboarding', capability: 'review_onboarding' }") &&
   source.includes("{ prefix: '/admin/sensors', capability: 'manage_devices' }") &&
   source.includes("{ prefix: '/reports', capability: 'view_reports' }") &&
   source.includes("{ prefix: '/vendors', capability: 'view_vendors' }")
