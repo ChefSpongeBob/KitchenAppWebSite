@@ -15,7 +15,8 @@
     hasBusinessCapability,
     hasManagementAccess,
     hasReportsAccess,
-    hasVendorAccess
+    hasVendorAccess,
+    type BusinessCapability
   } from "$lib/auth/roles";
   import { resolveBusinessCapabilityForPath } from "$lib/auth/routeCapabilities";
   import ToastStack from "$lib/components/ui/ToastStack.svelte";
@@ -23,6 +24,7 @@
 
   type FeatureAwareNavItem = NavItem & {
     featureKey?: AppFeatureKey;
+    requiredCapability?: BusinessCapability;
   };
 
   type AdminControlGroup = {
@@ -119,7 +121,48 @@
       label: "People & HR",
       icon: "groups",
       items: [
-        { label: "People & HR", route: "/admin/users", icon: "groups" }
+        {
+          label: "Overview",
+          route: "/admin/users?view=overview",
+          icon: "space_dashboard",
+          requiredCapability: "view_people"
+        },
+        {
+          label: "Team",
+          route: "/admin/users?view=team",
+          icon: "groups",
+          requiredCapability: "view_people"
+        },
+        {
+          label: "Invitations",
+          route: "/admin/onboarding?view=invites",
+          icon: "person_add",
+          requiredCapability: "manage_onboarding"
+        },
+        {
+          label: "Onboarding",
+          route: "/admin/onboarding?view=packets",
+          icon: "assignment_turned_in",
+          requiredCapability: "review_onboarding"
+        },
+        {
+          label: "Forms & Policies",
+          route: "/admin/onboarding?view=forms",
+          icon: "description",
+          requiredCapability: "manage_hr_setup"
+        },
+        {
+          label: "HR & Compliance",
+          route: "/admin/users?view=hr",
+          icon: "verified_user",
+          requiredCapability: "view_sensitive_employee_data"
+        },
+        {
+          label: "Roles & Access",
+          route: "/admin/users?view=access",
+          icon: "manage_accounts",
+          requiredCapability: "manage_permissions"
+        }
       ]
     },
     {
@@ -174,14 +217,33 @@
     await module.registerNativePushNotifications();
   }
 
-  function isActive(route: string, path: string) {
-    if (route === "/") return path === "/";
-    if (route === "/admin") return path === "/admin";
-    return path === route || path.startsWith(`${route}/`);
+  function isActive(route: string, path: string, search = "") {
+    const [routePath, routeQuery = ""] = route.split("?", 2);
+    if (routePath === "/") return path === "/";
+    if (routePath === "/admin") return path === "/admin";
+
+    const routeParams = new URLSearchParams(routeQuery);
+    const requestedView = routeParams.get("view");
+    if (routePath === "/admin/users" && requestedView === "team" && path.startsWith("/admin/users/")) {
+      return true;
+    }
+
+    const pathMatches = path === routePath || path.startsWith(`${routePath}/`);
+    if (!pathMatches || !routeQuery) return pathMatches;
+
+    const currentParams = new URLSearchParams(search);
+    for (const [key, value] of routeParams) {
+      const currentValue = currentParams.get(key);
+      if (currentValue === value) continue;
+      if (!currentValue && value === "overview" && path === "/admin/users") continue;
+      if (!currentValue && value === "packets" && path === "/admin/onboarding") continue;
+      return false;
+    }
+    return true;
   }
 
   function isAdminGroupActive(group: AdminControlGroup) {
-    return group.items.some((item) => isActive(item.route, currentPath));
+    return group.items.some((item) => isActive(item.route, currentPath, currentSearch));
   }
 
   function submitWorkspaceSwitch(event: Event) {
@@ -224,6 +286,7 @@
   }
 
   $: currentPath = $page.url.pathname;
+  $: currentSearch = $page.url.search;
   $: navTargetPath = $navigating?.to?.url.pathname ?? "";
   const marketingExactRoutes = new Set([
     "/",
@@ -317,12 +380,12 @@
   );
   $: toolNavItems = filteredPrimaryNav.filter((item) => item.group === "tools");
   $: mainNavItems = filteredPrimaryNav.filter((item) => item.group !== "tools");
-  $: toolsGroupActive = toolNavItems.some((item) => isActive(item.route, currentPath));
+  $: toolsGroupActive = toolNavItems.some((item) => isActive(item.route, currentPath, currentSearch));
   $: visibleAdminControlGroups = adminControlGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        const requiredCapability = resolveBusinessCapabilityForPath(item.route);
+        const requiredCapability = item.requiredCapability ?? resolveBusinessCapabilityForPath(item.route.split("?", 1)[0]);
         if (
           requiredCapability &&
           !hasBusinessCapability(
@@ -453,7 +516,7 @@
 
       <nav class="marketing-nav" aria-label="Primary navigation">
         {#each marketingNav as item}
-          <a href={item.route} class:active={isActive(item.route, currentPath)}>{item.label}</a>
+          <a href={item.route} class:active={isActive(item.route, currentPath, currentSearch)}>{item.label}</a>
         {/each}
       </nav>
 
@@ -473,7 +536,7 @@
     {#if marketingMenuOpen}
       <div class="marketing-mobile-menu">
         {#each marketingNav as item}
-          <a href={item.route} class:active={isActive(item.route, currentPath)} on:click={() => (marketingMenuOpen = false)}>{item.label}</a>
+          <a href={item.route} class:active={isActive(item.route, currentPath, currentSearch)} on:click={() => (marketingMenuOpen = false)}>{item.label}</a>
         {/each}
         <div class="marketing-mobile-cta">
           <a href="/login" on:click={() => (marketingMenuOpen = false)}>Sign In</a>
@@ -539,7 +602,7 @@
                 <a
                   href={item.route}
                   class="side-item side-sub-item tap"
-                  class:active={isActive(item.route, currentPath)}
+                  class:active={isActive(item.route, currentPath, currentSearch)}
                   on:click={() => (sidebarOpen = false)}
                 >
                   <span class="active-indicator"></span>
@@ -560,7 +623,7 @@
                   <a
                     href={item.route}
                     class="side-item side-sub-item tap"
-                    class:active={isActive(item.route, currentPath)}
+                    class:active={isActive(item.route, currentPath, currentSearch)}
                     on:click={() => (sidebarOpen = false)}
                   >
                     <span class="active-indicator"></span>
@@ -577,7 +640,7 @@
           <a
             href={item.route}
             class="side-item tap"
-            class:active={isActive(item.route, currentPath)}
+            class:active={isActive(item.route, currentPath, currentSearch)}
             on:click={() => (sidebarOpen = false)}
           >
             <span class="active-indicator"></span>
@@ -597,7 +660,7 @@
                 <a
                   href={item.route}
                   class="side-item side-sub-item tap"
-                  class:active={isActive(item.route, currentPath)}
+                  class:active={isActive(item.route, currentPath, currentSearch)}
                   on:click={() => (sidebarOpen = false)}
                 >
                   <span class="active-indicator"></span>

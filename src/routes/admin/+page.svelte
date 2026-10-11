@@ -387,12 +387,12 @@
             <span><strong>People</strong><small>Staff and permissions</small></span>
             <span class="material-icons arrow" aria-hidden="true">arrow_forward</span>
           </a>
-          <a href="/admin/onboarding#employee-packets" data-guide="admin-onboarding">
+          <a href="/admin/onboarding?view=packets" data-guide="admin-onboarding">
             <span class="material-icons" aria-hidden="true">assignment_ind</span>
             <span><strong>Onboarding</strong><small>Employee progress</small></span>
             <span class="material-icons arrow" aria-hidden="true">arrow_forward</span>
           </a>
-          <a href="/admin/onboarding#packet-builder">
+          <a href="/admin/onboarding?view=forms">
             <span class="material-icons" aria-hidden="true">description</span>
             <span><strong>Packet Builder</strong><small>Forms and policies</small></span>
             <span class="material-icons arrow" aria-hidden="true">arrow_forward</span>

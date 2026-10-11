@@ -1,7 +1,6 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import PeopleHrNav from '$lib/components/ui/PeopleHrNav.svelte';
   import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
@@ -85,6 +84,7 @@
   };
 
   export let data: {
+    activeView: 'invites' | 'packets' | 'forms';
     templateItems: OnboardingTemplateItem[];
     onboardingRows: OnboardingRow[];
     users: UserOption[];
@@ -109,6 +109,13 @@
   };
 
   let feedbackMessage = '';
+
+  $: pageTitle =
+    data.activeView === 'invites'
+      ? 'Invitations'
+      : data.activeView === 'forms'
+        ? 'Forms & Policies'
+        : 'Onboarding';
 
   $: staffUsers = data.users.filter((user) => user.is_active === 1);
   $: activeInvites = data.invites.filter((invite) => invite.revoked_at === null && invite.used_at === null);
@@ -167,15 +174,10 @@
 </script>
 
 <Layout>
-  <PageHeader title="Employee Onboarding" />
+  <PageHeader title={pageTitle} />
 
   <section class="onboarding-console">
-    <PeopleHrNav
-      active="onboarding"
-      canReviewOnboarding={data.canReviewOnboarding}
-      canViewSensitive={data.canViewSensitive}
-      canManagePermissions={data.canManagePermissions}
-    />
+    {#if data.activeView === 'packets'}
     <div class="metric-strip" aria-label="Onboarding status">
       <div>
         <span>Needs Review</span>
@@ -194,23 +196,24 @@
         <strong>{missingRows.length}</strong>
       </div>
     </div>
+    {/if}
 
     {#if feedbackMessage}
       <p class="feedback-banner">{feedbackMessage}</p>
     {/if}
 
-    {#if data.canManageOnboarding}
-    <div class="action-grid">
+    {#if data.activeView === 'invites' && data.canManageOnboarding}
+    <div class="action-grid action-grid-single">
       <section class="workspace-section invite-section" id="invites" aria-label="Registration access">
         <header class="section-head">
           <div>
             <span class="section-kicker">Invites</span>
-            <h2>Registration Access</h2>
+            <h2>Invite Employee</h2>
           </div>
           <span>{activeInvites.length} active</span>
         </header>
 
-        <form method="POST" action="?/create_user_invite" use:enhance={withFeedback} class="invite-form">
+        <form method="POST" action="?/create_user_invite&view=invites" use:enhance={withFeedback} class="invite-form">
           <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
           <details class="invite-context">
             <summary>Employment</summary>
@@ -290,7 +293,7 @@
                   <span>{inviteDepartmentSummary(invite)}</span>
                   <span>Expires {formatDate(invite.expires_at)}</span>
                 </div>
-                <form method="POST" action="?/revoke_user_invite" use:enhance={withFeedback}>
+                <form method="POST" action="?/revoke_user_invite&view=invites" use:enhance={withFeedback}>
                   <input type="hidden" name="invite_id" value={invite.id} />
                   <button type="submit" class="text-action warn-text">Revoke</button>
                 </form>
@@ -314,6 +317,10 @@
         {/if}
       </section>
 
+    </div>
+    {/if}
+
+    {#if data.activeView === 'packets' && data.canManageOnboarding}
       <section class="workspace-section send-panel" id="packets" aria-label="Send onboarding packet">
         <header class="section-head">
           <div>
@@ -322,7 +329,7 @@
           </div>
         </header>
 
-        <form method="POST" action="?/send_package" use:enhance={withFeedback} class="send-form">
+        <form method="POST" action="?/send_package&view=packets" use:enhance={withFeedback} class="send-form">
           <label>
             <span>Employee</span>
             <select name="user_id" required>
@@ -336,9 +343,9 @@
           <button type="submit">Send Packet</button>
         </form>
       </section>
-    </div>
     {/if}
 
+    {#if data.activeView === 'packets'}
     <section class="workspace-section" id="employee-packets" aria-label="Employee onboarding packets">
       <header class="section-head">
         <div>
@@ -375,8 +382,9 @@
         {/if}
       </div>
     </section>
+    {/if}
 
-    {#if data.canManageHrSetup}
+    {#if data.activeView === 'forms' && data.canManageHrSetup}
     <details class="workspace-section packet-setup">
       <summary>
         <span>
@@ -385,7 +393,7 @@
         </span>
         <em>{data.hrSettings.retain_i9_document_copies === 1 ? 'Copies retained' : 'Examination record only'}</em>
       </summary>
-      <form method="POST" action="?/save_hr_settings" use:enhance={withFeedback} class="packet-form compact">
+      <form method="POST" action="?/save_hr_settings&view=forms" use:enhance={withFeedback} class="packet-form compact">
         <label class="toggle-card wide">
           <input type="checkbox" name="retain_i9_document_copies" value="1" checked={data.hrSettings.retain_i9_document_copies === 1} />
           <span>
@@ -423,7 +431,7 @@
               federal tax and eligibility records use the current official PDFs.
             </p>
           </div>
-          <form method="POST" action="?/install_standard_packet" use:enhance={withFeedback}>
+          <form method="POST" action="?/install_standard_packet&view=forms" use:enhance={withFeedback}>
             <button type="submit">{data.templateItems.length ? 'Add Missing Forms' : 'Install Base Forms'}</button>
           </form>
         </div>
@@ -445,7 +453,7 @@
         <summary>Add Form</summary>
         <form
           method="POST"
-          action="?/create_item"
+          action="?/create_item&view=forms"
           enctype="multipart/form-data"
           use:enhance={withFeedback}
           class="packet-form"
@@ -528,7 +536,7 @@
 
               <form
                 method="POST"
-                action="?/update_item"
+                action="?/update_item&view=forms"
                 enctype="multipart/form-data"
                 use:enhance={withFeedback}
                 class="packet-form compact"
@@ -600,7 +608,7 @@
                 <button type="submit">Save Form</button>
               </form>
 
-              <form method="POST" action="?/delete_item" use:enhance={withFeedback} class="delete-form">
+              <form method="POST" action="?/delete_item&view=forms" use:enhance={withFeedback} class="delete-form">
                 <input type="hidden" name="id" value={item.id} />
                 <button type="submit" class="danger">Delete Form</button>
               </form>
@@ -681,6 +689,10 @@
     grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
     gap: clamp(1rem, 3vw, 2rem);
     align-items: start;
+  }
+
+  .action-grid-single {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .section-head h2 {

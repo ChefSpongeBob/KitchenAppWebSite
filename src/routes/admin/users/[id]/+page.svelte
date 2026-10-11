@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
-	import PeopleHrNav from '$lib/components/ui/PeopleHrNav.svelte';
 	import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
 	import { applyAction, enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
@@ -267,15 +266,7 @@
 </script>
 
 <Layout>
-	<PageHeader title="People & HR" />
-	<div class="people-nav-wrap">
-		<PeopleHrNav
-			active="team"
-			canReviewOnboarding={data.canReviewOnboarding}
-			canViewSensitive={data.canReadSensitiveProfile}
-			canManagePermissions={data.canManagePermissions}
-		/>
-	</div>
+	<PageHeader title="Team" />
 
 	<section class="employee-shell">
 		<a class="back-link" href="/admin/users?view=team"
@@ -1040,9 +1031,6 @@
 </Layout>
 
 <style>
-	.people-nav-wrap {
-		margin-top: 0.55rem;
-	}
 	.employee-shell {
 		display: grid;
 		gap: 0;

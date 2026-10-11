@@ -109,6 +109,26 @@ expect('src/routes/+layout.svelte', 'admin sidebar has one content editor entry'
   !source.includes('label: "Recipes", route: "/admin/recipes"')
 );
 
+expect('src/routes/+layout.svelte', 'People and HR sidebar exposes focused permission-aware workspaces', (source) =>
+  source.includes('label: "Overview"') &&
+  source.includes('route: "/admin/users?view=overview"') &&
+  source.includes('route: "/admin/users?view=team"') &&
+  source.includes('route: "/admin/onboarding?view=invites"') &&
+  source.includes('route: "/admin/onboarding?view=packets"') &&
+  source.includes('route: "/admin/onboarding?view=forms"') &&
+  source.includes('route: "/admin/users?view=hr"') &&
+  source.includes('route: "/admin/users?view=access"') &&
+  source.includes('requiredCapability?: BusinessCapability') &&
+  source.includes('item.requiredCapability ??') &&
+  source.includes('resolveBusinessCapabilityForPath(item.route.split("?", 1)[0])') &&
+  source.includes('$: currentSearch = $page.url.search')
+);
+
+expectMissing(
+  ['src/lib/components/ui/PeopleHrNav.svelte'],
+  'duplicate horizontal People and HR navigation is removed'
+);
+
 expect('src/routes/admin/+page.svelte', 'manager dashboard keeps navigation and groups scheduling with people tools', (source) =>
   source.includes('<PageHeader title="Manager Dashboard" />') &&
   source.includes('<h2>Schedule & People</h2>') &&
@@ -116,8 +136,8 @@ expect('src/routes/admin/+page.svelte', 'manager dashboard keeps navigation and 
   source.includes('href="/admin/schedule?tool=approvals"') &&
   source.includes('href="/admin/schedule?tool=setup"') &&
   source.includes('href="/admin/users"') &&
-  source.includes('href="/admin/onboarding#employee-packets"') &&
-  source.includes('href="/admin/onboarding#packet-builder"')
+  source.includes('href="/admin/onboarding?view=packets"') &&
+  source.includes('href="/admin/onboarding?view=forms"')
 );
 
 expect('src/routes/admin/+page.svelte', 'manager dashboard links separate registry and feature workspaces', (source) =>
@@ -194,6 +214,41 @@ expect('src/routes/admin/users/+page.svelte', 'People and HR owns tenant positio
   source.includes('action="?/create_position"') &&
   source.includes('action="?/update_position"') &&
   source.includes('action="?/toggle_position"')
+);
+
+expect('src/routes/admin/users/+page.svelte', 'People and HR overview and team directory use focused views', (source) =>
+  source.includes("activeView === 'overview'") &&
+  source.includes("activeView === 'team'") &&
+  source.includes("activeView === 'hr'") &&
+  source.includes("activeView === 'access'") &&
+  source.includes('placeholder="Name, email, role, department"') &&
+  !source.includes('PeopleHrNav')
+);
+
+expect('src/routes/admin/users/[id]/+page.svelte', 'employee records retain record tabs without duplicate section navigation', (source) =>
+  source.includes('class="record-nav"') &&
+  source.includes('action="?/update_permissions"') &&
+  !source.includes('PeopleHrNav')
+);
+
+expect('src/routes/admin/onboarding/+page.server.ts', 'onboarding loads only the selected permission-aware workspace', (source) =>
+  source.includes("new Set(['invites', 'packets', 'forms'])") &&
+  source.includes("activeView === 'forms'") &&
+  source.includes("activeView === 'packets'") &&
+  source.includes("activeView === 'invites'") &&
+  source.includes('canManageOnboarding') &&
+  source.includes('canReviewOnboarding') &&
+  source.includes('canManageHrSetup')
+);
+
+expect('src/routes/admin/onboarding/+page.svelte', 'onboarding separates invitations, packets, and forms', (source) =>
+  source.includes("data.activeView === 'invites'") &&
+  source.includes("data.activeView === 'packets'") &&
+  source.includes("data.activeView === 'forms'") &&
+  source.includes('Invite Employee') &&
+  source.includes('<h2>Employee packets</h2>') &&
+  source.includes('<strong>Packet Forms</strong>') &&
+  !source.includes('PeopleHrNav')
 );
 
 expect('src/routes/app/+page.svelte', 'announcements are viewed on the workspace dashboard', (source) =>

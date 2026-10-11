@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
-	import PeopleHrNav from '$lib/components/ui/PeopleHrNav.svelte';
 	import { applyAction, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { pushToast } from '$lib/client/toasts';
@@ -99,6 +98,15 @@
 	let staffSearch = '';
 	let newPositionAccountType: BusinessPosition['account_type'] = 'staff';
 
+	$: pageTitle =
+		data.activeView === 'team'
+			? 'Team'
+			: data.activeView === 'hr'
+				? 'HR & Compliance'
+				: data.activeView === 'access'
+					? 'Roles & Access'
+					: 'People & HR';
+
 	$: activeUsers = data.users.filter((user) => user.is_active === 1);
 	$: managerUsers = activeUsers.filter((user) => isBusinessAdminRole(user.role));
 	$: onboardingReview = data.onboardingRows.filter((row) => row.package_status === 'submitted');
@@ -154,16 +162,9 @@
 </script>
 
 <Layout>
-	<PageHeader title="People & HR" />
+	<PageHeader title={pageTitle} />
 
 	<section class="people-board">
-		<PeopleHrNav
-			active={data.activeView}
-			canReviewOnboarding={data.canReviewOnboarding}
-			canViewSensitive={data.canViewSensitive}
-			canManagePermissions={data.canManagePermissions}
-		/>
-
 		{#if data.activeView === 'overview'}
 			<section class="overview-strip" aria-label="People and HR overview">
 				<div><span>Active Team</span><strong>{activeUsers.length}</strong></div>
@@ -179,7 +180,7 @@
 							<span class="kicker">Attention</span>
 							<h2>HR queue</h2>
 						</div>
-						{#if data.canReviewOnboarding}<a href="/admin/onboarding">Open Onboarding</a>{/if}
+						{#if data.canReviewOnboarding}<a href="/admin/onboarding?view=packets">Open Onboarding</a>{/if}
 					</header>
 					<div class="queue-list">
 						{#if onboardingReview.length === 0 && onboardingMissing.length === 0}
@@ -204,34 +205,26 @@
 					</div>
 				</div>
 
-				<aside class="quick-actions" aria-label="People and HR actions">
-					<span class="kicker">Actions</span>
-					{#if data.canManageOnboarding}<a href="/admin/onboarding#invites">Invite Employee</a>{/if}
-					{#if data.canManageOnboarding}<a href="/admin/onboarding#packets">Send Packet</a>{/if}
-					<a href="/admin/users?view=team">Search Team</a>
-					{#if data.canViewSensitive}<a href="/admin/users?view=hr">Review Compliance</a>{/if}
-				</aside>
-			</section>
-
-			<section class="workspace-section team-preview">
-				<header class="section-toolbar">
-					<div>
-						<span class="kicker">Directory</span>
-						<h2>Team</h2>
+				<div class="workspace-section team-preview">
+					<header class="section-toolbar">
+						<div>
+							<span class="kicker">Directory</span>
+							<h2>Team</h2>
+						</div>
+						<a href="/admin/users?view=team">View All</a>
+					</header>
+					<div class="compact-team">
+						{#each activeUsers.slice(0, 8) as user}
+							<a href={`/admin/users/${user.id}?section=profile`}>
+								<span class="avatar">{initialsFor(user)}</span>
+								<span
+									><strong>{displayName(user)}</strong><small
+										>{user.position_name || businessRoleLabel(user.role)} | {departmentSummary(user)}</small
+									></span
+								>
+							</a>
+						{/each}
 					</div>
-					<a href="/admin/users?view=team">View All</a>
-				</header>
-				<div class="compact-team">
-					{#each activeUsers.slice(0, 8) as user}
-						<a href={`/admin/users/${user.id}?section=profile`}>
-							<span class="avatar">{initialsFor(user)}</span>
-							<span
-								><strong>{displayName(user)}</strong><small
-									>{user.position_name || businessRoleLabel(user.role)} | {departmentSummary(user)}</small
-								></span
-							>
-						</a>
-					{/each}
 				</div>
 			</section>
 		{:else if data.activeView === 'team'}
@@ -489,7 +482,6 @@
 	.workspace-section,
 	.overview-grid,
 	.hr-grid,
-	.quick-actions,
 	.queue-list,
 	.compact-team {
 		display: grid;
@@ -528,7 +520,7 @@
 		letter-spacing: -0.04em;
 	}
 	.overview-grid {
-		grid-template-columns: minmax(0, 1fr) minmax(13rem, 0.3fr);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 1.5rem;
 	}
 	.hr-grid {
@@ -554,23 +546,12 @@
 		letter-spacing: -0.035em;
 	}
 	.section-toolbar > a,
-	.quick-actions a,
 	.inline-action {
 		color: var(--color-text);
 		font-size: 0.74rem;
 		font-weight: var(--weight-semibold);
 		text-decoration: none;
 		border-bottom: 1px solid var(--color-divider-strong);
-	}
-	.quick-actions {
-		align-content: start;
-		gap: 0.25rem;
-		padding: 1rem 0;
-		border-top: 1px solid var(--color-divider);
-		border-bottom: 1px solid var(--color-divider);
-	}
-	.quick-actions a {
-		padding: 0.72rem 0;
 	}
 	.queue-list a,
 	.compact-team a {
@@ -607,8 +588,7 @@
 		text-transform: uppercase;
 	}
 	.compact-team {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		column-gap: 1.5rem;
+		grid-template-columns: 1fr;
 	}
 	.compact-team a {
 		justify-content: start;

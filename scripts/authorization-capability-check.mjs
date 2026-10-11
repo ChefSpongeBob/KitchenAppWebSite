@@ -97,7 +97,8 @@ expect(
 
 expect(
   'sidebar protected navigation uses effective capabilities',
-  layout.includes('resolveBusinessCapabilityForPath(item.route)') &&
+  layout.includes('resolveBusinessCapabilityForPath(item.route.split("?", 1)[0])') &&
+    layout.includes('item.requiredCapability ??') &&
     layout.includes('data.user?.businessCapabilities') &&
     layout.includes('hasBusinessCapability('),
   'Protected navigation must match server-side capability decisions.'
