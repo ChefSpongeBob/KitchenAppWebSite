@@ -88,46 +88,65 @@ expectMissing(
   'dead aliases and redundant viewer routes are removed'
 );
 
-expect('src/lib/components/ui/AdminEditorMenu.svelte', 'admin dropdown has one content editor entry', (source) =>
+expect('src/lib/navigation/managerNavigation.ts', 'manager navigation is complete and centrally permission-aware', (source) =>
+  source.includes("label: 'People & HR'") &&
+  source.includes("label: 'Team Directory'") &&
+  source.includes("label: 'Onboarding Packets'") &&
+  source.includes("label: 'HR & Compliance'") &&
+  source.includes("label: 'Roles & Access'") &&
+  source.includes("label: 'Schedule Builder'") &&
   source.includes("label: 'Creator Studio'") &&
-  source.includes("href: '/admin/business-registry'") &&
-  source.includes("href: '/admin/feature-matrix'") &&
-  !source.includes('/admin/app-editor#business-registry') &&
-  !source.includes("label: 'Category Creator'") &&
-  !source.includes("label: 'Documents'") &&
-  !source.includes("label: 'Lists'") &&
-  !source.includes("label: 'Menus'") &&
-  !source.includes("label: 'Recipes'")
+  source.includes("label: 'Vendor Manager'") &&
+  source.includes("label: 'Reports'") &&
+  source.includes("label: 'Business Registry'") &&
+  source.includes("label: 'Billing'") &&
+  source.includes("label: 'Feature Matrix'") &&
+  source.includes('canViewManagerNavigationItem') &&
+  source.includes('hasBusinessCapability(') &&
+  source.includes('canRoleAccessFeature(')
 );
 
-expect('src/routes/+layout.svelte', 'admin sidebar has one content editor entry', (source) =>
-  source.includes('label: "Creator Studio"') &&
-  !source.includes('label: "Category Creator"') &&
-  !source.includes('label: "Documents", route: "/admin/documents"') &&
-  !source.includes('label: "Lists", route: "/admin/lists"') &&
-  !source.includes('label: "Menus", route: "/admin/menus"') &&
-  !source.includes('label: "Recipes", route: "/admin/recipes"')
+expect('src/lib/components/ui/AdminEditorMenu.svelte', 'manager dropdown renders every accessible grouped destination', (source) =>
+  source.includes('managerNavigationGroups') &&
+  source.includes('canViewManagerNavigationItem') &&
+  source.includes('isManagerNavigationItemActive') &&
+  source.includes('<optgroup label={group.label}>') &&
+  source.includes('<option value={item.href}>{item.label}</option>')
 );
 
-expect('src/routes/+layout.svelte', 'People and HR sidebar exposes focused permission-aware workspaces', (source) =>
-  source.includes('label: "Overview"') &&
-  source.includes('route: "/admin/users?view=overview"') &&
-  source.includes('route: "/admin/users?view=team"') &&
-  source.includes('route: "/admin/onboarding?view=invites"') &&
-  source.includes('route: "/admin/onboarding?view=packets"') &&
-  source.includes('route: "/admin/onboarding?view=forms"') &&
-  source.includes('route: "/admin/users?view=hr"') &&
-  source.includes('route: "/admin/users?view=access"') &&
-  source.includes('requiredCapability?: BusinessCapability') &&
+expect('src/routes/+layout.svelte', 'admin sidebar derives its focused permission-aware workspaces from shared navigation', (source) =>
+  source.includes('managerNavigationGroups') &&
+  source.includes('item.showInSidebar') &&
   source.includes('item.requiredCapability ??') &&
   source.includes('resolveBusinessCapabilityForPath(item.route.split("?", 1)[0])') &&
   source.includes('$: currentSearch = $page.url.search')
+);
+
+expect('src/lib/components/ui/PageHeader.svelte', 'manager quick navigation appears across special-access workspaces', (source) =>
+  source.includes('isManagerWorkspacePath') &&
+  source.includes('<AdminEditorMenu />')
 );
 
 expectMissing(
   ['src/lib/components/ui/PeopleHrNav.svelte'],
   'duplicate horizontal People and HR navigation is removed'
 );
+
+expect('src/lib/components/ui/ManagerSectionNav.svelte', 'People and HR has visible permission-aware local navigation', (source) =>
+  source.includes('managerNavigationGroups') &&
+  source.includes('canViewManagerNavigationItem') &&
+  source.includes('isManagerNavigationItemActive')
+);
+
+for (const path of [
+  'src/routes/admin/users/+page.svelte',
+  'src/routes/admin/onboarding/+page.svelte',
+  'src/routes/admin/users/[id]/+page.svelte'
+]) {
+  expect(path, `${path} exposes People and HR section navigation`, (source) =>
+    source.includes('ManagerSectionNav') && source.includes('groupId="people"')
+  );
+}
 
 expect('src/routes/admin/+page.svelte', 'manager dashboard keeps navigation and groups scheduling with people tools', (source) =>
   source.includes('<PageHeader title="Manager Dashboard" />') &&
@@ -221,7 +240,12 @@ expect('src/routes/admin/users/+page.svelte', 'People and HR overview and team d
   source.includes("activeView === 'team'") &&
   source.includes("activeView === 'hr'") &&
   source.includes("activeView === 'access'") &&
+  source.includes('aria-label="People and HR quick actions"') &&
   source.includes('placeholder="Name, email, role, department"') &&
+  source.includes('bind:value={staffStatus}') &&
+  source.includes('bind:value={staffAccountType}') &&
+  source.includes('bind:value={staffDepartment}') &&
+  source.includes('bind:value={staffPosition}') &&
   !source.includes('PeopleHrNav')
 );
 

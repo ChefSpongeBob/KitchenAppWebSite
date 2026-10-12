@@ -1,71 +1,30 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { defaultAppFeatureModes } from '$lib/features/appFeatures';
   import {
-    canRoleAccessFeature,
-    defaultAppFeatureModes,
-    type AppFeatureKey
-  } from '$lib/features/appFeatures';
-  import { hasBusinessCapability } from '$lib/auth/roles';
-  import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
-
-  type AdminRoute = {
-    href: string;
-    label: string;
-    matches: (path: string) => boolean;
-    featureKey?: AppFeatureKey;
-  };
-
-  function exact(pathname: string) {
-    return (path: string) => path === pathname;
-  }
-
-  function prefix(pathname: string) {
-    return (path: string) => path === pathname || path.startsWith(`${pathname}/`);
-  }
-
-  const menuItems: AdminRoute[] = [
-    { href: '/admin/app-editor', label: 'App Editor', matches: prefix('/admin/app-editor') },
-    { href: '/admin/business-registry', label: 'Business Registry', matches: prefix('/admin/business-registry') },
-    { href: '/admin/creator', label: 'Creator Studio', matches: prefix('/admin/creator') },
-    { href: '/admin', label: 'Dashboard', matches: exact('/admin') },
-    {
-      href: '/admin/users',
-      label: 'People & HR',
-      matches: (path) => prefix('/admin/users')(path) || prefix('/admin/onboarding')(path)
-    },
-    { href: '/admin/feature-matrix', label: 'Feature Matrix', matches: prefix('/admin/feature-matrix') },
-    { href: '/admin/schedule', label: 'Schedule', matches: prefix('/admin/schedule'), featureKey: 'scheduling' },
-    { href: '/admin/sensors', label: 'Temperature Sensors', matches: prefix('/admin/sensors') }
-  ];
+    canViewManagerNavigationItem,
+    isManagerNavigationItemActive,
+    managerNavigationGroups
+  } from '$lib/navigation/managerNavigation';
 
   $: currentPath = $page.url.pathname;
+  $: currentSearch = $page.url.search;
   $: featureModes = $page.data?.featureModes ?? defaultAppFeatureModes;
   $: activeUser = $page.data?.user;
-  $: visibleMenuItems = menuItems.filter((item) => {
-    const requiredCapability = resolveBusinessCapabilityForPath(item.href);
-    if (
-      requiredCapability &&
-      !hasBusinessCapability(
-        activeUser?.businessRole ?? activeUser?.role,
-        activeUser?.businessPermissionTemplate,
-        requiredCapability,
-        activeUser?.businessCapabilities
+  $: visibleGroups = managerNavigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        canViewManagerNavigationItem(item, activeUser, featureModes)
       )
-    ) {
-      return false;
-    }
-    return item.featureKey
-      ? canRoleAccessFeature(
-          featureModes[item.featureKey],
-          activeUser?.businessRole ?? activeUser?.role,
-          item.featureKey,
-          activeUser?.businessPermissionTemplate,
-          activeUser?.businessCapabilities
-        )
-      : true;
-  });
-  $: selectedHref = visibleMenuItems.find((item) => item.matches(currentPath))?.href ?? '/admin';
+    }))
+    .filter((group) => group.items.length > 0);
+  $: visibleMenuItems = visibleGroups.flatMap((group) => group.items);
+  $: selectedHref =
+    visibleMenuItems.find((item) =>
+      isManagerNavigationItemActive(item, currentPath, currentSearch)
+    )?.href ?? '/admin';
 
   async function openAdminEditor(event: Event) {
     const target = event.currentTarget as HTMLSelectElement | null;
@@ -84,8 +43,12 @@
       value={selectedHref}
       on:change={openAdminEditor}
     >
-      {#each visibleMenuItems as item}
-        <option value={item.href}>{item.label}</option>
+      {#each visibleGroups as group}
+        <optgroup label={group.label}>
+          {#each group.items as item}
+            <option value={item.href}>{item.label}</option>
+          {/each}
+        </optgroup>
       {/each}
     </select>
   </div>

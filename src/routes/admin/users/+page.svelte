@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Layout from '$lib/components/ui/Layout.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
 	import { applyAction, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { pushToast } from '$lib/client/toasts';
@@ -22,6 +23,7 @@
 		permission_template: string;
 		position_id: string | null;
 		position_name: string | null;
+		position_account_type: 'manager' | 'staff' | 'external' | null;
 		is_active: number;
 		approved_departments: string[];
 		effective_capabilities: string[];
@@ -96,6 +98,10 @@
 	};
 
 	let staffSearch = '';
+	let staffStatus = 'all';
+	let staffAccountType = 'all';
+	let staffDepartment = 'all';
+	let staffPosition = 'all';
 	let newPositionAccountType: BusinessPosition['account_type'] = 'staff';
 
 	$: pageTitle =
@@ -114,10 +120,17 @@
 		['sent', 'in_progress', 'returned'].includes(row.package_status)
 	);
 	$: onboardingMissing = data.onboardingRows.filter((row) => row.package_status === 'not_sent');
+	$: onboardingByUser = new Map(data.onboardingRows.map((row) => [row.user_id, row]));
+	$: availableDepartments = Array.from(
+		new Set(data.users.flatMap((user) => user.approved_departments))
+	).sort((a, b) => a.localeCompare(b));
+	$: availablePositions = Array.from(
+		new Set(data.users.map((user) => user.position_name).filter((value): value is string => Boolean(value)))
+	).sort((a, b) => a.localeCompare(b));
+	$: unassignedUsers = activeUsers.filter((user) => !user.position_id);
 	$: filteredStaff = data.users.filter((user) => {
 		const query = staffSearch.trim().toLowerCase();
-		if (!query) return true;
-		return [
+		const matchesQuery = !query || [
 			user.display_name ?? '',
 			user.email,
 			user.role,
@@ -127,6 +140,11 @@
 			.join(' ')
 			.toLowerCase()
 			.includes(query);
+		const matchesStatus = staffStatus === 'all' || (staffStatus === 'active' ? user.is_active === 1 : user.is_active !== 1);
+		const matchesAccount = staffAccountType === 'all' || user.position_account_type === staffAccountType;
+		const matchesDepartment = staffDepartment === 'all' || user.approved_departments.includes(staffDepartment);
+		const matchesPosition = staffPosition === 'all' || user.position_name === staffPosition;
+		return matchesQuery && matchesStatus && matchesAccount && matchesDepartment && matchesPosition;
 	});
 
 	const displayName = (user: { display_name: string | null; email: string }) =>
@@ -136,6 +154,8 @@
 		user.approved_departments.length
 			? user.approved_departments.join(', ')
 			: 'No schedule departments';
+	const onboardingStatusFor = (userId: string) =>
+		formatStatus(onboardingByUser.get(userId)?.package_status ?? 'not_sent');
 	const formatStatus = (value: string) =>
 		value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 	const formatDate = (value: number | null) =>
@@ -163,6 +183,7 @@
 
 <Layout>
 	<PageHeader title={pageTitle} />
+	<ManagerSectionNav groupId="people" />
 
 	<section class="people-board">
 		{#if data.activeView === 'overview'}
@@ -172,6 +193,13 @@
 				<div><span>Needs Review</span><strong>{onboardingReview.length}</strong></div>
 				<div><span>In Progress</span><strong>{onboardingInProgress.length}</strong></div>
 			</section>
+
+			<nav class="people-actions" aria-label="People and HR quick actions">
+				<a href="/admin/users?view=team"><span class="material-icons" aria-hidden="true">groups</span><span><strong>Team Directory</strong><small>Search and manage employee records</small></span></a>
+				{#if data.canManageOnboarding}<a href="/admin/onboarding?view=invites"><span class="material-icons" aria-hidden="true">person_add</span><span><strong>Invite Employee</strong><small>Create tenant-scoped access</small></span></a>{/if}
+				{#if data.canReviewOnboarding}<a href="/admin/onboarding?view=packets"><span class="material-icons" aria-hidden="true">assignment_turned_in</span><span><strong>Review Onboarding</strong><small>Track and approve packets</small></span></a>{/if}
+				{#if data.canManagePermissions}<a href="/admin/users?view=access"><span class="material-icons" aria-hidden="true">manage_accounts</span><span><strong>Roles & Access</strong><small>Positions and individual permissions</small></span></a>{/if}
+			</nav>
 
 			<section class="overview-grid">
 				<div class="workspace-section">
@@ -226,6 +254,28 @@
 						{/each}
 					</div>
 				</div>
+
+				{#if data.canReviewOnboarding}
+					<div class="workspace-section summary-panel">
+						<header class="section-toolbar"><div><span class="kicker">Progress</span><h2>Onboarding</h2></div><a href="/admin/onboarding?view=packets">Manage</a></header>
+						<div class="summary-lines">
+							<span><strong>{onboardingReview.length}</strong><small>Ready for review</small></span>
+							<span><strong>{onboardingInProgress.length}</strong><small>In progress</small></span>
+							<span><strong>{onboardingMissing.length}</strong><small>Not sent</small></span>
+						</div>
+					</div>
+				{/if}
+
+				{#if data.canManagePermissions}
+					<div class="workspace-section summary-panel">
+						<header class="section-toolbar"><div><span class="kicker">Structure</span><h2>Roles & Access</h2></div><a href="/admin/users?view=access">Manage</a></header>
+						<div class="summary-lines">
+							<span><strong>{data.positions.filter((position) => position.is_active === 1).length}</strong><small>Active positions</small></span>
+							<span><strong>{managerUsers.length}</strong><small>Managers</small></span>
+							<span><strong>{unassignedUsers.length}</strong><small>Position unassigned</small></span>
+						</div>
+					</div>
+				{/if}
 			</section>
 		{:else if data.activeView === 'team'}
 			<section class="workspace-section">
@@ -234,19 +284,20 @@
 						<span class="kicker">Directory</span>
 						<h2>Current Team</h2>
 					</div>
-					<label class="search-box">
-						<span>Search</span>
-						<input
-							bind:value={staffSearch}
-							type="search"
-							placeholder="Name, email, role, department"
-						/>
-					</label>
+					{#if data.canManageOnboarding}<a href="/admin/onboarding?view=invites" class="inline-action">Invite Employee</a>{/if}
 				</header>
+
+				<div class="directory-controls">
+					<label class="search-box"><span>Search</span><input bind:value={staffSearch} type="search" placeholder="Name, email, role, department" /></label>
+					<label><span>Status</span><select bind:value={staffStatus}><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+					<label><span>Type</span><select bind:value={staffAccountType}><option value="all">All</option><option value="manager">Managers</option><option value="staff">Team Members</option><option value="external">External</option></select></label>
+					<label><span>Department</span><select bind:value={staffDepartment}><option value="all">All</option>{#each availableDepartments as department}<option value={department}>{department}</option>{/each}</select></label>
+					<label><span>Position</span><select bind:value={staffPosition}><option value="all">All</option>{#each availablePositions as position}<option value={position}>{position}</option>{/each}</select></label>
+				</div>
 
 				<div class="staff-table" aria-label="Staff roster">
 					<div class="table-header">
-						<span>Employee</span><span>Access</span><span>Assignments</span><span></span>
+						<span>Employee</span><span>Position</span><span>Departments</span><span>Onboarding</span><span>Status</span><span></span>
 					</div>
 					{#if filteredStaff.length === 0}
 						<p class="empty table-empty">No employees match that search.</p>
@@ -264,9 +315,11 @@
 								>
 								<span
 									><strong>{departmentSummary(user)}</strong><small
-										>{user.is_active ? 'Active' : 'Inactive'}</small
+										>Schedule access</small
 									></span
 								>
+								<span><strong>{onboardingStatusFor(user.id)}</strong><small>Employee packet</small></span>
+								<span><strong>{user.is_active ? 'Active' : 'Inactive'}</strong><small>{user.position_account_type ? accountTypeLabel(user.position_account_type) : businessRoleLabel(user.role)}</small></span>
 								<a href={`/admin/users/${user.id}?section=profile`} class="inline-action">Open</a>
 							</div>
 						{/each}
@@ -483,7 +536,10 @@
 	.overview-grid,
 	.hr-grid,
 	.queue-list,
-	.compact-team {
+	.compact-team,
+	.people-actions,
+	.summary-lines,
+	.directory-controls {
 		display: grid;
 	}
 	.people-board {
@@ -522,6 +578,47 @@
 	.overview-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 1.5rem;
+	}
+	.people-actions {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.6rem;
+	}
+	.people-actions a {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 0;
+		padding: 0.8rem;
+		border-bottom: 1px solid var(--color-divider);
+		color: var(--color-text);
+		text-decoration: none;
+	}
+	.people-actions a > span:last-child {
+		display: grid;
+		gap: 0.12rem;
+		min-width: 0;
+	}
+	.people-actions .material-icons {
+		color: var(--color-text-muted);
+		font-size: 1.15rem;
+	}
+	.people-actions small,
+	.summary-lines small {
+		color: var(--color-text-muted);
+		font-size: 0.72rem;
+	}
+	.summary-lines {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.6rem;
+	}
+	.summary-lines span {
+		display: grid;
+		gap: 0.1rem;
+		padding: 0.7rem 0;
+		border-bottom: 1px solid var(--color-divider);
+	}
+	.summary-lines strong {
+		font-size: 1.2rem;
 	}
 	.hr-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -609,6 +706,32 @@
 		gap: 0.25rem;
 		min-width: min(22rem, 100%);
 	}
+	.directory-controls {
+		grid-template-columns: minmax(14rem, 1.7fr) repeat(4, minmax(8rem, 0.8fr));
+		gap: 0.7rem;
+		padding: 0.8rem 0;
+	}
+	.directory-controls label {
+		display: grid;
+		gap: 0.25rem;
+		min-width: 0;
+	}
+	.directory-controls label > span {
+		color: var(--color-text-muted);
+		font-size: 0.66rem;
+		font-weight: var(--weight-semibold);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.directory-controls select {
+		width: 100%;
+		min-height: 2.35rem;
+		border: 0;
+		border-bottom: 1px solid var(--color-divider-strong);
+		border-radius: 0;
+		background: transparent;
+		color: var(--color-text);
+	}
 	.search-box input {
 		width: 100%;
 		min-height: 2.35rem;
@@ -626,7 +749,7 @@
 	.table-header,
 	.staff-row {
 		display: grid;
-		grid-template-columns: minmax(13rem, 1.25fr) minmax(9rem, 0.7fr) minmax(12rem, 1fr) auto;
+		grid-template-columns: minmax(12rem, 1.25fr) minmax(8rem, 0.75fr) minmax(10rem, 1fr) minmax(8rem, 0.7fr) minmax(7rem, 0.6fr) auto;
 		align-items: center;
 		gap: 1rem;
 	}
@@ -638,6 +761,10 @@
 		min-height: 4.2rem;
 		padding: 0.6rem 0;
 		border-bottom: 1px solid var(--color-divider);
+	}
+	.access-table .table-header,
+	.access-table .staff-row {
+		grid-template-columns: minmax(13rem, 1.25fr) minmax(9rem, 0.7fr) minmax(12rem, 1fr) auto;
 	}
 	.staff-identity {
 		display: flex;
@@ -756,6 +883,13 @@
 		.permission-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
+		.people-actions,
+		.directory-controls {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.directory-controls .search-box {
+			grid-column: 1 / -1;
+		}
 	}
 	@media (max-width: 620px) {
 		.overview-strip,
@@ -777,7 +911,10 @@
 			min-width: 0;
 		}
 		.position-fields,
-		.permission-grid {
+		.permission-grid,
+		.people-actions,
+		.directory-controls,
+		.summary-lines {
 			grid-template-columns: 1fr;
 		}
 	}

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import AdminEditorMenu from '$lib/components/ui/AdminEditorMenu.svelte';
+  import { isManagerWorkspacePath } from '$lib/navigation/managerNavigation';
 
   export let title: string;
   export let subtitle: string | null = null;
 
-  $: showAdminEditorMenu = $page.url.pathname.startsWith('/admin');
+  $: showAdminEditorMenu = isManagerWorkspacePath($page.url.pathname);
 </script>
 
 <header class="page-header" aria-label={title} data-legacy-subtitle={subtitle ? '1' : '0'}>

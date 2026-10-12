@@ -19,6 +19,7 @@
     type BusinessCapability
   } from "$lib/auth/roles";
   import { resolveBusinessCapabilityForPath } from "$lib/auth/routeCapabilities";
+  import { managerNavigationGroups } from "$lib/navigation/managerNavigation";
   import ToastStack from "$lib/components/ui/ToastStack.svelte";
   import { nativeServerUrl } from "$lib/client/nativeServerUrl";
 
@@ -101,77 +102,21 @@
         { label: "Manager Dashboard", route: "/admin", icon: "space_dashboard" }
       ]
     },
-    {
-      label: "Workspace",
-      icon: "tune",
-      items: [
-        { label: "App Editor", route: "/admin/app-editor", icon: "tune" },
-        { label: "Creator Studio", route: "/admin/creator", icon: "build_circle" },
-        { label: "Vendors", route: "/admin/vendors", icon: "local_shipping", featureKey: "vendors" }
-      ]
-    },
-    {
-      label: "Scheduling",
-      icon: "calendar_view_week",
-      items: [
-        { label: "Schedule Builder", route: "/admin/schedule", icon: "calendar_view_week", featureKey: "scheduling" }
-      ]
-    },
-    {
-      label: "People & HR",
-      icon: "groups",
-      items: [
-        {
-          label: "Overview",
-          route: "/admin/users?view=overview",
-          icon: "space_dashboard",
-          requiredCapability: "view_people"
-        },
-        {
-          label: "Team",
-          route: "/admin/users?view=team",
-          icon: "groups",
-          requiredCapability: "view_people"
-        },
-        {
-          label: "Invitations",
-          route: "/admin/onboarding?view=invites",
-          icon: "person_add",
-          requiredCapability: "manage_onboarding"
-        },
-        {
-          label: "Onboarding",
-          route: "/admin/onboarding?view=packets",
-          icon: "assignment_turned_in",
-          requiredCapability: "review_onboarding"
-        },
-        {
-          label: "Forms & Policies",
-          route: "/admin/onboarding?view=forms",
-          icon: "description",
-          requiredCapability: "manage_hr_setup"
-        },
-        {
-          label: "HR & Compliance",
-          route: "/admin/users?view=hr",
-          icon: "verified_user",
-          requiredCapability: "view_sensitive_employee_data"
-        },
-        {
-          label: "Roles & Access",
-          route: "/admin/users?view=access",
-          icon: "manage_accounts",
-          requiredCapability: "manage_permissions"
-        }
-      ]
-    },
-    {
-      label: "Systems",
-      icon: "device_thermostat",
-      items: [
-        { label: "Temperature Sensors", route: "/admin/sensors", icon: "device_thermostat" }
-      ]
-    }
+    ...managerNavigationGroups
+      .filter((group) => group.id !== "manager")
+      .map((group) => ({
+        label: group.label,
+        icon: group.icon,
+        items: group.items
+          .filter((item) => item.showInSidebar)
+          .map((item) => ({
+            label: item.label,
+            route: item.href,
+            icon: item.icon,
+            featureKey: item.featureKey,
+            requiredCapability: item.requiredCapability
+          }))
+      }))
   ];
 
   function toggleSidebar() {
@@ -237,6 +182,7 @@
       if (currentValue === value) continue;
       if (!currentValue && value === "overview" && path === "/admin/users") continue;
       if (!currentValue && value === "packets" && path === "/admin/onboarding") continue;
+      if (!currentValue && value === "builder" && path === "/admin/schedule") continue;
       return false;
     }
     return true;

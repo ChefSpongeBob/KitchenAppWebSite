@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
   import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
@@ -175,6 +176,7 @@
 
 <Layout>
   <PageHeader title={pageTitle} />
+  <ManagerSectionNav groupId="people" />
 
   <section class="onboarding-console">
     {#if data.activeView === 'packets'}
