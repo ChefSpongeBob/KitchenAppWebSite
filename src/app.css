@@ -459,23 +459,6 @@ a:focus-visible {
     padding-right: 0.75rem;
   }
 
-  body::before {
-    opacity: 0.1;
-    background-size: 66px auto, 64px auto, 48px auto, 56px auto, 72px auto, 64px auto, 46px auto;
-    background-position:
-      left 0.8rem top 7rem,
-      right 0.8rem top 11rem,
-      left 1.6rem top 17.5rem,
-      center top 5.25rem,
-      right 1.8rem bottom 11rem,
-      left 1rem bottom 6rem,
-      right 2.8rem bottom 18rem;
-  }
-
-  [data-theme='light'] body::before {
-    opacity: 0.24;
-  }
-
   :where(.table-shell, .editor-block, .document-stage, .schedule-scroll, .admin-scroll) {
     max-width: 100%;
     overflow-x: auto;
@@ -606,6 +589,22 @@ body::before,
 [data-theme='dark'] body::before {
   opacity: 0.055;
   filter: invert(1) grayscale(1) brightness(1.8) contrast(0.86);
+}
+
+@media (max-width: 760px) {
+  body::before,
+  [data-theme='light'] body::before {
+    opacity: 0.12;
+    background-size: 68px auto, 112px auto, 58px auto;
+    background-position:
+      left -0.25rem top 6.5rem,
+      right -0.75rem top 12.5rem,
+      left 0.75rem bottom 6rem;
+  }
+
+  [data-theme='dark'] body::before {
+    opacity: 0.1;
+  }
 }
 
 button,
