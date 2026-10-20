@@ -25,8 +25,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     end: url.searchParams.get('end'),
     submittedAt: url.searchParams.get('submitted_at')
   });
-  const valueHeader = domain === 'checklists' ? 'action' : 'value';
-  const header = ['date', 'list', 'item', 'details', valueHeader, 'par', 'done', 'completed_by', 'submitted_by'];
+  const valueHeader = domain === 'checklists' ? 'Action' : 'Value';
+  const header = ['Date', 'List', 'Item', 'Details', valueHeader, 'Par', 'Done', 'Completed By', 'Submitted By'];
   const lines = [
     header.join(','),
     ...report.rows.map((row) =>
@@ -46,10 +46,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     )
   ];
 
-  return new Response(lines.join('\n'), {
+  return new Response(`\uFEFF${lines.join('\n')}`, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="${domain}-history.csv"`
+      'content-disposition': `attachment; filename="${domain}-history-${report.startDate}-to-${report.endDate}.csv"`
     }
   });
 };

@@ -173,13 +173,15 @@ expect('src/routes/admin/business-registry/+page.svelte', 'business registry own
 
 expect('src/routes/admin/feature-matrix/+page.svelte', 'feature matrix has a dedicated workspace', (source) =>
   source.includes('<PageHeader title="Feature Matrix"') &&
-  source.includes('Save Feature Matrix')
+  source.includes('action="?/save"') &&
+  source.includes('Save Changes')
 );
 
 expect('src/routes/admin/app-editor/+page.svelte', 'app editor is limited to sidebar branding', (source) =>
   source.includes('Sidebar Branding') &&
-  !source.includes('Business Registry') &&
-  !source.includes('Feature Visibility')
+  source.includes('action="?/save_branding"') &&
+  !source.includes('action="?/save_business"') &&
+  !source.includes('action="?/save_features"')
 );
 
 expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes requests and owns announcement history', (source) =>
@@ -216,6 +218,98 @@ expect('src/routes/admin/schedule/+page.svelte', 'schedule builder exposes conso
   source.includes('action="?/approve_availability"') &&
   source.includes('action="?/create_department"') &&
   source.includes('action="?/create_role"')
+);
+
+expect('src/routes/admin/schedule/+page.svelte', 'schedule manager tools keep records visible and editors collapsed', (source) =>
+  source.includes('class="tool-metric-strip"') &&
+  source.includes('<summary>Create Open Shift</summary>') &&
+  source.includes('<summary>Save Current Week</summary>') &&
+  source.includes('<summary>Apply Template</summary>') &&
+  source.includes('<summary>Add Department or Role</summary>') &&
+  source.indexOf('{#if data.openShifts.length > 0}') < source.indexOf('<summary>Create Open Shift</summary>') &&
+  source.indexOf('class="department-setup-list"') < source.indexOf('<summary>Add Department or Role</summary>')
+);
+
+expect('src/routes/admin/schedule/+page.svelte', 'schedule saves serialize autosave and publish requests', (source) =>
+  source.includes('let autosaveInFlight: Promise<boolean> | null = null;') &&
+  source.includes('const submitScheduleWeek: SubmitFunction') &&
+  source.includes('writeSchedulePayloadToFormData(formData);') &&
+  source.includes('use:enhance={submitScheduleWeek}') &&
+  source.includes('disabled={isScheduleSubmitting}') &&
+  !source.includes('autosaveRequestId') &&
+  !source.includes('preparePublishPayload')
+);
+
+expect('src/lib/server/schedules.ts', 'schedule drafts are atomic, separate, and duplicate-safe', (source) =>
+  source.includes('function dedupeShiftInsertRows') &&
+  source.includes('async function replaceScheduleDraftWeekDataAtomic') &&
+  source.includes('schedule_draft_shifts') &&
+  source.includes('schedule_draft_open_shifts') &&
+  source.includes('draft_write_token') &&
+  source.includes('FROM json_each(?) AS item') &&
+  source.includes("if (!payload) return fail(400, { error: 'No schedule data was submitted.' });") &&
+  source.includes("? await saveScheduleWeekDraftFromForm(db, form, locals, businessId)")
+);
+
+expect('src/lib/server/schedules.ts', 'schedule user joins follow tenant memberships', (source) =>
+  source.includes('JOIN business_users member') &&
+  source.includes('JOIN business_users scheduled_member') &&
+  source.includes('JOIN business_users offering_member') &&
+  !/\b(?:u|offered|targeted|requested)\.business_id\b/.test(source)
+);
+
+for (const route of [
+  'src/routes/my-schedule/+page.server.ts',
+  'src/routes/schedule/+page.server.ts',
+  'src/routes/admin/schedule/+page.server.ts'
+]) {
+  expect(route, `${route} requires and consistently uses the active business`, (source) =>
+    source.includes('const businessId = requireBusinessId(locals);') &&
+    !source.includes('locals.businessId ??')
+  );
+}
+
+expect('src/lib/server/schedules.ts', 'published schedule approvals remain synchronized with manager drafts', (source) =>
+  source.includes('This shift changed in the schedule draft.') &&
+  source.includes('This open shift changed in the schedule draft.') &&
+  source.includes('UPDATE schedule_draft_shifts') &&
+  source.includes('INSERT INTO schedule_draft_shifts') &&
+  source.includes('DELETE FROM schedule_draft_open_shifts') &&
+  source.includes('published_version = published_version + 1')
+);
+
+expect('src/lib/server/schedules.ts', 'draft references protect schedule departments and roles from deletion', (source) =>
+  source.includes('SELECT COUNT(*) AS count FROM schedule_draft_shifts WHERE department = ? AND business_id = ?') &&
+  source.includes('SELECT COUNT(*) AS count FROM schedule_draft_open_shifts WHERE department = ? AND business_id = ?') &&
+  source.includes('SELECT COUNT(*) AS count FROM schedule_draft_shifts WHERE department = ? AND role = ? AND business_id = ?') &&
+  source.includes('SELECT COUNT(*) AS count FROM schedule_draft_open_shifts WHERE department = ? AND role = ? AND business_id = ?')
+);
+
+expect('src/routes/admin/schedule/+page.svelte', 'schedule relies on autosave without a manual draft button', (source) =>
+  source.includes("fetch('?/save_week'") &&
+  source.includes("formData.set('draft_version', String(serverDraftVersion));") &&
+  source.includes("formData.delete('payload');") &&
+  source.includes('id: shift.clientId') &&
+  source.includes('function buildEmployeeRowsFromData()') &&
+  source.includes('data.weekStart !== loadedWeekStart') &&
+  !source.includes('Save Draft')
+);
+
+expect('src/lib/server/history.ts', 'publishing snapshots history and final status in one batch', (source) =>
+  source.includes("completionStatements: ReturnType<DB['prepare']>[] = []") &&
+  source.includes("preparationStatements: ReturnType<DB['prepare']>[] = []") &&
+  source.includes('...preparationStatements') &&
+  source.includes('guard.draft_write_token = ?') &&
+  source.includes('INSERT INTO schedule_shift_history') &&
+  source.includes('...completionStatements') &&
+  !source.includes('for (const shift of shifts.results ?? [])')
+);
+
+expect('src/lib/components/ui/ScheduleTimeSelect.svelte', 'schedule time selection closes through explicit commit and cancel events', (source) =>
+  source.includes("commit: { value: string }; cancel: void") &&
+  source.includes("dispatch('cancel')") &&
+  source.includes("dispatch('commit', { value })") &&
+  !source.includes('confirmationTimer')
 );
 
 expect('src/routes/admin/users/[id]/+page.svelte', 'employee records own access and schedule assignments', (source) =>
@@ -291,6 +385,35 @@ expect('src/routes/todo/log/+page.server.ts', 'ToDo history uses current capabil
 expect('src/routes/todo/+page.svelte', 'ToDo managers can reach the completion log', (source) =>
   source.includes("href=\"/todo/log\"") &&
   source.includes('data.canViewHistory')
+);
+
+for (const route of [
+  'src/routes/admin/business-registry/+page.svelte',
+  'src/routes/admin/feature-matrix/+page.svelte',
+  'src/routes/admin/sensors/+page.svelte',
+  'src/routes/billing/+page.svelte'
+]) {
+  expect(route, `${route} uses Business and Systems navigation`, (source) =>
+    source.includes('ManagerSectionNav') && source.includes('groupId="business"')
+  );
+}
+
+for (const route of [
+  'src/routes/admin/app-editor/+page.svelte',
+  'src/routes/admin/creator/+page.svelte',
+  'src/routes/admin/vendors/+page.svelte',
+  'src/routes/todo/log/+page.svelte'
+]) {
+  expect(route, `${route} uses Content and Operations navigation`, (source) =>
+    source.includes('ManagerSectionNav') && source.includes('groupId="workspace"')
+  );
+}
+
+expect('src/routes/billing/+page.svelte', 'billing uses display-first status and collapsed workspace cancellation', (source) =>
+  source.includes('class="status-grid"') &&
+  source.includes('class="billing-section"') &&
+  source.includes('<details class="danger-section">') &&
+  source.includes('Manage Subscription')
 );
 
 expect('migrations/0100_admin_dashboard_workflows.sql', 'dashboard workflow storage is tenant scoped and indexed', (source) =>

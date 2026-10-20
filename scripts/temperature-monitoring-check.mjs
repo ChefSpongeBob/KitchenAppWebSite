@@ -228,13 +228,41 @@ expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves
 );
 
 expect('src/routes/admin/sensors/+page.svelte', 'sensor admin exposes thresholds and active alerts', (source) =>
-  source.includes('Register Sensor Node') &&
+  source.includes('Temperature Monitoring Sensors') &&
   source.includes('gateway_device_id') &&
   source.includes('Alert Rules') &&
   source.includes('High') &&
   source.includes('Low') &&
   source.includes('Acknowledge') &&
   source.includes('activeAlerts')
+);
+
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway receives restaurant Wi-Fi through secure BLE provisioning', (source) =>
+  source.includes('#include <WiFiProv.h>') &&
+  source.includes('NETWORK_PROV_SCHEME_BLE') &&
+  source.includes('NETWORK_PROV_SECURITY_1') &&
+  source.includes('provisionWifiIfNeeded()') &&
+  source.includes('WiFi.begin()') &&
+  !source.includes('WIFI_NAME') &&
+  !source.includes('WIFI_PASSWORD')
+);
+
+expect('src/routes/admin/sensors/+page.svelte', 'gateway Wi-Fi credentials remain phone-to-gateway only', (source) =>
+  source.includes('GatewayProvisioning.provisionNetwork') &&
+  source.includes("wifiPassword = ''") &&
+  source.includes('Connect Wi-Fi')
+);
+
+expect('android/app/src/main/java/com/nexusnorthsystems/crimini/GatewayProvisioningPlugin.java', 'Android uses Espressif secure BLE provisioning', (source) =>
+  source.includes('ESPProvisionManager') &&
+  source.includes('ESPConstants.SecurityType.SECURITY_1') &&
+  source.includes('activeDevice.provision(ssid, password')
+);
+
+expect('ios/App/CapApp-SPM/Sources/CapApp-SPM/GatewayProvisioningPlugin.swift', 'iOS uses Espressif secure BLE provisioning', (source) =>
+  source.includes('import ESPProvision') &&
+  source.includes('security: .secure') &&
+  source.includes('device.provision(ssid: ssid, passPhrase: password)')
 );
 
 expect('src/routes/api/internal/temperature-monitoring/process/+server.ts', 'stale processor is internal-token protected', (source) =>

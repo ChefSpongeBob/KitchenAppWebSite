@@ -133,7 +133,7 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Last full static validation: 2026-10-10 after the route, tenancy, temperature, security, and consolidation audit.
+- Last full static validation: 2026-10-20 after the scheduling draft/publish, route, tenancy, temperature, security, and consolidation audit.
 - Current repository status: app code is ready for controlled multi-tenant test data entry, not public production launch.
 - Current hold: public production launch and live-domain customer onboarding still wait for trademark/LLC timing, final legal/payroll review, store setup, and live operational integrations.
 - Phase status: Phases 1-18 and code-readiness parts of 20-22 are locally validated by scripts. Store, native-device, legal, live-domain, hardware, and edge-dashboard items remain manual/external.
@@ -202,6 +202,8 @@ This is the only active completion list. Work it in order and do not create scat
 5. Temperature hardware
 - Provision gateway and sensor-node serials into `iot_device_inventory`.
 - Claim a gateway in `/admin/sensors`, assign sensor nodes, ingest gateway-authenticated readings, and confirm wrong tenant, wrong gateway, unassigned, and revoked readings are rejected.
+- Complete native gateway Wi-Fi provisioning on physical Android and iOS devices: claim by serial, connect to the exact nearby gateway over BLE, scan gateway-visible networks, submit Wi-Fi directly from phone to gateway, and confirm no SSID or password reaches D1, Cloudflare logs, audit metadata, or application storage.
+- Debug and validate provisioning recovery: denied Bluetooth permission, gateway not found, wrong Wi-Fi password, interrupted setup, retry, gateway reboot, router reboot, stored-network reconnect, multiple nearby Crimini gateways, and an authorized re-provisioning path when restaurant Wi-Fi changes.
 - Tune thresholds by sensor type and verify high, low, stale, offline, recovery, dashboard, polling, and report behavior.
 - Deploy the operational dispatcher with its `DB` binding and `SMOKE_INTERNAL_TOKEN`; it processes tenant temperature stale/offline alerts in bounded batches every five minutes.
 - Validate gateway outage recovery: retain only the latest transient reading per node, recover after Wi-Fi/API interruption, resume IEEE 802.15.4 receive mode, report gateway health while nodes are quiet, and complete a 24-hour bench soak plus a controlled network-outage test before restaurant deployment.
@@ -210,7 +212,13 @@ This is the only active completion list. Work it in order and do not create scat
 
 6. Scheduling validation
 - Test owners, managers, department-scoped managers, shift leads, consultants, contractors, and staff.
-- Confirm schedule builder, autosave drafts, publish with unsaved changes, templates, labor targets, open shifts, shift offers, time off, approvals, My Schedule, event delivery, and report history.
+- Confirm a manager draft survives navigation, reload, browser restart, template replacement, and prior-week copy without a manual save action.
+- Confirm employees retain the last published schedule while managers edit, then receive exactly one updated version after publish or republish.
+- Confirm two manager sessions cannot silently overwrite each other: stale saves and publishes must return the reload conflict instead of duplicating or losing shifts.
+- Confirm department-scoped managers can edit only assigned departments and cannot publish an unauthorized full week.
+- Confirm selected-day duplication affects only the chosen destination days and never future weeks.
+- Confirm open shifts, offers, approvals, time off, availability, labor targets, role/department reference protection, My Schedule, dashboard shifts, history, notifications, and weekly exports remain synchronized with the published version.
+- Confirm desktop and mobile time selection closes after commit/cancel and the schedule workspace remains clear of the footer at all grid sizes.
 
 7. Lists, docs, menus, recipes, and tools
 - Create, edit, delete, submit, upload, replace, attach, and export real data for checklists, prep lists, inventory, orders, docs, menus, recipes, ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, food cost, safety reference, and waste tracker.
@@ -219,9 +227,13 @@ This is the only active completion list. Work it in order and do not create scat
 8. Reports and exports
 - Open reports as owner, manager, consultant, contractor, and staff.
 - Confirm access rules, row limits, read-only behavior, spreadsheet-safe CSVs, sensitive onboarding exclusions, and tenant isolation.
+- Confirm the Reports workspace exposes Prep, Checklist, Inventory, Orders, Waste, Schedule, Requests, Onboarding, Temperature, and permission-eligible ToDo history without showing links the active user cannot open.
+- Confirm each native report applies its date range, summary totals, responsive table rows, empty state, and 100-row display cap without exposing another tenant or sensitive onboarding payloads.
+- Compare each native report with its full-range CSV, including identical date filters, readable headers, formatted dates, temperature units, date-stamped filenames, mobile downloads, and data from a second tenant.
 
 9. Invite, onboarding, and HR
 - Test owner, manager, employee, consultant, and contractor invite flows.
+- Test the complete employer onboarding workspace flow: create and revoke invitations, configure required forms and policies, upload and preview source forms, install missing standard forms, send a packet, follow in-progress status, review submitted forms and physical I-9 verification, return corrections, approve the packet, and confirm the final status and documents appear on the correct tenant-scoped employee record.
 - Confirm employee/manager invite registration skips business pricing, creates correct onboarding packets, stores packet submissions, supports review/change/approval, and audits sensitive HR media access.
 - Confirm invited employees receive the four-step light-theme flow (name/birthday, address, contact/login, welcome), retain completed fields after a validation error, and enter the exact inviting business.
 - Confirm browser/native sign-in routes employees with an active packet to the non-blocking Profile & Settings onboarding prompt, while employees without a packet enter the dashboard normally.
@@ -281,14 +293,15 @@ Run these with at least two private validation businesses before entering real r
 
 - Permissions: verify owner, manager, staff, consultant, contractor, permission templates, route access, feature hiding, and direct URL denial.
 - Tenancy: create similar employee names, departments, schedules, list names, docs, menus, recipes, and reports in separate businesses and confirm nothing crosses tenants.
-- Scheduling: test draft save, publish, edits, duplicate day, templates, labor targets, open shifts, offers, time off, approvals, My Schedule, notifications, and exports.
+- Scheduling: test draft persistence, published/draft separation, direct publish and republish, concurrent-manager conflicts, scoped departments, duplicate day, templates, labor targets, open shifts, offers, time off, approvals, My Schedule, notifications, history, and exports.
 - Manager dashboard: verify scoped time-off and availability approvals, approved availability in the builder, named temperature exceptions, announcement history/delete/retention, reminders, ToDo aging, whiteboard moderation, and Schedule & People links.
+- Business & Systems: verify permission-aware navigation between Business Registry, Billing, Feature Matrix, and Temperature Sensor Setup; confirm App Editor stays under Content & Operations; test registry and branding edits, feature visibility, native purchase/restore/manage paths, collapsed workspace cancellation, equipment registration, Wi-Fi provisioning, revocation, alert acknowledgement, and alert-rule updates against the active tenant only.
 - Lists and content: test checklist, prep, inventory, order lists, item attachments, recipes, SOPs, docs, menus, uploads, replacements, deletes, and CSV exports.
 - HR: test invite links, onboarding packets, submissions, review/change/approval, sensitive media, audit logs, and restricted access.
 - Employee registration: test all four invite steps on desktop/mobile, email and SMS preference storage, password reset-in-place behavior, profile hydration, welcome downloads, and Profile & Settings handoff.
 - Billing: test native purchase, restore, cancellation, refund/revoke, renewal, grace, hold, past-due, webhook processing, and entitlement changes.
 - Temperature: test serial claim, gateway ingest, thresholds, stale/offline processor, wrong-tenant rejection, dashboard, polling, and temperature CSVs.
-- Reports: test schedule, requests, temperature, onboarding, waste, and list reports by role, tenant, row limit, and spreadsheet safety.
+- Reports: test schedule, requests, temperature, onboarding, waste, ToDo history, and all list reports by role, tenant, row/full-range export, date/version filter, row limit, mobile download, and spreadsheet safety.
 - Auth/security: test bad credentials, rate limits, Turnstile, reset tokens, expired invites, revoked sessions, inactive users, account deletion, internal APIs, device APIs, and billing webhooks.
 - UI/accessibility: test desktop/mobile, light/dark, keyboard focus, contrast, sidebar/footer spacing, upload states, empty states, and loading/error states.
 - Native/store: test Android and iOS builds, PDFs/uploads, push, billing bridge, deep links, review accounts, and account deletion.
@@ -310,10 +323,10 @@ Run this sequence on a physical phone against the private production-test enviro
 - Add, edit, delete, and complete checklist, prep, inventory, and order items; submit counts; open attached recipes/docs; and confirm history records the correct user and business.
 
 5. Scheduling
-- Build and autosave a draft, relaunch, publish, duplicate a selected day, verify My Schedule, offer/take a shift, submit time off and availability, and approve as an authorized manager.
+- Build and autosave a draft, relaunch, confirm staff still see the prior published version, publish without manual draft save, duplicate selected days only, verify My Schedule and dashboard shifts, offer/take a shift, submit time off and availability, and approve as an authorized manager.
 
 6. Employees and onboarding
-- Invite each supported role, finish invite registration and required packet steps, review permissions, approve/reject submitted forms, and verify restricted HR information is inaccessible to unauthorized users.
+- Invite each supported role; configure, upload, and preview employer forms; finish invite registration and required packet steps; return and resubmit a correction; approve the packet; review permissions; and verify restricted HR information is inaccessible to unauthorized users.
 
 7. Uploads and reports
 - Upload and replace PDFs/images, open them on-device, download each supported CSV/report, and confirm files contain only the active business's data.
@@ -322,7 +335,7 @@ Run this sequence on a physical phone against the private production-test enviro
 - Exercise ToDo, whiteboard, specials, announcements, spotlight, vendors, reminders, conversions, food cost, safety reference, and waste submission/reporting.
 
 9. Temperature monitoring
-- Register a gateway and nodes by serial, assign names, view current temperature/humidity, test stale/offline/recovery states and alerts, and confirm readings continue through app backgrounding and relaunch.
+- Register a gateway and nodes by serial, provision gateway Wi-Fi from the native app, assign names, view current temperature/humidity, test provisioning failure/retry plus stale/offline/recovery states and alerts, and confirm readings continue through app backgrounding and relaunch.
 
 10. Tenant isolation
 - Repeat representative user, schedule, list, document, report, and device actions in a second business and verify no names, records, files, notifications, or devices cross businesses.

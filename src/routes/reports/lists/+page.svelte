@@ -1,7 +1,14 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ReportDataTable, {
+    type ReportTableColumn,
+    type ReportTableRow
+  } from '$lib/components/ui/ReportDataTable.svelte';
+  import ReportDateFilters from '$lib/components/ui/ReportDateFilters.svelte';
   import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
+  import ReportSummaryStrip, { type ReportMetric } from '$lib/components/ui/ReportSummaryStrip.svelte';
+  import ReportToolbar, { type ReportToolbarLink } from '$lib/components/ui/ReportToolbar.svelte';
   import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
   type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
@@ -10,6 +17,14 @@
     submitted_at: number;
     section_title_snapshot: string;
     submitted_by_name: string;
+    item_name_snapshot: string;
+    details_snapshot: string;
+    submitted_value: string;
+    par_count_snapshot: number;
+    is_checked_snapshot: number;
+    completed_by_name: string | null;
+    completed_at: number | null;
+    event_type: string;
   };
 
   export let data: {
@@ -33,7 +48,23 @@
     checklists: 'fact_check'
   };
 
+  const tableColumns: ReportTableColumn[] = [
+    { key: 'date', label: 'Date' },
+    { key: 'list', label: 'List' },
+    { key: 'item', label: 'Item' },
+    { key: 'value', label: 'Value / Action' },
+    { key: 'done', label: 'Done' },
+    { key: 'completedBy', label: 'Completed By' },
+    { key: 'submittedBy', label: 'Submitted By' }
+  ];
+
   $: csvHref = nativeServerUrl(`/reports/lists.csv?domain=${data.domain}&start=${data.startDate}&end=${data.endDate}`);
+  $: reportLinks = [
+    { href: '/reports/lists?domain=preplists', label: 'Prep', icon: 'restaurant', active: data.domain === 'preplists' },
+    { href: '/reports/lists?domain=inventory', label: 'Inventory', icon: 'inventory_2', active: data.domain === 'inventory' },
+    { href: '/reports/lists?domain=orders', label: 'Orders', icon: 'receipt_long', active: data.domain === 'orders' },
+    { href: '/reports/lists?domain=checklists', label: 'Checklists', icon: 'fact_check', active: data.domain === 'checklists' }
+  ] satisfies ReportToolbarLink[];
 
   function weekStart(dateIso: string) {
     const date = new Date(`${dateIso}T00:00:00`);
@@ -63,19 +94,16 @@
           ? `${row.business_day}:${row.section_title_snapshot}`
           : `${row.business_day}:${row.section_title_snapshot}:${row.submitted_at}`;
       const existing = map[key];
-      if (existing) {
-        existing.itemCount += 1;
-      } else {
-        map[key] = { row, itemCount: 1 };
-      }
+      if (existing) existing.itemCount += 1;
+      else map[key] = { row, itemCount: 1 };
       return map;
     }, {});
 
     return Object.values(groups)
       .sort((a, b) => b.row.business_day.localeCompare(a.row.business_day) || b.row.submitted_at - a.row.submitted_at)
       .map(({ row, itemCount }): ReportExportEntry => ({
-        title: `${row.section_title_snapshot} · ${formatDate(row.business_day)}`,
-        meta: `${itemCount} item${itemCount === 1 ? '' : 's'} · ${row.submitted_by_name}`,
+        title: `${row.section_title_snapshot} | ${formatDate(row.business_day)}`,
+        meta: `${itemCount} item${itemCount === 1 ? '' : 's'} | ${row.submitted_by_name}`,
         href:
           data.domain === 'checklists'
             ? `/reports/lists.csv?domain=${data.domain}&start=${row.business_day}&end=${row.business_day}`
@@ -98,54 +126,40 @@
       .sort((a, b) => b.week.localeCompare(a.week))
       .map((entry): ReportExportEntry => ({
         title: `Week of ${formatDate(entry.week)}`,
-        meta: `${entry.itemCount} item${entry.itemCount === 1 ? '' : 's'} · ${entry.submissions} line${entry.submissions === 1 ? '' : 's'}`,
+        meta: `${entry.itemCount} item${entry.itemCount === 1 ? '' : 's'} | ${entry.submissions} line${entry.submissions === 1 ? '' : 's'}`,
         href: `/reports/lists.csv?domain=${data.domain}&start=${entry.week}&end=${addDays(entry.week, 6)}`,
         icon: icons[data.domain]
       }));
   }
 
   $: entries = data.domain === 'orders' ? weeklyEntries(data.rows) : submissionEntries(data.rows);
+  $: metrics = [
+    { label: 'Submissions', value: entries.length },
+    { label: 'Items', value: data.rows.length },
+    { label: 'Completed', value: data.rows.filter((row) => Boolean(row.is_checked_snapshot)).length }
+  ] satisfies ReportMetric[];
+  $: tableRows = data.rows.map(
+    (row, index): ReportTableRow => ({
+      id: `${row.business_day}-${row.submitted_at}-${index}`,
+      cells: {
+        date: formatDate(row.business_day),
+        list: row.section_title_snapshot,
+        item: row.details_snapshot ? `${row.item_name_snapshot} - ${row.details_snapshot}` : row.item_name_snapshot,
+        value: row.submitted_value || (row.par_count_snapshot ? String(row.par_count_snapshot) : '-'),
+        done: row.is_checked_snapshot ? 'Yes' : 'No',
+        completedBy: row.completed_by_name || '-',
+        submittedBy: row.submitted_by_name
+      }
+    })
+  );
 </script>
 
 <Layout>
   <PageHeader title={titles[data.domain] ?? 'List History'} />
 
-  <div class="report-toolbar">
-    <a href="/reports"><span class="material-icons" aria-hidden="true">arrow_back</span>Reports</a>
-    <a href="/reports/lists?domain=preplists"><span class="material-icons" aria-hidden="true">restaurant</span>Prep</a>
-    <a href="/reports/lists?domain=inventory"><span class="material-icons" aria-hidden="true">inventory_2</span>Inventory</a>
-    <a href="/reports/lists?domain=orders"><span class="material-icons" aria-hidden="true">receipt_long</span>Orders</a>
-    <a href="/reports/lists?domain=checklists"><span class="material-icons" aria-hidden="true">fact_check</span>Checklists</a>
-    <a href={csvHref}><span class="material-icons" aria-hidden="true">download</span>Full CSV</a>
-  </div>
-
-  <ReportExportList {entries} empty="No history exports yet." icon={icons[data.domain]} />
+  <ReportToolbar exportHref={csvHref} links={reportLinks} />
+  <ReportDateFilters startDate={data.startDate} endDate={data.endDate} hidden={{ domain: data.domain }} />
+  <ReportSummaryStrip {metrics} />
+  <ReportDataTable columns={tableColumns} rows={tableRows} />
+  <ReportExportList {entries} empty="No history exports yet." icon={icons[data.domain]} collapsed />
 </Layout>
-
-<style>
-  .report-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem 0.9rem;
-    align-items: center;
-    padding: 0.7rem 0;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .report-toolbar a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    border-bottom: 1px solid var(--color-divider);
-    color: var(--color-text);
-    font-weight: var(--weight-semibold);
-    text-decoration: none;
-  }
-
-  .report-toolbar .material-icons {
-    color: var(--color-text-muted);
-    font-size: 1rem;
-    line-height: 1;
-  }
-</style>

@@ -25,6 +25,7 @@ import {
   withdrawScheduleShiftRequest
 } from '$lib/server/schedules';
 import { hasBusinessCapability } from '$lib/server/permissions';
+import { requireBusinessId } from '$lib/server/tenant';
 import type { Actions } from './$types';
 
 function canManageSchedule(locals: App.Locals) {
@@ -70,24 +71,25 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     };
   }
 
+  const businessId = requireBusinessId(locals);
   const canManage = canManageSchedule(locals);
   const [schedule, offers, openShifts, openShiftRequests, employees, availability, pendingAvailability, timeOffRequests] = await Promise.all([
-    loadMyWeekSchedule(db, weekStart, userId, locals.businessId, { publishedOnly: !canManage }),
-    loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
-    loadScheduleOpenShiftsForWeek(db, weekStart, locals.businessId),
-    loadScheduleOpenShiftRequestsForWeek(db, weekStart, locals.businessId),
-    loadScheduleAssignableUsers(db, locals.businessId),
-    loadUserScheduleAvailability(db, userId, locals.businessId),
-    loadUserPendingScheduleAvailabilityRequest(db, userId, locals.businessId ?? ''),
-    loadUserScheduleTimeOffRequests(db, userId, locals.businessId)
+    loadMyWeekSchedule(db, weekStart, userId, businessId, { publishedOnly: !canManage }),
+    loadScheduleShiftOffersForWeek(db, weekStart, businessId),
+    loadScheduleOpenShiftsForWeek(db, weekStart, businessId),
+    loadScheduleOpenShiftRequestsForWeek(db, weekStart, businessId),
+    loadScheduleAssignableUsers(db, businessId),
+    loadUserScheduleAvailability(db, userId, businessId),
+    loadUserPendingScheduleAvailabilityRequest(db, userId, businessId),
+    loadUserScheduleTimeOffRequests(db, userId, businessId)
   ]);
 
   const currentUser = employees.find((employee) => employee.id === userId);
   const approvedDepartments = new Set(currentUser?.approvedDepartments ?? []);
   const hasPublishedWeek = schedule.week?.status === 'published';
   const [roleAccessByUser, roleDefinitions] = await Promise.all([
-    loadScheduleRoleAccessByUser(db, locals.businessId ?? '', employees.map((employee) => employee.id)),
-    loadScheduleRoleDefinitions(db, locals.businessId)
+    loadScheduleRoleAccessByUser(db, businessId, employees.map((employee) => employee.id)),
+    loadScheduleRoleDefinitions(db, businessId)
   ]);
   const roleDefinitionsById = new Map(roleDefinitions.map((role) => [role.id, role]));
   const canWorkRole = (userId: string, department: string, roleName: string) => {

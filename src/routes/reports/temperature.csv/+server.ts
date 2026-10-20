@@ -17,17 +17,17 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     end: url.searchParams.get('end')
   });
   const header = [
-    'date',
-    'hour',
-    'sensor_id',
-    'sensor_name',
-    'avg_temperature',
-    'min_temperature',
-    'max_temperature',
-    'avg_humidity_pct',
-    'min_humidity_pct',
-    'max_humidity_pct',
-    'reading_count'
+    'Date',
+    'Hour',
+    'Sensor ID',
+    'Sensor Name',
+    'Average Temperature (F)',
+    'Minimum Temperature (F)',
+    'Maximum Temperature (F)',
+    'Average Humidity (%)',
+    'Minimum Humidity (%)',
+    'Maximum Humidity (%)',
+    'Reading Count'
   ];
   const lines = [
     header.join(','),
@@ -50,10 +50,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     )
   ];
 
-  return new Response(lines.join('\n'), {
+  return new Response(`\uFEFF${lines.join('\n')}`, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': 'attachment; filename="temperature-hourly-averages.csv"'
+      'content-disposition': `attachment; filename="temperature-hourly-${report.startDate}-to-${report.endDate}.csv"`
     }
   });
 };

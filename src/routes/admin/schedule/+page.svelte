@@ -164,7 +164,13 @@
     prevWeekStart: string;
     nextWeekStart: string;
     users: UserOption[];
-    week: { status: 'draft' | 'published' } | null;
+    week: {
+      status: 'draft' | 'published';
+      draftVersion: number;
+      publishedVersion: number;
+      hasUnpublishedChanges: boolean;
+      draftUpdatedAt: number | null;
+    } | null;
     days: Day[];
     rosterUserIds: string[];
     offers: ShiftOffer[];
@@ -206,7 +212,14 @@
   let autosaveTimer: number | null = null;
   let autosaveState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
   let autosaveError = '';
-  let autosaveRequestId = 0;
+  let autosaveInFlight: Promise<boolean> | null = null;
+  let editRevision = 0;
+  let draftHasUnpublishedChanges = data.week?.hasUnpublishedChanges ?? false;
+  let loadedWeekStart = data.weekStart;
+  let loadedDraftVersion = data.week?.draftVersion ?? 0;
+  let serverDraftVersion = loadedDraftVersion;
+  let isScheduleSubmitting = false;
+  let scheduleSubmissionKind: 'save' | 'publish' | 'action' | '' = '';
   let laborTargetsPayload = '';
   let laborTargets = data.laborTargets.map((target) => ({ ...target }));
   let openShiftDate = data.weekStart;
@@ -275,7 +288,6 @@
   $: if (!selectedTemplateId && data.templates.length > 0) {
     selectedTemplateId = data.templates[0].id;
   }
-
   function createShift(userId: string, shiftDate: string): DraftShift {
     const approvedDepartments = approvedDepartmentsForUser(userId);
     const schedulableDepartments = approvedDepartments.filter(
@@ -302,16 +314,16 @@
     };
   }
 
-  const initialVisibleUserIds = Array.from(
-    new Set(
-      [
+  function scheduleUserIdsFromData() {
+    return Array.from(
+      new Set([
         ...data.rosterUserIds.filter((userId) => userId.length > 0),
         ...data.days.flatMap((day) =>
           day.shifts.map((shift) => shift.userId).filter((userId) => userId.length > 0)
         )
-      ]
-    )
-  );
+      ])
+    );
+  }
 
   function draftFromShift(shift: Shift): DraftShift {
     const department = normalizeDepartment(shift.department);
@@ -347,7 +359,8 @@
     };
   }
 
-  let employeeRows: EmployeeRow[] = initialVisibleUserIds
+  function buildEmployeeRowsFromData() {
+    return scheduleUserIdsFromData()
     .map((userId) => buildRow(userId))
     .sort((a, b) =>
       compareUsers(
@@ -355,10 +368,27 @@
         userOption(b.userId) ?? { id: b.userId, displayName: null, email: b.userId, approvedDepartments: [] }
       )
     );
+  }
+
+  let employeeRows: EmployeeRow[] = buildEmployeeRowsFromData();
+  $: if (
+    (data.weekStart !== loadedWeekStart || (data.week?.draftVersion ?? 0) !== loadedDraftVersion) &&
+    !hasUnsavedChanges
+  ) {
+    loadedWeekStart = data.weekStart;
+    loadedDraftVersion = data.week?.draftVersion ?? 0;
+    serverDraftVersion = loadedDraftVersion;
+    draftHasUnpublishedChanges = data.week?.hasUnpublishedChanges ?? false;
+    employeeRows = buildEmployeeRowsFromData();
+    editorDraft = null;
+    isShiftEditorOpen = false;
+    bumpGridRender();
+  }
   const initialWeekPayload = JSON.stringify(
     employeeRows.flatMap((row) =>
       row.cells.flatMap((cell) =>
         cell.shifts.map((shift) => ({
+          id: shift.clientId,
           shiftDate: cell.date,
           userId: row.userId,
           department: shift.department,
@@ -394,6 +424,12 @@
     pendingOpenShiftRequests.length +
     pendingTimeOffRequests.length +
     data.pendingAvailability.length;
+  $: configuredLaborTargetCount = laborTargets.filter(
+    (target) =>
+      target.projectedSales > 0 ||
+      target.targetLaborPercent > 0 ||
+      target.averageHourlyRate > 0
+  ).length;
   $: visibleOpenShiftCount = data.openShifts.filter(
     (shift) => selectedSection === 'All' || shift.department === selectedSection
   ).length;
@@ -408,11 +444,13 @@
     0
   );
   $: scheduleStateLabel =
-    data.week?.status === 'published' && !hasUnsavedChanges
-      ? 'Published Schedule'
-      : hasUnsavedChanges
-        ? 'Unsaved Draft'
-        : 'Saved Draft';
+    hasUnsavedChanges
+      ? 'Saving changes'
+      : data.week?.status !== 'published'
+        ? 'Not published'
+        : draftHasUnpublishedChanges
+          ? 'Unpublished changes'
+          : 'Published';
   $: allShifts = employeeRows.flatMap((row) =>
     row.cells.flatMap((cell) =>
       cell.shifts.map((shift) => ({
@@ -495,15 +533,105 @@
   );
   $: visibleWeekDateSet = new Set(data.days.map((day) => day.date));
 
-  const withFeedback: SubmitFunction = () => {
+  const withFeedback: SubmitFunction = async ({ cancel, formData }) => {
+    if (isScheduleSubmitting) {
+      cancel();
+      return;
+    }
+
+    isScheduleSubmitting = true;
+    scheduleSubmissionKind = 'action';
+    clearAutosaveTimer();
+    const pendingAutosave = autosaveInFlight;
+    if (pendingAutosave) await pendingAutosave;
+    if (hasUnsavedChanges && !(await autosaveDraft())) {
+      isScheduleSubmitting = false;
+      scheduleSubmissionKind = '';
+      cancel();
+      pushToast(autosaveError || 'Save the current schedule before continuing.', 'error');
+      return;
+    }
+    formData.set('draft_version', String(serverDraftVersion));
+
     return async ({ result }) => {
-      await applyAction(result);
-      if (result.type === 'success') {
-        hasUnsavedChanges = false;
-        await invalidate('app:admin-schedule');
-        pushToast(result.data?.message ?? 'Schedule updated.', 'success');
-      } else if (result.type === 'failure') {
-        pushToast(result.data?.error ?? 'That schedule change could not be saved.', 'error');
+      try {
+        await applyAction(result);
+        if (result.type === 'success') {
+          await invalidate('app:admin-schedule');
+          pushToast(result.data?.message ?? 'Schedule updated.', 'success');
+        } else if (result.type === 'failure') {
+          pushToast(result.data?.error ?? 'That schedule change could not be saved.', 'error');
+        }
+      } finally {
+        isScheduleSubmitting = false;
+        scheduleSubmissionKind = '';
+        if (hasUnsavedChanges) queueDraftAutosave();
+      }
+    };
+  };
+
+  const submitScheduleWeek: SubmitFunction = async ({ action, cancel, formData }) => {
+    if (isScheduleSubmitting) {
+      cancel();
+      return;
+    }
+
+    const isPublishing = action.search.includes('publish_week');
+    isScheduleSubmitting = true;
+    scheduleSubmissionKind = isPublishing ? 'publish' : 'save';
+    clearAutosaveTimer();
+    const pendingAutosave = autosaveInFlight;
+    if (pendingAutosave) await pendingAutosave;
+    if (isPublishing && hasUnsavedChanges && !(await autosaveDraft())) {
+      isScheduleSubmitting = false;
+      scheduleSubmissionKind = '';
+      cancel();
+      pushToast(autosaveError || 'The latest schedule changes could not be saved.', 'error');
+      return;
+    }
+
+    const submittedRevision = editRevision;
+    writeSchedulePayloadToFormData(formData);
+    if (isPublishing) {
+      formData.delete('payload');
+      formData.delete('team_payload');
+      warnBeforePublish();
+    }
+
+    return async ({ result }) => {
+      try {
+        await applyAction(result);
+        if (result.type === 'success') {
+          if (editRevision === submittedRevision) {
+            hasUnsavedChanges = false;
+            autosaveState = 'saved';
+            autosaveError = '';
+          }
+          if (Number.isInteger(Number(result.data?.draftVersion))) {
+            serverDraftVersion = Number(result.data?.draftVersion);
+          }
+          draftHasUnpublishedChanges = !isPublishing;
+          await invalidate('app:admin-schedule');
+          pushToast(
+            result.data?.message ?? (isPublishing ? 'Schedule published.' : 'Schedule saved.'),
+            'success'
+          );
+        } else if (result.type === 'failure') {
+          pushToast(
+            result.data?.error ??
+              (isPublishing ? 'The schedule could not be published.' : 'The draft could not be saved.'),
+            'error'
+          );
+        } else if (result.type === 'error') {
+          pushToast(
+            isPublishing ? 'The schedule could not be published.' : 'The draft could not be saved.',
+            'error'
+          );
+        }
+      } finally {
+        isScheduleSubmitting = false;
+        scheduleSubmissionKind = '';
+        if (hasUnsavedChanges) queueDraftAutosave();
       }
     };
   };
@@ -513,6 +641,7 @@
       employeeRows.flatMap((row) =>
         row.cells.flatMap((cell) =>
           cell.shifts.map((shift) => ({
+            id: shift.clientId,
             shiftDate: cell.date,
             userId: row.userId,
             department: shift.department,
@@ -529,6 +658,7 @@
   }
 
   function markDirty() {
+    editRevision += 1;
     hasUnsavedChanges = true;
     queueDraftAutosave();
   }
@@ -537,46 +667,36 @@
     gridRenderVersion += 1;
   }
 
-  function writeSchedulePayloadToForm(form: HTMLFormElement | null) {
-    if (!form) return;
-    const payloadInput = form.querySelector<HTMLInputElement>('input[name="payload"]');
-    const teamInput = form.querySelector<HTMLInputElement>('input[name="team_payload"]');
-    if (payloadInput) payloadInput.value = weekPayload;
-    if (teamInput) teamInput.value = teamPayload;
-  }
-
-  function prepareWeekPayload(event?: SubmitEvent) {
+  function captureSchedulePayload() {
     weekPayload = serializeWeekPayload();
     teamPayload = JSON.stringify(employeeRows.map((row) => row.userId));
-    writeSchedulePayloadToForm(event?.currentTarget instanceof HTMLFormElement ? event.currentTarget : null);
   }
 
-  function preparePublishPayload(event?: SubmitEvent | MouseEvent) {
-    const form =
-      event?.currentTarget instanceof HTMLFormElement
-        ? event.currentTarget
-        : event?.currentTarget instanceof HTMLButtonElement
-          ? event.currentTarget.form
-          : null;
-    prepareWeekPayload();
-    writeSchedulePayloadToForm(form);
-    warnBeforePublish();
+  function writeSchedulePayloadToFormData(formData: FormData) {
+    captureSchedulePayload();
+    formData.set('week_start', data.weekStart);
+    formData.set('draft_version', String(serverDraftVersion));
+    formData.set('payload', weekPayload);
+    formData.set('team_payload', teamPayload);
   }
 
   function buildDraftFormData() {
-    prepareWeekPayload();
     const formData = new FormData();
-    formData.set('week_start', data.weekStart);
-    formData.set('payload', weekPayload);
-    formData.set('team_payload', teamPayload);
+    writeSchedulePayloadToFormData(formData);
     return formData;
   }
 
+  function clearAutosaveTimer() {
+    if (typeof window === 'undefined' || autosaveTimer === null) return;
+    window.clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+
   function queueDraftAutosave() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || isScheduleSubmitting || autosaveInFlight) return;
     autosaveState = 'idle';
     autosaveError = '';
-    if (autosaveTimer) window.clearTimeout(autosaveTimer);
+    clearAutosaveTimer();
     autosaveTimer = window.setTimeout(() => {
       autosaveTimer = null;
       void autosaveDraft();
@@ -584,38 +704,56 @@
   }
 
   async function autosaveDraft() {
-    const requestId = ++autosaveRequestId;
-    autosaveState = 'saving';
-    autosaveError = '';
+    if (autosaveInFlight) return autosaveInFlight;
 
-    try {
-      const response = await fetch('?/save_week', {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'x-sveltekit-action': 'true'
-        },
-        body: buildDraftFormData()
-      });
-      const result = deserialize(await response.text());
-      if (requestId !== autosaveRequestId) return;
+    const request = (async () => {
+      autosaveState = 'saving';
+      autosaveError = '';
 
-      if (result.type === 'success') {
-        hasUnsavedChanges = false;
-        autosaveState = 'saved';
-        return;
+      while (true) {
+        const savingRevision = editRevision;
+        try {
+          const response = await fetch('?/save_week', {
+            method: 'POST',
+            headers: {
+              accept: 'application/json',
+              'x-sveltekit-action': 'true'
+            },
+            body: buildDraftFormData()
+          });
+          const result = deserialize(await response.text());
+
+          if (result.type !== 'success') {
+            autosaveState = 'error';
+            autosaveError =
+              result.type === 'failure'
+                ? String(result.data?.error ?? 'Autosave failed.')
+                : 'Autosave failed.';
+            return false;
+          }
+          if (Number.isInteger(Number(result.data?.draftVersion))) {
+            serverDraftVersion = Number(result.data?.draftVersion);
+          }
+        } catch {
+          autosaveState = 'error';
+          autosaveError = 'Autosave failed.';
+          return false;
+        }
+
+        if (editRevision === savingRevision) {
+          hasUnsavedChanges = false;
+          autosaveState = 'saved';
+          draftHasUnpublishedChanges = true;
+          return true;
+        }
       }
+    })();
 
-      autosaveState = 'error';
-      autosaveError =
-        result.type === 'failure'
-          ? String(result.data?.error ?? 'Autosave failed.')
-          : 'Autosave failed.';
-    } catch {
-      if (requestId !== autosaveRequestId) return;
-      autosaveState = 'error';
-      autosaveError = 'Autosave failed.';
-    }
+    autosaveInFlight = request;
+    void request.finally(() => {
+      if (autosaveInFlight === request) autosaveInFlight = null;
+    });
+    return request;
   }
 
   function prepareLaborTargets() {
@@ -1142,6 +1280,16 @@
     editorDraft = { ...editorDraft };
   }
 
+  function commitDraftTime() {
+    if (!editorDraft) return;
+    editorDraft = { ...editorDraft, activeTimeEditor: '' };
+  }
+
+  function cancelDraftTime() {
+    if (!editorDraft) return;
+    editorDraft = { ...editorDraft, activeTimeEditor: '' };
+  }
+
   function collapseShiftFromDraft() {
     if (!editorDraft) return;
     const {
@@ -1276,11 +1424,13 @@
                     </form>
                   <a href={`/admin/schedule?week=${data.weekStart}&tool=setup`} class="menu-item menu-link">Roles &amp; Departments</a>
                   <a href="/admin/users?view=team" class="menu-item menu-link">People &amp; HR</a>
-                    <form method="POST" action="?/publish_week" use:enhance={withFeedback} class="menu-separate" on:submit={preparePublishPayload}>
+                    <form method="POST" action="?/publish_week" use:enhance={submitScheduleWeek} class="menu-separate">
                       <input type="hidden" name="week_start" value={data.weekStart} />
                       <input type="hidden" name="payload" value={weekPayload} />
                       <input type="hidden" name="team_payload" value={teamPayload} />
-                      <button type="submit" class="menu-item menu-item-primary">Publish</button>
+                      <button type="submit" class="menu-item menu-item-primary" disabled={isScheduleSubmitting}>
+                        {scheduleSubmissionKind === 'publish' ? 'Publishing...' : 'Publish'}
+                      </button>
                     </form>
                   </div>
                 </details>
@@ -1298,6 +1448,28 @@
       <section class="toolbox-shell" aria-label="Schedule tools">
         {#if selectedScheduleTool === 'approvals'}
           <div class="tool-section">
+            <div class="tool-section-head">
+              <h2>Requests &amp; Availability</h2>
+              <span class="status-pill">{pendingApprovalCount} pending</span>
+            </div>
+            <div class="tool-metric-strip" aria-label="Pending schedule requests">
+              <div>
+                <span>Shift Offers</span>
+                <strong>{pendingOffers.length}</strong>
+              </div>
+              <div>
+                <span>Open Shifts</span>
+                <strong>{pendingOpenShiftRequests.length}</strong>
+              </div>
+              <div>
+                <span>Time Off</span>
+                <strong>{pendingTimeOffRequests.length}</strong>
+              </div>
+              <div>
+                <span>Availability</span>
+                <strong>{data.pendingAvailability.length}</strong>
+              </div>
+            </div>
             {#if pendingApprovalCount === 0}
               <p class="tool-empty">No approvals are waiting right now.</p>
             {:else}
@@ -1418,89 +1590,9 @@
         {:else if selectedScheduleTool === 'open-shifts'}
           <div class="tool-section">
             <div class="tool-section-head">
-            <div>
-              <h2>Open Shift</h2>
+              <h2>Open Shifts</h2>
+              <span class="status-pill">{data.openShifts.length} open</span>
             </div>
-            <span class="status-pill">{data.openShifts.length} open</span>
-          </div>
-          <form method="POST" action="?/create_open_shift" use:enhance={withFeedback} class="planning-create-form">
-            <input type="hidden" name="week_start" value={data.weekStart} />
-            <input type="hidden" name="start_time" value={openShiftStartTime} />
-            <input type="hidden" name="end_label" value={openShiftEndLabel} />
-            <div class="planning-fields">
-              <label>
-                <span>Date</span>
-                <input type="date" name="shift_date" bind:value={openShiftDate} />
-              </label>
-              <label>
-                <span>Department</span>
-                <select name="department" bind:value={openShiftDepartment}>
-                  {#each availableDepartments as department}
-                    <option value={department}>{department}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Role</span>
-                <select name="role" bind:value={openShiftRole}>
-                  {#each openShiftRoles as role}
-                    <option value={role}>{role}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Start</span>
-                <button
-                  type="button"
-                  class="time-launch-btn"
-                  on:click={() => (openShiftTimeEditor = openShiftTimeEditor === 'start' ? '' : 'start')}
-                >
-                  {openShiftStartTime ? formatScheduleTimeLabel(openShiftStartTime) : 'Set Start Time'}
-                </button>
-                {#if openShiftTimeEditor === 'start'}
-                  <ScheduleTimeSelect
-                    bind:value={openShiftStartTime}
-                    on:commit={() => (openShiftTimeEditor = '')}
-                  />
-                {/if}
-              </label>
-              <label>
-                <span>End</span>
-                <button
-                  type="button"
-                  class="time-launch-btn"
-                  on:click={() => (openShiftTimeEditor = openShiftTimeEditor === 'end' ? '' : 'end')}
-                >
-                  {openShiftEndLabel
-                    ? /^\d{2}:\d{2}$/.test(openShiftEndLabel)
-                      ? formatScheduleTimeLabel(openShiftEndLabel)
-                      : openShiftEndLabel
-                    : 'Set End Time'}
-                </button>
-                {#if openShiftTimeEditor === 'end'}
-                  <ScheduleTimeSelect
-                    bind:value={openShiftEndLabel}
-                    includeSpecialOptions={[...scheduleEndLabels]}
-                    specialPlaceholder="Timed End"
-                    on:commit={() => (openShiftTimeEditor = '')}
-                  />
-                {/if}
-              </label>
-              <label>
-                <span>Break</span>
-                <input type="number" name="break_minutes" min="0" step="5" value="0" />
-              </label>
-              <label class="wide-field">
-                <span>Detail</span>
-                <input type="text" name="detail" placeholder="Line, expo, prep, close..." />
-              </label>
-              <label class="wide-field">
-                <span>Notes</span>
-                <input type="text" name="notes" placeholder="Anything the pickup needs to know" />
-              </label>
-            </div>
-            <button type="submit" class="create-shift-btn">Create Open Shift</button>
-          </form>
 
           {#if data.openShifts.length > 0}
             <div class="compact-list">
@@ -1517,7 +1609,93 @@
                 </article>
               {/each}
             </div>
+          {:else}
+            <p class="tool-empty">No open shifts for this week.</p>
           {/if}
+
+          <details class="management-drawer">
+            <summary>Create Open Shift</summary>
+            <form method="POST" action="?/create_open_shift" use:enhance={withFeedback} class="planning-create-form">
+              <input type="hidden" name="week_start" value={data.weekStart} />
+              <input type="hidden" name="start_time" value={openShiftStartTime} />
+              <input type="hidden" name="end_label" value={openShiftEndLabel} />
+              <div class="planning-fields">
+                <label>
+                  <span>Date</span>
+                  <input type="date" name="shift_date" bind:value={openShiftDate} />
+                </label>
+                <label>
+                  <span>Department</span>
+                  <select name="department" bind:value={openShiftDepartment}>
+                    {#each availableDepartments as department}
+                      <option value={department}>{department}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Role</span>
+                  <select name="role" bind:value={openShiftRole}>
+                    {#each openShiftRoles as role}
+                      <option value={role}>{role}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Start</span>
+                  <button
+                    type="button"
+                    class="time-launch-btn"
+                    on:click={() => (openShiftTimeEditor = openShiftTimeEditor === 'start' ? '' : 'start')}
+                  >
+                    {openShiftStartTime ? formatScheduleTimeLabel(openShiftStartTime) : 'Set Start Time'}
+                  </button>
+                  {#if openShiftTimeEditor === 'start'}
+                    <ScheduleTimeSelect
+                      bind:value={openShiftStartTime}
+                      on:commit={() => (openShiftTimeEditor = '')}
+                      on:cancel={() => (openShiftTimeEditor = '')}
+                    />
+                  {/if}
+                </label>
+                <label>
+                  <span>End</span>
+                  <button
+                    type="button"
+                    class="time-launch-btn"
+                    on:click={() => (openShiftTimeEditor = openShiftTimeEditor === 'end' ? '' : 'end')}
+                  >
+                    {openShiftEndLabel
+                      ? /^\d{2}:\d{2}$/.test(openShiftEndLabel)
+                        ? formatScheduleTimeLabel(openShiftEndLabel)
+                        : openShiftEndLabel
+                      : 'Set End Time'}
+                  </button>
+                  {#if openShiftTimeEditor === 'end'}
+                    <ScheduleTimeSelect
+                      bind:value={openShiftEndLabel}
+                      includeSpecialOptions={[...scheduleEndLabels]}
+                      specialPlaceholder="Timed End"
+                      on:commit={() => (openShiftTimeEditor = '')}
+                      on:cancel={() => (openShiftTimeEditor = '')}
+                    />
+                  {/if}
+                </label>
+                <label>
+                  <span>Break</span>
+                  <input type="number" name="break_minutes" min="0" step="5" value="0" />
+                </label>
+                <label class="wide-field">
+                  <span>Detail</span>
+                  <input type="text" name="detail" placeholder="Line, expo, prep, close..." />
+                </label>
+                <label class="wide-field">
+                  <span>Notes</span>
+                  <input type="text" name="notes" placeholder="Anything the pickup needs to know" />
+                </label>
+              </div>
+              <button type="submit" class="create-shift-btn">Create Open Shift</button>
+            </form>
+          </details>
           </div>
         {:else if selectedScheduleTool === 'labor'}
           <form
@@ -1530,9 +1708,14 @@
           <input type="hidden" name="week_start" value={data.weekStart} />
           <input type="hidden" name="labor_targets" value={laborTargetsPayload} />
           <div class="tool-section-head">
-            <div>
-              <h2>Targets</h2>
-            </div>
+            <h2>Labor Targets</h2>
+            <span class="status-pill">{configuredLaborTargetCount}/7 set</span>
+          </div>
+          <div class="target-table-head" aria-hidden="true">
+            <span>Day</span>
+            <span>Projected Sales</span>
+            <span>Labor %</span>
+            <span>Average Rate</span>
           </div>
           <div class="target-list">
             {#each data.days as day}
@@ -1574,47 +1757,64 @@
         {:else if selectedScheduleTool === 'templates'}
           <section class="tool-section">
           <div class="tool-section-head">
-            <div>
-              <h2>Reusable Weeks</h2>
-            </div>
+            <h2>Schedule Templates</h2>
             <span class="status-pill">{data.templates.length} saved</span>
           </div>
-          <form method="POST" action="?/save_template" use:enhance={withFeedback} class="template-row">
-            <input type="hidden" name="week_start" value={data.weekStart} />
-            <label>
-              <span>Name</span>
-              <input type="text" name="template_name" placeholder="Dinner rush baseline" />
-            </label>
-            <button type="submit" class="create-shift-btn">Save Week</button>
-          </form>
-          <form method="POST" action="?/apply_template" use:enhance={withFeedback} class="template-row">
-            <input type="hidden" name="week_start" value={data.weekStart} />
-            <label>
-              <span>Apply</span>
-              <select name="template_id" bind:value={selectedTemplateId}>
-                {#if data.templates.length === 0}
-                  <option value="">No templates saved</option>
-                {:else}
-                  {#each data.templates as template}
-                    <option value={template.id}>{template.name} ({template.shiftCount})</option>
-                  {/each}
-                {/if}
-              </select>
-            </label>
-            <button type="submit" name="template_mode" value="merge" class="create-shift-btn" disabled={!selectedTemplateId}>
-              Add
-            </button>
-            <button type="submit" name="template_mode" value="replace" class="remove-btn" disabled={!selectedTemplateId}>
-              Replace
-            </button>
-          </form>
+          {#if data.templates.length > 0}
+            <div class="template-catalog">
+              {#each data.templates as template}
+                <div>
+                  <strong>{template.name}</strong>
+                  <span>{template.shiftCount} shifts</span>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="tool-empty">No schedule templates saved.</p>
+          {/if}
+
+          <details class="management-drawer">
+            <summary>Save Current Week</summary>
+            <form method="POST" action="?/save_template" use:enhance={withFeedback} class="template-row drawer-form">
+              <input type="hidden" name="week_start" value={data.weekStart} />
+              <label>
+                <span>Name</span>
+                <input type="text" name="template_name" placeholder="Dinner rush baseline" />
+              </label>
+              <button type="submit" class="create-shift-btn">Save Week</button>
+            </form>
+          </details>
+
+          <details class="management-drawer">
+            <summary>Apply Template</summary>
+            <form method="POST" action="?/apply_template" use:enhance={withFeedback} class="template-row drawer-form">
+              <input type="hidden" name="week_start" value={data.weekStart} />
+              <label>
+                <span>Template</span>
+                <select name="template_id" bind:value={selectedTemplateId}>
+                  {#if data.templates.length === 0}
+                    <option value="">No templates saved</option>
+                  {:else}
+                    {#each data.templates as template}
+                      <option value={template.id}>{template.name} ({template.shiftCount})</option>
+                    {/each}
+                  {/if}
+                </select>
+              </label>
+              <button type="submit" name="template_mode" value="merge" class="create-shift-btn" disabled={!selectedTemplateId}>
+                Add
+              </button>
+              <button type="submit" name="template_mode" value="replace" class="remove-btn" disabled={!selectedTemplateId}>
+                Replace
+              </button>
+            </form>
+          </details>
         </section>
         {:else}
           <section class="tool-section schedule-setup" aria-label="Schedule setup">
             <div class="tool-section-head">
-              <div>
-                <h2>Roles &amp; Departments</h2>
-              </div>
+              <h2>Roles &amp; Departments</h2>
+              <span class="status-pill">{availableDepartments.length} departments | {data.roleDefinitions.length} roles</span>
             </div>
 
             <div class="setup-row autofill-row">
@@ -1627,32 +1827,6 @@
                 <button type="submit" class:setup-enabled={data.settings.autofillNewWeeks}>
                   {data.settings.autofillNewWeeks ? 'Disable' : 'Enable'}
                 </button>
-              </form>
-            </div>
-
-            <div class="setup-create-grid">
-              <form method="POST" action="?/create_department" use:enhance={withFeedback} class="setup-form">
-                <label>
-                  <span>New Department</span>
-                  <input name="department_name" placeholder="Department name" required />
-                </label>
-                <button type="submit">Add Department</button>
-              </form>
-
-              <form method="POST" action="?/create_role" use:enhance={withFeedback} class="setup-form role-setup-form">
-                <label>
-                  <span>Department</span>
-                  <select name="department" bind:value={newRoleDepartment} disabled={availableDepartments.length === 0} required>
-                    {#each availableDepartments as department}
-                      <option value={department}>{department}</option>
-                    {/each}
-                  </select>
-                </label>
-                <label>
-                  <span>New Role</span>
-                  <input name="role_name" placeholder="Role name" required />
-                </label>
-                <button type="submit" disabled={availableDepartments.length === 0}>Add Role</button>
               </form>
             </div>
 
@@ -1686,13 +1860,42 @@
                 </article>
               {/each}
             </div>
+
+            <details class="management-drawer">
+              <summary>Add Department or Role</summary>
+              <div class="setup-create-grid drawer-form">
+                <form method="POST" action="?/create_department" use:enhance={withFeedback} class="setup-form">
+                  <label>
+                    <span>New Department</span>
+                    <input name="department_name" placeholder="Department name" required />
+                  </label>
+                  <button type="submit">Add Department</button>
+                </form>
+
+                <form method="POST" action="?/create_role" use:enhance={withFeedback} class="setup-form role-setup-form">
+                  <label>
+                    <span>Department</span>
+                    <select name="department" bind:value={newRoleDepartment} disabled={availableDepartments.length === 0} required>
+                      {#each availableDepartments as department}
+                        <option value={department}>{department}</option>
+                      {/each}
+                    </select>
+                  </label>
+                  <label>
+                    <span>New Role</span>
+                    <input name="role_name" placeholder="Role name" required />
+                  </label>
+                  <button type="submit" disabled={availableDepartments.length === 0}>Add Role</button>
+                </form>
+              </div>
+            </details>
           </section>
         {/if}
       </section>
       {/if}
     </section>
 
-    <form method="POST" action="?/save_week" use:enhance={withFeedback} class="planner-shell" on:submit={prepareWeekPayload}>
+    <form method="POST" action="?/save_week" use:enhance={submitScheduleWeek} class="planner-shell">
       <input type="hidden" name="week_start" value={data.weekStart} />
       <input type="hidden" name="payload" value={weekPayload} />
       <input type="hidden" name="team_payload" value={teamPayload} />
@@ -1715,9 +1918,9 @@
                 : `${selectedSection} Hours: ${formatHours(visibleScheduledHours)}`}
             </span>
             {#if autosaveState === 'saving'}
-              <span class="autosave-state">Saving draft...</span>
+              <span class="autosave-state">Saving...</span>
             {:else if autosaveState === 'saved'}
-              <span class="autosave-state">Draft saved</span>
+              <span class="autosave-state">Saved</span>
             {:else if autosaveState === 'error'}
               <span class="autosave-state autosave-state-error">{autosaveError}</span>
             {/if}
@@ -1730,14 +1933,13 @@
             </div>
           </div>
           <div class="planner-submit-actions">
-            <button type="submit">Save Draft</button>
             <button
               type="submit"
               formaction="?/publish_week"
               class="planner-publish-btn"
-              on:click={preparePublishPayload}
+              disabled={isScheduleSubmitting}
             >
-              Publish Schedule
+              {scheduleSubmissionKind === 'publish' ? 'Publishing...' : 'Publish Schedule'}
             </button>
           </div>
         </div>
@@ -1948,7 +2150,11 @@
                     : 'Set Start Time'}
                 </button>
                 {#if editorDraft.activeTimeEditor === 'start'}
-                  <ScheduleTimeSelect bind:value={editorDraft.startTime} on:commit={touchDraft} />
+                  <ScheduleTimeSelect
+                    bind:value={editorDraft.startTime}
+                    on:commit={commitDraftTime}
+                    on:cancel={cancelDraftTime}
+                  />
                 {/if}
               </label>
 
@@ -1970,7 +2176,8 @@
                     bind:value={editorDraft.endLabel}
                     includeSpecialOptions={[...scheduleEndLabels]}
                     specialPlaceholder="Timed End"
-                    on:commit={touchDraft}
+                    on:commit={commitDraftTime}
+                    on:cancel={cancelDraftTime}
                   />
                 {/if}
               </label>
@@ -2151,6 +2358,78 @@
     padding-top: 0.2rem;
   }
 
+  .tool-metric-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .tool-metric-strip > div {
+    padding: 0.7rem 0.85rem;
+    border-right: 1px solid var(--color-divider);
+  }
+
+  .tool-metric-strip > div:last-child {
+    border-right: 0;
+  }
+
+  .tool-metric-strip span,
+  .target-table-head span {
+    color: var(--color-text-muted);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .tool-metric-strip strong {
+    display: block;
+    margin-top: 0.16rem;
+    font-size: 1.3rem;
+    line-height: 1;
+  }
+
+  .management-drawer {
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .management-drawer > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 2.65rem;
+    padding: 0.58rem 0;
+    list-style: none;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.74rem;
+    font-weight: var(--weight-semibold);
+  }
+
+  .management-drawer > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .management-drawer > summary::after {
+    content: '+';
+    color: var(--color-text-muted);
+    font-size: 1rem;
+  }
+
+  .management-drawer[open] > summary {
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .management-drawer[open] > summary::after {
+    content: '-';
+  }
+
+  .drawer-form,
+  .management-drawer > .planning-create-form {
+    padding: 0.85rem 0;
+  }
+
   .tool-empty {
     margin: 0;
     color: var(--color-text-muted);
@@ -2192,8 +2471,10 @@
     display: grid;
     grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
     gap: 1rem;
-    padding-top: 0.8rem;
-    border-top: 1px solid var(--color-divider);
+  }
+
+  .management-drawer .setup-create-grid {
+    border-top: 0;
   }
 
   .setup-form {
@@ -2647,6 +2928,27 @@
     min-height: 2.3rem;
   }
 
+  .toolbox-shell .create-shift-btn,
+  .toolbox-shell .remove-btn,
+  .toolbox-shell .setup-form button,
+  .toolbox-shell .autofill-row button {
+    min-height: 2rem;
+    padding: 0.38rem 0.58rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
+    box-shadow: none;
+    font-size: 0.72rem;
+    font-weight: var(--weight-semibold);
+    flex: 0 0 auto;
+  }
+
+  .toolbox-shell .remove-btn {
+    color: color-mix(in srgb, var(--color-danger) 76%, var(--color-text));
+  }
+
   .compact-list article,
   .template-row {
     display: flex;
@@ -2702,6 +3004,29 @@
     gap: 0.45rem;
   }
 
+  .template-catalog {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .template-catalog > div {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.7rem 0.8rem;
+    border-right: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .template-catalog > div:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .template-catalog span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+  }
+
   .compact-list article {
     padding: 0.55rem 0;
     border-top: 1px solid var(--color-divider);
@@ -2723,6 +3048,14 @@
     grid-template-columns: minmax(6rem, 1fr) repeat(3, minmax(0, 0.9fr));
     gap: 0.45rem;
     align-items: center;
+  }
+
+  .target-table-head {
+    display: grid;
+    grid-template-columns: minmax(6rem, 1fr) repeat(3, minmax(0, 0.9fr));
+    gap: 0.45rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .target-list strong {
@@ -3136,8 +3469,14 @@
     }
 
     .setup-create-grid,
-    .department-setup-list {
+    .department-setup-list,
+    .template-catalog {
       grid-template-columns: 1fr;
+    }
+
+    .template-catalog > div,
+    .template-catalog > div:nth-child(3n) {
+      border-right: 0;
     }
 
     .role-setup-form {
@@ -3167,11 +3506,27 @@
       align-items: stretch;
     }
 
+    .tool-metric-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tool-metric-strip > div:nth-child(2) {
+      border-right: 0;
+    }
+
+    .tool-metric-strip > div:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--color-divider);
+    }
+
     .planning-fields,
     .target-list article,
     .template-row,
     .setup-form {
       grid-template-columns: 1fr;
+    }
+
+    .target-table-head {
+      display: none;
     }
 
     .autofill-row,

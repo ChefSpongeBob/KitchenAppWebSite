@@ -1,5 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
 import { requireAdmin } from '$lib/server/admin';
+import { requireBusinessId } from '$lib/server/tenant';
 import {
   addDays,
   applyScheduleTemplateToWeek,
@@ -79,19 +80,20 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     };
   }
 
+  const businessId = requireBusinessId(locals);
   const [users, schedule, offers, openShifts, openShiftRequests, settings, timeOffRequests, templates, laborTargets, roleDefinitions] = await Promise.all([
-    loadScheduleAssignableUsers(db, locals.businessId),
-    loadScheduleWeek(db, weekStart, { userId: locals.userId ?? null, businessId: locals.businessId }),
-    loadScheduleShiftOffersForWeek(db, weekStart, locals.businessId),
-    loadScheduleOpenShiftsForWeek(db, weekStart, locals.businessId),
-    loadScheduleOpenShiftRequestsForWeek(db, weekStart, locals.businessId),
-    loadScheduleSettings(db, locals.businessId),
-    loadScheduleTimeOffRequestsForRange(db, weekStart, addDays(weekStart, 6), locals.businessId),
-    loadScheduleTemplates(db, locals.businessId),
-    loadScheduleLaborTargets(db, weekStart, locals.businessId),
-    loadScheduleRoleDefinitions(db, locals.businessId)
+    loadScheduleAssignableUsers(db, businessId),
+    loadScheduleWeek(db, weekStart, { userId: locals.userId ?? null, businessId }),
+    loadScheduleShiftOffersForWeek(db, weekStart, businessId),
+    loadScheduleOpenShiftsForWeek(db, weekStart, businessId, { draft: true }),
+    loadScheduleOpenShiftRequestsForWeek(db, weekStart, businessId),
+    loadScheduleSettings(db, businessId),
+    loadScheduleTimeOffRequestsForRange(db, weekStart, addDays(weekStart, 6), businessId),
+    loadScheduleTemplates(db, businessId),
+    loadScheduleLaborTargets(db, weekStart, businessId),
+    loadScheduleRoleDefinitions(db, businessId)
   ]);
-  const allowedDepartments = await loadScheduleManagerDepartments(db, locals, locals.businessId ?? '');
+  const allowedDepartments = await loadScheduleManagerDepartments(db, locals, businessId);
   const allowedDepartmentSet = new Set(allowedDepartments);
   const hasAllDepartmentAccess = settings.departments.every((department) => allowedDepartmentSet.has(department));
   const visibleUsers = users.filter((user) =>
@@ -113,10 +115,10 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     loadScheduleAvailabilityByUser(
       db,
       visibleUsers.map((user) => user.id),
-      locals.businessId
+      businessId
     ),
-    loadPendingScheduleAvailabilityRequests(db, locals.businessId ?? '', Array.from(visibleUserIds)),
-    loadScheduleRoleAccessByUser(db, locals.businessId ?? '', visibleUsers.map((user) => user.id))
+    loadPendingScheduleAvailabilityRequests(db, businessId, Array.from(visibleUserIds)),
+    loadScheduleRoleAccessByUser(db, businessId, visibleUsers.map((user) => user.id))
   ]);
 
   return {
@@ -126,7 +128,11 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     users: visibleUsers,
     week: schedule.week
       ? {
-          status: schedule.week.status
+          status: schedule.week.status,
+          draftVersion: schedule.week.draftVersion,
+          publishedVersion: schedule.week.publishedVersion,
+          hasUnpublishedChanges: schedule.week.hasUnpublishedChanges,
+          draftUpdatedAt: schedule.week.draftUpdatedAt
         }
       : null,
     days: buildWeekDays(weekStart, visibleShifts),

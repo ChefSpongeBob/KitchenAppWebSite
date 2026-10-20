@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
       WebView.setWebContentsDebuggingEnabled(true);
     }
     registerPlugin(CriminiBillingPlugin.class);
+    registerPlugin(GatewayProvisioningPlugin.class);
     super.onCreate(savedInstanceState);
   }
 }

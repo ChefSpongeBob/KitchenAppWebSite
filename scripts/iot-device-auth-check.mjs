@@ -74,6 +74,42 @@ assertIncludes(
 );
 
 assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  'loadGatewayProvisioningSession(db, businessId, gatewayId)',
+  'gateway Wi-Fi setup is scoped to the signed-in business'
+);
+
+assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  'isNativeAppRequest(request)',
+  'gateway Wi-Fi setup is exposed only through the native app flow'
+);
+
+assertIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  "action: 'gateway-wifi-setup'",
+  'gateway Wi-Fi setup is rate limited'
+);
+
+assertIncludes(
+  'src/lib/server/temperatureDeviceProvisioning.ts',
+  'AND business_id = ?',
+  'gateway provisioning lookup enforces gateway and tenant ownership'
+);
+
+assertIncludes(
+  'src/lib/server/temperatureDeviceProvisioning.ts',
+  "crypto.subtle.sign('HMAC'",
+  'gateway provisioning proof is derived without exposing the factory credential'
+);
+
+assertNotIncludes(
+  'src/routes/admin/sensors/+page.server.ts',
+  "formData.get('password')",
+  'restaurant Wi-Fi passwords never enter the application server'
+);
+
+assertIncludes(
   'migrations/0052_iot_devices.sql',
   'UNIQUE (business_id, external_device_id)',
   'iot device ids are unique per business'

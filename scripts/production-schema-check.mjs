@@ -62,6 +62,9 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
   source.includes('SMOKE_INTERNAL_TOKEN') &&
   source.includes('missingCoreTables') &&
   source.includes('missingCoreIndexes') &&
+  source.includes('missingCoreColumns') &&
+  source.includes("schedule_weeks: [") &&
+  source.includes("'draft_write_token'") &&
   source.includes('business_position_permissions') &&
   source.includes('idx_business_users_business_position') &&
   source.includes('idx_schedule_departments_business_active_order')

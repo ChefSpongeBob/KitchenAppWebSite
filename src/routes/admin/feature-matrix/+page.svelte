@@ -3,6 +3,7 @@
   import { invalidateAll } from '$app/navigation';
   import type { SubmitFunction } from '@sveltejs/kit';
   import Layout from '$lib/components/ui/Layout.svelte';
+  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { pushToast } from '$lib/client/toasts';
   import type { AppFeatureKey, AppFeatureMode } from '$lib/features/appFeatures';
@@ -18,6 +19,17 @@
 
   let features: FeatureRow[] = data.features.map((feature) => ({ ...feature }));
   let featuresMessage = '';
+  let editing = false;
+
+  const featureGroups: Array<{ label: string; keys: AppFeatureKey[] }> = [
+    {
+      label: 'Operations',
+      keys: ['scheduling', 'todo', 'whiteboard', 'announcements', 'employee_spotlight', 'daily_specials']
+    },
+    { label: 'Content', keys: ['lists', 'recipes', 'documents', 'menus'] },
+    { label: 'Tools', keys: ['conversions', 'food_cost_calculator', 'safety_healthcode', 'waste_tracker'] },
+    { label: 'Systems', keys: ['temps', 'vendors'] }
+  ];
 
   $: if (data.features) {
     features = data.features.map((feature) => ({ ...feature }));
@@ -29,6 +41,7 @@
       await applyAction(result);
       if (result.type === 'success') {
         await invalidateAll();
+        editing = false;
       }
 
       const message =
@@ -51,111 +64,202 @@
 
   function statusLabel(mode: AppFeatureMode) {
     if (mode === 'off') return 'Hidden';
-    if (mode === 'admin') return 'Live (Manager Only)';
-    return 'Live';
+    if (mode === 'admin') return 'Manager Only';
+    return 'Available';
   }
+
+  function groupFeatures(keys: AppFeatureKey[]) {
+    return keys.map((key) => features.find((feature) => feature.key === key)).filter(Boolean) as FeatureRow[];
+  }
+
+  function startEditing() {
+    editing = true;
+  }
+
+  function cancelEditing() {
+    features = data.features.map((feature) => ({ ...feature }));
+    editing = false;
+  }
+
+  $: availableCount = features.filter((feature) => feature.mode === 'all').length;
+  $: managerCount = features.filter((feature) => feature.mode === 'admin').length;
+  $: hiddenCount = features.filter((feature) => feature.mode === 'off').length;
 </script>
 
 <Layout>
   <PageHeader title="Feature Matrix" />
+  <ManagerSectionNav groupId="business" />
 
-  <section class="matrix-section">
-    <div class="section-heading">
-      <div>
-        <h2>Feature Visibility</h2>
-        <p>Hidden features are disabled, not deleted.</p>
+  <div class="matrix-page">
+    <section class="matrix-summary">
+      <header class="section-heading">
+        <h2>Feature Access</h2>
+        {#if editing}
+          <button type="button" on:click={cancelEditing}>Close Editor</button>
+        {:else}
+          <button type="button" on:click={startEditing}>Edit Access</button>
+        {/if}
+      </header>
+      <div class="status-grid">
+        <div><span>Available</span><strong>{availableCount}</strong></div>
+        <div><span>Manager Only</span><strong>{managerCount}</strong></div>
+        <div><span>Hidden</span><strong>{hiddenCount}</strong></div>
       </div>
-      <div class="status-legend" aria-label="Feature status legend">
-        <span><i class="dot live"></i> Live</span>
-        <span><i class="dot off"></i> Hidden</span>
-      </div>
-    </div>
+    </section>
 
     <form method="POST" action="?/save" use:enhance={withFeatureSaveFeedback} class="matrix-form">
-      <div class="feature-list">
-        {#each features as feature}
-          <article class="feature-item">
-            <div class="feature-main">
-              <i class="dot" class:live={isLive(feature.mode)} class:off={!isLive(feature.mode)} aria-hidden="true"></i>
-              <div class="feature-copy">
-                <h3>{feature.label}</h3>
-                <p>{feature.description}</p>
+      {#each featureGroups as group}
+        <section class="feature-group">
+          <header><h2>{group.label}</h2></header>
+          <div class="feature-list">
+            {#each groupFeatures(group.keys) as feature}
+              <div class="feature-item">
+                <div class="feature-main">
+                  <i class="dot" class:live={isLive(feature.mode)} class:off={!isLive(feature.mode)} aria-hidden="true"></i>
+                  <strong>{feature.label}</strong>
+                </div>
+
+                {#if editing}
+                  <label class="mode-field">
+                    <span class="sr-only">{feature.label} access</span>
+                    <select name={`feature_${feature.key}`} bind:value={feature.mode}>
+                      <option value="all">Available</option>
+                      <option value="admin">Manager Only</option>
+                      <option value="off">Hidden</option>
+                    </select>
+                  </label>
+                {:else}
+                  <span class:off={feature.mode === 'off'} class="status-text">{statusLabel(feature.mode)}</span>
+                {/if}
               </div>
-            </div>
+            {/each}
+          </div>
+        </section>
+      {/each}
 
-            <label class="mode-field">
-              <span class="status-text" class:off={feature.mode === 'off'}>{statusLabel(feature.mode)}</span>
-              <select name={`feature_${feature.key}`} bind:value={feature.mode}>
-                <option value="all">On</option>
-                <option value="admin">Manager Only</option>
-                <option value="off">Hidden</option>
-              </select>
-            </label>
-          </article>
-        {/each}
-      </div>
-
-      <div class="form-actions">
-        <button type="submit">Save Feature Matrix</button>
-      </div>
+      {#if editing}
+        <div class="form-actions">
+          <button type="button" on:click={cancelEditing}>Cancel</button>
+          <i aria-hidden="true"></i>
+          <button type="submit">Save Changes</button>
+        </div>
+      {/if}
     </form>
 
     {#if featuresMessage}
       <p class="save-message">{featuresMessage}</p>
     {/if}
-  </section>
+  </div>
 </Layout>
 
 <style>
-  .matrix-section {
-    padding: 0.9rem 1rem 1rem;
+  :global(.main-content:has(.matrix-page)) {
+    max-width: 1040px;
+  }
+
+  .matrix-page,
+  .matrix-form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .matrix-page {
+    padding-bottom: 2rem;
+  }
+
+  .matrix-summary,
+  .feature-group {
     border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
-    display: grid;
-    gap: 0.8rem;
+    background: transparent;
   }
 
   .section-heading {
     display: flex;
     justify-content: space-between;
-    gap: 0.9rem;
-    align-items: end;
-    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--color-divider);
   }
 
-  .section-heading h2 {
+  .section-heading h2,
+  .feature-group h2 {
     margin: 0;
     font-size: 1rem;
   }
 
-  .section-heading p,
-  .feature-copy p,
-  .save-message {
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .status-grid > div {
+    min-height: 4.2rem;
+    padding: 0.7rem 0.9rem;
+    display: grid;
+    align-content: center;
+    gap: 0.1rem;
+    border-right: 1px solid var(--color-divider);
+    transition: background 160ms var(--ease-out);
+  }
+
+  .status-grid > div:last-child {
+    border-right: 0;
+  }
+
+  .status-grid > div:hover,
+  .feature-item:hover {
+    background: color-mix(in srgb, var(--color-surface-alt) 34%, transparent);
+  }
+
+  .status-grid span {
     color: var(--color-text-muted);
+    font-size: 0.64rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
   }
 
-  .section-heading p {
-    margin: 0.28rem 0 0;
-    font-size: 0.8rem;
+  .status-grid strong {
+    font-size: 1.15rem;
+    font-weight: var(--weight-semibold);
   }
 
-  .status-legend {
-    display: inline-flex;
-    gap: 0.7rem;
+  .feature-group > header {
+    padding: 0.72rem 1rem;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .feature-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
+    gap: 0.8rem;
     align-items: center;
-    font-size: 0.74rem;
-    color: var(--color-text-muted);
+    min-height: 3.35rem;
+    padding: 0.55rem 1rem;
+    border-bottom: 1px solid var(--color-divider);
+    transition: background 160ms var(--ease-out);
   }
 
-  .status-legend span {
-    display: inline-flex;
+  .feature-item:last-child {
+    border-bottom: 0;
+  }
+
+  .feature-main {
+    display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .feature-main strong {
+    font-size: 0.84rem;
   }
 
   .dot {
-    width: 0.62rem;
-    height: 0.62rem;
+    width: 0.55rem;
+    height: 0.55rem;
     border-radius: 0;
     border: 1px solid var(--color-border);
     display: inline-block;
@@ -167,57 +271,22 @@
   }
 
   .dot.off {
-    background: var(--color-error);
+    background: transparent;
   }
 
-  .matrix-form,
-  .feature-list {
-    display: grid;
-    gap: 0.5rem;
+  .status-text {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: var(--weight-semibold);
+    text-align: right;
   }
 
-  .feature-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(190px, 210px);
-    gap: 0.65rem;
-    align-items: center;
-    padding: 0.55rem 0;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  .feature-main {
-    display: flex;
-    align-items: start;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  .feature-copy h3 {
-    margin: 0;
-    font-size: 0.9rem;
-  }
-
-  .feature-copy p {
-    margin: 0.2rem 0 0;
-    font-size: 0.75rem;
-    line-height: 1.35;
+  .status-text.off {
+    opacity: 0.72;
   }
 
   .mode-field {
     display: grid;
-    gap: 0.24rem;
-  }
-
-  .status-text {
-    font-size: 0.72rem;
-    color: var(--color-success);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: var(--weight-semibold);
-  }
-
-  .status-text.off {
-    color: var(--color-error);
   }
 
   .mode-field select {
@@ -234,6 +303,15 @@
   .form-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.15rem 1rem 0;
+  }
+
+  .form-actions i {
+    width: 1px;
+    height: 1rem;
+    background: var(--color-divider);
   }
 
   button {
@@ -250,12 +328,41 @@
 
   .save-message {
     margin: 0;
+    padding: 0 1rem;
+    color: var(--color-text-muted);
     font-size: 0.78rem;
   }
 
-  @media (max-width: 900px) {
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 560px) {
+    .status-grid,
     .feature-item {
       grid-template-columns: 1fr;
+    }
+
+    .status-grid > div,
+    .status-grid > div:last-child {
+      border-right: 0;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .status-grid > div:last-child {
+      border-bottom: 0;
+    }
+
+    .status-text {
+      text-align: left;
     }
   }
 </style>

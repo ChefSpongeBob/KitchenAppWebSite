@@ -16,12 +16,25 @@ if (result.status !== 0) process.exit(result.status ?? 1);
 const swiftPackagePath = resolve('ios/App/CapApp-SPM/Package.swift');
 if (existsSync(swiftPackagePath)) {
 	const source = readFileSync(swiftPackagePath, 'utf8');
-	const normalized = source.replace(/path: "([^"]+)"/g, (_, dependencyPath) =>
+	let normalized = source.replace(/path: "([^"]+)"/g, (_, dependencyPath) =>
 		`path: "${dependencyPath.replaceAll('\\', '/')}"`
 	);
 
+	if (!normalized.includes('github.com/espressif/esp-idf-provisioning-ios.git')) {
+		normalized = normalized.replace(
+			'.package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.4.0"),',
+			'.package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.4.0"),\n        .package(name: "ESPProvision", url: "https://github.com/espressif/esp-idf-provisioning-ios.git", exact: "3.2.0"),'
+		);
+	}
+	if (!normalized.includes('.product(name: "ESPProvision", package: "ESPProvision")')) {
+		normalized = normalized.replace(
+			'.product(name: "Cordova", package: "capacitor-swift-pm"),',
+			'.product(name: "Cordova", package: "capacitor-swift-pm"),\n                .product(name: "ESPProvision", package: "ESPProvision"),'
+		);
+	}
+
 	if (normalized !== source) {
 		writeFileSync(swiftPackagePath, normalized, 'utf8');
-		console.log('Normalized SwiftPM local dependency paths.');
+		console.log('Normalized SwiftPM dependencies.');
 	}
 }

@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiProv.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_ieee802154.h>
+#include <esp_wifi.h>
 #include <freertos/queue.h>
 #include <mbedtls/md.h>
 #include <time.h>
@@ -15,8 +17,6 @@
 const char GATEWAY_SERIAL[] = "";
 const char FACTORY_GATEWAY_CREDENTIAL[] = "";
 const char RADIO_SECRET[] = "";
-const char WIFI_NAME[] = "";
-const char WIFI_PASSWORD[] = "";
 const char API_URL[] = "https://criminiops.com/api/temps";
 
 constexpr uint8_t RADIO_CHANNEL = 20;
@@ -78,6 +78,98 @@ RecentPacket recentPackets[RECENT_PACKET_COUNT] = {};
 size_t recentPacketCount = 0;
 size_t nextRecentPacket = 0;
 uint32_t lastRadioDiagnostic = 0;
+volatile bool provisioningConnected = false;
+char provisioningServiceName[32] = {};
+char provisioningProof[33] = {};
+
+void onProvisioningEvent(arduino_event_t* event) {
+  switch (event->event_id) {
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      provisioningConnected = true;
+      Serial.println("Gateway Wi-Fi connected");
+      break;
+    case ARDUINO_EVENT_PROV_START:
+      Serial.println("Gateway ready for Crimini Wi-Fi setup");
+      break;
+    case ARDUINO_EVENT_PROV_CRED_FAIL:
+      Serial.println("Gateway Wi-Fi setup failed; retry in Crimini");
+      break;
+    case ARDUINO_EVENT_PROV_CRED_SUCCESS:
+      Serial.println("Gateway Wi-Fi details accepted");
+      break;
+    default:
+      break;
+  }
+}
+
+bool buildProvisioningIdentity() {
+  const mbedtls_md_info_t* sha256 = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  if (!sha256) return false;
+
+  uint8_t credentialHash[32] = {};
+  uint8_t proofDigest[32] = {};
+  if (mbedtls_md(sha256,
+                 reinterpret_cast<const uint8_t*>(FACTORY_GATEWAY_CREDENTIAL),
+                 strlen(FACTORY_GATEWAY_CREDENTIAL),
+                 credentialHash) != 0) return false;
+
+  char message[64] = {};
+  snprintf(message, sizeof(message), "crimini-wifi-v1:%s", GATEWAY_SERIAL);
+  if (mbedtls_md_hmac(sha256,
+                      credentialHash,
+                      sizeof(credentialHash),
+                      reinterpret_cast<const uint8_t*>(message),
+                      strlen(message),
+                      proofDigest) != 0) {
+    memset(credentialHash, 0, sizeof(credentialHash));
+    return false;
+  }
+
+  const size_t serialLength = strlen(GATEWAY_SERIAL);
+  const char* suffix = serialLength > 28 ? GATEWAY_SERIAL + serialLength - 28 : GATEWAY_SERIAL;
+  snprintf(provisioningServiceName, sizeof(provisioningServiceName), "CR_%s", suffix);
+  for (size_t index = 0; index < 16; ++index) {
+    snprintf(provisioningProof + index * 2, 3, "%02x", proofDigest[index]);
+  }
+  provisioningProof[32] = '\0';
+  memset(credentialHash, 0, sizeof(credentialHash));
+  memset(proofDigest, 0, sizeof(proofDigest));
+  return true;
+}
+
+bool hasStoredWifiCredentials() {
+  WiFi.mode(WIFI_STA);
+  wifi_config_t configuration = {};
+  return esp_wifi_get_config(WIFI_IF_STA, &configuration) == ESP_OK && configuration.sta.ssid[0] != '\0';
+}
+
+bool provisionWifiIfNeeded() {
+  if (hasStoredWifiCredentials()) {
+    WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+    return true;
+  }
+  if (!buildProvisioningIdentity()) return false;
+
+  provisioningConnected = false;
+  WiFi.onEvent(onProvisioningEvent);
+  WiFiProv.beginProvision(
+    NETWORK_PROV_SCHEME_BLE,
+    NETWORK_PROV_SCHEME_HANDLER_FREE_BLE,
+    NETWORK_PROV_SECURITY_1,
+    provisioningProof,
+    provisioningServiceName,
+    nullptr,
+    nullptr,
+    false
+  );
+  while (!provisioningConnected) delay(100);
+  delay(500);
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  memset(provisioningProof, 0, sizeof(provisioningProof));
+  return true;
+}
 
 void reportRadioIssue(const char* message) {
   const uint32_t now = millis();
@@ -251,7 +343,7 @@ void receiveReading(const RadioFrame& incoming) {
 
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
+  WiFi.begin();
   const uint32_t started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < 7000) delay(100);
   if (WiFi.status() != WL_CONNECTED) return false;
@@ -367,8 +459,7 @@ void setup() {
   Serial.begin(115200);
   delay(100);
   if (!validSerial(GATEWAY_SERIAL) || strlen(FACTORY_GATEWAY_CREDENTIAL) < 32 ||
-      strlen(RADIO_SECRET) < 16 ||
-      !WIFI_NAME[0] || !WIFI_PASSWORD[0]) {
+      strlen(RADIO_SECRET) < 16) {
     Serial.println("Complete gateway factory setup before uploading.");
     return;
   }
@@ -378,6 +469,11 @@ void setup() {
   delay(100);
   pinMode(WIFI_ANT_CONFIG, OUTPUT);
   digitalWrite(WIFI_ANT_CONFIG, HIGH);
+
+  if (!provisionWifiIfNeeded()) {
+    Serial.println("Gateway Wi-Fi setup could not start");
+    return;
+  }
 
   receivedFrames = xQueueCreate(RADIO_QUEUE_DEPTH, sizeof(RadioFrame));
   if (!receivedFrames) return;

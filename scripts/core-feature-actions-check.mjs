@@ -272,7 +272,7 @@ expect('src/routes/reports/waste.csv/+server.ts', 'waste report CSV export is pe
     'requireBusinessId(locals)',
     'csvEscape',
     'loadWasteReport',
-    'waste-logs.csv'
+    'waste-logs-'
   ])
 );
 

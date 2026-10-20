@@ -12,7 +12,7 @@
     weekStart: string;
     prevWeekStart: string;
     nextWeekStart: string;
-    week: { status: 'draft' | 'published' } | null;
+    week: { status: 'draft' | 'published'; hasUnpublishedChanges: boolean } | null;
     isAdmin: boolean;
     departments: ScheduleDepartment[];
     visibleDepartments: ScheduleDepartment[];
@@ -129,7 +129,11 @@
         <p class="viewing-note">Viewing: {viewingLabel}</p>
       </div>
       <span class:published={data.week?.status === 'published'} class="status-pill">
-        {data.week?.status === 'published' ? 'Published Schedule' : 'Draft Schedule'}
+        {data.isAdmin && data.week?.hasUnpublishedChanges
+          ? 'Unpublished changes'
+          : data.week?.status === 'published'
+            ? 'Published Schedule'
+            : 'Not published'}
       </span>
     </section>
 

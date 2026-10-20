@@ -17,18 +17,18 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     version: url.searchParams.get('version')
   });
   const header = [
-    'week_start',
-    'version',
-    'published_by',
-    'shift_date',
-    'employee',
-    'department',
-    'role',
-    'detail',
-    'start',
-    'end',
-    'break_minutes',
-    'notes'
+    'Week Start',
+    'Version',
+    'Published By',
+    'Shift Date',
+    'Employee',
+    'Department',
+    'Role',
+    'Detail',
+    'Start',
+    'End',
+    'Break Minutes',
+    'Notes'
   ];
   const lines = [
     header.join(','),
@@ -52,10 +52,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     )
   ];
 
-  return new Response(lines.join('\n'), {
+  return new Response(`\uFEFF${lines.join('\n')}`, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': 'attachment; filename="schedule-history.csv"'
+      'content-disposition': `attachment; filename="schedule-history-${report.startDate}-to-${report.endDate}.csv"`
     }
   });
 };

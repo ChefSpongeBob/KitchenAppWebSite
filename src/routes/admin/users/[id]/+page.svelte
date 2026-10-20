@@ -226,6 +226,18 @@
 	};
 	const sectionHref = (section: EmployeeSection) =>
 		`/admin/users/${data.employee.id}?section=${section}`;
+	const formatEmploymentDate = (value: string) =>
+		value ? new Date(`${value}T00:00:00`).toLocaleDateString([], { dateStyle: 'medium' }) : 'Not set';
+	const managerName = (managerId: string | null) => {
+		const manager = data.managerOptions.find((option) => option.id === managerId);
+		return manager ? manager.displayName || manager.email : 'Not assigned';
+	};
+	$: approvedDepartmentSummary = data.employee.approved_departments.length
+		? data.employee.approved_departments.join(', ')
+		: 'None assigned';
+	$: roleAccessSummary = data.scheduleRoleAccess.restrictToSelected
+		? `${data.scheduleRoleAccess.roleDefinitionIds.length} selected roles`
+		: 'All roles in assigned departments';
 
 	const withFeedback: SubmitFunction =
 		() =>
@@ -267,7 +279,7 @@
 </script>
 
 <Layout>
-	<PageHeader title="Team" />
+	<PageHeader title="Employee Record" />
 	<ManagerSectionNav groupId="people" />
 
 	<section class="employee-shell">
@@ -374,6 +386,19 @@
 						<h2>Job record</h2>
 					</div>
 				</header>
+				<div class="record-grid employment-summary">
+					<div><span>Status</span><strong>{formatStatus(data.employment.employment_status)}</strong></div>
+					<div><span>Worker type</span><strong>{formatStatus(data.employment.employment_type)}</strong></div>
+					<div><span>Position</span><strong>{data.employee.position_name || data.employment.job_title || 'Unassigned'}</strong></div>
+					<div><span>Primary department</span><strong>{data.employment.primary_schedule_department || 'Not assigned'}</strong></div>
+					<div><span>Reports to</span><strong>{managerName(data.employment.manager_user_id)}</strong></div>
+					<div><span>Pay type</span><strong>{data.employment.pay_type ? formatStatus(data.employment.pay_type) : 'Not set'}</strong></div>
+					<div><span>Hire date</span><strong>{formatEmploymentDate(data.employment.hire_date)}</strong></div>
+					<div><span>Start date</span><strong>{formatEmploymentDate(data.employment.start_date)}</strong></div>
+				</div>
+				{#if data.canManagePeople}
+				<details class="editor-drawer">
+					<summary>Edit employment</summary>
 				<form
 					method="POST"
 					action="?/update_employment"
@@ -460,6 +485,8 @@
 					>
 					{#if data.canManagePeople}<button type="submit">Save Employment</button>{/if}
 				</form>
+				</details>
+				{/if}
 			</section>
 
 			{#if data.canDeleteEmployee}
@@ -486,6 +513,13 @@
 						<h2>Departments and roles</h2>
 					</div>
 				</header>
+				<div class="record-grid schedule-summary">
+					<div><span>Departments</span><strong>{approvedDepartmentSummary}</strong></div>
+					<div><span>Role access</span><strong>{roleAccessSummary}</strong></div>
+				</div>
+				{#if data.canManageScheduleAssignments}
+				<details class="editor-drawer">
+					<summary>Manage schedule access</summary>
 				<div class="department-list">
 					{#each data.departments as department}
 						{@const approved = isDepartmentApproved(department)}
@@ -555,6 +589,8 @@
 					{#if data.canManageScheduleAssignments}<button type="submit">Save Schedule Roles</button
 						>{/if}
 				</form>
+				</details>
+				{/if}
 			</section>
 		{:else if data.activeSection === 'onboarding'}
 			<section class="workspace-section onboarding-review">
@@ -1195,6 +1231,50 @@
 		color: var(--color-text-muted);
 		font-size: 0.82rem;
 		line-height: 1.55;
+	}
+	.editor-drawer {
+		margin-top: 1rem;
+		border-top: 1px solid var(--color-divider);
+		border-bottom: 1px solid var(--color-divider);
+	}
+	.editor-drawer > summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		min-height: 2.8rem;
+		padding: 0.65rem 0;
+		list-style: none;
+		color: var(--color-text);
+		font-size: 0.76rem;
+		font-weight: var(--weight-semibold);
+		cursor: pointer;
+	}
+	.editor-drawer > summary::-webkit-details-marker {
+		display: none;
+	}
+	.editor-drawer > summary::after {
+		content: '+';
+		color: var(--color-text-muted);
+		font-size: 1rem;
+	}
+	.editor-drawer[open] > summary {
+		border-bottom: 1px solid var(--color-divider);
+	}
+	.editor-drawer[open] > summary::after {
+		content: '-';
+	}
+	.editor-drawer > .employment-form,
+	.editor-drawer > .department-list {
+		padding-top: 1rem;
+	}
+	.schedule-summary {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.schedule-summary > div:nth-child(4n) {
+		border-right: 1px solid var(--color-divider);
+	}
+	.schedule-summary > div:nth-child(2n) {
+		border-right: 0;
 	}
 	.employment-form,
 	.packet-form {

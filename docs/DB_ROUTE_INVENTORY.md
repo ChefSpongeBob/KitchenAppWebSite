@@ -80,6 +80,9 @@ Use these column names exactly when scoping business data:
 - `push_notification_devices.business_id`
 - `recipes.business_id`
 - `schedule_departments.business_id`
+- `schedule_draft_open_shifts.business_id`
+- `schedule_draft_shifts.business_id`
+- `schedule_draft_week_team.business_id`
 - `schedule_labor_targets.business_id`
 - `schedule_open_shift_requests.business_id`
 - `schedule_open_shifts.business_id`
@@ -1621,6 +1624,68 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/schedules.ts` [ddl, insert, select, update]
   - `src/lib/server/tenant.ts` [reference]
 
+### schedule_draft_open_shifts
+
+**Columns**
+  - `id` TEXT (PK)
+  - `week_id` TEXT (NOT NULL)
+  - `shift_date` TEXT (NOT NULL)
+  - `department` TEXT (NOT NULL)
+  - `role` TEXT (NOT NULL)
+  - `detail` TEXT (NOT NULL, DEFAULT '')
+  - `start_time` TEXT (NOT NULL)
+  - `end_label` TEXT (NOT NULL, DEFAULT '')
+  - `break_minutes` INTEGER (NOT NULL, DEFAULT 0)
+  - `notes` TEXT (NOT NULL, DEFAULT '')
+  - `sort_order` INTEGER (NOT NULL, DEFAULT 0)
+  - `created_at` INTEGER (NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+  - `business_id` TEXT (NOT NULL)
+
+**Code Usage**
+  - `scripts/ensure-tenant-columns.mjs` [reference]
+  - `src/lib/server/schedules.ts` [ddl, delete, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### schedule_draft_shifts
+
+**Columns**
+  - `id` TEXT (PK)
+  - `week_id` TEXT (NOT NULL)
+  - `shift_date` TEXT (NOT NULL)
+  - `user_id` TEXT (NOT NULL)
+  - `department` TEXT (NOT NULL)
+  - `role` TEXT (NOT NULL)
+  - `detail` TEXT (NOT NULL, DEFAULT '')
+  - `start_time` TEXT (NOT NULL)
+  - `end_label` TEXT (NOT NULL, DEFAULT '')
+  - `break_minutes` INTEGER (NOT NULL, DEFAULT 0)
+  - `notes` TEXT (NOT NULL, DEFAULT '')
+  - `sort_order` INTEGER (NOT NULL, DEFAULT 0)
+  - `created_at` INTEGER (NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+  - `business_id` TEXT (NOT NULL)
+
+**Code Usage**
+  - `scripts/ensure-tenant-columns.mjs` [reference]
+  - `src/lib/server/schedules.ts` [ddl, delete, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
+
+### schedule_draft_week_team
+
+**Columns**
+  - `week_id` TEXT (NOT NULL)
+  - `user_id` TEXT (NOT NULL)
+  - `sort_order` INTEGER (NOT NULL, DEFAULT 0)
+  - `created_at` INTEGER (NOT NULL)
+  - `updated_at` INTEGER (NOT NULL)
+  - `business_id` TEXT (NOT NULL)
+
+**Code Usage**
+  - `scripts/ensure-tenant-columns.mjs` [reference]
+  - `src/lib/server/schedules.ts` [ddl, delete, insert, select]
+  - `src/lib/server/tenant.ts` [reference]
+
 ### schedule_labor_targets
 
 **Columns**
@@ -1865,6 +1930,13 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `updated_at` INTEGER (NOT NULL)
   - `updated_by` TEXT
   - `business_id` TEXT (NOT NULL, DEFAULT '')
+  - `draft_initialized` INTEGER (NOT NULL, DEFAULT 0)
+  - `draft_version` INTEGER (NOT NULL, DEFAULT 0)
+  - `published_version` INTEGER (NOT NULL, DEFAULT 0)
+  - `has_unpublished_changes` INTEGER (NOT NULL, DEFAULT 0)
+  - `draft_updated_at` INTEGER
+  - `draft_updated_by` TEXT
+  - `draft_write_token` TEXT
 
 **Code Usage**
   - `scripts/ensure-tenant-columns.mjs` [reference]

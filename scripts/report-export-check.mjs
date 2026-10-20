@@ -24,7 +24,22 @@ for (const route of ['lists', 'schedule', 'requests', 'temperature', 'onboarding
   expect(`src/routes/reports/${route}.csv/+server.ts`, `${route} CSV endpoint is report-access gated`, (source) =>
     source.includes('hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)') &&
     source.includes('content-disposition') &&
-    source.includes('csvEscape')
+    source.includes('csvEscape') &&
+    source.includes('\\uFEFF') &&
+    source.includes('report.startDate') &&
+    source.includes('report.endDate')
+  );
+
+  expect(`src/routes/reports/${route}/+page.svelte`, `${route} report uses the native report workspace`, (source) =>
+    ['ReportToolbar', 'ReportDateFilters', 'ReportSummaryStrip', 'ReportDataTable', 'ReportExportList'].every((token) =>
+      source.includes(token)
+    )
+  );
+}
+
+for (const component of ['ReportToolbar', 'ReportDateFilters', 'ReportSummaryStrip', 'ReportDataTable', 'ReportExportList']) {
+  expect(`src/lib/components/ui/${component}.svelte`, `${component} shared report component exists`, (source) =>
+    source.length > 0
   );
 }
 
@@ -56,6 +71,20 @@ expect('src/lib/server/reports.ts', 'onboarding report excludes sensitive payloa
   !source.includes('signed_name')
 );
 
+expect('src/routes/reports/onboarding.csv/+server.ts', 'onboarding CSV formats timestamps for users', (source) =>
+  source.includes('csvTimestamp(row.sent_at)') &&
+  source.includes('csvTimestamp(row.completed_at)') &&
+  source.includes('csvTimestamp(row.approved_at)')
+);
+
+expect('src/routes/reports/temperature/+page.server.ts', 'temperature viewer uses bounded hourly aggregates', (source) =>
+  source.includes('loadTemperatureHourlyAverageReport') && !source.includes('loadTemperatureReport(')
+);
+
+expect('src/routes/reports/temperature.csv/+server.ts', 'temperature CSV identifies temperature and humidity units', (source) =>
+  source.includes('Average Temperature (F)') && source.includes('Average Humidity (%)')
+);
+
 expect('migrations/0080_report_export_indexes.sql', 'report export indexes support production report filters', (source) =>
   [
     'idx_schedule_shift_offers_business_updated',
@@ -66,8 +95,31 @@ expect('migrations/0080_report_export_indexes.sql', 'report export indexes suppo
   ].every((indexName) => source.includes(indexName))
 );
 
-expect('src/routes/reports/+page.svelte', 'reports landing links to Phase 8 exports', (source) =>
-  ['/reports/requests', '/reports/temperature', '/reports/onboarding', '/reports/waste'].every((href) => source.includes(href))
+expect('src/routes/reports/+page.svelte', 'reports landing links every operational report', (source) =>
+  [
+    'domain=preplists',
+    'domain=checklists',
+    'domain=inventory',
+    'domain=orders',
+    '/reports/schedule',
+    '/reports/requests',
+    '/reports/temperature',
+    '/reports/onboarding',
+    '/reports/waste',
+    '/todo/log'
+  ].every((href) => source.includes(href))
+);
+
+expect('src/routes/reports/+page.server.ts', 'ToDo history link remains permission aware', (source) =>
+  source.includes("'manage_content'") && source.includes('canViewTodoLog')
+);
+
+expect('src/routes/todo/log/+page.server.ts', 'ToDo history remains tenant scoped and bounded', (source) =>
+  source.includes('WHERE l.business_id = ?') && source.includes('LIMIT 250') && source.includes('canManageTodoHistory')
+);
+
+expect('src/routes/todo/log/+page.svelte', 'ToDo history uses the current report presentation', (source) =>
+  source.includes('history-row') && source.includes('ReportToolbar') && !source.includes('DashboardCard')
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks reports/export launch work', (source) =>

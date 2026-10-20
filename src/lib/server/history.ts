@@ -252,107 +252,87 @@ export async function recordSchedulePublishSnapshot(
   weekStart: string,
   publishedBy: string | null | undefined,
   publishedAt: number,
-  notes = ''
+  writeToken: string,
+  notes = '',
+  completionStatements: ReturnType<DB['prepare']>[] = [],
+  preparationStatements: ReturnType<DB['prepare']>[] = []
 ) {
   await ensureHistorySchema(db);
   await ensureTenantSchema(db, true);
 
-  const previous = await db
-    .prepare(
-      `
-      SELECT COALESCE(MAX(version_number), 0) AS max_version
-      FROM schedule_publish_history
-      WHERE business_id = ?
-        AND schedule_week_id = ?
-      `
-    )
-    .bind(businessId, weekId)
-    .first<{ max_version: number }>();
-  const versionNumber = (previous?.max_version ?? 0) + 1;
   const publishHistoryId = crypto.randomUUID();
 
-  await db
-    .prepare(
+  return db.batch([
+    ...preparationStatements,
+    db
+      .prepare(
       `
       INSERT INTO schedule_publish_history (
         id, business_id, schedule_week_id, week_start, published_by, published_at, version_number, notes
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, COALESCE((
+        SELECT MAX(version_number)
+        FROM schedule_publish_history
+        WHERE business_id = ? AND schedule_week_id = ?
+      ), 0) + 1, ?
+      FROM schedule_weeks guard
+      WHERE guard.id = ? AND guard.business_id = ? AND guard.draft_write_token = ?
       `
     )
-    .bind(publishHistoryId, businessId, weekId, weekStart, publishedBy ?? null, publishedAt, versionNumber, notes || null)
-    .run();
-
-  const shifts = await db
-    .prepare(
+      .bind(
+        publishHistoryId,
+        businessId,
+        weekId,
+        weekStart,
+        publishedBy ?? null,
+        publishedAt,
+        businessId,
+        weekId,
+        notes || null,
+        weekId,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
       `
+      INSERT INTO schedule_shift_history (
+        id, publish_history_id, business_id, shift_id_snapshot, shift_date, user_id,
+        employee_name_snapshot, department, role_name, detail, start_time, end_label,
+        break_minutes, notes, sort_order
+      )
       SELECT
+        ? || ':' || s.id,
+        ?,
+        s.business_id,
         s.id,
         s.shift_date,
         s.user_id,
         COALESCE(u.display_name, u.email, 'Open') AS employee_name,
         s.department,
         s.role,
-        s.detail,
+        COALESCE(s.detail, ''),
         s.start_time,
-        s.end_label,
+        COALESCE(s.end_label, ''),
         COALESCE(s.break_minutes, 0) AS break_minutes,
-        s.notes,
+        COALESCE(s.notes, ''),
         COALESCE(s.sort_order, 0) AS sort_order
       FROM schedule_shifts s
-      LEFT JOIN users u ON u.id = s.user_id
+      LEFT JOIN business_users member
+        ON member.business_id = s.business_id
+       AND member.user_id = s.user_id
+      LEFT JOIN users u ON u.id = member.user_id
       WHERE s.business_id = ?
         AND s.week_id = ?
-      ORDER BY s.shift_date ASC, s.start_time ASC, s.sort_order ASC
+        AND EXISTS (
+          SELECT 1 FROM schedule_weeks guard
+          WHERE guard.id = ? AND guard.business_id = ? AND guard.draft_write_token = ?
+        )
       `
     )
-    .bind(businessId, weekId)
-    .all<{
-      id: string;
-      shift_date: string;
-      user_id: string | null;
-      employee_name: string;
-      department: string;
-      role: string;
-      detail: string | null;
-      start_time: string;
-      end_label: string | null;
-      break_minutes: number | null;
-      notes: string | null;
-      sort_order: number | null;
-    }>();
-
-  for (const shift of shifts.results ?? []) {
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_shift_history (
-          id, publish_history_id, business_id, shift_id_snapshot, shift_date, user_id,
-          employee_name_snapshot, department, role_name, detail, start_time, end_label,
-          break_minutes, notes, sort_order
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        crypto.randomUUID(),
-        publishHistoryId,
-        businessId,
-        shift.id,
-        shift.shift_date,
-        shift.user_id,
-        shift.employee_name,
-        shift.department,
-        shift.role,
-        shift.detail ?? '',
-        shift.start_time,
-        shift.end_label ?? '',
-        shift.break_minutes ?? 0,
-        shift.notes ?? '',
-        shift.sort_order ?? 0
-      )
-      .run();
-  }
+      .bind(publishHistoryId, publishHistoryId, businessId, weekId, weekId, businessId, writeToken),
+    ...completionStatements
+  ]);
 }
 
 function clampRange(start: string | null, end: string | null, fallbackDays: number) {

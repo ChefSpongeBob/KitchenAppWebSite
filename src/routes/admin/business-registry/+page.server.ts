@@ -4,6 +4,8 @@ import { requireAdmin } from '$lib/server/admin';
 import { ensureBusinessSchema } from '$lib/server/business';
 import { normalizeFormText } from '$lib/server/inputSanitizer';
 import { hasBusinessCapability } from '$lib/server/permissions';
+import { getBusinessTrialAccess } from '$lib/server/trial';
+import { readBusinessEntitlements, readStoreBillingPlaceholder } from '$lib/server/storeBilling';
 
 type RegistryPayload = {
   legalName: string;
@@ -64,7 +66,15 @@ export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
 
   if (!db || !locals.businessId) {
-    return { registry: emptyRegistry, canManageBilling };
+    return {
+      business: {
+        displayName: locals.businessName ?? '',
+        logoUrl: locals.businessLogoUrl ?? null
+      },
+      registry: emptyRegistry,
+      billing: null,
+      canManageBilling
+    };
   }
 
   await ensureBusinessSchema(db);
@@ -72,6 +82,11 @@ export const load: PageServerLoad = async ({ locals }) => {
     .prepare(
       `
       SELECT
+        name,
+        sidebar_logo_url,
+        plan_tier,
+        status,
+        addon_temp_monitoring,
         legal_business_name,
         registry_id,
         contact_email,
@@ -90,6 +105,11 @@ export const load: PageServerLoad = async ({ locals }) => {
     )
     .bind(locals.businessId)
     .first<{
+      name: string;
+      sidebar_logo_url: string | null;
+      plan_tier: string;
+      status: string;
+      addon_temp_monitoring: number;
       legal_business_name: string | null;
       registry_id: string | null;
       contact_email: string | null;
@@ -103,7 +123,66 @@ export const load: PageServerLoad = async ({ locals }) => {
       address_country: string | null;
     }>();
 
+  let billing: {
+    planTier: string;
+    status: string;
+    store: string | null;
+    currentPeriodEnd: number | null;
+    autoRenewing: boolean | null;
+    temperatureMonitoring: boolean;
+    registeredSensors: number;
+  } | null = null;
+
+  if (canManageBilling && business) {
+    const [trial, entitlements, placeholder] = await Promise.all([
+      getBusinessTrialAccess(db, locals.businessId),
+      readBusinessEntitlements(db, locals.businessId),
+      readStoreBillingPlaceholder(db, locals.businessId)
+    ]);
+    const currentEntitlement =
+      entitlements.find((entry) => entry.plan_tier && entry.status === 'active') ??
+      entitlements.find((entry) => entry.plan_tier && entry.status === 'grace_period') ??
+      entitlements.find((entry) => entry.plan_tier && entry.status === 'past_due') ??
+      entitlements.find((entry) => entry.status === 'active') ??
+      entitlements[0] ??
+      null;
+    let registeredSensors = 0;
+    try {
+      const sensorCount = await db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM temperature_sensor_nodes
+           WHERE business_id = ? AND is_active = 1`
+        )
+        .bind(locals.businessId)
+        .first<{ count: number }>();
+      registeredSensors = Number(sensorCount?.count ?? 0);
+    } catch {
+      registeredSensors = 0;
+    }
+
+    billing = {
+      planTier: currentEntitlement?.plan_tier ?? placeholder?.plan_tier ?? business.plan_tier,
+      status: currentEntitlement?.status ?? placeholder?.status ?? trial.mode ?? business.status,
+      store: currentEntitlement?.store ?? placeholder?.preferred_store ?? null,
+      currentPeriodEnd: currentEntitlement?.current_period_end ?? trial.trialEndsAt,
+      autoRenewing: currentEntitlement ? currentEntitlement.auto_renewing === 1 : null,
+      temperatureMonitoring:
+        business.addon_temp_monitoring === 1 ||
+        entitlements.some(
+          (entry) =>
+            entry.addon_temp_monitoring === 1 &&
+            (entry.status === 'active' || entry.status === 'grace_period')
+        ),
+      registeredSensors
+    };
+  }
+
   return {
+    business: {
+      displayName: business?.name ?? locals.businessName ?? '',
+      logoUrl: business?.sidebar_logo_url ?? locals.businessLogoUrl ?? null
+    },
     registry: {
       legalName: business?.legal_business_name ?? '',
       registryId: business?.registry_id ?? '',
@@ -117,6 +196,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       addressPostalCode: business?.address_postal_code ?? '',
       addressCountry: business?.address_country ?? ''
     } satisfies RegistryPayload,
+    billing,
     canManageBilling
   };
 };

@@ -38,7 +38,7 @@ expect('src/routes/api/billing/status/+server.ts', 'Billing status endpoint exis
 expect('src/routes/billing/+page.svelte', 'Billing page supports native purchase and restore', (source) =>
   source.includes('CriminiBilling.purchase') &&
   source.includes('CriminiBilling.restorePurchases') &&
-  source.includes('Manage subscription')
+  source.includes('Manage Subscription')
 );
 
 expect('docs/PROJECT_HANDOFF.md', 'Store billing setup doc exists', (source) =>

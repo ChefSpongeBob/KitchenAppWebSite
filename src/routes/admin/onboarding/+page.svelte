@@ -126,6 +126,10 @@
   $: completedRows = data.onboardingRows.filter((row) => row.package_status === 'approved');
   $: missingRows = data.onboardingRows.filter((row) => row.package_status === 'not_sent');
   $: packetRows = [...data.onboardingRows].sort((a, b) => statusRank(a.package_status) - statusRank(b.package_status));
+  $: activePositions = data.positions.filter((position) => position.is_active === 1);
+  $: activeTemplateItems = data.templateItems.filter((item) => item.is_active === 1);
+  $: uploadedTemplateItems = activeTemplateItems.filter((item) => item.source_file_url).length;
+  $: acknowledgementItems = activeTemplateItems.filter((item) => item.item_type === 'acknowledgement').length;
 
   const withFeedback: SubmitFunction = () => {
     feedbackMessage = '';
@@ -179,8 +183,42 @@
   <ManagerSectionNav groupId="people" />
 
   <section class="onboarding-console">
-    {#if data.activeView === 'packets'}
     <div class="metric-strip" aria-label="Onboarding status">
+      {#if data.activeView === 'invites'}
+      <div>
+        <span>Active Invites</span>
+        <strong>{activeInvites.length}</strong>
+      </div>
+      <div>
+        <span>Used</span>
+        <strong>{usedInvites.length}</strong>
+      </div>
+      <div>
+        <span>Positions</span>
+        <strong>{activePositions.length}</strong>
+      </div>
+      <div>
+        <span>Departments</span>
+        <strong>{data.departments.length}</strong>
+      </div>
+      {:else if data.activeView === 'forms'}
+      <div>
+        <span>Active Forms</span>
+        <strong>{activeTemplateItems.length}</strong>
+      </div>
+      <div>
+        <span>Source Files</span>
+        <strong>{uploadedTemplateItems}</strong>
+      </div>
+      <div>
+        <span>Acknowledgements</span>
+        <strong>{acknowledgementItems}</strong>
+      </div>
+      <div>
+        <span>I-9 Policy</span>
+        <strong>{data.hrSettings.retain_i9_document_copies === 1 ? 'Copies' : 'Review'}</strong>
+      </div>
+      {:else}
       <div>
         <span>Needs Review</span>
         <strong>{needsReview.length}</strong>
@@ -197,8 +235,8 @@
         <span>No Packet</span>
         <strong>{missingRows.length}</strong>
       </div>
+      {/if}
     </div>
-    {/if}
 
     {#if feedbackMessage}
       <p class="feedback-banner">{feedbackMessage}</p>
@@ -214,74 +252,6 @@
           </div>
           <span>{activeInvites.length} active</span>
         </header>
-
-        <form method="POST" action="?/create_user_invite&view=invites" use:enhance={withFeedback} class="invite-form">
-          <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
-          <details class="invite-context">
-            <summary>Employment</summary>
-            <div class="invite-context-grid">
-              <label>
-                <span>Position</span>
-                <select name="position_id" required>
-                  <option value="">Choose position</option>
-                  {#if data.actorIsOwner}<option value="__owner__">Owner</option>{/if}
-                  {#each data.positions as position}
-                    <option value={position.id} disabled={position.account_type === 'manager' && !data.canManageManagers}>{position.name}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Type</span>
-                <select name="employment_type">
-                  <option value="employee">Employee</option>
-                  <option value="contractor">Contractor</option>
-                </select>
-              </label>
-              <label>
-                <span>Primary Department</span>
-                <select name="primary_schedule_department">
-                  <option value="">Unassigned</option>
-                  {#each data.departments as department}
-                    <option value={department}>{department}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                <span>Start Date</span>
-                <input name="start_date" type="date" />
-              </label>
-              <label>
-                <span>Pay Type</span>
-                <select name="pay_type">
-                  <option value="">Unset</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="salary">Salary</option>
-                </select>
-              </label>
-              <fieldset class="department-checks">
-                <legend>Schedule Departments</legend>
-                {#if data.departments.length === 0}
-                  <p>No departments yet.</p>
-                {:else}
-                  {#each data.departments as department}
-                    <label>
-                      <input type="checkbox" name="schedule_departments" value={department} />
-                      <span>{department}</span>
-                    </label>
-                  {/each}
-                {/if}
-              </fieldset>
-              <fieldset class="department-checks">
-                <legend>Onboarding</legend>
-                <label>
-                  <input type="checkbox" name="onboarding_required" value="1" />
-                  <span>Include onboarding packet</span>
-                </label>
-              </fieldset>
-            </div>
-          </details>
-          <button type="submit">Invite</button>
-        </form>
 
         <div class="invite-list">
           {#if activeInvites.length === 0}
@@ -304,6 +274,77 @@
           {/if}
         </div>
 
+        <details class="management-drawer">
+          <summary>Invite Employee</summary>
+          <form method="POST" action="?/create_user_invite&view=invites" use:enhance={withFeedback} class="invite-form">
+            <input name="email" type="email" placeholder="staff@email.com" aria-label="Invite email" required />
+            <details class="invite-context">
+              <summary>Employment</summary>
+              <div class="invite-context-grid">
+                <label>
+                  <span>Position</span>
+                  <select name="position_id" required>
+                    <option value="">Choose position</option>
+                    {#if data.actorIsOwner}<option value="__owner__">Owner</option>{/if}
+                    {#each data.positions as position}
+                      <option value={position.id} disabled={position.account_type === 'manager' && !data.canManageManagers}>{position.name}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Type</span>
+                  <select name="employment_type">
+                    <option value="employee">Employee</option>
+                    <option value="contractor">Contractor</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Primary Department</span>
+                  <select name="primary_schedule_department">
+                    <option value="">Unassigned</option>
+                    {#each data.departments as department}
+                      <option value={department}>{department}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Start Date</span>
+                  <input name="start_date" type="date" />
+                </label>
+                <label>
+                  <span>Pay Type</span>
+                  <select name="pay_type">
+                    <option value="">Unset</option>
+                    <option value="hourly">Hourly</option>
+                    <option value="salary">Salary</option>
+                  </select>
+                </label>
+                <fieldset class="department-checks">
+                  <legend>Schedule Departments</legend>
+                  {#if data.departments.length === 0}
+                    <p>No departments yet.</p>
+                  {:else}
+                    {#each data.departments as department}
+                      <label>
+                        <input type="checkbox" name="schedule_departments" value={department} />
+                        <span>{department}</span>
+                      </label>
+                    {/each}
+                  {/if}
+                </fieldset>
+                <fieldset class="department-checks">
+                  <legend>Onboarding</legend>
+                  <label>
+                    <input type="checkbox" name="onboarding_required" value="1" />
+                    <span>Include onboarding packet</span>
+                  </label>
+                </fieldset>
+              </div>
+            </details>
+            <button type="submit">Invite</button>
+          </form>
+        </details>
+
         {#if usedInvites.length > 0}
           <details class="used-invites">
             <summary>Used invites ({usedInvites.length})</summary>
@@ -320,31 +361,6 @@
       </section>
 
     </div>
-    {/if}
-
-    {#if data.activeView === 'packets' && data.canManageOnboarding}
-      <section class="workspace-section send-panel" id="packets" aria-label="Send onboarding packet">
-        <header class="section-head">
-          <div>
-            <span class="section-kicker">Packet</span>
-            <h2>Send Onboarding</h2>
-          </div>
-        </header>
-
-        <form method="POST" action="?/send_package&view=packets" use:enhance={withFeedback} class="send-form">
-          <label>
-            <span>Employee</span>
-            <select name="user_id" required>
-              <option value="">Choose employee</option>
-              {#each staffUsers as user}
-                <option value={user.id}>{user.display_name ?? user.email}</option>
-              {/each}
-            </select>
-          </label>
-          <input type="hidden" name="payroll_classification" value="employee" />
-          <button type="submit">Send Packet</button>
-        </form>
-      </section>
     {/if}
 
     {#if data.activeView === 'packets'}
@@ -383,6 +399,25 @@
           {/each}
         {/if}
       </div>
+
+      {#if data.canManageOnboarding}
+        <details class="management-drawer" id="packets">
+          <summary>Send Onboarding Packet</summary>
+          <form method="POST" action="?/send_package&view=packets" use:enhance={withFeedback} class="send-form">
+            <label>
+              <span>Employee</span>
+              <select name="user_id" required>
+                <option value="">Choose employee</option>
+                {#each staffUsers as user}
+                  <option value={user.id}>{user.display_name ?? user.email}</option>
+                {/each}
+              </select>
+            </label>
+            <input type="hidden" name="payroll_classification" value="employee" />
+            <button type="submit">Send Packet</button>
+          </form>
+        </details>
+      {/if}
     </section>
     {/if}
 
@@ -734,6 +769,48 @@
     color: var(--color-text-muted);
     cursor: pointer;
     font-size: 0.85rem;
+  }
+
+  .management-drawer {
+    margin-top: 0.9rem;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .management-drawer > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 2.8rem;
+    padding: 0.65rem 0;
+    list-style: none;
+    color: var(--color-text);
+    font-size: 0.76rem;
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+  }
+
+  .management-drawer > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .management-drawer > summary::after {
+    content: '+';
+    color: var(--color-text-muted);
+    font-size: 1rem;
+  }
+
+  .management-drawer[open] > summary {
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .management-drawer[open] > summary::after {
+    content: '-';
+  }
+
+  .management-drawer > .invite-form,
+  .management-drawer > .send-form {
+    padding: 0.9rem 0;
   }
 
   .invite-context-grid {

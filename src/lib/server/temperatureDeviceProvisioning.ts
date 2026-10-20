@@ -32,6 +32,13 @@ type IoTDeviceRow = {
   updated_at: number;
 };
 
+export type GatewayProvisioningSession = {
+  gatewayId: string;
+  serial: string;
+  serviceName: string;
+  proofOfPossession: string;
+};
+
 type TemperatureSensorNodeRow = {
   id: string;
   business_id: string;
@@ -120,6 +127,33 @@ function mapTemperatureSensorNode(row: TemperatureSensorNodeRow): TemperatureSen
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function bytesFromHex(value: string) {
+  if (!/^[a-f0-9]{64}$/i.test(value)) throw new Error('Gateway credentials are not provisioned.');
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < value.length; index += 2) {
+    bytes[index / 2] = Number.parseInt(value.slice(index, index + 2), 16);
+  }
+  return bytes;
+}
+
+function provisioningServiceName(serial: string) {
+  return `CR_${serial.slice(-28)}`;
+}
+
+async function provisioningProof(serial: string, credentialHash: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    bytesFromHex(credentialHash),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = new Uint8Array(
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`crimini-wifi-v1:${serial}`))
+  );
+  return Array.from(signature.slice(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function ensureOptionalColumn(db: D1, tableName: string, columnName: string, definition: string) {
@@ -252,6 +286,40 @@ export async function loadTemperatureGateways(db: D1, businessId: string) {
     .bind(businessId)
     .all<IoTDeviceRow>();
   return (rows.results ?? []).map(mapIoTDevice);
+}
+
+export async function loadGatewayProvisioningSession(
+  db: D1,
+  businessId: string,
+  gatewayId: string
+): Promise<GatewayProvisioningSession> {
+  await ensureTemperatureDeviceProvisioningSchema(db);
+  const gateway = await db
+    .prepare(
+      `
+      SELECT id, external_device_id, key_hash
+      FROM iot_devices
+      WHERE id = ?
+        AND business_id = ?
+        AND device_type = 'sensor_gateway'
+        AND is_active = 1
+        AND revoked_at IS NULL
+      LIMIT 1
+      `
+    )
+    .bind(gatewayId, businessId)
+    .first<{ id: string; external_device_id: string; key_hash: string | null }>();
+
+  if (!gateway) throw new Error('Gateway is not active in this business.');
+  if (!gateway.key_hash) throw new Error('Gateway credentials are not provisioned.');
+
+  const serial = normalizeDeviceSerial(gateway.external_device_id);
+  return {
+    gatewayId: gateway.id,
+    serial,
+    serviceName: provisioningServiceName(serial),
+    proofOfPossession: await provisioningProof(serial, gateway.key_hash)
+  };
 }
 
 export async function loadTemperatureSensorNodes(db: D1, businessId: string) {

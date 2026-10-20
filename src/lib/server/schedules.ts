@@ -20,6 +20,10 @@ export type ScheduleWeek = {
   status: 'draft' | 'published';
   publishedAt: number | null;
   updatedAt: number;
+  draftVersion: number;
+  publishedVersion: number;
+  hasUnpublishedChanges: boolean;
+  draftUpdatedAt: number | null;
 };
 
 export type ScheduleShift = {
@@ -189,6 +193,7 @@ export type ScheduleWeekTeamMember = {
 };
 
 type ScheduleDraftRow = {
+  id: string;
   shiftDate: string;
   userId: string;
   department: string;
@@ -201,6 +206,7 @@ type ScheduleDraftRow = {
 };
 
 type ShiftInsertRow = {
+  id: string;
   shiftDate: string;
   userId: string;
   department: string;
@@ -279,26 +285,6 @@ async function loadScheduleManagerDepartmentScope(db: DB, locals: App.Locals, bu
     allowedSet,
     hasAllAccess: allDepartments.every((department) => allowedSet.has(department))
   };
-}
-
-async function deleteScheduleShiftsForScope(
-  db: DB,
-  table: 'schedule_shifts' | 'schedule_open_shifts',
-  weekId: string,
-  businessId: string,
-  allowedDepartments: ScheduleDepartment[],
-  hasAllAccess: boolean
-) {
-  if (hasAllAccess) {
-    await db.prepare(`DELETE FROM ${table} WHERE week_id = ? AND business_id = ?`).bind(weekId, businessId).run();
-    return;
-  }
-  if (allowedDepartments.length === 0) return;
-  const placeholders = allowedDepartments.map(() => '?').join(', ');
-  await db
-    .prepare(`DELETE FROM ${table} WHERE week_id = ? AND business_id = ? AND department IN (${placeholders})`)
-    .bind(weekId, businessId, ...allowedDepartments)
-    .run();
 }
 
 async function managerCanAccessScheduleDepartment(
@@ -511,7 +497,10 @@ export async function loadPendingScheduleAvailabilityRequests(
         r.resolved_at,
         r.resolved_by_user_id
       FROM user_schedule_availability_requests r
-      JOIN users u ON u.id = r.user_id
+      JOIN business_users member
+        ON member.business_id = r.business_id
+       AND member.user_id = r.user_id
+      JOIN users u ON u.id = member.user_id
       WHERE r.business_id = ?
         AND r.status = 'pending'
         ${requestedUserIds ? `AND r.user_id IN (${placeholders})` : ''}
@@ -786,6 +775,14 @@ export async function ensureScheduleSchema(db: DB) {
         )
       .run();
 
+    await ensureOptionalColumn(db, 'schedule_weeks', 'draft_initialized', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureOptionalColumn(db, 'schedule_weeks', 'draft_version', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureOptionalColumn(db, 'schedule_weeks', 'published_version', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureOptionalColumn(db, 'schedule_weeks', 'has_unpublished_changes', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureOptionalColumn(db, 'schedule_weeks', 'draft_updated_at', 'INTEGER');
+    await ensureOptionalColumn(db, 'schedule_weeks', 'draft_updated_by', 'TEXT');
+    await ensureOptionalColumn(db, 'schedule_weeks', 'draft_write_token', 'TEXT');
+
     await db
       .prepare(
         `
@@ -839,6 +836,32 @@ export async function ensureScheduleSchema(db: DB) {
     await db
       .prepare(
         `
+        CREATE TABLE IF NOT EXISTS schedule_draft_shifts (
+          id TEXT PRIMARY KEY,
+          week_id TEXT NOT NULL,
+          shift_date TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          department TEXT NOT NULL,
+          role TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          start_time TEXT NOT NULL,
+          end_label TEXT NOT NULL DEFAULT '',
+          break_minutes INTEGER NOT NULL DEFAULT 0,
+          notes TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          business_id TEXT NOT NULL,
+          FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
         CREATE TABLE IF NOT EXISTS schedule_open_shifts (
           id TEXT PRIMARY KEY,
           week_id TEXT NOT NULL,
@@ -854,6 +877,30 @@ export async function ensureScheduleSchema(db: DB) {
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
           business_id TEXT NOT NULL DEFAULT '',
+          FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE TABLE IF NOT EXISTS schedule_draft_open_shifts (
+          id TEXT PRIMARY KEY,
+          week_id TEXT NOT NULL,
+          shift_date TEXT NOT NULL,
+          department TEXT NOT NULL,
+          role TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          start_time TEXT NOT NULL,
+          end_label TEXT NOT NULL DEFAULT '',
+          break_minutes INTEGER NOT NULL DEFAULT 0,
+          notes TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          business_id TEXT NOT NULL,
           FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE
         )
         `
@@ -886,6 +933,24 @@ export async function ensureScheduleSchema(db: DB) {
     await db
       .prepare(
         `
+        CREATE TABLE IF NOT EXISTS schedule_draft_week_team (
+          week_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          business_id TEXT NOT NULL,
+          PRIMARY KEY (business_id, week_id, user_id),
+          FOREIGN KEY (week_id) REFERENCES schedule_weeks(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
         CREATE TABLE IF NOT EXISTS schedule_templates (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -900,6 +965,42 @@ export async function ensureScheduleSchema(db: DB) {
           UNIQUE (business_id, name),
           FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
         )
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_draft_shifts_business_week_date
+        ON schedule_draft_shifts(business_id, week_id, shift_date, start_time, sort_order)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_draft_shifts_business_user_date
+        ON schedule_draft_shifts(business_id, user_id, shift_date, start_time)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_draft_week_team_week_sort
+        ON schedule_draft_week_team(business_id, week_id, sort_order, user_id)
+        `
+      )
+      .run();
+
+    await db
+      .prepare(
+        `
+        CREATE INDEX IF NOT EXISTS idx_schedule_draft_open_shifts_business_week_date
+        ON schedule_draft_open_shifts(business_id, week_id, shift_date, start_time, sort_order)
         `
       )
       .run();
@@ -1303,7 +1404,8 @@ export async function getOrCreateScheduleWeek(
   let week = await db
     .prepare(
       `
-      SELECT id, week_start, status, published_at, updated_at
+      SELECT id, week_start, status, published_at, updated_at,
+        draft_version, published_version, has_unpublished_changes, draft_updated_at
       FROM schedule_weeks
       WHERE week_start = ? AND business_id = ?
       LIMIT 1
@@ -1316,6 +1418,10 @@ export async function getOrCreateScheduleWeek(
       status: 'draft' | 'published';
       published_at: number | null;
       updated_at: number;
+      draft_version: number;
+      published_version: number;
+      has_unpublished_changes: number;
+      draft_updated_at: number | null;
     }>();
 
   if (!week) {
@@ -1336,7 +1442,11 @@ export async function getOrCreateScheduleWeek(
       week_start: weekStart,
       status: 'draft',
       published_at: null,
-      updated_at: now
+      updated_at: now,
+      draft_version: 0,
+      published_version: 0,
+      has_unpublished_changes: 0,
+      draft_updated_at: null
     };
   }
 
@@ -1345,8 +1455,73 @@ export async function getOrCreateScheduleWeek(
     weekStart: week.week_start,
     status: week.status,
     publishedAt: week.published_at,
-    updatedAt: week.updated_at
+    updatedAt: week.updated_at,
+    draftVersion: week.draft_version ?? 0,
+    publishedVersion: week.published_version ?? 0,
+    hasUnpublishedChanges: (week.has_unpublished_changes ?? 0) === 1,
+    draftUpdatedAt: week.draft_updated_at ?? null
   } satisfies ScheduleWeek;
+}
+
+async function ensureScheduleDraftInitialized(db: DB, weekId: string, businessId: string) {
+  const week = await db
+    .prepare(`SELECT draft_initialized FROM schedule_weeks WHERE id = ? AND business_id = ? LIMIT 1`)
+    .bind(weekId, businessId)
+    .first<{ draft_initialized: number }>();
+  if (!week) throw new Error('Schedule week not found.');
+  if (week.draft_initialized === 1) return;
+
+  await db.batch([
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order,
+          created_at, updated_at, business_id
+        )
+        SELECT
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, COALESCE(break_minutes, 0), notes, sort_order,
+          created_at, updated_at, business_id
+        FROM schedule_shifts
+        WHERE week_id = ? AND business_id = ?
+        `
+      )
+      .bind(weekId, businessId),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_open_shifts (
+          id, week_id, shift_date, department, role, detail, start_time,
+          end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT
+          id, week_id, shift_date, department, role, detail, start_time,
+          end_label, COALESCE(break_minutes, 0), notes, sort_order, created_at, updated_at, business_id
+        FROM schedule_open_shifts
+        WHERE week_id = ? AND business_id = ?
+        `
+      )
+      .bind(weekId, businessId),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT week_id, user_id, sort_order, created_at, updated_at, business_id
+        FROM schedule_week_team
+        WHERE week_id = ? AND business_id = ?
+        `
+      )
+      .bind(weekId, businessId),
+    db
+      .prepare(
+        `UPDATE schedule_weeks SET draft_initialized = 1 WHERE id = ? AND business_id = ? AND draft_initialized = 0`
+      )
+      .bind(weekId, businessId)
+  ]);
 }
 
 export async function loadScheduleRoleOptionsByDepartment(
@@ -1513,7 +1688,9 @@ export async function loadScheduleWeek(
   let week = await db
     .prepare(
       `
-      SELECT id, week_start, status, published_at, updated_at
+      SELECT id, week_start, status, published_at, updated_at,
+        draft_initialized, draft_version, published_version,
+        has_unpublished_changes, draft_updated_at
       FROM schedule_weeks
       WHERE week_start = ? AND business_id = ?
       ${publishedClause}
@@ -1527,6 +1704,11 @@ export async function loadScheduleWeek(
       status: 'draft' | 'published';
       published_at: number | null;
       updated_at: number;
+      draft_initialized: number;
+      draft_version: number;
+      published_version: number;
+      has_unpublished_changes: number;
+      draft_updated_at: number | null;
     }>();
 
   if (!week && !options?.publishedOnly && options?.ensureWeek) {
@@ -1536,7 +1718,12 @@ export async function loadScheduleWeek(
       week_start: created.weekStart,
       status: created.status,
       published_at: created.publishedAt,
-      updated_at: created.updatedAt
+      updated_at: created.updatedAt,
+      draft_initialized: 0,
+      draft_version: created.draftVersion,
+      published_version: created.publishedVersion,
+      has_unpublished_changes: created.hasUnpublishedChanges ? 1 : 0,
+      draft_updated_at: created.draftUpdatedAt
     };
   }
 
@@ -1549,6 +1736,9 @@ export async function loadScheduleWeek(
     };
   }
 
+  const useDraft = !options?.publishedOnly && week.draft_initialized === 1;
+  const shiftTable = useDraft ? 'schedule_draft_shifts' : 'schedule_shifts';
+  const teamTable = useDraft ? 'schedule_draft_week_team' : 'schedule_week_team';
   const rows = await db
     .prepare(
       `
@@ -1567,8 +1757,11 @@ export async function loadScheduleWeek(
         COALESCE(s.break_minutes, 0) AS break_minutes,
         s.notes,
         s.sort_order
-      FROM schedule_shifts s
-      JOIN users u ON u.id = s.user_id
+      FROM ${shiftTable} s
+      JOIN business_users member
+        ON member.business_id = s.business_id
+       AND member.user_id = s.user_id
+      JOIN users u ON u.id = member.user_id
       WHERE s.week_id = ? AND s.business_id = ?
         AND s.shift_date >= ? AND s.shift_date <= ?
       ORDER BY s.shift_date ASC, s.start_time ASC, s.sort_order ASC, COALESCE(u.display_name, u.email) ASC
@@ -1613,7 +1806,7 @@ export async function loadScheduleWeek(
     .prepare(
       `
       SELECT user_id
-      FROM schedule_week_team
+      FROM ${teamTable}
       WHERE week_id = ? AND business_id = ?
       ORDER BY sort_order ASC, user_id ASC
       `
@@ -1631,12 +1824,30 @@ export async function loadScheduleWeek(
       weekStart: week.week_start,
       status: week.status,
       publishedAt: week.published_at,
-      updatedAt: week.updated_at
+      updatedAt: week.updated_at,
+      draftVersion: week.draft_version ?? 0,
+      publishedVersion: week.published_version ?? 0,
+      hasUnpublishedChanges: (week.has_unpublished_changes ?? 0) === 1,
+      draftUpdatedAt: week.draft_updated_at ?? null
     } satisfies ScheduleWeek,
     shifts,
     days: buildWeekDays(week.week_start, shifts),
     rosterUserIds: mergedRosterUserIds
   };
+}
+
+async function loadScheduleWeekIdentity(db: DB, weekStart: string, businessId?: string | null) {
+  return db
+    .prepare(
+      `
+      SELECT id, status
+      FROM schedule_weeks
+      WHERE week_start = ? AND business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(weekStart, businessId ?? '')
+    .first<{ id: string; status: 'draft' | 'published' }>();
 }
 
 export async function loadMyWeekSchedule(
@@ -1673,8 +1884,8 @@ export async function loadTodayShifts(
 
 export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string, businessId?: string | null) {
   await ensureScheduleSchema(db);
-  const week = await loadScheduleWeek(db, weekStart, { publishedOnly: false, businessId });
-  if (!week.week) return [];
+  const week = await loadScheduleWeekIdentity(db, weekStart, businessId);
+  if (!week) return [];
 
   const rows = await db
     .prepare(
@@ -1707,16 +1918,28 @@ export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string, 
         requested.display_name AS requested_by_user_name,
         requested.email AS requested_by_user_email
       FROM schedule_shift_offers o
-      JOIN schedule_shifts s ON s.id = o.shift_id
-      JOIN users u ON u.id = s.user_id
-      JOIN users offered ON offered.id = o.offered_by_user_id
-      LEFT JOIN users targeted ON targeted.id = o.target_user_id
-      LEFT JOIN users requested ON requested.id = o.requested_by_user_id
+      JOIN schedule_shifts s ON s.id = o.shift_id AND s.business_id = o.business_id
+      JOIN business_users scheduled_member
+        ON scheduled_member.business_id = o.business_id
+       AND scheduled_member.user_id = s.user_id
+      JOIN users u ON u.id = scheduled_member.user_id
+      JOIN business_users offering_member
+        ON offering_member.business_id = o.business_id
+       AND offering_member.user_id = o.offered_by_user_id
+      JOIN users offered ON offered.id = offering_member.user_id
+      LEFT JOIN business_users targeted_member
+        ON targeted_member.business_id = o.business_id
+       AND targeted_member.user_id = o.target_user_id
+      LEFT JOIN users targeted ON targeted.id = targeted_member.user_id
+      LEFT JOIN business_users requesting_member
+        ON requesting_member.business_id = o.business_id
+       AND requesting_member.user_id = o.requested_by_user_id
+      LEFT JOIN users requested ON requested.id = requesting_member.user_id
       WHERE s.week_id = ? AND o.business_id = ?
       ORDER BY s.shift_date ASC, s.start_time ASC, COALESCE(u.display_name, u.email) ASC
       `
     )
-    .bind(week.week.id, businessId ?? '')
+    .bind(week.id, businessId ?? '')
     .all<{
       id: string;
       shift_id: string;
@@ -1776,10 +1999,17 @@ export async function loadScheduleShiftOffersForWeek(db: DB, weekStart: string, 
   })) satisfies ScheduleShiftOffer[];
 }
 
-export async function loadScheduleOpenShiftsForWeek(db: DB, weekStart: string, businessId?: string | null) {
+export async function loadScheduleOpenShiftsForWeek(
+  db: DB,
+  weekStart: string,
+  businessId?: string | null,
+  options: { draft?: boolean } = {}
+) {
   await ensureScheduleSchema(db);
-  const week = await loadScheduleWeek(db, weekStart, { publishedOnly: false, businessId });
-  if (!week.week) return [] as ScheduleOpenShift[];
+  const week = await loadScheduleWeekIdentity(db, weekStart, businessId);
+  if (!week) return [] as ScheduleOpenShift[];
+  if (!options.draft && week.status !== 'published') return [] as ScheduleOpenShift[];
+  const source = options.draft ? 'schedule_draft_open_shifts' : 'schedule_open_shifts';
 
   const rows = await db
     .prepare(
@@ -1796,12 +2026,12 @@ export async function loadScheduleOpenShiftsForWeek(db: DB, weekStart: string, b
         break_minutes,
         notes,
         sort_order
-      FROM schedule_open_shifts
+      FROM ${source}
       WHERE week_id = ? AND business_id = ?
       ORDER BY shift_date ASC, start_time ASC, sort_order ASC
       `
     )
-    .bind(week.week.id, businessId ?? '')
+    .bind(week.id, businessId ?? '')
     .all<{
       id: string;
       week_id: string;
@@ -1833,8 +2063,8 @@ export async function loadScheduleOpenShiftsForWeek(db: DB, weekStart: string, b
 
 export async function loadScheduleOpenShiftRequestsForWeek(db: DB, weekStart: string, businessId?: string | null) {
   await ensureScheduleSchema(db);
-  const week = await loadScheduleWeek(db, weekStart, { publishedOnly: false, businessId });
-  if (!week.week) return [] as ScheduleOpenShiftRequest[];
+  const week = await loadScheduleWeekIdentity(db, weekStart, businessId);
+  if (!week) return [] as ScheduleOpenShiftRequest[];
 
   const rows = await db
     .prepare(
@@ -1860,8 +2090,11 @@ export async function loadScheduleOpenShiftRequestsForWeek(db: DB, weekStart: st
         o.notes,
         o.sort_order
       FROM schedule_open_shift_requests r
-      JOIN schedule_open_shifts o ON o.id = r.open_shift_id
-      JOIN users u ON u.id = r.requested_by_user_id
+      JOIN schedule_open_shifts o ON o.id = r.open_shift_id AND o.business_id = r.business_id
+      JOIN business_users member
+        ON member.business_id = r.business_id
+       AND member.user_id = r.requested_by_user_id
+      JOIN users u ON u.id = member.user_id
       WHERE o.week_id = ?
         AND r.business_id = ?
         AND o.business_id = ?
@@ -1872,7 +2105,7 @@ export async function loadScheduleOpenShiftRequestsForWeek(db: DB, weekStart: st
         COALESCE(u.display_name, u.email) ASC
       `
     )
-    .bind(week.week.id, businessId ?? '', businessId ?? '')
+    .bind(week.id, businessId ?? '', businessId ?? '')
     .all<{
       request_id: string;
       requested_by_user_id: string;
@@ -1933,7 +2166,7 @@ export async function loadScheduleTemplates(db: DB, businessId?: string | null) 
         t.updated_at,
         COUNT(s.id) AS shift_count
       FROM schedule_templates t
-      LEFT JOIN schedule_template_shifts s ON s.template_id = t.id
+      LEFT JOIN schedule_template_shifts s ON s.template_id = t.id AND s.business_id = t.business_id
       WHERE t.business_id = ?
       GROUP BY t.id
       ORDER BY t.updated_at DESC, t.name ASC
@@ -2076,7 +2309,10 @@ export async function loadUserScheduleTimeOffRequests(db: DB, userId: string, bu
         r.resolved_at,
         r.resolved_by_user_id
       FROM user_schedule_time_off_requests r
-      JOIN users u ON u.id = r.user_id
+      JOIN business_users member
+        ON member.business_id = r.business_id
+       AND member.user_id = r.user_id
+      JOIN users u ON u.id = member.user_id
       WHERE r.user_id = ?
         AND r.business_id = ?
       ORDER BY
@@ -2146,7 +2382,10 @@ export async function loadScheduleTimeOffRequestsForRange(
         r.resolved_at,
         r.resolved_by_user_id
       FROM user_schedule_time_off_requests r
-      JOIN users u ON u.id = r.user_id
+      JOIN business_users member
+        ON member.business_id = r.business_id
+       AND member.user_id = r.user_id
+      JOIN users u ON u.id = member.user_id
       WHERE r.start_date <= ?
         AND r.end_date >= ?
         AND r.business_id = ?
@@ -2219,7 +2458,10 @@ export async function loadPendingScheduleTimeOffRequests(
         r.resolved_at,
         r.resolved_by_user_id
       FROM user_schedule_time_off_requests r
-      JOIN users u ON u.id = r.user_id
+      JOIN business_users member
+        ON member.business_id = r.business_id
+       AND member.user_id = r.user_id
+      JOIN users u ON u.id = member.user_id
       WHERE r.business_id = ?
         AND r.status = 'pending'
         ${requestedUserIds ? `AND r.user_id IN (${placeholders})` : ''}
@@ -2275,7 +2517,7 @@ async function loadOwnedShift(db: DB, shiftId: string, businessId?: string | nul
         s.start_time,
         w.week_start
       FROM schedule_shifts s
-      JOIN schedule_weeks w ON w.id = s.week_id
+      JOIN schedule_weeks w ON w.id = s.week_id AND w.business_id = s.business_id
       WHERE s.id = ? AND s.business_id = ?
         AND w.business_id = ?
         AND w.status = 'published'
@@ -2295,72 +2537,264 @@ async function loadOwnedShift(db: DB, shiftId: string, businessId?: string | nul
     }>();
 }
 
-async function loadAssignableUserById(db: DB, userId: string, businessId?: string | null) {
-  const users = await loadScheduleAssignableUsersById(db, [userId], businessId);
-  return users.get(userId) ?? null;
-}
+function dedupeShiftInsertRows(rows: ShiftInsertRow[]) {
+  const uniqueRows = new Map<string, ShiftInsertRow>();
 
-async function insertScheduleShifts(db: DB, weekId: string, rows: ShiftInsertRow[], now: number, businessId: string) {
-  if (rows.length === 0) return;
-
-  const chunkSize = 100;
-  for (let index = 0; index < rows.length; index += chunkSize) {
-    const chunk = rows.slice(index, index + chunkSize);
-    await db.batch(
-      chunk.map((row) =>
-        db
-          .prepare(
-            `
-            INSERT INTO schedule_shifts (
-              id, week_id, shift_date, user_id, department, role, detail,
-              start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `
-          )
-          .bind(
-            crypto.randomUUID(),
-            weekId,
-            row.shiftDate,
-            row.userId,
-            row.department,
-            row.role,
-            row.detail,
-            row.startTime,
-            row.endLabel,
-            row.breakMinutes,
-            row.notes,
-            row.sortOrder,
-            now,
-            now,
-            businessId
-          )
-      )
-    );
+  for (const row of rows) {
+    const key = JSON.stringify([
+      row.shiftDate,
+      row.userId,
+      row.department,
+      row.role,
+      row.detail,
+      row.startTime,
+      row.endLabel,
+      row.breakMinutes,
+      row.notes
+    ]);
+    if (!uniqueRows.has(key)) uniqueRows.set(key, row);
   }
+
+  return Array.from(uniqueRows.values()).map((row, sortOrder) => ({ ...row, sortOrder }));
 }
 
-async function replaceWeekTeamRoster(db: DB, weekId: string, userIds: string[], now: number, businessId: string) {
-  await db.prepare(`DELETE FROM schedule_week_team WHERE week_id = ? AND business_id = ?`).bind(weekId, businessId).run();
-  const uniqueUserIds = Array.from(new Set(userIds));
-  if (uniqueUserIds.length === 0) return;
-
-  await db.batch(
-    uniqueUserIds.map((userId, index) =>
-      db
-        .prepare(
-          `
-          INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at, business_id)
-          VALUES (?, ?, ?, ?, ?, ?)
-          `
-        )
-        .bind(weekId, userId, index, now, now, businessId)
+function prepareScheduleDraftScopeDelete(
+  db: DB,
+  table: 'schedule_draft_shifts' | 'schedule_draft_open_shifts',
+  weekId: string,
+  businessId: string,
+  allowedDepartments: ScheduleDepartment[],
+  hasAllAccess: boolean,
+  writeToken: string
+) {
+  if (hasAllAccess) {
+    return db
+      .prepare(
+        `DELETE FROM ${table}
+         WHERE week_id = ? AND business_id = ?
+           AND EXISTS (
+             SELECT 1 FROM schedule_weeks
+             WHERE id = ? AND business_id = ? AND draft_write_token = ?
+           )`
+      )
+      .bind(weekId, businessId, weekId, businessId, writeToken);
+  }
+  if (allowedDepartments.length === 0) {
+    return db.prepare(`DELETE FROM ${table} WHERE 1 = 0`);
+  }
+  const placeholders = allowedDepartments.map(() => '?').join(', ');
+  return db
+    .prepare(
+      `DELETE FROM ${table}
+       WHERE week_id = ? AND business_id = ? AND department IN (${placeholders})
+         AND EXISTS (
+           SELECT 1 FROM schedule_weeks
+           WHERE id = ? AND business_id = ? AND draft_write_token = ?
+         )`
     )
-  );
+    .bind(weekId, businessId, ...allowedDepartments, weekId, businessId, writeToken);
+}
+
+async function replaceScheduleDraftWeekDataAtomic(
+  db: DB,
+  options: {
+    weekId: string;
+    businessId: string;
+    rows: ShiftInsertRow[];
+    rosterUserIds: string[];
+    allowedDepartments: ScheduleDepartment[];
+    hasAllAccess: boolean;
+    updatedBy: string | null | undefined;
+    now: number;
+    expectedDraftVersion: number;
+  }
+) {
+  const rows = dedupeShiftInsertRows(options.rows);
+  const rosterUserIds = Array.from(new Set(options.rosterUserIds));
+  const writeToken = crypto.randomUUID();
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_write_token = ?
+        WHERE id = ? AND business_id = ?
+          AND draft_version = ?
+          AND draft_write_token IS NULL
+        `
+      )
+      .bind(writeToken, options.weekId, options.businessId, options.expectedDraftVersion),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order,
+          created_at, updated_at, business_id
+        )
+        SELECT
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, COALESCE(break_minutes, 0), notes, sort_order,
+          created_at, updated_at, business_id
+        FROM schedule_shifts
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_initialized = 0 AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(options.weekId, options.businessId, options.weekId, options.businessId, writeToken),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_open_shifts (
+          id, week_id, shift_date, department, role, detail, start_time,
+          end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT
+          id, week_id, shift_date, department, role, detail, start_time,
+          end_label, COALESCE(break_minutes, 0), notes, sort_order, created_at, updated_at, business_id
+        FROM schedule_open_shifts
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_initialized = 0 AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(options.weekId, options.businessId, options.weekId, options.businessId, writeToken),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT week_id, user_id, sort_order, created_at, updated_at, business_id
+        FROM schedule_week_team
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_initialized = 0 AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(options.weekId, options.businessId, options.weekId, options.businessId, writeToken),
+    prepareScheduleDraftScopeDelete(
+      db,
+      'schedule_draft_shifts',
+      options.weekId,
+      options.businessId,
+      options.allowedDepartments,
+      options.hasAllAccess,
+      writeToken
+    ),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_draft_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT
+          json_extract(item.value, '$.id'),
+          ?,
+          json_extract(item.value, '$.shiftDate'),
+          json_extract(item.value, '$.userId'),
+          json_extract(item.value, '$.department'),
+          json_extract(item.value, '$.role'),
+          json_extract(item.value, '$.detail'),
+          json_extract(item.value, '$.startTime'),
+          json_extract(item.value, '$.endLabel'),
+          CAST(json_extract(item.value, '$.breakMinutes') AS INTEGER),
+          json_extract(item.value, '$.notes'),
+          CAST(json_extract(item.value, '$.sortOrder') AS INTEGER),
+          ?,
+          ?,
+          ?
+        FROM json_each(?) AS item
+        WHERE EXISTS (
+          SELECT 1 FROM schedule_weeks
+          WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        )
+        `
+      )
+      .bind(
+        options.weekId,
+        options.now,
+        options.now,
+        options.businessId,
+        JSON.stringify(rows),
+        options.weekId,
+        options.businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `DELETE FROM schedule_draft_week_team
+         WHERE week_id = ? AND business_id = ?
+           AND EXISTS (
+             SELECT 1 FROM schedule_weeks
+             WHERE id = ? AND business_id = ? AND draft_write_token = ?
+           )`
+      )
+      .bind(options.weekId, options.businessId, options.weekId, options.businessId, writeToken),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_draft_week_team (week_id, user_id, sort_order, created_at, updated_at, business_id)
+        SELECT ?, CAST(item.value AS TEXT), CAST(item.key AS INTEGER), ?, ?, ?
+        FROM json_each(?) AS item
+        WHERE EXISTS (
+          SELECT 1 FROM schedule_weeks
+          WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        )
+        `
+      )
+      .bind(
+        options.weekId,
+        options.now,
+        options.now,
+        options.businessId,
+        JSON.stringify(rosterUserIds),
+        options.weekId,
+        options.businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_initialized = 1,
+          draft_version = draft_version + 1,
+          has_unpublished_changes = 1,
+          draft_updated_at = ?,
+          draft_updated_by = ?,
+          updated_at = ?,
+          updated_by = ?,
+          draft_write_token = NULL
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(
+        options.now,
+        options.updatedBy ?? null,
+        options.now,
+        options.updatedBy ?? null,
+        options.weekId,
+        options.businessId,
+        writeToken
+      )
+  ]);
+
+  const claimed = Number(results[0]?.meta?.changes ?? 0) === 1;
+  return claimed ? { rowCount: rows.length, draftVersion: options.expectedDraftVersion + 1 } : null;
 }
 
 function toShiftInsertRows(rows: ScheduleDraftRow[]): ShiftInsertRow[] {
   return rows.map((row, index) => ({
+    id: row.id,
     shiftDate: row.shiftDate,
     userId: row.userId,
     department: row.department,
@@ -2385,6 +2819,7 @@ function toCopiedShiftInsertRows(
         86400000
     );
     return {
+      id: crypto.randomUUID(),
       shiftDate: addDays(weekStart, dayOffset),
       userId: shift.userId,
       department: shift.department,
@@ -2413,13 +2848,33 @@ function isDateInWeek(date: string, weekStart: string) {
   return date >= weekStart && date <= addDays(weekStart, 6);
 }
 
+function normalizeScheduleShiftId(value: unknown) {
+  const id = String(value ?? '').trim();
+  return /^[A-Za-z0-9:_-]{1,128}$/.test(id) ? id : crypto.randomUUID();
+}
+
+function parseScheduleDraftVersion(form: FormData) {
+  const raw = String(form.get('draft_version') ?? '').trim();
+  if (!/^\d+$/.test(raw)) return null;
+  const version = Number(raw);
+  return Number.isSafeInteger(version) ? version : null;
+}
+
 function summarizePublishIssues(prefix: string, issues: string[]) {
   if (issues.length === 0) return '';
   if (issues.length === 1) return `${prefix}${issues[0]}`;
   return `${prefix}${issues[0]} (+${issues.length - 1} more)`;
 }
 
-async function loadPublishShifts(db: DB, weekId: string, businessId?: string | null) {
+type ScheduleShiftSource = 'schedule_shifts' | 'schedule_draft_shifts';
+type ScheduleOpenShiftSource = 'schedule_open_shifts' | 'schedule_draft_open_shifts';
+
+async function loadPublishShifts(
+  db: DB,
+  weekId: string,
+  businessId?: string | null,
+  source: ScheduleShiftSource = 'schedule_shifts'
+) {
   return db
     .prepare(
       `
@@ -2434,8 +2889,11 @@ async function loadPublishShifts(db: DB, weekId: string, businessId?: string | n
         COALESCE(s.break_minutes, 0) AS break_minutes,
         u.display_name AS user_name,
         u.email AS user_email
-      FROM schedule_shifts s
-      JOIN users u ON u.id = s.user_id
+      FROM ${source} s
+      JOIN business_users member
+        ON member.business_id = s.business_id
+       AND member.user_id = s.user_id
+      JOIN users u ON u.id = member.user_id
       WHERE s.week_id = ? AND s.business_id = ?
       ORDER BY s.shift_date ASC, s.user_id ASC, s.start_time ASC, s.sort_order ASC
       `
@@ -2444,9 +2902,16 @@ async function loadPublishShifts(db: DB, weekId: string, businessId?: string | n
     .all<PublishShiftRow>();
 }
 
-async function validatePublishWeek(db: DB, weekId: string, weekStart: string, businessId?: string | null) {
+async function validatePublishWeek(
+  db: DB,
+  weekId: string,
+  weekStart: string,
+  businessId?: string | null,
+  shiftSource: ScheduleShiftSource = 'schedule_shifts',
+  openShiftSource: ScheduleOpenShiftSource = 'schedule_open_shifts'
+) {
   const [rowsResult, departments, roleOptionsByDepartment] = await Promise.all([
-    loadPublishShifts(db, weekId, businessId),
+    loadPublishShifts(db, weekId, businessId, shiftSource),
     loadScheduleDepartments(db, businessId),
     loadScheduleRoleOptionsByDepartment(db, businessId)
   ]);
@@ -2553,7 +3018,7 @@ async function validatePublishWeek(db: DB, weekId: string, weekStart: string, bu
     .prepare(
       `
       SELECT COUNT(*) AS count
-      FROM schedule_shifts s
+      FROM ${shiftSource} s
       JOIN user_schedule_time_off_requests r
         ON r.user_id = s.user_id
        AND r.status = 'approved'
@@ -2578,7 +3043,7 @@ async function validatePublishWeek(db: DB, weekId: string, weekStart: string, bu
     .prepare(
       `
       SELECT COUNT(*) AS count
-      FROM schedule_shifts s
+      FROM ${shiftSource} s
       JOIN user_schedule_time_off_requests r
         ON r.user_id = s.user_id
        AND r.status = 'pending'
@@ -2603,7 +3068,7 @@ async function validatePublishWeek(db: DB, weekId: string, weekStart: string, bu
     .prepare(
       `
       SELECT COUNT(*) AS count
-      FROM schedule_open_shifts
+      FROM ${openShiftSource}
       WHERE week_id = ? AND business_id = ?
       `
     )
@@ -3003,8 +3468,8 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
         s.department,
         s.role
       FROM schedule_shift_offers o
-      JOIN schedule_shifts s ON s.id = o.shift_id
-      JOIN schedule_weeks w ON w.id = s.week_id
+      JOIN schedule_shifts s ON s.id = o.shift_id AND s.business_id = o.business_id
+      JOIN schedule_weeks w ON w.id = s.week_id AND w.business_id = s.business_id
       WHERE o.shift_id = ?
         AND o.business_id = ?
         AND s.business_id = ?
@@ -3113,7 +3578,7 @@ export async function requestScheduleOpenShift(request: Request, locals: App.Loc
       `
       SELECT o.id, o.department, o.role
       FROM schedule_open_shifts o
-      JOIN schedule_weeks w ON w.id = o.week_id
+      JOIN schedule_weeks w ON w.id = o.week_id AND w.business_id = o.business_id
       WHERE o.id = ?
         AND o.business_id = ?
         AND w.business_id = ?
@@ -3209,7 +3674,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
       `
       SELECT o.requested_by_user_id, s.week_id, s.department, s.role
       FROM schedule_shift_offers o
-      JOIN schedule_shifts s ON s.id = o.shift_id
+      JOIN schedule_shifts s ON s.id = o.shift_id AND s.business_id = o.business_id
       WHERE o.shift_id = ? AND o.business_id = ? AND s.business_id = ?
       LIMIT 1
       `
@@ -3239,27 +3704,218 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
   );
   if (assignmentError) return fail(400, { error: assignmentError });
 
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(`UPDATE schedule_shifts SET user_id = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
-    .bind(offer.requested_by_user_id, now, shiftId, businessId)
-    .run();
-  const currentRoster = await db
-    .prepare(`SELECT user_id FROM schedule_week_team WHERE week_id = ? AND business_id = ? ORDER BY sort_order ASC`)
-    .bind(offer.week_id, businessId)
-    .all<{ user_id: string }>();
-  await replaceWeekTeamRoster(
+  await ensureScheduleDraftInitialized(db, offer.week_id, businessId);
+  const draftState = await db
+    .prepare(
+      `
+      SELECT
+        w.draft_version,
+        live.user_id AS live_user_id,
+        draft.user_id AS draft_user_id,
+        draft.shift_date AS draft_shift_date,
+        draft.department AS draft_department,
+        draft.role AS draft_role
+      FROM schedule_weeks w
+      JOIN schedule_shifts live
+        ON live.week_id = w.id AND live.id = ? AND live.business_id = w.business_id
+      LEFT JOIN schedule_draft_shifts draft
+        ON draft.week_id = w.id AND draft.id = live.id AND draft.business_id = w.business_id
+      WHERE w.id = ? AND w.business_id = ?
+      LIMIT 1
+      `
+    )
+    .bind(shiftId, offer.week_id, businessId)
+    .first<{
+      draft_version: number;
+      live_user_id: string;
+      draft_user_id: string | null;
+      draft_shift_date: string | null;
+      draft_department: string | null;
+      draft_role: string | null;
+    }>();
+  if (!draftState || !draftState.draft_user_id || draftState.draft_user_id !== draftState.live_user_id) {
+    return fail(409, { error: 'This shift changed in the schedule draft. Review it before approving the request.' });
+  }
+  const draftAssignmentError = await validateScheduleAssignments(
     db,
-    offer.week_id,
-    [...(currentRoster.results ?? []).map((row) => row.user_id), offer.requested_by_user_id],
-    now,
+    [
+      {
+        userId: offer.requested_by_user_id,
+        department: draftState.draft_department ?? offer.department,
+        role: draftState.draft_role ?? offer.role,
+        shiftDate: draftState.draft_shift_date ?? undefined
+      }
+    ],
     businessId
   );
-  await db.prepare(`DELETE FROM schedule_shift_offers WHERE shift_id = ? AND business_id = ?`).bind(shiftId, businessId).run();
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, offer.week_id, businessId)
-    .run();
+  if (draftAssignmentError) return fail(400, { error: draftAssignmentError });
+
+  const now = Math.floor(Date.now() / 1000);
+  const writeToken = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_write_token = ?
+        WHERE id = ? AND business_id = ?
+          AND draft_version = ?
+          AND draft_write_token IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM schedule_shifts live
+            JOIN schedule_draft_shifts draft
+              ON draft.id = live.id
+             AND draft.week_id = live.week_id
+             AND draft.business_id = live.business_id
+            WHERE live.id = ? AND live.week_id = ? AND live.business_id = ?
+              AND draft.user_id = live.user_id
+          )
+          AND EXISTS (
+            SELECT 1 FROM schedule_shift_offers
+            WHERE shift_id = ? AND business_id = ? AND requested_by_user_id = ?
+          )
+        `
+      )
+      .bind(
+        writeToken,
+        offer.week_id,
+        businessId,
+        draftState.draft_version,
+        shiftId,
+        offer.week_id,
+        businessId,
+        shiftId,
+        businessId,
+        offer.requested_by_user_id
+      ),
+    db
+      .prepare(
+        `
+        UPDATE schedule_shifts
+        SET user_id = ?, updated_at = ?
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(
+        offer.requested_by_user_id,
+        now,
+        shiftId,
+        offer.week_id,
+        businessId,
+        offer.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        UPDATE schedule_draft_shifts
+        SET user_id = ?, updated_at = ?
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(
+        offer.requested_by_user_id,
+        now,
+        shiftId,
+        offer.week_id,
+        businessId,
+        offer.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, ?, COALESCE((
+          SELECT MAX(sort_order) FROM schedule_week_team
+          WHERE week_id = ? AND business_id = ?
+        ), -1) + 1, ?, ?, ?
+        FROM schedule_weeks
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(
+        offer.week_id,
+        offer.requested_by_user_id,
+        offer.week_id,
+        businessId,
+        now,
+        now,
+        businessId,
+        offer.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, ?, COALESCE((
+          SELECT MAX(sort_order) FROM schedule_draft_week_team
+          WHERE week_id = ? AND business_id = ?
+        ), -1) + 1, ?, ?, ?
+        FROM schedule_weeks
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(
+        offer.week_id,
+        offer.requested_by_user_id,
+        offer.week_id,
+        businessId,
+        now,
+        now,
+        businessId,
+        offer.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_shift_offers
+        WHERE shift_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(shiftId, businessId, offer.week_id, businessId, writeToken),
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_version = draft_version + 1,
+          published_version = published_version + 1,
+          draft_updated_at = ?,
+          draft_updated_by = ?,
+          updated_at = ?,
+          updated_by = ?,
+          draft_write_token = NULL
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(now, locals.userId, now, locals.userId, offer.week_id, businessId, writeToken)
+  ]);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    return fail(409, { error: 'This schedule changed while the request was being approved. Reload and try again.' });
+  }
   await recordOperationalEventBestEffort(
     db,
     {
@@ -3365,7 +4021,7 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
         o.notes,
         o.sort_order
       FROM schedule_open_shift_requests r
-      JOIN schedule_open_shifts o ON o.id = r.open_shift_id
+      JOIN schedule_open_shifts o ON o.id = r.open_shift_id AND o.business_id = r.business_id
       WHERE r.id = ?
         AND r.status = 'pending'
         AND r.business_id = ?
@@ -3400,56 +4056,230 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
   );
   if (assignmentError) return fail(400, { error: assignmentError });
 
-  const now = Math.floor(Date.now() / 1000);
-  await db
+  await ensureScheduleDraftInitialized(db, row.week_id, businessId);
+  const draftState = await db
     .prepare(
       `
-      INSERT INTO schedule_shifts (
-        id, week_id, shift_date, user_id, department, role, detail,
-        start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT w.draft_version
+      FROM schedule_weeks w
+      JOIN schedule_open_shifts live
+        ON live.week_id = w.id AND live.id = ? AND live.business_id = w.business_id
+      JOIN schedule_draft_open_shifts draft
+        ON draft.week_id = w.id AND draft.id = live.id AND draft.business_id = w.business_id
+      WHERE w.id = ? AND w.business_id = ?
+        AND draft.shift_date = live.shift_date
+        AND draft.department = live.department
+        AND draft.role = live.role
+        AND draft.start_time = live.start_time
+        AND draft.end_label = live.end_label
+      LIMIT 1
       `
     )
-    .bind(
-      crypto.randomUUID(),
-      row.week_id,
-      row.shift_date,
-      row.requested_by_user_id,
-      row.department,
-      row.role,
-      row.detail ?? '',
-      row.start_time,
-      row.end_label ?? '',
-      row.break_minutes ?? 0,
-      row.notes ?? '',
-      row.sort_order ?? 0,
-      now,
-      now,
-      businessId
-    )
-    .run();
+    .bind(row.open_shift_id, row.week_id, businessId)
+    .first<{ draft_version: number }>();
+  if (!draftState) {
+    return fail(409, { error: 'This open shift changed in the schedule draft. Review it before approving the request.' });
+  }
 
-  const currentRoster = await db
-    .prepare(`SELECT user_id FROM schedule_week_team WHERE week_id = ? AND business_id = ? ORDER BY sort_order ASC`)
-    .bind(row.week_id, businessId)
-    .all<{ user_id: string }>();
-  await replaceWeekTeamRoster(
-    db,
-    row.week_id,
-    [...(currentRoster.results ?? []).map((entry) => entry.user_id), row.requested_by_user_id],
-    now,
-    businessId
-  );
-
-  await db
-    .prepare(`DELETE FROM schedule_open_shifts WHERE id = ? AND business_id = ?`)
-    .bind(row.open_shift_id, businessId)
-    .run();
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, row.week_id, businessId)
-    .run();
+  const now = Math.floor(Date.now() / 1000);
+  const assignedShiftId = crypto.randomUUID();
+  const writeToken = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_write_token = ?
+        WHERE id = ? AND business_id = ?
+          AND draft_version = ?
+          AND draft_write_token IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM schedule_open_shifts live
+            JOIN schedule_draft_open_shifts draft
+              ON draft.id = live.id
+             AND draft.week_id = live.week_id
+             AND draft.business_id = live.business_id
+            WHERE live.id = ? AND live.week_id = ? AND live.business_id = ?
+              AND draft.shift_date = live.shift_date
+              AND draft.department = live.department
+              AND draft.role = live.role
+              AND draft.start_time = live.start_time
+              AND draft.end_label = live.end_label
+          )
+          AND EXISTS (
+            SELECT 1 FROM schedule_open_shift_requests
+            WHERE id = ? AND open_shift_id = ? AND requested_by_user_id = ?
+              AND business_id = ? AND status = 'pending'
+          )
+        `
+      )
+      .bind(
+        writeToken,
+        row.week_id,
+        businessId,
+        draftState.draft_version,
+        row.open_shift_id,
+        row.week_id,
+        businessId,
+        requestId,
+        row.open_shift_id,
+        row.requested_by_user_id,
+        businessId
+      ),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, week_id, shift_date, ?, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order, ?, ?, business_id
+        FROM schedule_open_shifts
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(
+        assignedShiftId,
+        row.requested_by_user_id,
+        now,
+        now,
+        row.open_shift_id,
+        row.week_id,
+        businessId,
+        row.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_draft_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, week_id, shift_date, ?, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order, ?, ?, business_id
+        FROM schedule_draft_open_shifts
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(
+        assignedShiftId,
+        row.requested_by_user_id,
+        now,
+        now,
+        row.open_shift_id,
+        row.week_id,
+        businessId,
+        row.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, ?, COALESCE((
+          SELECT MAX(sort_order) FROM schedule_week_team
+          WHERE week_id = ? AND business_id = ?
+        ), -1) + 1, ?, ?, ?
+        FROM schedule_weeks
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(
+        row.week_id,
+        row.requested_by_user_id,
+        row.week_id,
+        businessId,
+        now,
+        now,
+        businessId,
+        row.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, ?, COALESCE((
+          SELECT MAX(sort_order) FROM schedule_draft_week_team
+          WHERE week_id = ? AND business_id = ?
+        ), -1) + 1, ?, ?, ?
+        FROM schedule_weeks
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(
+        row.week_id,
+        row.requested_by_user_id,
+        row.week_id,
+        businessId,
+        now,
+        now,
+        businessId,
+        row.week_id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_open_shifts
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(row.open_shift_id, row.week_id, businessId, row.week_id, businessId, writeToken),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_draft_open_shifts
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(row.open_shift_id, row.week_id, businessId, row.week_id, businessId, writeToken),
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_version = draft_version + 1,
+          published_version = published_version + 1,
+          draft_updated_at = ?,
+          draft_updated_by = ?,
+          updated_at = ?,
+          updated_by = ?,
+          draft_write_token = NULL
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(now, locals.userId, now, locals.userId, row.week_id, businessId, writeToken)
+  ]);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    return fail(409, { error: 'This schedule changed while the request was being approved. Reload and try again.' });
+  }
   await recordOperationalEventBestEffort(
     db,
     {
@@ -3755,117 +4585,6 @@ export async function declineScheduleAvailabilityRequest(request: Request, local
   return { success: true, message: 'Availability declined.' };
 }
 
-export async function saveScheduleShift(request: Request, locals: App.Locals) {
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
-
-  await ensureScheduleSchema(db);
-  await ensureTenantSchema(db, true);
-  const businessId = requireBusinessId(locals);
-
-  const form = await request.formData();
-  const id = String(form.get('id') ?? '').trim();
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
-  const shiftDate = String(form.get('shift_date') ?? '').trim();
-  const userId = String(form.get('user_id') ?? '').trim();
-  const department = String(form.get('department') ?? '').trim() as ScheduleDepartment;
-  const role = String(form.get('role') ?? '').trim();
-  const detail = String(form.get('detail') ?? '').trim();
-  const startTime = String(form.get('start_time') ?? '').trim();
-  const endLabel = String(form.get('end_label') ?? '').trim();
-  const breakMinutes = Math.max(0, Math.round(Number(form.get('break_minutes') ?? 0) || 0));
-  const notes = String(form.get('notes') ?? '').trim();
-
-  if (!shiftDate || !userId || !department || !role || !startTime) {
-    return fail(400, { error: 'Date, user, department, role, and start time are required.' });
-  }
-
-  const departments = await loadScheduleDepartments(db, businessId);
-  if (!isValidScheduleDepartment(department, departments)) {
-    return fail(400, { error: 'Invalid department.' });
-  }
-  const departmentAccessFailure = await scheduleDepartmentAccessFailure(db, locals, businessId, department);
-  if (departmentAccessFailure) return departmentAccessFailure;
-
-  const roleOptionsByDepartment = await loadScheduleRoleOptionsByDepartment(db, businessId);
-  if (!roleIsAllowed(roleOptionsByDepartment, department, role)) {
-    return fail(400, { error: 'Invalid role for that department.' });
-  }
-
-  const assignmentError = await validateScheduleAssignments(db, [{ userId, department, role, shiftDate }], businessId);
-  if (assignmentError) {
-    return fail(400, { error: assignmentError });
-  }
-
-  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
-  const now = Math.floor(Date.now() / 1000);
-
-  if (id) {
-    await db
-      .prepare(
-        `
-        UPDATE schedule_shifts
-        SET
-          shift_date = ?,
-          user_id = ?,
-          department = ?,
-          role = ?,
-          detail = ?,
-          start_time = ?,
-          end_label = ?,
-          break_minutes = ?,
-          notes = ?,
-          updated_at = ?
-        WHERE id = ? AND week_id = ? AND business_id = ?
-        `
-      )
-      .bind(shiftDate, userId, department, role, detail, startTime, endLabel, breakMinutes, notes, now, id, week.id, businessId)
-      .run();
-  } else {
-    const maxSort = await db
-      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM schedule_shifts WHERE week_id = ? AND shift_date = ? AND business_id = ?`)
-      .bind(week.id, shiftDate, businessId)
-      .first<{ max_sort: number }>();
-
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_shifts (
-          id, week_id, shift_date, user_id, department, role, detail,
-          start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        crypto.randomUUID(),
-        week.id,
-        shiftDate,
-        userId,
-        department,
-        role,
-        detail,
-        startTime,
-        endLabel,
-        breakMinutes,
-        notes,
-        (maxSort?.max_sort ?? -1) + 1,
-        now,
-        now,
-        businessId
-      )
-      .run();
-  }
-
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, week.id, businessId)
-    .run();
-
-  return { success: true };
-}
-
 export async function saveScheduleWeekDraft(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -3877,6 +4596,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
 
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   const payload = String(form.get('payload') ?? '').trim();
   if (!payload) return fail(400, { error: 'No schedule data was submitted.' });
   const teamPayload = String(form.get('team_payload') ?? '').trim();
@@ -3900,6 +4620,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   for (const entry of parsed) {
     if (!entry || typeof entry !== 'object') continue;
     const row = entry as Record<string, unknown>;
+    const id = normalizeScheduleShiftId(row.id);
     const shiftDate = String(row.shiftDate ?? '').trim();
     const userId = String(row.userId ?? '').trim();
     const department = String(row.department ?? '').trim();
@@ -3933,6 +4654,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     }
 
     rows.push({
+      id,
       shiftDate,
       userId,
       department,
@@ -3976,6 +4698,7 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   }
 
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
+  const expectedDraftVersion = submittedDraftVersion ?? week.draftVersion;
   const now = Math.floor(Date.now() / 1000);
   const shiftUserIds = rows.map((row) => row.userId);
   const rosterUserIds = Array.from(new Set([...rosterUserIdsFromPayload, ...shiftUserIds]));
@@ -3988,40 +4711,36 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
     }
   }
 
-  await deleteScheduleShiftsForScope(
-    db,
-    'schedule_shifts',
-    week.id,
-    businessId,
-    departmentScope.allowedDepartments,
-    departmentScope.hasAllAccess
-  );
-  await insertScheduleShifts(db, week.id, toShiftInsertRows(rows), now, businessId);
-
   const existingRosterUserIds = departmentScope.hasAllAccess
     ? []
     : (
         await db
-          .prepare(`SELECT user_id FROM schedule_week_team WHERE week_id = ? AND business_id = ?`)
+          .prepare(`SELECT user_id FROM schedule_draft_week_team WHERE week_id = ? AND business_id = ?`)
           .bind(week.id, businessId)
           .all<{ user_id: string }>()
       ).results ?? [];
-  await replaceWeekTeamRoster(
+  const saved = await replaceScheduleDraftWeekDataAtomic(
     db,
-    week.id,
-    departmentScope.hasAllAccess
-      ? rosterUserIds
-      : Array.from(new Set([...existingRosterUserIds.map((row) => row.user_id), ...rosterUserIds])),
-    now,
-    businessId
+    {
+      weekId: week.id,
+      businessId,
+      rows: toShiftInsertRows(rows),
+      rosterUserIds: departmentScope.hasAllAccess
+        ? rosterUserIds
+        : Array.from(new Set([...existingRosterUserIds.map((row) => row.user_id), ...rosterUserIds])),
+      allowedDepartments: departmentScope.allowedDepartments,
+      hasAllAccess: departmentScope.hasAllAccess,
+      updatedBy: locals.userId,
+      now,
+      expectedDraftVersion
+    }
   );
 
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, week.id, businessId)
-    .run();
+  if (!saved) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before editing it again.' });
+  }
 
-  return { success: true };
+  return { success: true, draftVersion: saved.draftVersion };
 }
 
 async function saveScheduleWeekDraftFromForm(
@@ -4031,6 +4750,7 @@ async function saveScheduleWeekDraftFromForm(
   businessId: string
 ) {
   const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   const payload = String(form.get('payload') ?? '').trim();
   if (!payload) return { ok: false as const, failure: fail(400, { error: 'No schedule data was submitted.' }) };
   const teamPayload = String(form.get('team_payload') ?? '').trim();
@@ -4054,6 +4774,7 @@ async function saveScheduleWeekDraftFromForm(
   for (const entry of parsed) {
     if (!entry || typeof entry !== 'object') continue;
     const row = entry as Record<string, unknown>;
+    const id = normalizeScheduleShiftId(row.id);
     const shiftDate = String(row.shiftDate ?? '').trim();
     const userId = String(row.userId ?? '').trim();
     const department = String(row.department ?? '').trim();
@@ -4096,6 +4817,7 @@ async function saveScheduleWeekDraftFromForm(
     }
 
     rows.push({
+      id,
       shiftDate,
       userId,
       department,
@@ -4139,6 +4861,7 @@ async function saveScheduleWeekDraftFromForm(
   }
 
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId ?? null, businessId);
+  const expectedDraftVersion = submittedDraftVersion ?? week.draftVersion;
   const now = Math.floor(Date.now() / 1000);
   const shiftUserIds = rows.map((row) => row.userId);
   const rosterUserIds = Array.from(new Set([...rosterUserIdsFromPayload, ...shiftUserIds]));
@@ -4151,64 +4874,47 @@ async function saveScheduleWeekDraftFromForm(
     }
   }
 
-  await deleteScheduleShiftsForScope(
-    db,
-    'schedule_shifts',
-    week.id,
-    businessId,
-    departmentScope.allowedDepartments,
-    departmentScope.hasAllAccess
-  );
-  await insertScheduleShifts(db, week.id, toShiftInsertRows(rows), now, businessId);
-
   const existingRosterUserIds = departmentScope.hasAllAccess
     ? []
     : (
         await db
-          .prepare(`SELECT user_id FROM schedule_week_team WHERE week_id = ? AND business_id = ?`)
+          .prepare(`SELECT user_id FROM schedule_draft_week_team WHERE week_id = ? AND business_id = ?`)
           .bind(week.id, businessId)
           .all<{ user_id: string }>()
       ).results ?? [];
-  await replaceWeekTeamRoster(
+  const saved = await replaceScheduleDraftWeekDataAtomic(
     db,
-    week.id,
-    departmentScope.hasAllAccess
-      ? rosterUserIds
-      : Array.from(new Set([...existingRosterUserIds.map((row) => row.user_id), ...rosterUserIds])),
-    now,
-    businessId
+    {
+      weekId: week.id,
+      businessId,
+      rows: toShiftInsertRows(rows),
+      rosterUserIds: departmentScope.hasAllAccess
+        ? rosterUserIds
+        : Array.from(new Set([...existingRosterUserIds.map((row) => row.user_id), ...rosterUserIds])),
+      allowedDepartments: departmentScope.allowedDepartments,
+      hasAllAccess: departmentScope.hasAllAccess,
+      updatedBy: locals.userId,
+      now,
+      expectedDraftVersion
+    }
   );
 
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, week.id, businessId)
-    .run();
+  if (!saved) {
+    return {
+      ok: false as const,
+      failure: fail(409, { error: 'This schedule changed in another session. Reload before editing it again.' })
+    };
+  }
 
-  return { ok: true as const, week };
-}
-
-export async function deleteScheduleShift(request: Request, locals: App.Locals) {
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
-
-  await ensureScheduleSchema(db);
-  await ensureTenantSchema(db, true);
-  const businessId = requireBusinessId(locals);
-  const form = await request.formData();
-  const id = String(form.get('id') ?? '').trim();
-  if (!id) return fail(400, { error: 'Missing shift id.' });
-
-  const shift = await db
-    .prepare(`SELECT department FROM schedule_shifts WHERE id = ? AND business_id = ? LIMIT 1`)
-    .bind(id, businessId)
-    .first<{ department: string }>();
-  if (!shift) return fail(404, { error: 'That shift could not be found.' });
-  const departmentAccessFailure = await scheduleDepartmentAccessFailure(db, locals, businessId, shift.department);
-  if (departmentAccessFailure) return departmentAccessFailure;
-
-  await db.prepare(`DELETE FROM schedule_shifts WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
-  return { success: true };
+  return {
+    ok: true as const,
+    week: {
+      ...week,
+      draftVersion: saved.draftVersion,
+      hasUnpublishedChanges: true,
+      draftUpdatedAt: now
+    }
+  };
 }
 
 export async function createScheduleOpenShift(request: Request, locals: App.Locals) {
@@ -4221,6 +4927,7 @@ export async function createScheduleOpenShift(request: Request, locals: App.Loca
   const businessId = requireBusinessId(locals);
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   const shiftDate = String(form.get('shift_date') ?? '').trim();
   const department = String(form.get('department') ?? '').trim() as ScheduleDepartment;
   const role = String(form.get('role') ?? '').trim();
@@ -4255,41 +4962,76 @@ export async function createScheduleOpenShift(request: Request, locals: App.Loca
   }
 
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
+  if (submittedDraftVersion !== null && submittedDraftVersion !== week.draftVersion) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before adding the open shift.' });
+  }
+  await ensureScheduleDraftInitialized(db, week.id, businessId);
   const maxSort = await db
     .prepare(
-      `SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM schedule_open_shifts WHERE week_id = ? AND shift_date = ? AND business_id = ?`
+      `SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM schedule_draft_open_shifts WHERE week_id = ? AND shift_date = ? AND business_id = ?`
     )
     .bind(week.id, shiftDate, businessId)
     .first<{ max_sort: number }>();
   const now = Math.floor(Date.now() / 1000);
-
-  await db
-    .prepare(
-      `
-      INSERT INTO schedule_open_shifts (
-        id, week_id, shift_date, department, role, detail, start_time, end_label,
-        break_minutes, notes, sort_order, created_at, updated_at, business_id
+  const writeToken = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE schedule_weeks
+         SET draft_write_token = ?
+         WHERE id = ? AND business_id = ? AND draft_version = ? AND draft_write_token IS NULL`
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    )
-    .bind(
-      crypto.randomUUID(),
-      week.id,
-      shiftDate,
-      department,
-      role,
-      detail,
-      startTime,
-      endLabel,
-      breakMinutes,
-      notes,
-      (maxSort?.max_sort ?? -1) + 1,
-      now,
-      now,
-      businessId
-    )
-    .run();
+      .bind(writeToken, week.id, businessId, week.draftVersion),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_draft_open_shifts (
+          id, week_id, shift_date, department, role, detail, start_time, end_label,
+          break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        FROM schedule_weeks
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(
+        crypto.randomUUID(),
+        week.id,
+        shiftDate,
+        department,
+        role,
+        detail,
+        startTime,
+        endLabel,
+        breakMinutes,
+        notes,
+        (maxSort?.max_sort ?? -1) + 1,
+        now,
+        now,
+        businessId,
+        week.id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_version = draft_version + 1,
+          has_unpublished_changes = 1,
+          draft_updated_at = ?,
+          draft_updated_by = ?,
+          updated_at = ?,
+          updated_by = ?,
+          draft_write_token = NULL
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(now, locals.userId, now, locals.userId, week.id, businessId, writeToken)
+  ]);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before adding the open shift.' });
+  }
 
   return { success: true, message: 'Open shift added.' };
 }
@@ -4303,17 +5045,69 @@ export async function deleteScheduleOpenShift(request: Request, locals: App.Loca
   const businessId = requireBusinessId(locals);
   const form = await request.formData();
   const id = String(form.get('open_shift_id') ?? '').trim();
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   if (!id) return fail(400, { error: 'Missing open shift id.' });
 
   const shift = await db
-    .prepare(`SELECT department FROM schedule_open_shifts WHERE id = ? AND business_id = ? LIMIT 1`)
+    .prepare(
+      `
+      SELECT shift.week_id, shift.department, week.draft_version
+      FROM schedule_draft_open_shifts shift
+      JOIN schedule_weeks week ON week.id = shift.week_id AND week.business_id = shift.business_id
+      WHERE shift.id = ? AND shift.business_id = ?
+      LIMIT 1
+      `
+    )
     .bind(id, businessId)
-    .first<{ department: string }>();
+    .first<{ week_id: string; department: string; draft_version: number }>();
   if (!shift) return fail(404, { error: 'That open shift could not be found.' });
+  if (submittedDraftVersion !== null && submittedDraftVersion !== shift.draft_version) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before removing the open shift.' });
+  }
   const departmentAccessFailure = await scheduleDepartmentAccessFailure(db, locals, businessId, shift.department);
   if (departmentAccessFailure) return departmentAccessFailure;
 
-  await db.prepare(`DELETE FROM schedule_open_shifts WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const now = Math.floor(Date.now() / 1000);
+  const writeToken = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE schedule_weeks
+         SET draft_write_token = ?
+         WHERE id = ? AND business_id = ? AND draft_version = ? AND draft_write_token IS NULL`
+      )
+      .bind(writeToken, shift.week_id, businessId, shift.draft_version),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_draft_open_shifts
+        WHERE id = ? AND week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(id, shift.week_id, businessId, shift.week_id, businessId, writeToken),
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_version = draft_version + 1,
+          has_unpublished_changes = 1,
+          draft_updated_at = ?,
+          draft_updated_by = ?,
+          updated_at = ?,
+          updated_by = ?,
+          draft_write_token = NULL
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(now, locals.userId, now, locals.userId, shift.week_id, businessId, writeToken)
+  ]);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before removing the open shift.' });
+  }
   return { success: true, message: 'Open shift removed.' };
 }
 
@@ -4331,13 +5125,33 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   const weekStart = String(form.get('week_start') ?? '').trim();
   if (!weekStart) return fail(400, { error: 'Missing week start.' });
   const payload = String(form.get('payload') ?? '').trim();
-
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   const week = payload
     ? await saveScheduleWeekDraftFromForm(db, form, locals, businessId)
-    : { ok: true as const, week: await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId) };
+    : await (async () => {
+        const existing = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
+        if (
+          submittedDraftVersion !== null &&
+          submittedDraftVersion !== existing.draftVersion
+        ) {
+          return {
+            ok: false as const,
+            failure: fail(409, { error: 'This schedule changed in another session. Reload before publishing.' })
+          };
+        }
+        await ensureScheduleDraftInitialized(db, existing.id, businessId);
+        return { ok: true as const, week: existing };
+      })();
   if (!week.ok) return week.failure;
 
-  const publishValidation = await validatePublishWeek(db, week.week.id, weekStart, businessId);
+  const publishValidation = await validatePublishWeek(
+    db,
+    week.week.id,
+    weekStart,
+    businessId,
+    'schedule_draft_shifts',
+    'schedule_draft_open_shifts'
+  );
   if (publishValidation.errors.length > 0) {
     return fail(400, {
       error: summarizePublishIssues('Cannot publish schedule: ', publishValidation.errors)
@@ -4345,18 +5159,233 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   }
 
   const now = Math.floor(Date.now() / 1000);
-  await db
+  const publishWriteToken = crypto.randomUUID();
+  const publishPreparationStatements = [
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_write_token = ?
+        WHERE id = ? AND business_id = ?
+          AND draft_version = ?
+          AND draft_write_token IS NULL
+        `
+      )
+      .bind(publishWriteToken, week.week.id, businessId, week.week.draftVersion),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_shift_offers
+        WHERE business_id = ?
+          AND shift_id IN (
+            SELECT live.id
+            FROM schedule_shifts live
+            JOIN schedule_draft_shifts draft
+              ON draft.id = live.id
+             AND draft.week_id = live.week_id
+             AND draft.business_id = live.business_id
+            WHERE live.week_id = ? AND live.business_id = ?
+              AND (
+                live.shift_date <> draft.shift_date OR
+                live.user_id <> draft.user_id OR
+                live.department <> draft.department OR
+                live.role <> draft.role OR
+                live.start_time <> draft.start_time OR
+                live.end_label <> draft.end_label
+              )
+          )
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_shifts
+        WHERE week_id = ? AND business_id = ?
+          AND id NOT IN (
+            SELECT id FROM schedule_draft_shifts
+            WHERE week_id = ? AND business_id = ?
+          )
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(week.week.id, businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order,
+          created_at, updated_at, business_id
+        )
+        SELECT
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order,
+          created_at, ?, business_id
+        FROM schedule_draft_shifts
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        ON CONFLICT(id) DO UPDATE SET
+          shift_date = excluded.shift_date,
+          user_id = excluded.user_id,
+          department = excluded.department,
+          role = excluded.role,
+          detail = excluded.detail,
+          start_time = excluded.start_time,
+          end_label = excluded.end_label,
+          break_minutes = excluded.break_minutes,
+          notes = excluded.notes,
+          sort_order = excluded.sort_order,
+          updated_at = excluded.updated_at
+        WHERE schedule_shifts.week_id = excluded.week_id
+          AND schedule_shifts.business_id = excluded.business_id
+        `
+      )
+      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_open_shift_requests
+        WHERE business_id = ?
+          AND open_shift_id IN (
+            SELECT live.id
+            FROM schedule_open_shifts live
+            JOIN schedule_draft_open_shifts draft
+              ON draft.id = live.id
+             AND draft.week_id = live.week_id
+             AND draft.business_id = live.business_id
+            WHERE live.week_id = ? AND live.business_id = ?
+              AND (
+                live.shift_date <> draft.shift_date OR
+                live.department <> draft.department OR
+                live.role <> draft.role OR
+                live.start_time <> draft.start_time OR
+                live.end_label <> draft.end_label
+              )
+          )
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_open_shifts
+        WHERE week_id = ? AND business_id = ?
+          AND id NOT IN (
+            SELECT id FROM schedule_draft_open_shifts
+            WHERE week_id = ? AND business_id = ?
+          )
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(week.week.id, businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_open_shifts (
+          id, week_id, shift_date, department, role, detail, start_time,
+          end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT
+          id, week_id, shift_date, department, role, detail, start_time,
+          end_label, break_minutes, notes, sort_order, created_at, ?, business_id
+        FROM schedule_draft_open_shifts
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        ON CONFLICT(id) DO UPDATE SET
+          shift_date = excluded.shift_date,
+          department = excluded.department,
+          role = excluded.role,
+          detail = excluded.detail,
+          start_time = excluded.start_time,
+          end_label = excluded.end_label,
+          break_minutes = excluded.break_minutes,
+          notes = excluded.notes,
+          sort_order = excluded.sort_order,
+          updated_at = excluded.updated_at
+        WHERE schedule_open_shifts.week_id = excluded.week_id
+          AND schedule_open_shifts.business_id = excluded.business_id
+        `
+      )
+      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        DELETE FROM schedule_week_team
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_week_team (week_id, user_id, sort_order, created_at, updated_at, business_id)
+        SELECT week_id, user_id, sort_order, created_at, ?, business_id
+        FROM schedule_draft_week_team
+        WHERE week_id = ? AND business_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_weeks
+            WHERE id = ? AND business_id = ? AND draft_write_token = ?
+          )
+        `
+      )
+      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken)
+  ];
+  const publishStatement = db
     .prepare(
       `
       UPDATE schedule_weeks
-      SET status = 'published', published_at = ?, updated_at = ?, updated_by = ?
-      WHERE id = ? AND business_id = ?
+      SET status = 'published',
+        published_at = ?,
+        published_version = published_version + 1,
+        has_unpublished_changes = 0,
+        updated_at = ?,
+        updated_by = ?,
+        draft_write_token = NULL
+      WHERE id = ? AND business_id = ? AND draft_write_token = ?
       `
     )
-    .bind(now, now, locals.userId, week.week.id, businessId)
-    .run();
+    .bind(now, now, locals.userId, week.week.id, businessId, publishWriteToken);
 
-  await recordSchedulePublishSnapshot(db, businessId, week.week.id, weekStart, locals.userId, now);
+  const publishResults = await recordSchedulePublishSnapshot(
+    db,
+    businessId,
+    week.week.id,
+    weekStart,
+    locals.userId,
+    now,
+    publishWriteToken,
+    '',
+    [publishStatement],
+    publishPreparationStatements
+  );
+  if (Number(publishResults[0]?.meta?.changes ?? 0) !== 1) {
+    return fail(409, { error: 'This schedule changed while it was being published. Reload and try again.' });
+  }
   await recordOperationalEventBestEffort(
     db,
     {
@@ -4379,38 +5408,10 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   const warningSummary = summarizePublishIssues('Published with warning: ', publishValidation.warnings);
   return {
     success: true,
+    draftVersion: week.week.draftVersion,
+    publishedVersion: week.week.publishedVersion + 1,
     message: warningSummary || 'Schedule published.'
   };
-}
-
-export async function markScheduleWeekDraft(request: Request, locals: App.Locals) {
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  if (!requireScheduleManager(locals)) return fail(403, { error: 'Admin access required.' });
-
-  await ensureScheduleSchema(db);
-  await ensureTenantSchema(db, true);
-  const businessId = requireBusinessId(locals);
-  const allDepartmentAccessFailure = await scheduleAllDepartmentAccessFailure(db, locals, businessId);
-  if (allDepartmentAccessFailure) return allDepartmentAccessFailure;
-  const form = await request.formData();
-  const weekStart = String(form.get('week_start') ?? '').trim();
-  if (!weekStart) return fail(400, { error: 'Missing week start.' });
-
-  const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(
-      `
-      UPDATE schedule_weeks
-      SET status = 'draft', updated_at = ?, updated_by = ?
-      WHERE id = ? AND business_id = ?
-      `
-    )
-    .bind(now, locals.userId, week.id, businessId)
-    .run();
-
-  return { success: true };
 }
 
 export async function copyPreviousScheduleWeek(request: Request, locals: App.Locals) {
@@ -4423,10 +5424,11 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
 
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim();
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   if (!weekStart) return fail(400, { error: 'Missing week start.' });
 
   const previousWeekStart = addDays(weekStart, -7);
-  const source = await loadScheduleWeek(db, previousWeekStart, { businessId });
+  const source = await loadScheduleWeek(db, previousWeekStart, { publishedOnly: true, businessId });
   if (!source.week || source.shifts.length === 0) {
     return fail(400, { error: 'No previous week schedule was found to paste into this week.' });
   }
@@ -4461,42 +5463,42 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   }
 
   const targetWeek = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
+  if (submittedDraftVersion !== null && submittedDraftVersion !== targetWeek.draftVersion) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before copying the week again.' });
+  }
+  await ensureScheduleDraftInitialized(db, targetWeek.id, businessId);
   const now = Math.floor(Date.now() / 1000);
   const copiedRows = toCopiedShiftInsertRows(scopedSourceShifts, previousWeekStart, weekStart);
 
-  await deleteScheduleShiftsForScope(
-    db,
-    'schedule_shifts',
-    targetWeek.id,
-    businessId,
-    departmentScope.allowedDepartments,
-    departmentScope.hasAllAccess
-  );
-  await insertScheduleShifts(db, targetWeek.id, copiedRows, now, businessId);
-
   const currentRoster = await db
-    .prepare(`SELECT user_id FROM schedule_week_team WHERE week_id = ? AND business_id = ?`)
+    .prepare(`SELECT user_id FROM schedule_draft_week_team WHERE week_id = ? AND business_id = ?`)
     .bind(targetWeek.id, businessId)
     .all<{ user_id: string }>();
-  await replaceWeekTeamRoster(
+  const copied = await replaceScheduleDraftWeekDataAtomic(
     db,
-    targetWeek.id,
-    departmentScope.hasAllAccess
-      ? scopedSourceShifts.map((shift) => shift.userId)
-      : Array.from(
-          new Set([
-            ...(currentRoster.results ?? []).map((row) => row.user_id),
-            ...scopedSourceShifts.map((shift) => shift.userId)
-          ])
-        ),
-    now,
-    businessId
+    {
+      weekId: targetWeek.id,
+      businessId,
+      rows: copiedRows,
+      rosterUserIds: departmentScope.hasAllAccess
+        ? scopedSourceShifts.map((shift) => shift.userId)
+        : Array.from(
+            new Set([
+              ...(currentRoster.results ?? []).map((row) => row.user_id),
+              ...scopedSourceShifts.map((shift) => shift.userId)
+            ])
+          ),
+      allowedDepartments: departmentScope.allowedDepartments,
+      hasAllAccess: departmentScope.hasAllAccess,
+      updatedBy: locals.userId,
+      now,
+      expectedDraftVersion: targetWeek.draftVersion
+    }
   );
 
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, targetWeek.id, businessId)
-    .run();
+  if (!copied) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before copying the week again.' });
+  }
 
   return { success: true, message: 'Last week pasted into this schedule.' };
 }
@@ -4621,7 +5623,7 @@ export async function saveScheduleTemplateFromWeek(request: Request, locals: App
 
   const [schedule, openShifts, laborTargets] = await Promise.all([
     loadScheduleWeek(db, weekStart, { businessId }),
-    loadScheduleOpenShiftsForWeek(db, weekStart, businessId),
+    loadScheduleOpenShiftsForWeek(db, weekStart, businessId, { draft: true }),
     loadScheduleLaborTargets(db, weekStart, businessId)
   ]);
   const departmentScope = await loadScheduleManagerDepartmentScope(db, locals, businessId);
@@ -4645,60 +5647,6 @@ export async function saveScheduleTemplateFromWeek(request: Request, locals: App
     .bind(businessId, name)
     .first<{ id: string }>();
   const templateId = existingTemplate?.id ?? crypto.randomUUID();
-
-  if (existingTemplate) {
-    await db
-      .prepare(
-        `
-        UPDATE schedule_templates
-        SET name = ?,
-            department = ?,
-            labor_target_percent = ?,
-            projected_sales = ?,
-            average_hourly_rate = ?,
-            updated_at = ?,
-            created_by = ?
-        WHERE id = ? AND business_id = ?
-        `
-      )
-      .bind(
-        name,
-        templateDepartment,
-        firstTarget?.targetLaborPercent ?? 0,
-        firstTarget?.projectedSales ?? 0,
-        firstTarget?.averageHourlyRate ?? 0,
-        now,
-        locals.userId,
-        templateId,
-        businessId
-      )
-      .run();
-    await db.prepare(`DELETE FROM schedule_template_shifts WHERE template_id = ? AND business_id = ?`).bind(templateId, businessId).run();
-  } else {
-    await db
-      .prepare(
-        `
-        INSERT INTO schedule_templates (
-          id, name, department, labor_target_percent, projected_sales, average_hourly_rate,
-          created_at, updated_at, created_by, business_id
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        templateId,
-        name,
-        templateDepartment,
-        firstTarget?.targetLaborPercent ?? 0,
-        firstTarget?.projectedSales ?? 0,
-        firstTarget?.averageHourlyRate ?? 0,
-        now,
-        now,
-        locals.userId,
-        businessId
-      )
-      .run();
-  }
 
   const assignedRows = scopedShifts.map((shift, index) => ({
     weekday: weekdayOffset(weekStart, shift.shiftDate),
@@ -4727,35 +5675,89 @@ export async function saveScheduleTemplateFromWeek(request: Request, locals: App
     sortOrder: assignedRows.length + index
   }));
 
-  for (const row of [...assignedRows, ...openRows]) {
-    await db
+  const templateRows = [...assignedRows, ...openRows].map((row) => ({
+    id: crypto.randomUUID(),
+    ...row
+  }));
+  const templateStatement = existingTemplate
+    ? db
+        .prepare(
+          `
+          UPDATE schedule_templates
+          SET name = ?,
+              department = ?,
+              labor_target_percent = ?,
+              projected_sales = ?,
+              average_hourly_rate = ?,
+              updated_at = ?,
+              created_by = ?
+          WHERE id = ? AND business_id = ?
+          `
+        )
+        .bind(
+          name,
+          templateDepartment,
+          firstTarget?.targetLaborPercent ?? 0,
+          firstTarget?.projectedSales ?? 0,
+          firstTarget?.averageHourlyRate ?? 0,
+          now,
+          locals.userId,
+          templateId,
+          businessId
+        )
+    : db
+        .prepare(
+          `
+          INSERT INTO schedule_templates (
+            id, name, department, labor_target_percent, projected_sales, average_hourly_rate,
+            created_at, updated_at, created_by, business_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `
+        )
+        .bind(
+          templateId,
+          name,
+          templateDepartment,
+          firstTarget?.targetLaborPercent ?? 0,
+          firstTarget?.projectedSales ?? 0,
+          firstTarget?.averageHourlyRate ?? 0,
+          now,
+          now,
+          locals.userId,
+          businessId
+        );
+
+  await db.batch([
+    templateStatement,
+    db
+      .prepare(`DELETE FROM schedule_template_shifts WHERE template_id = ? AND business_id = ?`)
+      .bind(templateId, businessId),
+    db
       .prepare(
         `
         INSERT INTO schedule_template_shifts (
           id, template_id, weekday, user_id, is_open, department, role, detail,
           start_time, end_label, break_minutes, notes, sort_order, business_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        SELECT
+          json_extract(item.value, '$.id'), ?,
+          CAST(json_extract(item.value, '$.weekday') AS INTEGER),
+          json_extract(item.value, '$.userId'),
+          CAST(json_extract(item.value, '$.isOpen') AS INTEGER),
+          json_extract(item.value, '$.department'),
+          json_extract(item.value, '$.role'),
+          json_extract(item.value, '$.detail'),
+          json_extract(item.value, '$.startTime'),
+          json_extract(item.value, '$.endLabel'),
+          CAST(json_extract(item.value, '$.breakMinutes') AS INTEGER),
+          json_extract(item.value, '$.notes'),
+          CAST(json_extract(item.value, '$.sortOrder') AS INTEGER), ?
+        FROM json_each(?) AS item
         `
       )
-      .bind(
-        crypto.randomUUID(),
-        templateId,
-        row.weekday,
-        row.userId,
-        row.isOpen,
-        row.department,
-        row.role,
-        row.detail,
-        row.startTime,
-        row.endLabel,
-        row.breakMinutes,
-        row.notes,
-        row.sortOrder,
-        businessId
-      )
-      .run();
-  }
+      .bind(templateId, businessId, JSON.stringify(templateRows))
+  ]);
 
   return { success: true, message: 'Schedule template saved.' };
 }
@@ -4769,6 +5771,7 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
   const businessId = requireBusinessId(locals);
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const submittedDraftVersion = parseScheduleDraftVersion(form);
   const templateId = String(form.get('template_id') ?? '').trim();
   const mode = String(form.get('template_mode') ?? 'merge').trim() === 'replace' ? 'replace' : 'merge';
   if (!templateId) return fail(400, { error: 'Choose a template to apply.' });
@@ -4847,30 +5850,15 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
   if (assignmentError) return fail(400, { error: assignmentError });
 
   const week = await getOrCreateScheduleWeek(db, weekStart, locals.userId, businessId);
-  const now = Math.floor(Date.now() / 1000);
-  const currentSchedule = await loadScheduleWeek(db, weekStart, { businessId });
-  if (mode === 'replace') {
-    await deleteScheduleShiftsForScope(
-      db,
-      'schedule_shifts',
-      week.id,
-      businessId,
-      departmentScope.allowedDepartments,
-      departmentScope.hasAllAccess
-    );
-    await deleteScheduleShiftsForScope(
-      db,
-      'schedule_open_shifts',
-      week.id,
-      businessId,
-      departmentScope.allowedDepartments,
-      departmentScope.hasAllAccess
-    );
+  if (submittedDraftVersion !== null && submittedDraftVersion !== week.draftVersion) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before applying the template.' });
   }
-
+  await ensureScheduleDraftInitialized(db, week.id, businessId);
+  const now = Math.floor(Date.now() / 1000);
   const assignedInsertRows = templateRows
     .filter((row) => row.is_open !== 1 && row.user_id)
     .map((row, index) => ({
+      id: crypto.randomUUID(),
       shiftDate: addDays(weekStart, row.weekday),
       userId: row.user_id as string,
       department: row.department,
@@ -4882,51 +5870,186 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
       notes: row.notes ?? '',
       sortOrder: row.sort_order ?? index
     }));
-  await insertScheduleShifts(db, week.id, assignedInsertRows, now, businessId);
-  await replaceWeekTeamRoster(
-    db,
-    week.id,
-    mode === 'replace'
-      ? assignedInsertRows.map((row) => row.userId)
-      : [...currentSchedule.rosterUserIds, ...assignedInsertRows.map((row) => row.userId)],
-    now,
-    businessId
-  );
+  const openInsertRows = templateRows
+    .filter((row) => row.is_open === 1 || !row.user_id)
+    .map((row, index) => ({
+      id: crypto.randomUUID(),
+      shiftDate: addDays(weekStart, row.weekday),
+      department: row.department,
+      role: row.role,
+      detail: row.detail ?? '',
+      startTime: row.start_time,
+      endLabel: row.end_label ?? '',
+      breakMinutes: row.break_minutes ?? 0,
+      notes: row.notes ?? '',
+      sortOrder: row.sort_order ?? assignedInsertRows.length + index
+    }));
+  const rosterUserIds = Array.from(new Set(assignedInsertRows.map((row) => row.userId)));
+  const writeToken = crypto.randomUUID();
+  const statements: ReturnType<DB['prepare']>[] = [
+    db
+      .prepare(
+        `UPDATE schedule_weeks
+         SET draft_write_token = ?
+         WHERE id = ? AND business_id = ? AND draft_version = ? AND draft_write_token IS NULL`
+      )
+      .bind(writeToken, week.id, businessId, week.draftVersion)
+  ];
 
-  for (const row of templateRows.filter((entry) => entry.is_open === 1 || !entry.user_id)) {
-    await db
+  if (mode === 'replace') {
+    statements.push(
+      prepareScheduleDraftScopeDelete(
+        db,
+        'schedule_draft_shifts',
+        week.id,
+        businessId,
+        departmentScope.allowedDepartments,
+        departmentScope.hasAllAccess,
+        writeToken
+      ),
+      prepareScheduleDraftScopeDelete(
+        db,
+        'schedule_draft_open_shifts',
+        week.id,
+        businessId,
+        departmentScope.allowedDepartments,
+        departmentScope.hasAllAccess,
+        writeToken
+      )
+    );
+    if (departmentScope.hasAllAccess) {
+      statements.push(
+        db
+          .prepare(
+            `DELETE FROM schedule_draft_week_team
+             WHERE week_id = ? AND business_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM schedule_weeks
+                 WHERE id = ? AND business_id = ? AND draft_write_token = ?
+               )`
+          )
+          .bind(week.id, businessId, week.id, businessId, writeToken)
+      );
+    }
+  }
+
+  statements.push(
+    db
       .prepare(
         `
-        INSERT INTO schedule_open_shifts (
-          id, week_id, shift_date, department, role, detail, start_time, end_label,
-          break_minutes, notes, sort_order, created_at, updated_at, business_id
+        INSERT INTO schedule_draft_shifts (
+          id, week_id, shift_date, user_id, department, role, detail,
+          start_time, end_label, break_minutes, notes, sort_order, created_at, updated_at, business_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        SELECT
+          json_extract(item.value, '$.id'), ?, json_extract(item.value, '$.shiftDate'),
+          json_extract(item.value, '$.userId'), json_extract(item.value, '$.department'),
+          json_extract(item.value, '$.role'), json_extract(item.value, '$.detail'),
+          json_extract(item.value, '$.startTime'), json_extract(item.value, '$.endLabel'),
+          CAST(json_extract(item.value, '$.breakMinutes') AS INTEGER),
+          json_extract(item.value, '$.notes'), CAST(json_extract(item.value, '$.sortOrder') AS INTEGER),
+          ?, ?, ?
+        FROM json_each(?) AS item
+        WHERE EXISTS (
+          SELECT 1 FROM schedule_weeks
+          WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        )
         `
       )
       .bind(
-        crypto.randomUUID(),
         week.id,
-        addDays(weekStart, row.weekday),
-        row.department,
-        row.role,
-        row.detail ?? '',
-        row.start_time,
-        row.end_label ?? '',
-        row.break_minutes ?? 0,
-        row.notes ?? '',
-        row.sort_order ?? 0,
         now,
         now,
-        businessId
+        businessId,
+        JSON.stringify(assignedInsertRows),
+        week.id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT INTO schedule_draft_open_shifts (
+          id, week_id, shift_date, department, role, detail, start_time, end_label,
+          break_minutes, notes, sort_order, created_at, updated_at, business_id
+        )
+        SELECT
+          json_extract(item.value, '$.id'), ?, json_extract(item.value, '$.shiftDate'),
+          json_extract(item.value, '$.department'), json_extract(item.value, '$.role'),
+          json_extract(item.value, '$.detail'), json_extract(item.value, '$.startTime'),
+          json_extract(item.value, '$.endLabel'),
+          CAST(json_extract(item.value, '$.breakMinutes') AS INTEGER),
+          json_extract(item.value, '$.notes'), CAST(json_extract(item.value, '$.sortOrder') AS INTEGER),
+          ?, ?, ?
+        FROM json_each(?) AS item
+        WHERE EXISTS (
+          SELECT 1 FROM schedule_weeks
+          WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        )
+        `
       )
-      .run();
-  }
+      .bind(
+        week.id,
+        now,
+        now,
+        businessId,
+        JSON.stringify(openInsertRows),
+        week.id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        INSERT OR IGNORE INTO schedule_draft_week_team (
+          week_id, user_id, sort_order, created_at, updated_at, business_id
+        )
+        SELECT ?, CAST(item.value AS TEXT),
+          COALESCE((
+            SELECT MAX(sort_order) FROM schedule_draft_week_team
+            WHERE week_id = ? AND business_id = ?
+          ), -1) + CAST(item.key AS INTEGER) + 1,
+          ?, ?, ?
+        FROM json_each(?) AS item
+        WHERE EXISTS (
+          SELECT 1 FROM schedule_weeks
+          WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        )
+        `
+      )
+      .bind(
+        week.id,
+        week.id,
+        businessId,
+        now,
+        now,
+        businessId,
+        JSON.stringify(rosterUserIds),
+        week.id,
+        businessId,
+        writeToken
+      ),
+    db
+      .prepare(
+        `
+        UPDATE schedule_weeks
+        SET draft_version = draft_version + 1,
+          has_unpublished_changes = 1,
+          draft_updated_at = ?,
+          draft_updated_by = ?,
+          updated_at = ?,
+          updated_by = ?,
+          draft_write_token = NULL
+        WHERE id = ? AND business_id = ? AND draft_write_token = ?
+        `
+      )
+      .bind(now, locals.userId, now, locals.userId, week.id, businessId, writeToken)
+  );
 
-  await db
-    .prepare(`UPDATE schedule_weeks SET updated_at = ?, updated_by = ? WHERE id = ? AND business_id = ?`)
-    .bind(now, locals.userId, week.id, businessId)
-    .run();
+  const results = await db.batch(statements);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+    return fail(409, { error: 'This schedule changed in another session. Reload before applying the template.' });
+  }
 
   return { success: true, message: mode === 'replace' ? 'Template replaced this week.' : 'Template merged into this week.' };
 }
@@ -5243,7 +6366,15 @@ export async function deleteScheduleDepartment(request: Request, locals: App.Loc
       .bind(departmentName, businessId)
       .first<{ count: number }>(),
     db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_draft_shifts WHERE department = ? AND business_id = ?`)
+      .bind(departmentName, businessId)
+      .first<{ count: number }>(),
+    db
       .prepare(`SELECT COUNT(*) AS count FROM schedule_open_shifts WHERE department = ? AND business_id = ?`)
+      .bind(departmentName, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM schedule_draft_open_shifts WHERE department = ? AND business_id = ?`)
       .bind(departmentName, businessId)
       .first<{ count: number }>(),
     db
@@ -5357,7 +6488,19 @@ export async function deleteScheduleRoleDefinition(request: Request, locals: App
       .bind(role.department, role.role_name, businessId)
       .first<{ count: number }>(),
     db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM schedule_draft_shifts WHERE department = ? AND role = ? AND business_id = ?`
+      )
+      .bind(role.department, role.role_name, businessId)
+      .first<{ count: number }>(),
+    db
       .prepare(`SELECT COUNT(*) AS count FROM schedule_open_shifts WHERE department = ? AND role = ? AND business_id = ?`)
+      .bind(role.department, role.role_name, businessId)
+      .first<{ count: number }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM schedule_draft_open_shifts WHERE department = ? AND role = ? AND business_id = ?`
+      )
       .bind(role.department, role.role_name, businessId)
       .first<{ count: number }>(),
     db

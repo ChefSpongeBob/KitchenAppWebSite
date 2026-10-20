@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import Layout from '$lib/components/ui/Layout.svelte';
+	import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import { onMount } from 'svelte';
 	import {
@@ -140,6 +141,28 @@
 		return status.replaceAll('_', ' ');
 	}
 
+	function planLabel(plan: string) {
+		if (plan === 'starter') return 'Small';
+		if (plan === 'growth') return 'Medium';
+		if (plan === 'enterprise') return 'Large';
+		return plan ? plan.replaceAll('_', ' ') : 'Not selected';
+	}
+
+	$: billingState = activeEntitlement
+		? 'Active'
+		: data.storeBillingPlaceholder
+			? billingStatusLabel(data.storeBillingPlaceholder.status)
+			: billingStatusLabel(data.trial.mode);
+	$: billingChannel = activeEntitlement?.store === 'app_store'
+		? 'App Store'
+		: activeEntitlement?.store === 'google_play'
+			? 'Google Play'
+			: data.storeBillingPlaceholder?.preferredStore === 'app_store'
+				? 'App Store'
+				: data.storeBillingPlaceholder?.preferredStore === 'google_play'
+					? 'Google Play'
+					: 'Not selected';
+
 	async function postNativePurchase(payload: Record<string, unknown>) {
 		const response = await fetch('/api/billing/native-purchase', {
 			method: 'POST',
@@ -219,48 +242,50 @@
 
 <Layout>
 	<PageHeader title="Billing" />
+	<ManagerSectionNav groupId="business" />
 
 	<section class="billing-shell">
-		<article class="panel">
-			<h2>{data.business.name}</h2>
-			<p class="notice">Monthly subscriptions are managed through your purchase channel.</p>
-			{#if data.storeStatus === 'queued'}
-				<p class="notice">Store activation queued.</p>
-			{/if}
-			{#if data.storeBillingPlaceholder}
-				<p class="muted">
-					Billing: {data.storeBillingPlaceholder.preferredStore.replace('_', ' ')} /
-					{billingStatusLabel(data.storeBillingPlaceholder.status)}
-				</p>
-			{/if}
-			{#each data.storeEntitlements.filter((entitlement) => entitlement.status === 'active') as entitlement}
-				<p class="muted">{entitlement.planTier ? 'Plan' : 'Temperature monitoring'}: active</p>
-			{/each}
-			{#if activeEntitlement}
-				<a class="manage-link" href={manageUrl} target="_blank" rel="noreferrer"
-					>Manage subscription</a
-				>
-			{/if}
-		</article>
+		<section class="billing-overview">
+			<header class="section-heading">
+				<h2>{data.business.name}</h2>
+				{#if activeEntitlement}
+					<a class="manage-link" href={manageUrl} target="_blank" rel="noreferrer">Manage Subscription</a>
+				{/if}
+			</header>
+			<div class="status-grid">
+				<div><span>Plan</span><strong>{planLabel(data.business.planTier)}</strong></div>
+				<div><span>Status</span><strong>{billingState}</strong></div>
+				<div><span>Purchase Channel</span><strong>{billingChannel}</strong></div>
+				<div><span>Temperature Sensors</span><strong>{data.registeredSensorCount}</strong></div>
+			</div>
+		</section>
+
+		{#if data.storeStatus === 'queued'}
+			<p class="notice-line">Store activation queued.</p>
+		{/if}
 
 		{#if !data.canManageBilling}
-			<article class="panel">
+			<section class="access-line">
 				<p>Only workspace owners or managers can manage billing.</p>
-			</article>
+			</section>
 		{:else}
-			<article class="panel">
-				<h3>Subscriptions</h3>
+			<section class="billing-section">
+				<header class="section-heading"><h2>Subscriptions</h2></header>
 				<div class="stack">
 					<label for="store-product">Choose a plan or add-on</label>
-					<select id="store-product" bind:value={selectedProductId}>
-						{#each availableProducts as product}
-							<option value={product.productId}>
-								{product.displayName} - {nativeProducts.length && nativeProduct?.price
-									? nativeProduct.price
-									: `${priceLabel(product)}/mo`}
-							</option>
-						{/each}
-					</select>
+					{#if availableProducts.length}
+						<select id="store-product" bind:value={selectedProductId}>
+							{#each availableProducts as product}
+								<option value={product.productId}>
+									{product.displayName} - {nativeProducts.length && nativeProduct?.price
+										? nativeProduct.price
+										: `${priceLabel(product)}/mo`}
+								</option>
+							{/each}
+						</select>
+					{:else}
+						<p class="muted">Store products are not available.</p>
+					{/if}
 
 					{#if selectedStoreProduct}
 						<div class="subscription-summary" aria-live="polite">
@@ -296,7 +321,7 @@
 						<button
 							type="button"
 							class="primary"
-							disabled={purchaseBusy}
+							disabled={purchaseBusy || !selectedProductId}
 							on:click={purchaseSelectedProduct}
 						>
 							{purchaseBusy ? 'Working...' : 'Purchase'}
@@ -317,13 +342,6 @@
 					{#if purchaseStatus}
 						<p class="notice">{purchaseStatus}</p>
 					{/if}
-					<nav class="billing-links" aria-label="Billing links">
-						<a href="/privacy">Privacy</a>
-						<a href="/terms">Terms</a>
-						<a href="/billing-terms">Billing Terms</a>
-						<a href="/support">Support</a>
-						<a href="/account-deletion">Account Deletion</a>
-					</nav>
 				</div>
 				{#if data.localMode}
 					<form method="POST" action="?/convert" class="dev-convert" use:enhance>
@@ -341,17 +359,27 @@
 						<button type="submit" class="secondary">Local activate</button>
 					</form>
 				{/if}
-			</article>
+			</section>
 
-			<article class="panel danger">
-				<h3>Cancel Workspace Setup</h3>
-				<p>This permanently removes workspace data before activation.</p>
-				<form method="POST" action="?/cancel" use:enhance>
-					<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
-					<button type="submit" class="danger-btn">Cancel And Delete Workspace</button>
-				</form>
-			</article>
+			<details class="danger-section">
+				<summary>Cancel Workspace Setup</summary>
+				<div>
+					<p>This permanently removes workspace data before activation.</p>
+					<form method="POST" action="?/cancel" use:enhance>
+						<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
+						<button type="submit" class="danger-btn">Cancel And Delete Workspace</button>
+					</form>
+				</div>
+			</details>
 		{/if}
+
+		<nav class="billing-links" aria-label="Billing links">
+			<a href="/privacy">Privacy</a>
+			<a href="/terms">Terms</a>
+			<a href="/billing-terms">Billing Terms</a>
+			<a href="/support">Support</a>
+			<a href="/account-deletion">Account Deletion</a>
+		</nav>
 
 		{#if form?.error}
 			<p class="error">{form.error}</p>
@@ -360,57 +388,113 @@
 </Layout>
 
 <style>
-	.billing-shell {
-		display: grid;
-		gap: 0.8rem;
+	:global(.main-content:has(.billing-shell)) {
+		max-width: 1040px;
 	}
 
-	.panel {
-		padding: 1rem 0;
-		border: 0;
+	.billing-shell {
+		display: grid;
+		gap: 1rem;
+		padding-bottom: 2rem;
+	}
+
+	.billing-overview,
+	.billing-section,
+	.access-line,
+	.danger-section,
+	.notice-line,
+	.billing-links {
 		border-top: 1px solid var(--color-divider);
 		border-bottom: 1px solid var(--color-divider);
-		border-radius: 0;
 		background: transparent;
 	}
 
-	.panel h2,
-	.panel h3 {
-		margin: 0 0 0.45rem;
+	.section-heading {
+		min-height: 3.25rem;
+		padding: 0.72rem 1rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		border-bottom: 1px solid var(--color-divider);
+	}
+
+	.section-heading h2 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.status-grid {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+
+	.status-grid > div {
+		min-width: 0;
+		min-height: 4.25rem;
+		padding: 0.72rem 0.9rem;
+		display: grid;
+		align-content: center;
+		gap: 0.12rem;
+		border-right: 1px solid var(--color-divider);
+	}
+
+	.status-grid > div:last-child {
+		border-right: 0;
+	}
+
+	.status-grid span {
+		color: var(--color-text-muted);
+		font-size: 0.64rem;
+		font-weight: var(--weight-semibold);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.status-grid strong {
+		overflow: hidden;
+		font-size: 0.86rem;
+		text-overflow: ellipsis;
 	}
 
 	.muted {
-		margin: 0.2rem 0 0;
+		margin: 0;
 		color: var(--color-text-muted);
+		font-size: 0.78rem;
 	}
 
 	.stack {
 		display: grid;
-		gap: 0.7rem;
+		gap: 0.75rem;
+		padding: 0.9rem 1rem;
 	}
 
 	label {
 		display: grid;
-		gap: 0.35rem;
-		font-size: 0.86rem;
+		gap: 0.3rem;
+		font-size: 0.8rem;
+		font-weight: var(--weight-semibold);
 	}
 
 	select {
-		padding: 0.55rem 0;
+		width: 100%;
+		padding: 0.5rem 0;
 		border-radius: 0;
 		border: 0;
 		border-bottom: 1px solid var(--color-border);
 		background: transparent;
 		color: var(--color-text);
+		font: inherit;
 	}
 
 	.button-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.6rem;
+		gap: 0.65rem;
 	}
 
-	.subscription-summary {
+	.subscription-summary,
+	.sensor-usage {
 		display: grid;
 		gap: 0.18rem;
 		padding: 0.7rem 0;
@@ -419,9 +503,7 @@
 	}
 
 	.sensor-usage {
-		display: grid;
-		gap: 0.18rem;
-		padding: 0.7rem 0;
+		border-top: 0;
 		border-bottom: 1px solid var(--color-divider);
 	}
 
@@ -442,25 +524,27 @@
 	.primary,
 	.secondary,
 	.danger-btn {
-		padding: 0.34rem 0.18rem;
+		width: fit-content;
+		padding: 0.4rem 0.18rem;
 		border-radius: 0;
 		border: 0;
 		border-bottom: 1px solid var(--color-border);
+		background: transparent;
+		color: var(--color-text);
+		font: inherit;
+		font-size: 0.78rem;
 		font-weight: var(--weight-semibold);
+		cursor: pointer;
 	}
 
-	.primary {
-		background: transparent;
-		color: var(--color-text);
-	}
-
-	.secondary {
-		background: transparent;
-		color: var(--color-text);
+	.primary:disabled,
+	.secondary:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.dev-convert {
-		margin-top: 0.8rem;
+		padding: 0 1rem 0.9rem;
 	}
 
 	.local-addon {
@@ -476,29 +560,59 @@
 		accent-color: var(--color-text);
 	}
 
-	.danger {
-		border-color: color-mix(in srgb, var(--color-error) 42%, var(--color-border));
+	.access-line,
+	.notice-line {
+		padding: 0.75rem 1rem;
+	}
+
+	.access-line p,
+	.notice-line {
+		margin: 0;
+		color: var(--color-text-muted);
+		font-size: 0.78rem;
+	}
+
+	.danger-section summary {
+		padding: 0.75rem 1rem;
+		color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
+		font-size: 0.8rem;
+		font-weight: var(--weight-semibold);
+		cursor: pointer;
+	}
+
+	.danger-section > div {
+		padding: 0.8rem 1rem;
+		border-top: 1px solid var(--color-divider);
+	}
+
+	.danger-section p {
+		margin: 0 0 0.7rem;
+		color: var(--color-text-muted);
+		font-size: 0.78rem;
 	}
 
 	.danger-btn {
-		background: transparent;
-		color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
+		color: color-mix(in srgb, var(--color-error) 78%, var(--color-text));
+		border-bottom-color: color-mix(in srgb, var(--color-error) 42%, var(--color-border));
 	}
 
 	.error {
 		margin: 0;
+		padding: 0.7rem 1rem;
 		color: var(--color-error);
 	}
 
 	.notice {
-		margin: 0.45rem 0 0;
+		margin: 0;
 		color: var(--color-text);
+		font-size: 0.78rem;
 	}
 
 	.billing-links {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.65rem;
+		gap: 0.55rem 0.9rem;
+		padding: 0.72rem 1rem;
 	}
 
 	.billing-links a {
@@ -517,9 +631,50 @@
 
 	.manage-link {
 		display: inline-flex;
-		margin-top: 0.65rem;
+		border-bottom: 1px solid var(--color-divider);
 		color: var(--color-text);
-		text-decoration: underline;
-		text-underline-offset: 0.18em;
+		font-size: 0.76rem;
+		font-weight: var(--weight-semibold);
+		text-decoration: none;
+	}
+
+	@media (max-width: 720px) {
+		.status-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.status-grid > div:nth-child(even) {
+			border-right: 0;
+		}
+
+		.status-grid > div {
+			border-bottom: 1px solid var(--color-divider);
+		}
+
+		.status-grid > div:nth-last-child(-n + 2) {
+			border-bottom: 0;
+		}
+	}
+
+	@media (max-width: 460px) {
+		.status-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.status-grid > div,
+		.status-grid > div:nth-child(even),
+		.status-grid > div:nth-last-child(-n + 2) {
+			border-right: 0;
+			border-bottom: 1px solid var(--color-divider);
+		}
+
+		.status-grid > div:last-child {
+			border-bottom: 0;
+		}
+
+		.section-heading {
+			align-items: flex-start;
+			flex-direction: column;
+		}
 	}
 </style>

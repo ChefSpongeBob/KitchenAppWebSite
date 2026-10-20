@@ -195,10 +195,10 @@
 			</section>
 
 			<nav class="people-actions" aria-label="People and HR quick actions">
-				<a href="/admin/users?view=team"><span class="material-icons" aria-hidden="true">groups</span><span><strong>Team Directory</strong><small>Search and manage employee records</small></span></a>
-				{#if data.canManageOnboarding}<a href="/admin/onboarding?view=invites"><span class="material-icons" aria-hidden="true">person_add</span><span><strong>Invite Employee</strong><small>Create tenant-scoped access</small></span></a>{/if}
-				{#if data.canReviewOnboarding}<a href="/admin/onboarding?view=packets"><span class="material-icons" aria-hidden="true">assignment_turned_in</span><span><strong>Review Onboarding</strong><small>Track and approve packets</small></span></a>{/if}
-				{#if data.canManagePermissions}<a href="/admin/users?view=access"><span class="material-icons" aria-hidden="true">manage_accounts</span><span><strong>Roles & Access</strong><small>Positions and individual permissions</small></span></a>{/if}
+				<a href="/admin/users?view=team"><span class="material-icons" aria-hidden="true">groups</span><strong>Team Directory</strong></a>
+				{#if data.canManageOnboarding}<a href="/admin/onboarding?view=invites"><span class="material-icons" aria-hidden="true">person_add</span><strong>Invite Employee</strong></a>{/if}
+				{#if data.canReviewOnboarding}<a href="/admin/onboarding?view=packets"><span class="material-icons" aria-hidden="true">assignment_turned_in</span><strong>Review Onboarding</strong></a>{/if}
+				{#if data.canManagePermissions}<a href="/admin/users?view=access"><span class="material-icons" aria-hidden="true">manage_accounts</span><strong>Roles & Access</strong></a>{/if}
 			</nav>
 
 			<section class="overview-grid">
@@ -580,7 +580,7 @@
 		gap: 1.5rem;
 	}
 	.people-actions {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
 		gap: 0.6rem;
 	}
 	.people-actions a {
@@ -593,16 +593,10 @@
 		color: var(--color-text);
 		text-decoration: none;
 	}
-	.people-actions a > span:last-child {
-		display: grid;
-		gap: 0.12rem;
-		min-width: 0;
-	}
 	.people-actions .material-icons {
 		color: var(--color-text-muted);
 		font-size: 1.15rem;
 	}
-	.people-actions small,
 	.summary-lines small {
 		color: var(--color-text-muted);
 		font-size: 0.72rem;

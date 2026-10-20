@@ -9,6 +9,7 @@ import {
   loadScheduleWeek
 } from '$lib/server/schedules';
 import { hasBusinessCapability } from '$lib/server/permissions';
+import { requireBusinessId } from '$lib/server/tenant';
 
 function canManageSchedule(locals: App.Locals) {
   return hasBusinessCapability(
@@ -40,12 +41,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     };
   }
 
+  const businessId = requireBusinessId(locals);
   const [schedule, approvalsByUser, departments, managerDepartments] = await Promise.all([
-    loadScheduleWeek(db, weekStart, { publishedOnly: !canManage, businessId: locals.businessId }),
-    loadScheduleDepartmentApprovalsByUser(db, [locals.userId], locals.businessId),
-    loadScheduleDepartments(db, locals.businessId),
+    loadScheduleWeek(db, weekStart, { publishedOnly: !canManage, businessId }),
+    loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
+    loadScheduleDepartments(db, businessId),
     canManage
-      ? loadScheduleManagerDepartments(db, locals, locals.businessId ?? '')
+      ? loadScheduleManagerDepartments(db, locals, businessId)
       : Promise.resolve([])
   ]);
 

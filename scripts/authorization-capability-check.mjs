@@ -153,7 +153,7 @@ expect(
   'schedule manager department scope is enforced',
   schedules.includes('loadScheduleManagerDepartments') &&
     schedules.includes('scheduleDepartmentAccessFailure') &&
-    schedules.includes('deleteScheduleShiftsForScope') &&
+    schedules.includes('prepareScheduleDraftScopeDelete') &&
     schedules.includes("'manage_schedule'") &&
     schedules.includes('departmentScope.allowedSet.has(department)'),
   'Schedule mutations must reject departments outside the active manager scope.'

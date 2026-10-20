@@ -70,7 +70,7 @@ expect('src/routes/+layout.svelte', 'public footer links Apple review URLs', (so
 expect('src/routes/billing/+page.svelte', 'billing page shows subscription purchase restore and management paths', (source) =>
   source.includes('CriminiBilling.purchase') &&
   source.includes('CriminiBilling.restorePurchases') &&
-  source.includes('Manage subscription') &&
+  source.includes('Manage Subscription') &&
   source.includes('Renews monthly until canceled.') &&
   source.includes('Restore is available for existing App Store or Google Play purchases.') &&
   source.includes('href="/privacy"') &&

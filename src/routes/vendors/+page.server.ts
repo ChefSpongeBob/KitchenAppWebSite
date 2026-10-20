@@ -11,9 +11,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;
   if (!db) return { vendors: [] };
 
-  const vendors = (await loadVendors(db, requireBusinessId(locals))).filter(
-    (vendor) => vendor.isActive === 1
-  );
+  const vendors = await loadVendors(db, requireBusinessId(locals));
 
   return { vendors };
 };

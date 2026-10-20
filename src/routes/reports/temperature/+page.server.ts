@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { hasReportsAccess } from '$lib/server/permissions';
 import { requireBusinessId } from '$lib/server/tenant';
-import { loadTemperatureReport } from '$lib/server/reports';
+import { loadTemperatureHourlyAverageReport } from '$lib/server/reports';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {
@@ -13,5 +13,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const end = url.searchParams.get('end');
   if (!db) return { startDate: '', endDate: '', rows: [] };
 
-  return await loadTemperatureReport(db, requireBusinessId(locals), { start, end });
+  return await loadTemperatureHourlyAverageReport(db, requireBusinessId(locals), { start, end });
 };

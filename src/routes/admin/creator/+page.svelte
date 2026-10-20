@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '$lib/components/ui/Layout.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '$lib/client/toasts';
@@ -290,6 +291,26 @@
     categoryEditorType = data.initialCategoryEditorType;
     lastAppliedRouteSelection = routeSelectionToken;
   }
+  $: listCategoryCount =
+    data.sections.preplists.length +
+    checklistCategories.length +
+    data.sections.inventory.length +
+    data.sections.orders.length;
+  $: listItemCount =
+    listSections.reduce((total, section) => total + section.items.length, 0) +
+    checklistCategories.reduce((total, category) => total + category.section.items.length, 0);
+  $: activeEditorTitle =
+    editorType === 'category'
+      ? `${categoryEditorType === 'list' ? listDomainLabel(categoryListDomain) : toTitle(categoryEditorType)} Categories`
+      : editorType === 'list'
+        ? listDomainLabel(listDomain)
+        : editorType === 'menu'
+          ? 'Menus'
+          : `${toTitle(editorType)}s`;
+  $: activeEditorIcon =
+    editorType === 'category'
+      ? 'category'
+      : editorIcon(editorType === 'list' && listDomain === 'checklists' ? 'checklist' : editorType);
 
   const withFeedback: SubmitFunction = () => {
     feedbackMessage = '';
@@ -332,22 +353,37 @@
 </script>
 
 <Layout>
-  <PageHeader title="Manager Creator" />
+  <PageHeader title="Creator Studio" />
+  <ManagerSectionNav groupId="workspace" />
 
   <section class="creator-panel">
-    <header class="creator-header">
-      <div>
-        <span class="eyebrow">Creator Studio</span>
-        <h2>Creator Workbench</h2>
+    <section class="creator-overview">
+      <div class="active-editor">
+        <span class="material-icons" aria-hidden="true">{activeEditorIcon}</span>
+        <div>
+          <small>Current Editor</small>
+          <h2>{activeEditorTitle}</h2>
+        </div>
       </div>
+
+      <div class="creator-counts" aria-label="Content totals">
+        <div><span>Lists</span><strong>{listCategoryCount}</strong></div>
+        <div><span>Items</span><strong>{listItemCount}</strong></div>
+        <div><span>Recipes</span><strong>{data.recipes.length}</strong></div>
+        <div><span>Docs</span><strong>{data.documents.length - menuDocuments.length}</strong></div>
+        <div><span>Menus</span><strong>{menuDocuments.length}</strong></div>
+      </div>
+    </section>
+
+    <nav class="creator-header" aria-label="Creator editor selection">
       <div class="header-controls">
         <label>
-          <span>Editor Type</span>
+          <span>Editor</span>
           <select bind:value={editorType}>
-            <option value="category">Category Creator</option>
-            <option value="list">List</option>
-            <option value="recipe">Recipe</option>
-            <option value="document">Document</option>
+            <option value="category">Categories</option>
+            <option value="list">Lists</option>
+            <option value="recipe">Recipes</option>
+            <option value="document">Documents</option>
             <option value="menu">Menus</option>
           </select>
         </label>
@@ -382,7 +418,7 @@
           </label>
         {/if}
       </div>
-    </header>
+    </nav>
 
     {#if feedbackMessage}
       <p class="feedback-banner">{feedbackMessage}</p>
@@ -393,12 +429,15 @@
 
       {#if editorType === 'category'}
         {#if categoryEditorType === 'list'}
-          <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="create-form category-create-form">
-            <input type="hidden" name="domain" value={categoryListDomain} />
-            <input name="title" placeholder={`${listDomainLabel(categoryListDomain)} category`} required />
-            <input name="description" placeholder="Description" />
-            <button type="submit">Create</button>
-          </form>
+          <details class="create-editor">
+            <summary><span class="material-icons" aria-hidden="true">add</span>New Category</summary>
+            <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="create-form category-create-form">
+              <input type="hidden" name="domain" value={categoryListDomain} />
+              <input name="title" placeholder={`${listDomainLabel(categoryListDomain)} category`} required />
+              <input name="description" placeholder="Description" />
+              <button type="submit">Create</button>
+            </form>
+          </details>
 
           {#if filteredCategoryListSections.length === 0}
             <p class="empty empty-action">
@@ -424,11 +463,14 @@
             </div>
           {/if}
         {:else}
-          <form method="POST" action="?/create_creator_category" use:enhance={withResetFeedback} class="create-form category-create-form">
-            <input type="hidden" name="editor_type" value={categoryEditorType} />
-            <input name="category" placeholder={categoryEditorType === 'recipe' ? 'Recipe category' : 'Document category'} required />
-            <button type="submit">Create</button>
-          </form>
+          <details class="create-editor">
+            <summary><span class="material-icons" aria-hidden="true">add</span>New Category</summary>
+            <form method="POST" action="?/create_creator_category" use:enhance={withResetFeedback} class="create-form category-create-form">
+              <input type="hidden" name="editor_type" value={categoryEditorType} />
+              <input name="category" placeholder={categoryEditorType === 'recipe' ? 'Recipe category' : 'Document category'} required />
+              <button type="submit">Create</button>
+            </form>
+          </details>
 
           {@const categories = categoryEditorType === 'recipe' ? data.creatorCatalog.recipes : documentCategories}
           {#if categories.length === 0}
@@ -464,11 +506,14 @@
         {/if}
       {:else if editorType === 'list'}
         {#if listDomain === 'checklists'}
-          <form method="POST" action="?/create_checklist_category" use:enhance={withResetFeedback} class="create-form">
-            <input name="title" placeholder="New checklist category" required />
-            <input name="description" placeholder="Description" />
-            <button type="submit">Create Checklist</button>
-          </form>
+          <details class="create-editor">
+            <summary><span class="material-icons" aria-hidden="true">add</span>New Checklist</summary>
+            <form method="POST" action="?/create_checklist_category" use:enhance={withResetFeedback} class="create-form">
+              <input name="title" placeholder="Checklist name" required />
+              <input name="description" placeholder="Description" />
+              <button type="submit">Create Checklist</button>
+            </form>
+          </details>
 
           {#if checklistCategories.length === 0}
             <p class="empty empty-action">
@@ -586,15 +631,18 @@
             </div>
           {/if}
         {:else}
-          <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="create-form">
-            <input type="hidden" name="domain" value={listDomain} />
-            <input name="title" placeholder={`New ${listDomainLabel(listDomain)} category`} required />
-            <input name="description" placeholder="Description" />
-            <input name="first_item" placeholder="First item" />
-            <input name="first_details" placeholder="Item details" />
-            <input name="first_par_count" type="number" min="0" step="0.1" value="0" />
-            <button type="submit">Create {listDomainLabel(listDomain)}</button>
-          </form>
+          <details class="create-editor">
+            <summary><span class="material-icons" aria-hidden="true">add</span>New {listDomainLabel(listDomain)}</summary>
+            <form method="POST" action="?/create_list_section" use:enhance={withResetFeedback} class="create-form">
+              <input type="hidden" name="domain" value={listDomain} />
+              <input name="title" placeholder={`${listDomainLabel(listDomain)} name`} required />
+              <input name="description" placeholder="Description" />
+              <input name="first_item" placeholder="First item" />
+              <input name="first_details" placeholder="Item details" />
+              <input name="first_par_count" type="number" min="0" step="0.1" value="0" />
+              <button type="submit">Create {listDomainLabel(listDomain)}</button>
+            </form>
+          </details>
 
           {#if filteredListSections.length === 0}
             <p class="empty empty-action">
@@ -943,25 +991,28 @@
             </div>
           {/if}
         {:else}
-          <form
-            method="POST"
-            action="?/create_document"
-            enctype="multipart/form-data"
-            use:enhance={withResetFeedback}
-            class="create-form menu-form"
-          >
-            <input type="hidden" name="section" value="Menu" />
-            <input type="hidden" name="category" value="Menu" />
-            <input type="hidden" name="file_url" value="" />
-            <input type="hidden" name="content" value="" />
-            <input name="title" placeholder="Menu title" required />
-            <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" required />
-            <select name="is_active">
-              <option value="1" selected>Active</option>
-              <option value="0">Hidden</option>
-            </select>
-            <button type="submit">Add Menu</button>
-          </form>
+          <details class="create-editor">
+            <summary><span class="material-icons" aria-hidden="true">add</span>New Menu</summary>
+            <form
+              method="POST"
+              action="?/create_document"
+              enctype="multipart/form-data"
+              use:enhance={withResetFeedback}
+              class="create-form menu-form"
+            >
+              <input type="hidden" name="section" value="Menu" />
+              <input type="hidden" name="category" value="Menu" />
+              <input type="hidden" name="file_url" value="" />
+              <input type="hidden" name="content" value="" />
+              <input name="title" placeholder="Menu title" required />
+              <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" required />
+              <select name="is_active">
+                <option value="1" selected>Active</option>
+                <option value="0">Hidden</option>
+              </select>
+              <button type="submit">Add Menu</button>
+            </form>
+          </details>
 
           {#if menuDocuments.length === 0}
             <p class="empty">No menus yet.</p>
@@ -1014,41 +1065,93 @@
 </Layout>
 
 <style>
+  :global(.main-content:has(.creator-panel)) {
+    max-width: 1180px;
+  }
+
   .creator-panel {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.9rem;
     margin-top: 0.95rem;
-    padding: 1rem 0;
+    padding-bottom: 2rem;
+  }
+
+  .creator-overview {
     border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
+  }
+
+  .active-editor {
+    min-height: 4.7rem;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.72rem;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .active-editor > .material-icons {
+    color: var(--color-text-muted);
+    font-size: 1.55rem;
+  }
+
+  .active-editor > div {
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .active-editor small,
+  .creator-counts span {
+    color: var(--color-text-muted);
+    font-size: 0.64rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .active-editor h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .creator-counts {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .creator-counts > div {
+    min-width: 0;
+    min-height: 3.7rem;
+    padding: 0.62rem 0.75rem;
+    display: grid;
+    align-content: center;
+    gap: 0.12rem;
+    border-right: 1px solid var(--color-divider);
+  }
+
+  .creator-counts > div:last-child {
+    border-right: 0;
+  }
+
+  .creator-counts strong {
+    font-size: 0.9rem;
   }
 
   .creator-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: end;
-    gap: 0.8rem;
+    padding: 0.7rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
   }
 
-  .creator-header h2,
   .panel-block h3 {
     margin: 0;
-  }
-
-  .eyebrow {
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.7rem;
+    font-size: 0.92rem;
   }
 
   .header-controls {
     display: grid;
-    grid-template-columns: repeat(2, minmax(170px, 1fr));
-    gap: 0.5rem;
+    grid-template-columns: repeat(3, minmax(150px, 220px));
+    gap: 0.7rem;
   }
 
   .header-controls label {
@@ -1065,11 +1168,11 @@
 
   .panel-block {
     display: grid;
-    gap: 0.45rem;
+    gap: 0.6rem;
     border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
     border-radius: 0;
-    padding: 0.68rem 0;
+    padding: 0.75rem 0;
     background: transparent;
   }
 
@@ -1331,15 +1434,38 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.36rem;
-    padding: 0.48rem 0;
-    border-top: 1px solid var(--color-divider);
-    border-bottom: 1px solid var(--color-divider);
+    padding: 0.7rem 0 0.25rem;
     border-radius: 0;
     background: transparent;
   }
 
   .create-form button {
     grid-column: 1 / -1;
+  }
+
+  .create-editor {
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .create-editor > summary {
+    min-height: 2.65rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    list-style: none;
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
+  }
+
+  .create-editor > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .create-editor > summary .material-icons {
+    font-size: 1rem;
   }
 
   .feedback-banner {
@@ -1386,13 +1512,8 @@
   }
 
   @media (max-width: 900px) {
-    .creator-header {
-      flex-direction: column;
-      align-items: start;
-    }
-
     .header-controls {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       width: 100%;
     }
 
@@ -1401,6 +1522,31 @@
     }
 
     .item-composer-form {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .creator-counts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .creator-counts > div,
+    .creator-counts > div:last-child {
+      border-right: 0;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .creator-counts > div:nth-child(odd) {
+      border-right: 1px solid var(--color-divider);
+    }
+
+    .creator-counts > div:last-child {
+      border-right: 0;
+      border-bottom: 0;
+    }
+
+    .header-controls {
       grid-template-columns: 1fr;
     }
   }

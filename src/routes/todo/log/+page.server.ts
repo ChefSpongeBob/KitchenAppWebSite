@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { hasBusinessCapability } from '$lib/server/permissions';
+import { hasBusinessCapability, hasReportsAccess } from '$lib/server/permissions';
 import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
 
 function canManageTodoHistory(locals: App.Locals) {
@@ -16,9 +16,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!canManageTodoHistory(locals)) {
 		throw redirect(303, '/app');
 	}
+	const canViewReports = hasReportsAccess(
+		locals.businessRole,
+		locals.businessPermissionTemplate,
+		locals.businessCapabilities
+	);
 
 	const db = locals.DB;
-	if (!db) return { logs: [] };
+	if (!db) return { logs: [], canViewReports };
 	await ensureTenantSchema(db);
 	const businessId = requireBusinessId(locals);
 
@@ -38,6 +43,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	.all();
 
 	return {
-		logs: logs.results
+		logs: logs.results,
+		canViewReports
 	};
 };

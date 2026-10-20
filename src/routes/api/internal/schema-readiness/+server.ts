@@ -48,6 +48,9 @@ const REQUIRED_CORE_TABLES = [
 	'user_schedule_availability_requests',
 	'user_schedule_role_settings',
 	'user_schedule_roles',
+	'schedule_draft_shifts',
+	'schedule_draft_week_team',
+	'schedule_draft_open_shifts',
 	'iot_device_inventory',
 	'temperature_sensor_nodes',
 	'temperature_sensor_settings',
@@ -63,6 +66,10 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_business_invites_business_position',
 	'idx_schedule_shifts_business_week_date',
 	'idx_schedule_open_shifts_business_week',
+	'idx_schedule_draft_shifts_business_week_date',
+	'idx_schedule_draft_shifts_business_user_date',
+	'idx_schedule_draft_week_team_week_sort',
+	'idx_schedule_draft_open_shifts_business_week_date',
 	'idx_schedule_departments_business_active_order',
 	'idx_schedule_role_definitions_business_active_department',
 	'idx_user_schedule_departments_business_user',
@@ -119,6 +126,18 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_waste_logs_business_created'
 ];
 
+const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
+	schedule_weeks: [
+		'draft_initialized',
+		'draft_version',
+		'published_version',
+		'has_unpublished_changes',
+		'draft_updated_at',
+		'draft_updated_by',
+		'draft_write_token'
+	]
+};
+
 function missingRequiredSecrets(env: App.Platform['env'] | undefined) {
 	const missing: string[] = [];
 	if (!isSensitiveEncryptionConfigured(env)) missing.push('SENSITIVE_DATA_KEY');
@@ -171,6 +190,21 @@ async function missingCoreIndexes(db: App.Platform['env']['DB']) {
 	return missing;
 }
 
+async function missingCoreColumns(db: App.Platform['env']['DB']) {
+	const missing: Array<{ table: string; column: string }> = [];
+	for (const [table, requiredColumns] of Object.entries(REQUIRED_CORE_COLUMNS)) {
+		const rows = await db
+			.prepare('SELECT name FROM pragma_table_info(?)')
+			.bind(table)
+			.all<{ name: string }>();
+		const present = new Set((rows.results ?? []).map((row) => row.name));
+		for (const column of requiredColumns) {
+			if (!present.has(column)) missing.push({ table, column });
+		}
+	}
+	return missing;
+}
+
 export const GET: RequestHandler = async ({ request, platform, locals }) => {
 	if (!isAuthorized(request, platform?.env)) {
 		return json({ ok: false, error: 'Unauthorized.' }, { status: 401 });
@@ -187,13 +221,19 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 		return json({ ok: false, error: 'Database not configured.' }, { status: 503 });
 	}
 
-	const [coreTables, coreIndexes, tenantIssues] = await Promise.all([
+	const [coreTables, coreIndexes, coreColumns, tenantIssues] = await Promise.all([
 		missingCoreTables(db),
 		missingCoreIndexes(db),
+		missingCoreColumns(db),
 		verifyTenantSchema(db)
 	]);
 	const secrets = missingRequiredSecrets(platform?.env);
-	const ok = coreTables.length === 0 && coreIndexes.length === 0 && tenantIssues.length === 0 && secrets.length === 0;
+	const ok =
+		coreTables.length === 0 &&
+		coreIndexes.length === 0 &&
+		coreColumns.length === 0 &&
+		tenantIssues.length === 0 &&
+		secrets.length === 0;
 	if (!ok) {
 		logOperationalEvent({
 			level: 'error',
@@ -203,6 +243,7 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 			metadata: {
 				table_count: coreTables.length,
 				index_count: coreIndexes.length,
+				column_count: coreColumns.length,
 				issue_count: tenantIssues.length,
 				secret_count: secrets.length,
 				phase: 'pre_traffic'
@@ -215,6 +256,7 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 			ok,
 			missingCoreTables: coreTables,
 			missingCoreIndexes: coreIndexes,
+			missingCoreColumns: coreColumns,
 			tenantIssues,
 			missingRequiredSecrets: secrets
 		},

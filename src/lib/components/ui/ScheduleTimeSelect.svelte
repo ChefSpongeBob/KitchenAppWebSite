@@ -4,7 +4,7 @@
   export let value = '';
   export let includeSpecialOptions: string[] = [];
   export let specialPlaceholder = 'Timed End';
-  const dispatch = createEventDispatcher<{ commit: { value: string } }>();
+  const dispatch = createEventDispatcher<{ commit: { value: string }; cancel: void }>();
 
   const hourOptions = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
   const minuteOptions = ['00', '15', '30', '45'];
@@ -15,8 +15,6 @@
   let selectedHour = '12';
   let selectedMinute = '00';
   let selectedPeriod = 'AM';
-  let confirmationText = '';
-  let confirmationTimer: ReturnType<typeof setTimeout> | null = null;
 
   function pad2(nextValue: number) {
     return String(nextValue).padStart(2, '0');
@@ -81,21 +79,13 @@
 
   function handleCancel() {
     syncFromValue(value);
+    dispatch('cancel');
   }
 
   function handleOk() {
     value = selectedSpecial || timeValueFromParts();
     draftValue = value;
     dispatch('commit', { value });
-    confirmationText = selectedSpecial
-      ? `${selectedSpecial} set`
-      : `${selectedHour}:${selectedMinute} ${selectedPeriod} set`;
-
-    if (confirmationTimer) clearTimeout(confirmationTimer);
-    confirmationTimer = setTimeout(() => {
-      confirmationText = '';
-      confirmationTimer = null;
-    }, 1400);
   }
 
   $: if (value !== draftValue) {
@@ -140,22 +130,16 @@
     <button type="button" class="cancel-btn" on:click={handleCancel}>Cancel</button>
     <button type="button" class="ok-btn" on:click={handleOk}>OK</button>
   </div>
-
-  {#if confirmationText}
-    <p class="confirmation">{confirmationText}</p>
-  {/if}
 </div>
 
 <style>
   .picker {
     display: grid;
-    gap: 0.55rem;
-    padding: 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
-    border-radius: 12px;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 38%),
-      color-mix(in srgb, var(--color-surface-alt) 94%, black 6%);
+    gap: 0.5rem;
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+    background: transparent;
   }
 
   .specials {
@@ -188,16 +172,14 @@
   .value-box {
     display: grid;
     place-items: center;
-    min-height: 2.5rem;
-    border-radius: 8px;
-    border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 55%),
-      color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    min-height: 2.25rem;
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
     color: var(--color-text);
-    font-size: 1rem;
+    font-size: 0.92rem;
     font-weight: var(--weight-semibold);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .period-box {
@@ -209,17 +191,19 @@
   .special-btn,
   .cancel-btn,
   .ok-btn {
-    border-radius: 8px;
-    border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+    border: 0;
+    border-bottom: 1px solid var(--color-divider);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.72rem;
+    font-weight: var(--weight-semibold);
   }
 
   .arrow-btn {
-    min-height: 1.8rem;
-    background: color-mix(in srgb, var(--color-surface) 88%, black 12%);
-    color: color-mix(in srgb, var(--color-primary) 75%, white 25%);
-    font-weight: var(--weight-semibold);
+    min-height: 1.55rem;
+    color: var(--color-text-muted);
   }
 
   .arrow-btn:disabled {
@@ -228,20 +212,15 @@
   }
 
   .special-btn {
-    min-height: 2rem;
-    padding: 0.4rem 0.7rem;
-    background: color-mix(in srgb, var(--color-surface) 88%, black 12%);
+    min-height: 1.85rem;
+    padding: 0.32rem 0.6rem;
     color: var(--color-text-soft);
   }
 
   .special-btn.selected {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-primary) 28%, transparent),
-      color-mix(in srgb, var(--color-primary) 14%, transparent)
-    );
     color: var(--color-text);
-    border-color: color-mix(in srgb, var(--color-primary) 42%, transparent);
+    border-bottom-color: var(--color-text);
+    font-weight: var(--weight-bold);
   }
 
   .actions {
@@ -250,31 +229,18 @@
     gap: 0.45rem;
   }
 
-  .confirmation {
-    margin: 0;
-    color: color-mix(in srgb, var(--color-success) 74%, var(--color-text));
-    font-size: 0.74rem;
-    text-align: right;
-  }
-
   .cancel-btn,
   .ok-btn {
-    min-height: 2rem;
-    padding: 0.42rem 0.8rem;
+    min-height: 1.85rem;
+    padding: 0.3rem 0.65rem;
   }
 
   .cancel-btn {
-    background: color-mix(in srgb, var(--color-surface) 90%, black 10%);
     color: var(--color-text-soft);
   }
 
   .ok-btn {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-primary) 42%, transparent),
-      color-mix(in srgb, var(--color-primary) 22%, transparent)
-    );
-    color: var(--color-primary-contrast);
-    border-color: color-mix(in srgb, var(--color-primary) 38%, transparent);
+    border-bottom-color: var(--color-text);
+    color: var(--color-text);
   }
 </style>

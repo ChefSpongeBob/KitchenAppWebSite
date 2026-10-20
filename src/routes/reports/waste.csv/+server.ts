@@ -17,7 +17,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		end: url.searchParams.get('end'),
 		createdAt: url.searchParams.get('created_at')
 	});
-	const header = ['date', 'product', 'amount', 'unit', 'reason', 'notes', 'submitted_by', 'submitted_by_email'];
+	const header = ['Date', 'Product', 'Amount', 'Unit', 'Reason', 'Notes', 'Submitted By', 'Submitted By Email'];
 	const lines = [
 		header.join(','),
 		...report.rows.map((row) =>
@@ -36,10 +36,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		)
 	];
 
-	return new Response(lines.join('\n'), {
+	return new Response(`\uFEFF${lines.join('\n')}`, {
 		headers: {
 			'content-type': 'text/csv; charset=utf-8',
-			'content-disposition': 'attachment; filename="waste-logs.csv"'
+			'content-disposition': `attachment; filename="waste-logs-${report.startDate}-to-${report.endDate}.csv"`
 		}
 	});
 };

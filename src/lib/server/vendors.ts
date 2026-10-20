@@ -85,12 +85,11 @@ function readVendorForm(formData: FormData) {
   const phone = optionalString(formData, 'phone', 48);
   const contactName = optionalString(formData, 'contact_name', 90);
   const notes = optionalString(formData, 'notes', 280);
-  const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
   if (!name) return { error: 'Vendor name is required.' } as const;
   if (websiteRaw && !websiteUrl) return { error: 'Enter a valid vendor website.' } as const;
 
-  return { name, websiteUrl: websiteUrl ?? '', phone, contactName, notes, isActive } as const;
+  return { name, websiteUrl: websiteUrl ?? '', phone, contactName, notes } as const;
 }
 
 export async function loadVendors(db: DB, businessId: string) {
@@ -103,7 +102,7 @@ export async function loadVendors(db: DB, businessId: string) {
       SELECT id, name, website_url, phone, contact_name, notes, is_active, updated_at
       FROM vendor_resources
       WHERE business_id = ?
-      ORDER BY is_active DESC, name COLLATE NOCASE ASC
+      ORDER BY name COLLATE NOCASE ASC
       `
     )
     .bind(businessId)
@@ -162,7 +161,7 @@ export async function createVendor(request: Request, locals: App.Locals) {
       vendor.phone || null,
       vendor.contactName || null,
       vendor.notes || null,
-      vendor.isActive,
+      1,
       now,
       now,
       locals.userId ?? null,
@@ -203,7 +202,7 @@ export async function updateVendor(request: Request, locals: App.Locals) {
       vendor.phone || null,
       vendor.contactName || null,
       vendor.notes || null,
-      vendor.isActive,
+      1,
       Math.floor(Date.now() / 1000),
       locals.userId ?? null,
       id,

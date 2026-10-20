@@ -72,6 +72,21 @@ expect('migrations/0103_business_positions.sql', 'tenant position lookups use bu
   ].every((indexName) => source.includes(indexName))
 );
 
+expect('migrations/0104_schedule_draft_publishing.sql', 'schedule drafts use tenant-first indexes', (source) =>
+  [
+    'idx_schedule_draft_shifts_business_week_date',
+    'idx_schedule_draft_shifts_business_user_date',
+    'idx_schedule_draft_week_team_week_sort',
+    'idx_schedule_draft_open_shifts_business_week_date'
+  ].every((indexName) => source.includes(indexName))
+);
+
+expect('src/lib/server/schedules.ts', 'schedule supporting loads avoid full-week overfetch', (source) =>
+  source.includes('async function loadScheduleWeekIdentity') &&
+  source.includes('const week = await loadScheduleWeekIdentity(db, weekStart, businessId);') &&
+  (source.match(/loadScheduleWeek\(db, weekStart/g) ?? []).length === 2
+);
+
 expect('migrations/0079_list_activity_lookup_index.sql', 'list activity lookup index supports executor history reports', (source) =>
   source.includes('idx_list_item_activity_lookup') &&
   source.includes('list_item_activity_events(business_id, domain, item_id, occurred_at)')
