@@ -87,8 +87,14 @@ function cookieHeaderValue() {
 
 async function request(path, options = {}) {
   const headers = new Headers(options.headers ?? {});
+  const method = String(options.method ?? 'GET').toUpperCase();
   const cookie = cookieHeaderValue();
   if (cookie) headers.set('cookie', cookie);
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers.set('origin', origin);
+    headers.set('referer', `${origin}/`);
+    headers.set('sec-fetch-site', 'same-origin');
+  }
 
   const response = await fetch(`${origin}${path}`, {
     redirect: 'manual',
@@ -126,7 +132,7 @@ async function assertReachable(path, label, options = {}) {
 
 async function createSmokeSession() {
   if (email && password) {
-    const response = await request('/login', {
+    const response = await request('/login?/login', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ email, password }).toString()
@@ -134,6 +140,13 @@ async function createSmokeSession() {
     if (response.status === 302 || response.status === 303) {
       log(true, `Password smoke login redirected ${response.status}`);
       return true;
+    }
+    if (response.status >= 200 && response.status < 300) {
+      const sessionProbe = await request('/app');
+      if (sessionProbe.status >= 200 && sessionProbe.status < 300) {
+        log(true, `Password smoke login established a session ${response.status}`);
+        return true;
+      }
     }
     log(false, `Password smoke login expected redirect, got ${response.status}`);
     return false;
@@ -145,11 +158,21 @@ async function createSmokeSession() {
 
 async function revokeSmokeSession() {
   if (email && password) {
-    const response = await request('/logout');
-    if (response.status === 302 || response.status === 303) {
-      log(true, `Logout redirected ${response.status}`);
+    const response = await request('/logout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: ''
+    });
+    if (response.status >= 200 && response.status < 400) {
+      const sessionProbe = await request('/app');
+      const location = sessionProbe.headers.get('location') ?? '';
+      if (sessionProbe.status >= 300 && sessionProbe.status < 400 && location.includes('/login')) {
+        log(true, `Logout revoked the session ${response.status}`);
+      } else {
+        log(false, 'Logout did not revoke the session');
+      }
     } else {
-      log(false, `Logout expected redirect, got ${response.status}`);
+      log(false, `Logout expected <400, got ${response.status}`);
     }
   }
 }

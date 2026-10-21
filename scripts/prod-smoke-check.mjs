@@ -80,8 +80,14 @@ function cookieHeaderValue() {
 
 async function request(path, options = {}) {
   const headers = new Headers(options.headers ?? {});
+  const method = String(options.method ?? 'GET').toUpperCase();
   const cookie = cookieHeaderValue();
   if (cookie) headers.set('cookie', cookie);
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers.set('origin', origin);
+    headers.set('referer', `${origin}/`);
+    headers.set('sec-fetch-site', 'same-origin');
+  }
 
   const response = await fetch(`${origin}${path}`, {
     redirect: 'manual',
@@ -124,44 +130,66 @@ async function main() {
 
   if (email && password) {
     const body = new URLSearchParams({ email, password }).toString();
-    const loginResponse = await request('/login', {
+    const loginResponse = await request('/login?/login', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body
     });
+    let authenticated = false;
     if (loginResponse.status === 303 || loginResponse.status === 302) {
       logPass(`Login action redirect (${loginResponse.status})`);
+      authenticated = true;
+    } else if (loginResponse.status >= 200 && loginResponse.status < 300) {
+      const sessionProbe = await request('/app');
+      if (sessionProbe.status >= 200 && sessionProbe.status < 300) {
+        logPass(`Login established an authenticated session (${loginResponse.status})`);
+        authenticated = true;
+      } else {
+        logFail(`Login returned ${loginResponse.status} without establishing a session`);
+      }
     } else {
       logFail(`Login action expected redirect, got ${loginResponse.status}`);
     }
 
-    for (const [path, label] of privateRoutes) {
-      await assertGetOk(path, label);
-    }
-
-    const forgotBody = new URLSearchParams({ email }).toString();
-    const forgotResponse = await request('/forgot-password', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: forgotBody
-    });
-    if (forgotResponse.status >= 200 && forgotResponse.status < 400) {
-      logPass(`Forgot-password submit (${forgotResponse.status})`);
-    } else {
-      logFail(`Forgot-password submit expected <400, got ${forgotResponse.status}`);
-    }
-
-    if (runAdminChecks) {
-      for (const [path, label] of adminRoutes) {
+    if (authenticated) {
+      for (const [path, label] of privateRoutes) {
         await assertGetOk(path, label);
       }
-    }
 
-    const logoutResponse = await request('/logout');
-    if (logoutResponse.status === 303 || logoutResponse.status === 302) {
-      logPass(`Logout redirect (${logoutResponse.status})`);
-    } else {
-      logFail(`Logout expected redirect, got ${logoutResponse.status}`);
+      const forgotBody = new URLSearchParams({ email }).toString();
+      const forgotResponse = await request('/forgot-password', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: forgotBody
+      });
+      if (forgotResponse.status >= 200 && forgotResponse.status < 400) {
+        logPass(`Forgot-password submit (${forgotResponse.status})`);
+      } else {
+        logFail(`Forgot-password submit expected <400, got ${forgotResponse.status}`);
+      }
+
+      if (runAdminChecks) {
+        for (const [path, label] of adminRoutes) {
+          await assertGetOk(path, label);
+        }
+      }
+
+      const logoutResponse = await request('/logout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: ''
+      });
+      if (logoutResponse.status >= 200 && logoutResponse.status < 400) {
+        const logoutProbe = await request('/app');
+        const location = logoutProbe.headers.get('location') ?? '';
+        if (logoutProbe.status >= 300 && logoutProbe.status < 400 && location.includes('/login')) {
+          logPass(`Logout revoked the authenticated session (${logoutResponse.status})`);
+        } else {
+          logFail(`Logout did not revoke the authenticated session`);
+        }
+      } else {
+        logFail(`Logout action expected <400, got ${logoutResponse.status}`);
+      }
     }
   } else {
     console.log('Skipping authenticated checks. Set SMOKE_EMAIL and SMOKE_PASSWORD.');
