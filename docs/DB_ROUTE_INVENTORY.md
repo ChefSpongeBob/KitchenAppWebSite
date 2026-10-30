@@ -2094,9 +2094,8 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `reading_ts` INTEGER
   - `first_seen_at` INTEGER (NOT NULL)
   - `last_seen_at` INTEGER (NOT NULL)
-  - `acknowledged_at` INTEGER
-  - `acknowledged_by` TEXT
   - `recovered_at` INTEGER
+  - `notification_ready_at` INTEGER
   - `dedupe_key` TEXT (NOT NULL)
   - `metadata_json` TEXT (NOT NULL, DEFAULT '{}')
 

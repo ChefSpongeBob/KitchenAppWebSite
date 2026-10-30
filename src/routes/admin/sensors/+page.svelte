@@ -69,7 +69,6 @@
     id: string;
     sensor_id: number;
     event_type: 'high' | 'low' | 'stale' | 'offline' | 'recovered';
-    status: 'active' | 'acknowledged' | 'recovered';
     temperature: number | null;
     threshold: number | null;
     last_seen_at: number;
@@ -104,7 +103,7 @@
       ...activeSensorNodes.map((node) => node.sensorId)
     ])
   ).sort((a, b) => a - b);
-  $: activeAlertCount = data.activeAlerts.filter((alert) => alert.status === 'active').length;
+  $: activeAlertCount = data.activeAlerts.length;
 
   function formatShortTime(value: number | null) {
     if (!value) return 'None';
@@ -292,14 +291,6 @@
                   | {formatDateTime(alert.last_seen_at)}
                 </small>
               </div>
-              {#if alert.status === 'active'}
-                <form method="POST" action="?/acknowledge_alert" use:enhance={withFeedback}>
-                  <input type="hidden" name="alert_id" value={alert.id} />
-                  <button type="submit">Acknowledge</button>
-                </form>
-              {:else}
-                <span class="status-text">Acknowledged</span>
-              {/if}
             </div>
           {/each}
         </div>
@@ -585,7 +576,6 @@
 
   .section-title > span,
   .equipment-group > header span,
-  .status-text,
   .unit-row summary > span:not(.unit-name):not(.material-icons),
   .unit-row summary small,
   .rule-row summary span,

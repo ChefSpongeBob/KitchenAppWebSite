@@ -12,7 +12,6 @@ import {
   revokeTemperatureSensorNode
 } from '$lib/server/temperatureDeviceProvisioning';
 import {
-  acknowledgeTemperatureAlert,
   defaultTemperatureSetting,
   loadActiveTemperatureAlerts,
   loadTemperatureSensorSettings,
@@ -166,24 +165,6 @@ export const actions: Actions = {
       return fail(400, { error: error instanceof Error ? error.message : 'Alert rules could not be saved.' });
     }
 
-    return { success: true };
-  },
-
-  acknowledge_alert: async ({ request, locals }) => {
-    requireAdmin(locals.userRole);
-    const db = locals.DB;
-    if (!db) return fail(503, { error: 'Database not configured.' });
-    const businessId = requireBusinessId(locals);
-
-    const formData = await request.formData();
-    const alertId = String(formData.get('alert_id') ?? '').trim();
-    if (!alertId) return fail(400, { error: 'Missing alert.' });
-
-    await acknowledgeTemperatureAlert(db, {
-      businessId,
-      alertId,
-      acknowledgedBy: locals.userId ?? null
-    });
     return { success: true };
   },
 

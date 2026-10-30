@@ -3,7 +3,7 @@ import { dev } from '$app/environment';
 type DB = App.Platform['env']['DB'];
 
 export type TemperatureAlertType = 'high' | 'low' | 'stale' | 'offline' | 'recovered';
-export type TemperatureAlertStatus = 'active' | 'acknowledged' | 'recovered';
+export type TemperatureAlertStatus = 'active' | 'recovered';
 
 export type TemperatureReading = {
   sensor_id: number;
@@ -36,8 +36,6 @@ export type TemperatureAlertEvent = {
   reading_ts: number | null;
   first_seen_at: number;
   last_seen_at: number;
-  acknowledged_at: number | null;
-  acknowledged_by: string | null;
   recovered_at: number | null;
   notification_ready_at: number | null;
   dedupe_key: string;
@@ -124,8 +122,6 @@ export async function ensureTemperatureMonitoringSchema(db: DB) {
           reading_ts INTEGER,
           first_seen_at INTEGER NOT NULL,
           last_seen_at INTEGER NOT NULL,
-          acknowledged_at INTEGER,
-          acknowledged_by TEXT,
           recovered_at INTEGER,
           notification_ready_at INTEGER,
           dedupe_key TEXT NOT NULL,
@@ -318,7 +314,7 @@ export async function loadActiveTemperatureAlerts(db: DB, businessId: string) {
       SELECT *
       FROM temperature_alert_events
       WHERE business_id = ?
-        AND status IN ('active', 'acknowledged')
+        AND status = 'active'
       ORDER BY last_seen_at DESC
       LIMIT 100
       `
@@ -326,32 +322,6 @@ export async function loadActiveTemperatureAlerts(db: DB, businessId: string) {
     .bind(businessId)
     .all<TemperatureAlertEvent>();
   return rows.results ?? [];
-}
-
-export async function acknowledgeTemperatureAlert(
-  db: DB,
-  input: {
-    businessId: string;
-    alertId: string;
-    acknowledgedBy: string | null;
-  }
-) {
-  await ensureTemperatureMonitoringSchema(db);
-  const now = nowSeconds();
-  await db
-    .prepare(
-      `
-      UPDATE temperature_alert_events
-      SET status = 'acknowledged',
-          acknowledged_at = ?,
-          acknowledged_by = ?
-      WHERE id = ?
-        AND business_id = ?
-        AND status = 'active'
-      `
-    )
-    .bind(now, input.acknowledgedBy, input.alertId, input.businessId)
-    .run();
 }
 
 async function upsertTemperatureAlert(
@@ -395,12 +365,7 @@ async function upsertTemperatureAlert(
       )
       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(business_id, dedupe_key) DO UPDATE SET
-        status = CASE
-          WHEN temperature_alert_events.status = 'recovered'
-            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
-          THEN 'active'
-          ELSE temperature_alert_events.status
-        END,
+        status = 'active',
         temperature = excluded.temperature,
         threshold = excluded.threshold,
         reading_ts = excluded.reading_ts,
@@ -411,18 +376,6 @@ async function upsertTemperatureAlert(
           ELSE temperature_alert_events.first_seen_at
         END,
         last_seen_at = excluded.last_seen_at,
-        acknowledged_at = CASE
-          WHEN temperature_alert_events.status = 'recovered'
-            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
-          THEN NULL
-          ELSE temperature_alert_events.acknowledged_at
-        END,
-        acknowledged_by = CASE
-          WHEN temperature_alert_events.status = 'recovered'
-            OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
-          THEN NULL
-          ELSE temperature_alert_events.acknowledged_by
-        END,
         recovered_at = CASE
           WHEN temperature_alert_events.status = 'recovered'
             OR excluded.last_seen_at - temperature_alert_events.last_seen_at > ?
@@ -453,9 +406,6 @@ async function upsertTemperatureAlert(
       JSON.stringify(input.metadata ?? {}),
       continuityGapSeconds,
       continuityGapSeconds,
-      continuityGapSeconds,
-      continuityGapSeconds,
-      continuityGapSeconds,
       continuityGapSeconds
     )
     .run();
@@ -472,7 +422,7 @@ async function recoverSensorAlerts(db: DB, businessId: string, sensorId: number)
           last_seen_at = ?
       WHERE business_id = ?
         AND sensor_id = ?
-        AND status IN ('active', 'acknowledged')
+        AND status = 'active'
       `
     )
     .bind(now, now, businessId, sensorId)

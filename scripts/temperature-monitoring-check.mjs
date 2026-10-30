@@ -33,6 +33,13 @@ expect('migrations/0086_temperature_gateway_nodes.sql', 'temperature gateway/nod
     source.includes('UNIQUE (node_serial)')
 );
 
+expect('migrations/0106_remove_temperature_acknowledgements.sql', 'temperature alerts remove acknowledgement state without losing alert history', (source) =>
+  source.includes('CREATE TABLE temperature_alert_events_without_acknowledgements') &&
+  source.includes("CASE WHEN status = 'recovered' THEN 'recovered' ELSE 'active' END") &&
+  !source.includes('acknowledged_at') &&
+  !source.includes('acknowledged_by')
+);
+
 expect('migrations/0093_temperature_humidity.sql', 'temperature humidity migration stores AHT20 humidity', (source) =>
   source.includes('ALTER TABLE temps ADD COLUMN humidity_pct REAL') &&
   source.includes('ALTER TABLE temperature_sensor_nodes ADD COLUMN humidity_pct REAL')
@@ -160,7 +167,6 @@ expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gatew
 expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates thresholds and delays high notifications for one continuous hour', (source) =>
   source.includes('evaluateTemperatureReadings') &&
   source.includes('processTemperatureStaleAlerts') &&
-  source.includes('acknowledgeTemperatureAlert') &&
   source.includes('saveTemperatureSensorSetting') &&
   source.includes('HIGH_NOTIFICATION_DELAY_SECONDS = 60 * 60') &&
   source.includes("input.eventType === 'high' ? now + HIGH_NOTIFICATION_DELAY_SECONDS : null") &&
@@ -168,6 +174,7 @@ expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates 
   source.includes('FROM temperature_sensor_nodes sn') &&
   source.includes('sensorName: sensorNames.get(reading.sensor_id)') &&
   source.includes("status = 'recovered'") &&
+  !source.includes('acknowledged') &&
   !source.includes('recordOperationalEventBestEffort')
 );
 
@@ -222,9 +229,8 @@ expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves
   source.includes('claimTemperatureGateway') &&
   source.includes('claimTemperatureSensorNode') &&
   source.includes('saveTemperatureSensorSetting') &&
-  source.includes('acknowledgeTemperatureAlert') &&
   source.includes('save_sensor_settings') &&
-  source.includes('acknowledge_alert')
+  !source.includes('acknowledge_alert')
 );
 
 expect('src/routes/admin/sensors/+page.svelte', 'sensor admin exposes thresholds and active alerts', (source) =>
@@ -233,7 +239,7 @@ expect('src/routes/admin/sensors/+page.svelte', 'sensor admin exposes thresholds
   source.includes('Alert Rules') &&
   source.includes('High') &&
   source.includes('Low') &&
-  source.includes('Acknowledge') &&
+  !source.includes('Acknowledge') &&
   source.includes('activeAlerts')
 );
 

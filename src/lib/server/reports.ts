@@ -37,7 +37,6 @@ export type TemperatureReportRow = {
   event_type: string;
   status: string;
   threshold: number | null;
-  acknowledged_by_name: string;
   recovered_at: number | null;
 };
 
@@ -242,7 +241,6 @@ export async function loadTemperatureReport(
         '' AS event_type,
         '' AS status,
         NULL AS threshold,
-        '' AS acknowledged_by_name,
         NULL AS recovered_at
       FROM temps t
       LEFT JOIN temperature_sensor_nodes sn
@@ -271,13 +269,11 @@ export async function loadTemperatureReport(
         a.event_type,
         a.status,
         a.threshold,
-        COALESCE(u.display_name, u.email, '') AS acknowledged_by_name,
         a.recovered_at
       FROM temperature_alert_events a
       LEFT JOIN temperature_sensor_nodes sn
         ON sn.business_id = a.business_id
         AND sn.sensor_id = a.sensor_id
-      LEFT JOIN users u ON u.id = a.acknowledged_by
       WHERE a.business_id = ?
         AND date(a.last_seen_at, 'unixepoch') BETWEEN ? AND ?
       ORDER BY a.last_seen_at DESC
