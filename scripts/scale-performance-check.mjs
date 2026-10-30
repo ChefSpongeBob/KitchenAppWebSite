@@ -209,9 +209,9 @@ expect('src/routes/app/+page.server.ts', 'homepage temperature sample stays boun
 
 expect('src/routes/app/+page.server.ts', 'homepage preview queries run in the initial parallel batch', (source) =>
   source.includes('const topIdeasPromise =') &&
-  source.includes('const sensorNamesPromise =') &&
+  source.includes('const latestTemperaturesPromise =') &&
   source.includes('topIdeasPromise,') &&
-  source.includes('sensorNamesPromise')
+  source.includes('latestTemperaturesPromise')
 );
 
 expect('src/lib/client/polling.ts', 'shared polling is visibility aware with backoff and in-flight protection', (source) =>

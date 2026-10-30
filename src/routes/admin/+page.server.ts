@@ -232,7 +232,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }));
   const staffedEmployees = staffingByDay.get(endIso) ?? 0;
 
-  const telemetryCutoff = Math.floor(Date.now() / 1000) - 15 * 60;
+  const telemetryCutoff = Math.floor(Date.now() / 1000) - 10 * 60;
   let nodesOperational = 0;
   if (featureAccess.temps) {
     nodesOperational =

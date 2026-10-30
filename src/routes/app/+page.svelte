@@ -18,7 +18,20 @@
     assigned_email: string | null;
   };
   type Idea = { text: string; votes: number };
-  type NodeTemp = { sensorId: number; nodeName: string | null; temperature: number; humidityPct: number | null; ts: number };
+  type NodeTemp = {
+    sensorId: number;
+    nodeName: string | null;
+    temperature: number;
+    humidityPct: number | null;
+    ts: number;
+  };
+  type LatestTemperatureRow = {
+    sensor_id: number;
+    name: string;
+    temperature: number | null;
+    humidity_pct: number | null;
+    ts: number | null;
+  };
   type MenuDoc = { id: string; title: string; file_url: string | null };
   type DailySpecial = {
     category: string;
@@ -91,10 +104,6 @@
   const SAFE_TEMP_LOW_F = 30;
   const SAFE_TEMP_HIGH_F = 41;
   const HOMEPAGE_TEMP_LIMIT = 240;
-
-  const namesBySensor = new Map<number, string | null>(
-    nodeTemps.map((node) => [node.sensorId, node.nodeName])
-  );
 
   $: guidedSteps = [
     {
@@ -202,23 +211,19 @@
     return `${Math.floor(diff / 3600)}h ago`;
   }
 
-  function buildTempState(rows: Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>) {
-    const latestBySensor = new Map<number, { sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>();
-    for (const row of rows) {
-      if (!latestBySensor.has(row.sensor_id)) {
-        latestBySensor.set(row.sensor_id, row);
-        if (latestBySensor.size >= 3) break;
-      }
-    }
-
-    nodeTemps = Array.from(latestBySensor.values())
-      .sort((a, b) => a.sensor_id - b.sensor_id)
+  function buildTempState(
+    rows: Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>,
+    latestRows: LatestTemperatureRow[]
+  ) {
+    nodeTemps = latestRows
+      .filter((row) => row.temperature !== null && row.ts !== null)
+      .slice(0, 3)
       .map((row) => ({
         sensorId: row.sensor_id,
-        nodeName: namesBySensor.get(row.sensor_id) ?? null,
-        temperature: row.temperature,
+        nodeName: row.name,
+        temperature: row.temperature as number,
         humidityPct: row.humidity_pct ?? null,
-        ts: row.ts
+        ts: row.ts as number
       }));
 
     const buckets = new Map<number, { sum: number; count: number }>();
@@ -238,11 +243,13 @@
   }
 
   async function refreshTemps() {
-    const response = await fetch(`/api/temps?limit=${HOMEPAGE_TEMP_LIMIT}`);
+    const response = await fetch(`/api/temps?view=summary&limit=${HOMEPAGE_TEMP_LIMIT}`);
     if (!response.ok) return;
-    const rows = (await response.json()) as Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>;
-    if (!rows?.length) return;
-    buildTempState(rows);
+    const payload = (await response.json()) as {
+      latest?: LatestTemperatureRow[];
+      history?: Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>;
+    };
+    buildTempState(payload.history ?? [], payload.latest ?? []);
   }
 
   async function refreshIdeas() {

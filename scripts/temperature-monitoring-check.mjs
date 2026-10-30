@@ -73,9 +73,8 @@ expect('src/lib/server/temperatureDeviceProvisioning.ts', 'node registration nee
 );
 
 expect('src/routes/temper/+page.server.ts', 'live temperature labels use the active sensor registry', (source) =>
-  source.includes('FROM temperature_sensor_nodes') &&
-  source.includes('is_active = 1') &&
-  source.includes('revoked_at IS NULL') &&
+  source.includes('loadLatestTemperatureSnapshots') &&
+  source.includes('nodes: await loadLatestTemperatureSnapshots') &&
   !source.includes('FROM sensor_nodes')
 );
 
@@ -151,6 +150,7 @@ expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute sta
   source.includes('ONLINE_WINDOW_MS = 10 * 60 * 1000') &&
   source.includes('SAFE_TEMP_LOW_F = 30') &&
   source.includes('SAFE_TEMP_HIGH_F = 41') &&
+  source.includes("view=latest") &&
   source.includes("'Online !'") &&
   source.includes('.node-head span.offline') &&
   source.includes('#2563eb')
@@ -173,6 +173,11 @@ expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates 
   source.includes('continuityGapSeconds') &&
   source.includes('FROM temperature_sensor_nodes sn') &&
   source.includes('sensorName: sensorNames.get(reading.sensor_id)') &&
+  source.includes("['high', 'low', 'stale', 'offline']") &&
+  source.includes("eventType === 'high' ? ['low', 'stale', 'offline']") &&
+  source.includes('activeConnectivity') &&
+  source.includes("connectivityType === 'offline' ? 'stale' : 'offline'") &&
+  source.includes("temperature_alert_events.status != 'active'") &&
   source.includes("status = 'recovered'") &&
   !source.includes('acknowledged') &&
   !source.includes('recordOperationalEventBestEffort')

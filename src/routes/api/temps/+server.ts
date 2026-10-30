@@ -4,7 +4,11 @@ import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
 import { ensureTenantSchema } from '$lib/server/tenant';
 import { normalizeDeviceSerial } from '$lib/server/temperatureSensors';
 import { resolveGatewayNodeReading } from '$lib/server/temperatureDeviceProvisioning';
-import { evaluateTemperatureReadings, type TemperatureReading } from '$lib/server/temperatureMonitoring';
+import {
+  evaluateTemperatureReadings,
+  loadLatestTemperatureSnapshots,
+  type TemperatureReading
+} from '$lib/server/temperatureMonitoring';
 
 type TempRow = {
   sensor_id: number;
@@ -123,6 +127,7 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
     ? Math.max(1, Math.min(MAX_TEMP_QUERY_LIMIT, Math.floor(requestedLimit)))
     : DEFAULT_TEMP_QUERY_LIMIT;
   const sensor = url.searchParams.get('sensor');
+  const view = url.searchParams.get('view')?.trim().toLowerCase() ?? '';
 
   if (sensor) {
     const sensorId = Number(sensor);
@@ -141,6 +146,40 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
     return json(result.results ?? [], {
       headers: { 'cache-control': TENANT_TEMP_CACHE_CONTROL }
     });
+  }
+
+  if (view === 'latest') {
+    const latest = await loadLatestTemperatureSnapshots(db, businessId, limit);
+    return json(latest, {
+      headers: { 'cache-control': TENANT_TEMP_CACHE_CONTROL }
+    });
+  }
+
+  if (view === 'summary') {
+    const [latest, history] = await Promise.all([
+      loadLatestTemperatureSnapshots(db, businessId, 25),
+      db
+        .prepare(
+          `
+          SELECT sensor_id, temperature, humidity_pct, ts
+          FROM temps
+          WHERE business_id = ?
+          ORDER BY ts DESC
+          LIMIT ?
+          `
+        )
+        .bind(businessId, limit)
+        .all<TempRow>()
+    ]);
+    return json(
+      {
+        latest,
+        history: history.results ?? []
+      },
+      {
+        headers: { 'cache-control': TENANT_TEMP_CACHE_CONTROL }
+      }
+    );
   }
 
   const result = await db

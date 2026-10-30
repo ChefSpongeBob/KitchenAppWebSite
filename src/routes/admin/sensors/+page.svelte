@@ -90,12 +90,26 @@
   let customSsid = '';
   let wifiPassword = '';
   let setupError = '';
+  const ONLINE_WINDOW_SECONDS = 10 * 60;
+  const alertPriority: Record<ActiveAlert['event_type'], number> = {
+    offline: 0,
+    high: 1,
+    low: 2,
+    stale: 3,
+    recovered: 4
+  };
 
   $: gatewayDevices = data.gateways;
   $: activeSensorNodes = data.sensorNodes.filter((node) => node.isActive === 1);
-  $: activeSensorCount = activeSensorNodes.length;
-  $: activeGatewayCount = gatewayDevices.filter((device) => device.isActive === 1).length;
-  $: latestSensorSeen = Math.max(0, ...data.sensorNodes.map((node) => node.lastSeenAt ?? 0));
+  $: registeredSensorCount = activeSensorNodes.length;
+  $: registeredGatewayCount = gatewayDevices.filter((device) => device.isActive === 1).length;
+  $: onlineSensorCount = activeSensorNodes.filter((node) => isOnline(node.lastSeenAt)).length;
+  $: onlineGatewayCount = gatewayDevices.filter((device) => device.isActive === 1 && isOnline(device.lastSeenAt)).length;
+  $: latestCheckIn = Math.max(
+    0,
+    ...data.sensorNodes.map((node) => node.lastSeenAt ?? 0),
+    ...gatewayDevices.map((device) => device.lastSeenAt ?? 0)
+  );
   $: settingsBySensor = new Map(data.sensorSettings.map((setting) => [setting.sensor_id, setting]));
   $: sensorIds = Array.from(
     new Set([
@@ -103,7 +117,19 @@
       ...activeSensorNodes.map((node) => node.sensorId)
     ])
   ).sort((a, b) => a - b);
-  $: activeAlertCount = data.activeAlerts.length;
+  $: currentAlerts = (() => {
+    const alerts = new Map<number, ActiveAlert>();
+    for (const alert of data.activeAlerts) {
+      const current = alerts.get(alert.sensor_id);
+      if (!current || alertPriority[alert.event_type] < alertPriority[current.event_type]) {
+        alerts.set(alert.sensor_id, alert);
+      }
+    }
+    return Array.from(alerts.values()).sort(
+      (a, b) => alertPriority[a.event_type] - alertPriority[b.event_type] || b.last_seen_at - a.last_seen_at
+    );
+  })();
+  $: activeAlertCount = currentAlerts.length;
 
   function formatShortTime(value: number | null) {
     if (!value) return 'None';
@@ -123,6 +149,10 @@
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  function isOnline(value: number | null) {
+    return Boolean(value && Math.floor(Date.now() / 1000) - value < ONLINE_WINDOW_SECONDS);
   }
 
   function sensorName(sensorId: number) {
@@ -264,9 +294,9 @@
 
     <section class="status-section">
       <div class="status-strip">
-        <div><span>Gateways</span><strong>{activeGatewayCount}/{gatewayDevices.length}</strong></div>
-        <div><span>Sensors</span><strong>{activeSensorCount}/{data.sensorNodes.length}</strong></div>
-        <div><span>Last Check-In</span><strong>{formatShortTime(latestSensorSeen)}</strong></div>
+        <div><span>Gateways Online</span><strong>{onlineGatewayCount}/{registeredGatewayCount}</strong></div>
+        <div><span>Sensors Online</span><strong>{onlineSensorCount}/{registeredSensorCount}</strong></div>
+        <div><span>Last Check-In</span><strong>{formatShortTime(latestCheckIn)}</strong></div>
         <div><span>Active Alerts</span><strong>{activeAlertCount}</strong></div>
         <div><span>Alert Rules</span><strong>{sensorIds.length}</strong></div>
       </div>
@@ -277,11 +307,11 @@
         <h2>Active Alerts</h2>
         <span>{activeAlertCount}</span>
       </header>
-      {#if data.activeAlerts.length === 0}
+      {#if currentAlerts.length === 0}
         <p class="empty-line">No active alerts.</p>
       {:else}
         <div class="alert-list">
-          {#each data.activeAlerts as alert}
+          {#each currentAlerts as alert}
             <div class="alert-row" data-alert-type={alert.event_type}>
               <div>
                 <strong>{sensorName(alert.sensor_id)}</strong>
@@ -301,7 +331,7 @@
       <header class="section-title"><h2>Registered Equipment</h2></header>
 
       <div class="equipment-group">
-        <header><h3>Gateways</h3><span>{activeGatewayCount} active</span></header>
+        <header><h3>Gateways</h3><span>{registeredGatewayCount} registered</span></header>
         {#if gatewayDevices.length === 0}
           <p class="empty-line">No gateways registered.</p>
         {:else}
@@ -312,7 +342,9 @@
                   <span class="unit-name"><span class="material-icons" aria-hidden="true">router</span><strong>{device.displayName}</strong></span>
                   <span>{device.externalDeviceId}</span>
                   <span>{formatShortTime(device.lastSeenAt)}</span>
-                  <small>{device.isActive === 1 ? 'Active' : 'Revoked'}</small>
+                  <small class:offline={device.isActive === 1 && !isOnline(device.lastSeenAt)}>
+                    {device.isActive !== 1 ? 'Revoked' : isOnline(device.lastSeenAt) ? 'Online' : 'Offline'}
+                  </small>
                   <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
                 </summary>
                 <div class="unit-details">
@@ -379,7 +411,7 @@
       </div>
 
       <div class="equipment-group">
-        <header><h3>Sensor Nodes</h3><span>{activeSensorCount} active</span></header>
+        <header><h3>Sensor Nodes</h3><span>{registeredSensorCount} registered</span></header>
         {#if data.sensorNodes.length === 0}
           <p class="empty-line">No sensor nodes registered.</p>
         {:else}
@@ -390,7 +422,9 @@
                   <span class="unit-name"><span class="material-icons" aria-hidden="true">device_thermostat</span><strong>{node.displayName}</strong></span>
                   <span>{node.nodeSerial}</span>
                   <span>{node.gatewayName ?? 'Gateway'}</span>
-                  <small>{node.isActive === 1 ? formatShortTime(node.lastSeenAt) : 'Revoked'}</small>
+                  <small class:offline={node.isActive === 1 && !isOnline(node.lastSeenAt)}>
+                    {node.isActive !== 1 ? 'Revoked' : isOnline(node.lastSeenAt) ? 'Online' : 'Offline'}
+                  </small>
                   <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
                 </summary>
                 <div class="unit-details sensor-details">
@@ -582,6 +616,11 @@
   .rule-row summary small {
     color: var(--color-text-muted);
     font-size: 0.72rem;
+  }
+
+  .unit-row summary small.offline {
+    color: color-mix(in srgb, var(--color-error) 82%, var(--color-text));
+    font-weight: var(--weight-semibold);
   }
 
   .empty-line {

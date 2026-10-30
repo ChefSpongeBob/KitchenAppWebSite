@@ -25,6 +25,14 @@ export type TemperatureSensorSetting = {
   is_alerting_enabled: number;
 };
 
+export type LatestTemperatureSnapshot = TemperatureSensorSetting & {
+  name: string;
+  last_seen_at: number | null;
+  temperature: number | null;
+  humidity_pct: number | null;
+  ts: number | null;
+};
+
 export type TemperatureAlertEvent = {
   id: string;
   business_id: string;
@@ -211,6 +219,63 @@ export async function loadTemperatureSettingsMap(db: DB, businessId: string) {
   return new Map(settings.map((setting) => [setting.sensor_id, setting]));
 }
 
+export async function loadLatestTemperatureSnapshots(
+  db: DB,
+  businessId: string,
+  requestedLimit = 25
+) {
+  await ensureTemperatureMonitoringSchema(db);
+  const limit = Math.max(1, Math.min(500, Math.floor(requestedLimit)));
+  const rows = await db
+    .prepare(
+      `
+      SELECT
+        sn.sensor_id,
+        sn.display_name AS name,
+        sn.last_seen_at,
+        COALESCE(tss.high_threshold, ?) AS high_threshold,
+        COALESCE(tss.low_threshold, ?) AS low_threshold,
+        COALESCE(tss.stale_after_minutes, ?) AS stale_after_minutes,
+        COALESCE(tss.offline_after_minutes, ?) AS offline_after_minutes,
+        COALESCE(tss.alert_cooldown_minutes, ?) AS alert_cooldown_minutes,
+        COALESCE(tss.is_alerting_enabled, 1) AS is_alerting_enabled,
+        latest.temperature,
+        latest.humidity_pct,
+        latest.ts
+      FROM temperature_sensor_nodes sn
+      LEFT JOIN temperature_sensor_settings tss
+        ON tss.business_id = sn.business_id
+        AND tss.sensor_id = sn.sensor_id
+      LEFT JOIN temps latest
+        ON latest.id = (
+          SELECT t.id
+          FROM temps t
+          WHERE t.business_id = sn.business_id
+            AND t.sensor_id = sn.sensor_id
+          ORDER BY t.ts DESC, t.id DESC
+          LIMIT 1
+        )
+      WHERE sn.business_id = ?
+        AND sn.is_active = 1
+        AND sn.revoked_at IS NULL
+      ORDER BY sn.sensor_id ASC
+      LIMIT ?
+      `
+    )
+    .bind(
+      DEFAULT_HIGH_THRESHOLD,
+      DEFAULT_LOW_THRESHOLD,
+      DEFAULT_STALE_MINUTES,
+      DEFAULT_OFFLINE_MINUTES,
+      DEFAULT_COOLDOWN_MINUTES,
+      businessId,
+      limit
+    )
+    .all<LatestTemperatureSnapshot>();
+
+  return rows.results ?? [];
+}
+
 async function loadTemperatureSensorNames(db: DB, businessId: string) {
   const rows = await db
     .prepare(
@@ -304,6 +369,10 @@ export async function saveTemperatureSensorSetting(
       input.updatedBy ?? null
     )
     .run();
+
+  if (!input.isAlertingEnabled) {
+    await recoverSensorAlerts(db, input.businessId, sensorId);
+  }
 }
 
 export async function loadActiveTemperatureAlerts(db: DB, businessId: string) {
@@ -389,6 +458,11 @@ async function upsertTemperatureAlert(
           ELSE COALESCE(temperature_alert_events.notification_ready_at, excluded.notification_ready_at)
         END,
         metadata_json = excluded.metadata_json
+      WHERE temperature_alert_events.status != 'active'
+        OR temperature_alert_events.temperature IS NOT excluded.temperature
+        OR temperature_alert_events.threshold IS NOT excluded.threshold
+        OR temperature_alert_events.reading_ts IS NOT excluded.reading_ts
+        OR temperature_alert_events.metadata_json != excluded.metadata_json
       `
     )
     .bind(
@@ -411,8 +485,15 @@ async function upsertTemperatureAlert(
     .run();
 }
 
-async function recoverSensorAlerts(db: DB, businessId: string, sensorId: number) {
+async function recoverSensorAlertTypes(
+  db: DB,
+  businessId: string,
+  sensorId: number,
+  eventTypes: TemperatureAlertType[]
+) {
+  if (eventTypes.length === 0) return;
   const now = nowSeconds();
+  const placeholders = eventTypes.map(() => '?').join(', ');
   await db
     .prepare(
       `
@@ -423,10 +504,15 @@ async function recoverSensorAlerts(db: DB, businessId: string, sensorId: number)
       WHERE business_id = ?
         AND sensor_id = ?
         AND status = 'active'
+        AND event_type IN (${placeholders})
       `
     )
-    .bind(now, now, businessId, sensorId)
+    .bind(now, now, businessId, sensorId, ...eventTypes)
     .run();
+}
+
+async function recoverSensorAlerts(db: DB, businessId: string, sensorId: number) {
+  await recoverSensorAlertTypes(db, businessId, sensorId, ['high', 'low', 'stale', 'offline']);
 }
 
 export async function evaluateTemperatureReadings(
@@ -443,7 +529,10 @@ export async function evaluateTemperatureReadings(
 
   for (const reading of input.readings) {
     const setting = settingsMap.get(reading.sensor_id) ?? defaultTemperatureSetting(reading.sensor_id);
-    if (setting.is_alerting_enabled !== 1) continue;
+    if (setting.is_alerting_enabled !== 1) {
+      await recoverSensorAlerts(db, input.businessId, reading.sensor_id);
+      continue;
+    }
 
     let eventType: TemperatureAlertType | null = null;
     let threshold: number | null = null;
@@ -456,9 +545,16 @@ export async function evaluateTemperatureReadings(
     }
 
     if (!eventType) {
-      await recoverSensorAlerts(db, input.businessId, reading.sensor_id);
+      await recoverSensorAlertTypes(db, input.businessId, reading.sensor_id, ['high', 'low', 'stale', 'offline']);
       continue;
     }
+
+    await recoverSensorAlertTypes(
+      db,
+      input.businessId,
+      reading.sensor_id,
+      eventType === 'high' ? ['low', 'stale', 'offline'] : ['high', 'stale', 'offline']
+    );
 
     await upsertTemperatureAlert(db, {
       businessId: input.businessId,
@@ -527,25 +623,60 @@ export async function processTemperatureStaleAlerts(
       }
     >();
 
+  const connectivityRows = await db
+    .prepare(
+      `
+      SELECT sensor_id, event_type
+      FROM temperature_alert_events
+      WHERE business_id = ?
+        AND status = 'active'
+        AND event_type IN ('stale', 'offline')
+      LIMIT 1000
+      `
+    )
+    .bind(businessId)
+    .all<{ sensor_id: number; event_type: 'stale' | 'offline' }>();
+  const activeConnectivity = new Map<number, Set<'stale' | 'offline'>>();
+  for (const alert of connectivityRows.results ?? []) {
+    const types = activeConnectivity.get(alert.sensor_id) ?? new Set<'stale' | 'offline'>();
+    types.add(alert.event_type);
+    activeConnectivity.set(alert.sensor_id, types);
+  }
+
   let processed = 0;
   for (const row of rows.results ?? []) {
-    if (row.is_alerting_enabled !== 1 || !row.last_reading_ts) continue;
+    if (row.is_alerting_enabled !== 1) continue;
+    if (!row.last_reading_ts) continue;
     const staleAt = row.last_reading_ts + row.stale_after_minutes * 60;
     const offlineAt = row.last_reading_ts + row.offline_after_minutes * 60;
     const eventType: TemperatureAlertType | null =
       now >= offlineAt ? 'offline' : now >= staleAt ? 'stale' : null;
-    if (!eventType) continue;
-
-    await upsertTemperatureAlert(db, {
-      businessId,
-      sensorId: row.sensor_id,
-      eventType,
-      readingTs: row.last_reading_ts,
-      metadata: {
-        sensorName: row.display_name.trim() || `Sensor ${row.sensor_id}`,
-        lastReadingTs: row.last_reading_ts
+    const activeTypes = activeConnectivity.get(row.sensor_id) ?? new Set<'stale' | 'offline'>();
+    if (!eventType) {
+      if (activeTypes.size > 0) {
+        await recoverSensorAlertTypes(db, businessId, row.sensor_id, Array.from(activeTypes));
       }
-    });
+      continue;
+    }
+
+    const connectivityType = eventType as 'stale' | 'offline';
+    const oppositeType = connectivityType === 'offline' ? 'stale' : 'offline';
+    if (activeTypes.has(oppositeType)) {
+      await recoverSensorAlertTypes(db, businessId, row.sensor_id, [oppositeType]);
+    }
+
+    if (!activeTypes.has(connectivityType)) {
+      await upsertTemperatureAlert(db, {
+        businessId,
+        sensorId: row.sensor_id,
+        eventType,
+        readingTs: row.last_reading_ts,
+        metadata: {
+          sensorName: row.display_name.trim() || `Sensor ${row.sensor_id}`,
+          lastReadingTs: row.last_reading_ts
+        }
+      });
+    }
     processed += 1;
   }
 

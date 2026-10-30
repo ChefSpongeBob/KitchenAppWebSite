@@ -8,6 +8,7 @@ import { loadTodayShifts } from '$lib/server/schedules';
 import { requireBusinessId } from '$lib/server/tenant';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
 import { hasBusinessCapability } from '$lib/server/permissions';
+import { loadLatestTemperatureSnapshots } from '$lib/server/temperatureMonitoring';
 
 type HomeTask = {
   id: string;
@@ -29,11 +30,6 @@ type TempRow = {
   temperature: number;
   humidity_pct: number | null;
   ts: number;
-};
-
-type NodeNameRow = {
-  sensor_id: number;
-  name: string;
 };
 
 type MenuDoc = {
@@ -241,19 +237,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         'whiteboard preview'
       )
     : Promise.resolve({ results: [] as IdeaRow[] });
-  const sensorNamesPromise = featureAccess.temps
-    ? safeRows(
-        db
-          .prepare(
-            `SELECT sensor_id, display_name AS name
-             FROM temperature_sensor_nodes
-             WHERE business_id = ? AND is_active = 1 AND revoked_at IS NULL`
-          )
-          .bind(businessId)
-          .all<NodeNameRow>(),
-        'sensor labels'
-      )
-    : Promise.resolve({ results: [] as NodeNameRow[] });
+  const latestTemperaturesPromise = featureAccess.temps
+    ? safeHomeData(loadLatestTemperatureSnapshots(db, businessId, 25), [], 'latest temperatures')
+    : Promise.resolve([]);
   const [
     announcement,
     canEditAnnouncement,
@@ -265,7 +251,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     tempsResult,
     menuDocsResult,
     topIdeasResult,
-    sensorNamesResult
+    latestTemperatures
   ] = await Promise.all([
     announcementPromise,
     announcementEditorPromise,
@@ -277,7 +263,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     tempsPromise,
     menuDocsPromise,
     topIdeasPromise,
-    sensorNamesPromise
+    latestTemperaturesPromise
   ]);
 
   const userName = user?.display_name || user?.email || 'Team';
@@ -287,19 +273,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
 
   const rows = tempsResult.results ?? [];
-  const latestBySensor = new Map<number, TempRow>();
-  for (const row of rows) {
-    if (!latestBySensor.has(row.sensor_id)) {
-      latestBySensor.set(row.sensor_id, row);
-      if (latestBySensor.size >= 3) break;
-    }
-  }
-  const nodeTemps = Array.from(latestBySensor.values()).sort((a, b) => a.sensor_id - b.sensor_id);
-
-  const namesBySensor = new Map<number, string>();
-  for (const row of sensorNamesResult.results ?? []) {
-    namesBySensor.set(row.sensor_id, row.name);
-  }
+  const nodeTemps = latestTemperatures
+    .filter((row) => row.temperature !== null && row.ts !== null)
+    .slice(0, 3);
 
   const bucketAverages = new Map<number, { sum: number; count: number }>();
   for (const row of rows) {
@@ -331,10 +307,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     topIdeas: (topIdeasResult.results ?? []).map((r) => ({ text: r.content, votes: r.votes })),
     nodeTemps: nodeTemps.map((r) => ({
       sensorId: r.sensor_id,
-      nodeName: namesBySensor.get(r.sensor_id) ?? null,
-      temperature: r.temperature,
+      nodeName: r.name,
+      temperature: r.temperature as number,
       humidityPct: r.humidity_pct,
-      ts: r.ts
+      ts: r.ts as number
     })),
     tempSeries: { avg },
     refreshedAt: Math.floor(Date.now() / 1000)

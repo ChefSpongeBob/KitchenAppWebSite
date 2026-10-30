@@ -4,27 +4,47 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { startVisiblePolling } from '$lib/client/polling';
 
-  type NodeName = {
+  type TemperatureNode = {
     sensor_id: number;
     name: string;
+    last_seen_at: number | null;
+    high_threshold: number;
+    low_threshold: number;
+    stale_after_minutes: number;
+    offline_after_minutes: number;
+    alert_cooldown_minutes: number;
+    is_alerting_enabled: number;
+    temperature: number | null;
+    humidity_pct: number | null;
+    ts: number | null;
   };
 
   export let data: {
-    nodeNames?: NodeName[];
+    nodes?: TemperatureNode[];
   };
 
-  let latest: Record<number, number> = {};
-  let humidity: Record<number, number> = {};
-  let lastSeen: Record<number, number> = {};
-  let seenSensorIds: number[] = [];
+  const initialNodes = data.nodes ?? [];
+  let latest: Record<number, number> = Object.fromEntries(
+    initialNodes.filter((node) => node.temperature !== null).map((node) => [node.sensor_id, node.temperature as number])
+  );
+  let humidity: Record<number, number> = Object.fromEntries(
+    initialNodes.filter((node) => node.humidity_pct !== null).map((node) => [node.sensor_id, node.humidity_pct as number])
+  );
+  let lastSeen: Record<number, number> = Object.fromEntries(
+    initialNodes.filter((node) => node.last_seen_at !== null).map((node) => [node.sensor_id, (node.last_seen_at as number) * 1000])
+  );
+  let readingSeen: Record<number, number> = Object.fromEntries(
+    initialNodes.filter((node) => node.ts !== null).map((node) => [node.sensor_id, (node.ts as number) * 1000])
+  );
+  let seenSensorIds: number[] = initialNodes.map((node) => node.sensor_id);
   const SAFE_TEMP_LOW_F = 30;
   const SAFE_TEMP_HIGH_F = 41;
   const ONLINE_WINDOW_MS = 10 * 60 * 1000;
 
-  const URL = '/api/temps?limit=180';
+  const URL = '/api/temps?view=latest&limit=25';
 
   const nodeNames: Record<number, string> = {
-    ...(data.nodeNames ?? []).reduce<Record<number, string>>((acc, row) => {
+    ...initialNodes.reduce<Record<number, string>>((acc, row) => {
       acc[row.sensor_id] = row.name;
       return acc;
     }, {})
@@ -39,32 +59,35 @@
       const latestMap: Record<number, number> = {};
       const humidityMap: Record<number, number> = {};
       const seen: Record<number, number> = {};
+      const readingTimes: Record<number, number> = {};
       const seenIds = new Set<number>();
 
       for (const row of responseData) {
-        const sensor = row.sensor_id;
+        const sensor = Number(row.sensor_id);
         const temp = Number(row.temperature);
-        const tsMs = row.ts > 1e10 ? row.ts : row.ts * 1000;
-        if (!Number.isFinite(sensor) || !Number.isFinite(temp) || !Number.isFinite(tsMs)) continue;
+        const ts = Number(row.ts);
+        const lastSeenAt = Number(row.last_seen_at);
+        if (!Number.isFinite(sensor)) continue;
         seenIds.add(sensor);
 
-        if (latestMap[sensor] === undefined) {
+        if (row.temperature !== null && Number.isFinite(temp)) {
           latestMap[sensor] = temp;
         }
 
         const humidityPct = Number(row.humidity_pct);
-        if (Number.isFinite(humidityPct) && humidityPct >= 0 && humidityPct <= 100 && humidityMap[sensor] === undefined) {
+        if (row.humidity_pct !== null && Number.isFinite(humidityPct) && humidityPct >= 0 && humidityPct <= 100) {
           humidityMap[sensor] = humidityPct;
         }
 
-        if (seen[sensor] === undefined) {
-          seen[sensor] = tsMs;
-        }
+        if (row.last_seen_at !== null && Number.isFinite(lastSeenAt)) seen[sensor] = lastSeenAt * 1000;
+        if (row.ts !== null && Number.isFinite(ts)) readingTimes[sensor] = ts * 1000;
+
       }
 
       latest = latestMap;
       humidity = humidityMap;
       lastSeen = seen;
+      readingSeen = readingTimes;
       seenSensorIds = Array.from(seenIds).sort((a, b) => a - b);
     } catch (err) {
       console.error('Failed to load temps:', err);
@@ -91,7 +114,10 @@
 
   function formatTime(ts?: number) {
     if (!ts) return '--';
-    return new Date(ts).toLocaleTimeString([], {
+    const date = new Date(ts);
+    const sameDay = date.toDateString() === new Date().toDateString();
+    return date.toLocaleString([], {
+      ...(sameDay ? {} : { month: 'short', day: 'numeric' }),
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -113,7 +139,7 @@
       sensorId: node,
       name: nodeNames[node] ?? `Node ${node}`,
       temperature: latest[node],
-      ts: lastSeen[node]
+      ts: readingSeen[node]
     }));
 </script>
 
@@ -172,11 +198,11 @@
         </div>
 
         {#if latest[node] !== undefined}
-          <div class="temp">{latest[node]}F</div>
+          <div class="temp">{latest[node].toFixed(1)}F</div>
           {#if humidity[node] !== undefined}
             <small class="humidity">Humidity: {humidity[node].toFixed(0)}%</small>
           {/if}
-          <small class="seen">Last update: {formatTime(lastSeen[node])}</small>
+          <small class="seen">Last update: {formatTime(readingSeen[node])}</small>
         {:else}
           <div class="temp offline">--</div>
           <small class="seen">No recent data</small>
