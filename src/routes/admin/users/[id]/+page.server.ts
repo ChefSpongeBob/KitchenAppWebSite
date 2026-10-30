@@ -242,7 +242,8 @@ export const actions: Actions = {
 	add_verification_check: ({ request, locals }) => addEmployeeVerificationCheck(request, locals),
 	update_verification_check: ({ request, locals }) =>
 		updateEmployeeVerificationCheck(request, locals),
-	send_onboarding_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
+	send_onboarding_package: ({ request, locals, url, platform }) =>
+		sendEmployeeOnboardingPackage(request, locals, url.origin, platform?.env),
 	verify_i9: ({ request, locals }) => verifyEmployeeI9(request, locals),
 	approve_onboarding_packet: ({ request, locals }) =>
 		approveEmployeeOnboardingPackage(request, locals),

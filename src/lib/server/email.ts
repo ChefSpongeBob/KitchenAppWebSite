@@ -248,6 +248,50 @@ export async function sendInviteEmail({
   });
 }
 
+export async function sendEmployeeOnboardingPackageEmail({
+  env,
+  origin,
+  employeeEmail,
+  employeeName,
+  businessName,
+  packageId
+}: {
+  env?: EmailEnv | null;
+  origin: string;
+  employeeEmail: string;
+  employeeName?: string | null;
+  businessName?: string | null;
+  packageId: string;
+}) {
+  const baseUrl = getAppBaseUrl(origin, env);
+  const onboardingUrl = `${baseUrl}/onboarding`;
+  const workspaceName = businessName?.trim() || 'Your employer';
+  const greetingName = employeeName?.trim() || 'there';
+  const body = `${workspaceName} sent you an employee onboarding packet. Sign in to complete and submit it for review.`;
+
+  return sendTransactionalEmail({
+    env,
+    to: employeeEmail,
+    subject: `${workspaceName} sent your onboarding packet`,
+    html: renderCriminiEmail({
+      eyebrow: 'Employee Onboarding',
+      title: `Hello ${greetingName}`,
+      body,
+      actionLabel: 'Open onboarding packet',
+      actionUrl: onboardingUrl
+    }),
+    text: [
+      `Hello ${greetingName},`,
+      '',
+      body,
+      onboardingUrl,
+      '',
+      'Crimini by NNS, LLC'
+    ].join('\n'),
+    idempotencyKey: `onboarding-package/${packageId}`
+  });
+}
+
 function signupPlanDetails(planTier: string) {
   const normalized = planTier.trim().toLowerCase();
   if (normalized === 'growth' || normalized === 'medium') {

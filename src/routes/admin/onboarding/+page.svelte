@@ -455,35 +455,29 @@
           <span class="section-kicker">Setup</span>
           <strong>Packet Forms</strong>
         </span>
-        <em>{data.templateItems.length ? `${data.templateItems.length} active` : 'Not installed'}</em>
+        <em>{data.templateItems.length ? `${data.templateItems.length} saved` : 'None uploaded yet.'}</em>
       </summary>
 
       <div class="standard-packet" aria-label="Base employee packet forms">
         <div class="standard-packet-head">
           <div>
-            <span class="section-kicker">Recommended Packet</span>
-            <strong>{data.recommendations.state ? `${data.recommendations.state} employee onboarding` : 'Employee onboarding'}</strong>
-            <p>
-              Install these to create the packet employees receive from their onboarding link. Personal forms are completed in Crimini;
-              federal tax and eligibility records use the current official PDFs.
-            </p>
+            <strong>Standard forms</strong>
+            <span>{data.recommendations.items.length} included</span>
           </div>
           <form method="POST" action="?/install_standard_packet&view=forms" use:enhance={withFeedback}>
-            <button type="submit">{data.templateItems.length ? 'Add Missing Forms' : 'Install Base Forms'}</button>
+            <button type="submit">Customize Forms</button>
           </form>
         </div>
 
         <div class="needed-list">
           {#each data.recommendations.items as item}
-            <div>
-              <span>
-                <strong>{item.title}</strong>
-                <small>{item.description}</small>
-              </span>
-              <em>{item.type === 'form' ? 'Employee fills out' : item.type === 'document' ? 'Upload needed' : 'Signature'}</em>
-            </div>
+            <span>{item.title}</span>
           {/each}
         </div>
+      </div>
+
+      <div class="requirements-head">
+        <strong>Saved forms</strong>
       </div>
 
       <details class="add-requirement">
@@ -497,42 +491,26 @@
         >
           <label>
             <span>Type</span>
-            <select name="item_type">
-              <option value="form">Employee Information Form</option>
+            <select name="item_kind">
               <option value="document">Completed Document Upload</option>
               <option value="acknowledgement">Policy Acknowledgement</option>
+              <option value="state_withholding">State Withholding Form</option>
             </select>
           </label>
 
           <label>
-            <span>Form</span>
-            <select name="form_key">
-              <option value="personal_information">Personal Information</option>
-              <option value="emergency_contact">Emergency Contact</option>
-              <option value="payroll_setup">Payroll Setup</option>
-              <option value="federal_i9">Federal I-9</option>
-              <option value="federal_w4">Federal W-4</option>
-              <option value="state_withholding">State Withholding</option>
-            </select>
+            <span>Name</span>
+            <input name="title" placeholder="Employee handbook" required />
           </label>
-
-          <label>
-            <span>Title</span>
-            <input name="title" placeholder="I-9 employment eligibility" required />
-          </label>
-
-          <label>
-            <span>Order</span>
-            <input name="sort_order" type="number" step="1" value={data.templateItems.length} />
-          </label>
+          <input name="sort_order" type="hidden" value={data.templateItems.length + data.recommendations.items.length} />
 
           <label class="wide">
-            <span>Instructions</span>
+            <span>Employee Instructions</span>
             <textarea name="description" rows="3"></textarea>
           </label>
 
           <label>
-            <span>Upload PDF/Image</span>
+            <span>PDF or Image</span>
             <input name="source_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif" />
           </label>
 
@@ -548,19 +526,8 @@
         </form>
       </details>
 
-      <div class="requirements-head">
-        <span class="section-kicker">Current Packet</span>
-        <strong>{data.templateItems.length ? 'Configured forms' : 'No custom forms yet'}</strong>
-        <p>
-          These are the active packet items used when you send onboarding. Open a form below to edit instructions, attach a source file,
-          hide it, or delete it.
-        </p>
-      </div>
-
       <div class="requirement-list" aria-label="Current onboarding packet forms">
-        {#if data.templateItems.length === 0}
-          <p class="empty">No packet forms yet. Defaults will be used until this packet is customized.</p>
-        {:else}
+        {#if data.templateItems.length > 0}
           {#each data.templateItems as item}
             <details class="requirement-row">
               <summary>
@@ -568,7 +535,7 @@
                   <strong>{item.title}</strong>
                   <small>{formatStatus(item.item_type)}</small>
                 </span>
-                <em>{item.is_active === 1 ? 'Active' : 'Hidden'}</em>
+                <em>{item.is_active !== 1 ? 'Hidden' : (item.item_type === 'acknowledgement' || item.form_key === 'state_withholding') && !item.source_file_url ? 'Needs upload' : 'Active'}</em>
               </summary>
 
               <form
@@ -582,36 +549,15 @@
                 <input type="hidden" name="existing_source_file_url" value={item.source_file_url} />
                 <input type="hidden" name="existing_source_file_name" value={item.source_file_name} />
 
-                <label>
-                  <span>Type</span>
-                  <select name="item_type">
-                    <option value="form" selected={item.item_type === 'form'}>Employee Information Form</option>
-                    <option value="document" selected={item.item_type === 'document'}>Completed Document Upload</option>
-                    <option value="acknowledgement" selected={item.item_type === 'acknowledgement'}>Policy Acknowledgement</option>
-                  </select>
-                </label>
+                <input type="hidden" name="item_type" value={item.item_type} />
+                <input type="hidden" name="form_key" value={item.form_key} />
 
                 <label>
-                  <span>Form</span>
-                  <select name="form_key">
-                    <option value="personal_information" selected={item.form_key === 'personal_information'}>Personal Information</option>
-                    <option value="emergency_contact" selected={item.form_key === 'emergency_contact'}>Emergency Contact</option>
-                    <option value="payroll_setup" selected={item.form_key === 'payroll_setup'}>Payroll Setup</option>
-                    <option value="federal_i9" selected={item.form_key === 'federal_i9'}>Federal I-9</option>
-                    <option value="federal_w4" selected={item.form_key === 'federal_w4'}>Federal W-4</option>
-                    <option value="state_withholding" selected={item.form_key === 'state_withholding'}>State Withholding</option>
-                  </select>
-                </label>
-
-                <label>
-                  <span>Title</span>
+                  <span>Name</span>
                   <input name="title" value={item.title} required />
                 </label>
 
-                <label>
-                  <span>Order</span>
-                  <input name="sort_order" type="number" step="1" value={item.sort_order} />
-                </label>
+                <input name="sort_order" type="hidden" value={item.sort_order} />
 
                 <label class="wide">
                   <span>Employee Instructions</span>
@@ -695,7 +641,6 @@
   label span,
   .employee-cell small,
   .requirement-row small,
-  .standard-packet small,
   .empty,
   .packet-setup summary em,
   .requirement-row summary em,
@@ -1036,9 +981,20 @@
 
   .standard-packet-head {
     display: flex;
-    align-items: end;
+    align-items: center;
     justify-content: space-between;
     gap: 0.8rem;
+  }
+
+  .standard-packet-head > div {
+    display: flex;
+    align-items: baseline;
+    gap: 0.65rem;
+  }
+
+  .standard-packet-head span {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
   }
 
   .requirements-head {
@@ -1051,63 +1007,24 @@
     margin-top: 0.18rem;
   }
 
-  .standard-packet-head p,
-  .requirements-head p {
-    max-width: 52rem;
-    margin: 0.35rem 0 0;
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-    line-height: 1.45;
-  }
-
   .needed-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  .needed-list div {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-    min-width: 0;
-    padding: 0.52rem 0;
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .needed-list div:nth-child(odd) {
-    padding-right: 0.8rem;
-    border-right: 1px solid var(--color-divider);
-  }
-
-  .needed-list div:nth-child(even) {
-    padding-left: 0.8rem;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.8rem;
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.7rem;
   }
 
   .needed-list span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .needed-list span strong {
-    margin: 0;
-  }
-
-  .standard-packet small,
-  .needed-list small {
-    display: block;
+    padding-right: 0.8rem;
+    border-right: 1px solid var(--color-divider);
+    color: var(--color-text-muted);
     font-size: 0.78rem;
   }
 
-  .needed-list em {
-    color: var(--color-text-muted);
-    flex: 0 0 auto;
-    font-size: 0.72rem;
-    font-style: normal;
-    padding-top: 0.08rem;
-    white-space: nowrap;
+  .needed-list span:last-child {
+    border-right: 0;
+    padding-right: 0;
   }
 
   .add-requirement {
@@ -1229,17 +1146,6 @@
     .packet-form.compact,
     .standard-packet {
       grid-template-columns: 1fr;
-    }
-
-    .needed-list {
-      grid-template-columns: 1fr;
-    }
-
-    .needed-list div:nth-child(odd),
-    .needed-list div:nth-child(even) {
-      padding-left: 0;
-      padding-right: 0;
-      border-right: 0;
     }
 
     .invite-context-grid {

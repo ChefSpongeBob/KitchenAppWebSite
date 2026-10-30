@@ -211,6 +211,31 @@ expect('src/lib/server/admin.ts', 'legal forms use official document artifacts i
   !source.includes("if (formKey === 'federal_w4') {\n    const fields")
 );
 
+expect('src/lib/server/admin.ts', 'custom packet forms supplement rather than replace standard onboarding forms', (source) =>
+  source.includes('function composeEmployeeOnboardingPacket') &&
+  source.includes('const templateItems = await loadEmployeeOnboardingTemplate') &&
+  source.includes('const onboardingItems = composeEmployeeOnboardingPacket(templateItems, businessState)') &&
+  source.includes('(existingRows.results ?? []).map(onboardingTemplateIdentity)') &&
+  source.includes("item.item_type === 'acknowledgement' && !item.source_file_url") &&
+  source.includes("item.form_key === 'state_withholding' && !item.source_file_url")
+);
+
+expect('src/routes/admin/onboarding/+page.svelte', 'packet setup is concise and avoids duplicate empty states', (source) =>
+  source.includes('None uploaded yet.') &&
+  source.includes('Standard forms') &&
+  source.includes('Saved forms') &&
+  source.includes('name="item_kind"') &&
+  !source.includes('Not installed') &&
+  !source.includes('Recommended Packet') &&
+  !source.includes('No packet forms yet')
+);
+
+expect('src/lib/server/admin.ts', 'sending an onboarding package also notifies the employee', (source) =>
+  source.includes('sendEmployeeOnboardingPackageEmail') &&
+  source.includes('employeeEmail: membership.email') &&
+  source.includes('packageId: created.packageId')
+);
+
 expect('src/lib/server/admin.ts', 'onboarding is reviewed and locked as one packet', (source) =>
   source.includes('submitEmployeeOnboardingPacket') &&
   source.includes('approveEmployeeOnboardingPackage') &&

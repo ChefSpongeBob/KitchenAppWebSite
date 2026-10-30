@@ -23,7 +23,7 @@ import {
   isValidScheduleDepartment,
   type ScheduleDepartment
 } from '$lib/assets/schedule';
-import { isEmailConfigured, sendInviteEmail } from '$lib/server/email';
+import { isEmailConfigured, sendEmployeeOnboardingPackageEmail, sendInviteEmail } from '$lib/server/email';
 import {
   ensureBusinessSchema,
   loadBusinessPositions,
@@ -2096,21 +2096,7 @@ type DefaultEmployeeOnboardingItem = {
   sort_order: number;
 };
 
-function defaultEmployeeOnboardingItems(state = ''): DefaultEmployeeOnboardingItem[] {
-  const normalizedState = normalizeStateLabel(state);
-  const stateItems: DefaultEmployeeOnboardingItem[] = normalizedState
-    ? [
-        {
-          item_type: 'document',
-          form_key: 'state_withholding',
-          title: `${normalizedState} withholding`,
-          description: 'Complete and sign the current state withholding form, then upload the completed PDF.',
-          source_file_url: '',
-          source_file_name: '',
-          sort_order: 5
-        }
-      ]
-    : [];
+function defaultEmployeeOnboardingItems(_state = ''): DefaultEmployeeOnboardingItem[] {
   const items: DefaultEmployeeOnboardingItem[] = [
     {
       item_type: 'form',
@@ -2156,29 +2142,49 @@ function defaultEmployeeOnboardingItems(state = ''): DefaultEmployeeOnboardingIt
       source_file_url: '',
       source_file_name: '',
       sort_order: 4
-    },
-    ...stateItems,
-    {
-      item_type: 'acknowledgement',
-      form_key: '',
-      title: 'Handbook acknowledgement',
-      description: 'Review the employee handbook, then acknowledge and sign.',
-      source_file_url: '',
-      source_file_name: '',
-      sort_order: normalizedState ? 6 : 5
-    },
-    {
-      item_type: 'acknowledgement',
-      form_key: '',
-      title: 'Policy acknowledgement',
-      description: 'Review attached company policies, then acknowledge and sign.',
-      source_file_url: '',
-      source_file_name: '',
-      sort_order: normalizedState ? 7 : 6
     }
   ];
 
   return items;
+}
+
+type EmployeeOnboardingPacketTemplateItem = DefaultEmployeeOnboardingItem | EmployeeOnboardingTemplateItem;
+
+function onboardingTemplateIdentity(item: Pick<EmployeeOnboardingPacketTemplateItem, 'form_key' | 'title'>) {
+  if (item.form_key) return `form:${item.form_key}`;
+  return `custom:${normalizeComplianceKey(item.title)}`;
+}
+
+function canIncludeOnboardingTemplateItem(item: EmployeeOnboardingPacketTemplateItem) {
+  if ('is_active' in item && item.is_active !== 1) return false;
+  if (item.item_type === 'acknowledgement' && !item.source_file_url) return false;
+  if (item.form_key === 'state_withholding' && !item.source_file_url) return false;
+  return true;
+}
+
+function composeEmployeeOnboardingPacket(
+  templateItems: EmployeeOnboardingTemplateItem[],
+  state = ''
+): EmployeeOnboardingPacketTemplateItem[] {
+  const defaults = defaultEmployeeOnboardingItems(state);
+  const configuredByIdentity = new Map(
+    templateItems.map((item) => [onboardingTemplateIdentity(item), item] as const)
+  );
+  const standardIdentities = new Set(defaults.map(onboardingTemplateIdentity));
+  const packetItems: EmployeeOnboardingPacketTemplateItem[] = [];
+
+  for (const item of defaults) {
+    const configured = configuredByIdentity.get(onboardingTemplateIdentity(item));
+    const selected = configured ?? item;
+    if (canIncludeOnboardingTemplateItem(selected)) packetItems.push(selected);
+  }
+
+  for (const item of templateItems) {
+    if (standardIdentities.has(onboardingTemplateIdentity(item))) continue;
+    if (canIncludeOnboardingTemplateItem(item)) packetItems.push(item);
+  }
+
+  return packetItems.sort((left, right) => left.sort_order - right.sort_order);
 }
 
 export function buildEmployeeOnboardingRecommendations(state = '') {
@@ -3027,8 +3033,18 @@ export async function createEmployeeOnboardingTemplateItem(request: Request, loc
   await ensureEmployeeOnboardingTables(db);
 
   const formData = await request.formData();
-  const requestedFormKey = String(formData.get('form_key') ?? '').trim().toLowerCase();
-  const requestedItemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
+  const itemKind = String(formData.get('item_kind') ?? '').trim().toLowerCase();
+  const requestedFormKey =
+    itemKind === 'state_withholding'
+      ? 'state_withholding'
+      : String(formData.get('form_key') ?? '').trim().toLowerCase();
+  const requestedItemType = normalizeOnboardingItemType(
+    itemKind === 'acknowledgement'
+      ? 'acknowledgement'
+      : itemKind === 'document' || itemKind === 'state_withholding'
+        ? 'document'
+        : String(formData.get('item_type') ?? '').trim()
+  );
   const itemType = ['federal_i9', 'federal_w4', 'state_withholding'].includes(requestedFormKey)
     ? 'document'
     : requestedItemType;
@@ -3041,8 +3057,29 @@ export async function createEmployeeOnboardingTemplateItem(request: Request, loc
   if (!itemType) return fail(400, { error: 'Choose a valid onboarding item type.' });
   if (!title) return fail(400, { error: 'Title is required.' });
 
+  if (formKey) {
+    const existingForm = await db
+      .prepare(
+        `
+        SELECT id
+        FROM employee_onboarding_template_items
+        WHERE business_id = ? AND form_key = ?
+        LIMIT 1
+        `
+      )
+      .bind(businessId, formKey)
+      .first<{ id: string }>();
+    if (existingForm) return fail(400, { error: 'That packet form already exists.' });
+  }
+
   const sourceResult = await resolveOnboardingTemplateSourceFile(formData, locals, 'source_file');
   if ('error' in sourceResult) return fail(400, { error: sourceResult.error });
+  if (itemType === 'acknowledgement' && !sourceResult.sourceFileUrl) {
+    return fail(400, { error: 'Upload the policy or handbook employees will acknowledge.' });
+  }
+  if (formKey === 'state_withholding' && !sourceResult.sourceFileUrl) {
+    return fail(400, { error: 'Upload the current state withholding form.' });
+  }
 
   const now = Math.floor(Date.now() / 1000);
   await db
@@ -3134,17 +3171,13 @@ export async function installStandardEmployeeOnboardingTemplate(_request: Reques
     )
     .bind(businessId)
     .all<{ title: string; item_type: string; form_key: string }>();
-  const existingKeys = new Set(
-    (existingRows.results ?? []).map(
-      (row) => `${row.item_type}:${row.form_key}:${String(row.title ?? '').trim().toLowerCase()}`
-    )
-  );
+  const existingKeys = new Set((existingRows.results ?? []).map(onboardingTemplateIdentity));
 
   const now = Math.floor(Date.now() / 1000);
   let created = 0;
 
   for (const item of defaults) {
-    const key = `${item.item_type}:${item.form_key}:${item.title.trim().toLowerCase()}`;
+    const key = onboardingTemplateIdentity(item);
     if (existingKeys.has(key)) continue;
 
     await db
@@ -3221,6 +3254,12 @@ export async function updateEmployeeOnboardingTemplateItem(request: Request, loc
 
   const sourceResult = await resolveOnboardingTemplateSourceFile(formData, locals, 'source_file', existingUrl);
   if ('error' in sourceResult) return fail(400, { error: sourceResult.error });
+  if (itemType === 'acknowledgement' && !sourceResult.sourceFileUrl) {
+    return fail(400, { error: 'Upload the policy or handbook employees will acknowledge.' });
+  }
+  if (formKey === 'state_withholding' && !sourceResult.sourceFileUrl) {
+    return fail(400, { error: 'Upload the current state withholding form.' });
+  }
 
   await db
     .prepare(
@@ -3819,11 +3858,9 @@ async function createEmployeeOnboardingPackageForUser(
     )
     .run();
 
-  const templateItems = (await loadEmployeeOnboardingTemplate(db, options.businessId)).filter(
-    (item) => item.is_active === 1
-  );
+  const templateItems = await loadEmployeeOnboardingTemplate(db, options.businessId);
   const businessState = await loadBusinessRegisteredState(db, options.businessId);
-  const onboardingItems = templateItems.length > 0 ? templateItems : defaultEmployeeOnboardingItems(businessState);
+  const onboardingItems = composeEmployeeOnboardingPacket(templateItems, businessState);
 
   for (const item of onboardingItems) {
     const onboardingItemId = crypto.randomUUID();
@@ -6610,7 +6647,12 @@ export async function updateEmployeeVerificationCheck(request: Request, locals: 
   return { success: true, message: 'Verification updated.' };
 }
 
-export async function sendEmployeeOnboardingPackage(request: Request, locals: App.Locals) {
+export async function sendEmployeeOnboardingPackage(
+  request: Request,
+  locals: App.Locals,
+  origin?: string,
+  env?: EmailEnv | null
+) {
   requireAdmin(locals.userRole);
   if (!canManageEmployeeOnboarding(locals)) {
     return fail(403, { error: 'Employee onboarding access required.' });
@@ -6634,14 +6676,15 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
   const membership = await db
     .prepare(
       `
-      SELECT role, COALESCE(is_active, 1) AS is_active
-      FROM business_users
-      WHERE business_id = ? AND user_id = ?
+      SELECT bu.role, COALESCE(bu.is_active, 1) AS is_active, u.email, u.display_name
+      FROM business_users bu
+      JOIN users u ON u.id = bu.user_id
+      WHERE bu.business_id = ? AND bu.user_id = ?
       LIMIT 1
       `
     )
     .bind(businessId, userId)
-    .first<{ role: string | null; is_active: number }>();
+    .first<{ role: string | null; is_active: number; email: string; display_name: string | null }>();
 
   if (!membership || membership.is_active !== 1) {
     return fail(400, { error: 'Employee must be active before onboarding.' });
@@ -6661,6 +6704,9 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
 
   if (!created.created) {
     return fail(400, { error: 'This employee already has an active onboarding package.' });
+  }
+  if (!created.packageId) {
+    return fail(500, { error: 'Onboarding package could not be created.' });
   }
 
   await writeAuditLog(db, {
@@ -6690,7 +6736,21 @@ export async function sendEmployeeOnboardingPackage(request: Request, locals: Ap
     request
   );
 
-  return { success: true, message: 'Onboarding package sent.' };
+  const emailResult = await sendEmployeeOnboardingPackageEmail({
+    env,
+    origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
+    employeeEmail: membership.email,
+    employeeName: membership.display_name,
+    businessName: locals.businessName,
+    packageId: created.packageId
+  });
+
+  return {
+    success: true,
+    message: emailResult.sent
+      ? 'Onboarding package sent.'
+      : `Onboarding package created. ${emailResult.reason ?? 'Email was not sent.'}`
+  };
 }
 
 export async function submitEmployeeOnboardingItem(

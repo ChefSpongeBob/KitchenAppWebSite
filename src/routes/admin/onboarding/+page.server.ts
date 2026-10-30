@@ -145,7 +145,8 @@ export const actions: Actions = {
   create_user_invite: ({ request, locals, url, platform }) =>
     createUserInvite(request, locals, url.origin, platform?.env),
   revoke_user_invite: ({ request, locals }) => revokeUserInvite(request, locals),
-  send_package: ({ request, locals }) => sendEmployeeOnboardingPackage(request, locals),
+  send_package: ({ request, locals, url, platform }) =>
+    sendEmployeeOnboardingPackage(request, locals, url.origin, platform?.env),
   install_standard_packet: ({ request, locals }) => installStandardEmployeeOnboardingTemplate(request, locals),
   create_item: ({ request, locals }) => createEmployeeOnboardingTemplateItem(request, locals),
   update_item: ({ request, locals }) => updateEmployeeOnboardingTemplateItem(request, locals),
