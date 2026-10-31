@@ -13,7 +13,6 @@ import {
   loadAdminAnnouncementHistory,
   loadAdminAssignableUsers,
   loadAdminEmployeeSpotlight,
-  loadAdminNodeNames,
   loadAdminReminders,
   loadAdminTodos,
   loadAdminWhiteboardIdeas,
@@ -40,7 +39,10 @@ import {
   loadScheduleManagerDepartments,
   loadScheduleSettings
 } from '$lib/server/schedules';
-import { loadActiveTemperatureAlerts } from '$lib/server/temperatureMonitoring';
+import {
+  loadLatestTemperatureSnapshots,
+  temperatureExceptionsFromSnapshots
+} from '$lib/server/temperatureMonitoring';
 
 function isoDate(date = new Date()) {
   const y = date.getFullYear();
@@ -132,18 +134,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     todos,
     savedReminders,
     users,
-    nodeNames,
+    temperatureSnapshots,
     whiteboardIdeas,
     announcement,
     announcementHistory,
     employeeSpotlight,
     hasIsActive,
-    activeTemperatureAlerts
   ] = await Promise.all([
     featureAccess.todo ? loadAdminTodos(db, businessId) : Promise.resolve([]),
     loadAdminReminders(db, businessId),
     loadAdminAssignableUsers(db, businessId),
-    featureAccess.temps ? loadAdminNodeNames(db, businessId) : Promise.resolve([]),
+    featureAccess.temps ? loadLatestTemperatureSnapshots(db, businessId, 500) : Promise.resolve([]),
     featureAccess.whiteboard ? loadAdminWhiteboardIdeas(db, businessId) : Promise.resolve([]),
     featureAccess.announcements
       ? loadAdminAnnouncement(db, businessId)
@@ -152,8 +153,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     featureAccess.employee_spotlight
       ? loadAdminEmployeeSpotlight(db, businessId)
       : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 }),
-    usersHasIsActiveColumn(db),
-    featureAccess.temps ? loadActiveTemperatureAlerts(db, businessId) : Promise.resolve([])
+    usersHasIsActiveColumn(db)
   ]);
 
   const pendingUsers = hasIsActive
@@ -232,38 +232,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }));
   const staffedEmployees = staffingByDay.get(endIso) ?? 0;
 
-  const telemetryCutoff = Math.floor(Date.now() / 1000) - 10 * 60;
-  let nodesOperational = 0;
-  if (featureAccess.temps) {
-    nodesOperational =
-      (
-        await db
-          .prepare(`SELECT COUNT(DISTINCT sensor_id) AS count FROM temps WHERE ts >= ? AND business_id = ?`)
-          .bind(telemetryCutoff, businessId)
-          .first<{ count: number }>()
-      )?.count ?? 0;
-  }
-
-  const nodeNameMap = new Map(nodeNames.map((node) => [node.sensor_id, node.name]));
-  const alertPriority = { offline: 0, high: 1, low: 2, stale: 3, recovered: 4 } as const;
-  const alertBySensor = new Map<number, (typeof activeTemperatureAlerts)[number]>();
-  for (const alert of activeTemperatureAlerts) {
-    const current = alertBySensor.get(alert.sensor_id);
-    if (!current || alertPriority[alert.event_type] < alertPriority[current.event_type]) {
-      alertBySensor.set(alert.sensor_id, alert);
-    }
-  }
-  const temperatureAnomalies = Array.from(alertBySensor.values())
-    .sort((a, b) => alertPriority[a.event_type] - alertPriority[b.event_type] || b.last_seen_at - a.last_seen_at)
-    .map((alert) => ({
-      id: alert.id,
-      sensorId: alert.sensor_id,
-      name: nodeNameMap.get(alert.sensor_id) ?? `Sensor ${alert.sensor_id}`,
-      eventType: alert.event_type,
-      temperature: alert.temperature,
-      threshold: alert.threshold,
-      lastSeenAt: alert.last_seen_at
-    }));
+  const nodesOperational = temperatureSnapshots.filter(
+    (snapshot) => snapshot.connection_status === 'online'
+  ).length;
+  const temperatureAnomalies = temperatureExceptionsFromSnapshots(temperatureSnapshots);
 
   const todoActive = todos.filter((todo) => !todo.completed_at).length;
   const todoCompleted = todos.length - todoActive;
@@ -307,7 +279,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       todoActive,
       todoCompleted,
       nodesOperational,
-      nodesTracked: nodeNames.length,
+      nodesTracked: temperatureSnapshots.length,
       schedulePending,
       temperatureAnomalies: temperatureAnomalies.length
     }

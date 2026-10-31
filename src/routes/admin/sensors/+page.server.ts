@@ -13,7 +13,6 @@ import {
 } from '$lib/server/temperatureDeviceProvisioning';
 import {
   defaultTemperatureSetting,
-  loadActiveTemperatureAlerts,
   loadTemperatureSensorSettings,
   saveTemperatureSensorSetting
 } from '$lib/server/temperatureMonitoring';
@@ -23,20 +22,19 @@ import { checkRateLimit, rateLimitFailure, writeAuditLogSafe } from '$lib/server
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
-  if (!db) return { nodeNames: [], gateways: [], sensorNodes: [], sensorSettings: [], activeAlerts: [] };
+  if (!db) return { nodeNames: [], gateways: [], sensorNodes: [], sensorSettings: [] };
   const businessId = requireBusinessId(locals);
 
   await ensureTenantSchema(db, true);
 
-  const [nodeNames, gateways, sensorNodes, sensorSettings, activeAlerts] = await Promise.all([
+  const [nodeNames, gateways, sensorNodes, sensorSettings] = await Promise.all([
     loadAdminNodeNames(db, businessId),
     loadTemperatureGateways(db, businessId),
     loadTemperatureSensorNodes(db, businessId),
-    loadTemperatureSensorSettings(db, businessId),
-    loadActiveTemperatureAlerts(db, businessId)
+    loadTemperatureSensorSettings(db, businessId)
   ]);
 
-  return { nodeNames, gateways, sensorNodes, sensorSettings, activeAlerts };
+  return { nodeNames, gateways, sensorNodes, sensorSettings };
 };
 
 export const actions: Actions = {

@@ -78,6 +78,14 @@ expect('src/routes/temper/+page.server.ts', 'live temperature labels use the act
   !source.includes('FROM sensor_nodes')
 );
 
+expect('src/lib/server/temperatureMonitoring.ts', 'current temperature state is derived once from the latest sensor contact', (source) =>
+  source.includes('TEMPERATURE_ONLINE_WINDOW_SECONDS = 10 * 60') &&
+  source.includes('deriveTemperatureSnapshotState') &&
+  source.includes('last_contact_at: lastContactAt') &&
+  source.includes("temperature: connectionStatus === 'online' ? snapshot.temperature : null") &&
+  source.includes('temperatureExceptionsFromSnapshots')
+);
+
 expect('src/lib/server/reports.ts', 'temperature reports use the authoritative sensor registry', (source) =>
   source.includes('LEFT JOIN temperature_sensor_nodes sn') &&
   source.includes('sn.display_name') &&
@@ -152,6 +160,8 @@ expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute sta
   source.includes('SAFE_TEMP_HIGH_F = 41') &&
   source.includes("view=latest") &&
   source.includes("'Online !'") &&
+  source.includes('isOnline(lastSeen[node]) && latest[node] !== undefined') &&
+  source.includes('Last check-in:') &&
   source.includes('.node-head span.offline') &&
   source.includes('#2563eb')
 );
@@ -177,6 +187,8 @@ expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates 
   source.includes("eventType === 'high' ? ['low', 'stale', 'offline']") &&
   source.includes('activeConnectivity') &&
   source.includes("connectivityType === 'offline' ? 'stale' : 'offline'") &&
+  source.includes('COALESCE(MAX(sn.last_seen_at), MAX(t.ts)) AS last_reading_ts') &&
+  source.includes("['high', 'low', oppositeType]") &&
   source.includes("temperature_alert_events.status != 'active'") &&
   source.includes("status = 'recovered'") &&
   !source.includes('acknowledged') &&
@@ -238,14 +250,28 @@ expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves
   !source.includes('acknowledge_alert')
 );
 
-expect('src/routes/admin/sensors/+page.svelte', 'sensor admin exposes thresholds and active alerts', (source) =>
+expect('src/routes/admin/sensors/+page.svelte', 'sensor admin keeps provisioning and rules separate from live monitoring', (source) =>
   source.includes('Temperature Monitoring Sensors') &&
   source.includes('gateway_device_id') &&
   source.includes('Alert Rules') &&
   source.includes('High') &&
   source.includes('Low') &&
   !source.includes('Acknowledge') &&
-  source.includes('activeAlerts')
+  !source.includes('activeAlerts') &&
+  !source.includes('Active Alerts')
+);
+
+expect('src/routes/admin/+page.server.ts', 'manager temperature exceptions use current snapshots instead of stored alert rows', (source) =>
+  source.includes('loadLatestTemperatureSnapshots') &&
+  source.includes('temperatureExceptionsFromSnapshots') &&
+  source.includes("snapshot.connection_status === 'online'") &&
+  !source.includes('loadActiveTemperatureAlerts')
+);
+
+expect('src/routes/app/+page.svelte', 'dashboard suppresses old temperatures after a sensor goes offline', (source) =>
+  source.includes("node.connectionStatus === 'online'") &&
+  source.includes('node.temperature !== null') &&
+  source.includes('<span class="offline-reading">Offline</span>')
 );
 
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway receives restaurant Wi-Fi through secure BLE provisioning', (source) =>

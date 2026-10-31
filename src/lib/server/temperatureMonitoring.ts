@@ -3,7 +3,6 @@ import { dev } from '$app/environment';
 type DB = App.Platform['env']['DB'];
 
 export type TemperatureAlertType = 'high' | 'low' | 'stale' | 'offline' | 'recovered';
-export type TemperatureAlertStatus = 'active' | 'recovered';
 
 export type TemperatureReading = {
   sensor_id: number;
@@ -25,7 +24,7 @@ export type TemperatureSensorSetting = {
   is_alerting_enabled: number;
 };
 
-export type LatestTemperatureSnapshot = TemperatureSensorSetting & {
+type LatestTemperatureSnapshotRow = TemperatureSensorSetting & {
   name: string;
   last_seen_at: number | null;
   temperature: number | null;
@@ -33,21 +32,22 @@ export type LatestTemperatureSnapshot = TemperatureSensorSetting & {
   ts: number | null;
 };
 
-export type TemperatureAlertEvent = {
-  id: string;
-  business_id: string;
-  sensor_id: number;
-  event_type: TemperatureAlertType;
-  status: TemperatureAlertStatus;
+export type TemperatureConnectionStatus = 'online' | 'offline' | 'never';
+export type TemperatureCondition = 'normal' | 'high' | 'low' | 'offline' | 'never' | 'disabled';
+
+export type LatestTemperatureSnapshot = LatestTemperatureSnapshotRow & {
+  last_contact_at: number | null;
+  connection_status: TemperatureConnectionStatus;
+  condition: TemperatureCondition;
+};
+
+export type CurrentTemperatureException = {
+  sensorId: number;
+  name: string;
+  eventType: 'high' | 'low' | 'offline';
   temperature: number | null;
   threshold: number | null;
-  reading_ts: number | null;
-  first_seen_at: number;
-  last_seen_at: number;
-  recovered_at: number | null;
-  notification_ready_at: number | null;
-  dedupe_key: string;
-  metadata_json: string;
+  lastSeenAt: number | null;
 };
 
 const DEFAULT_HIGH_THRESHOLD = 42;
@@ -56,6 +56,7 @@ const DEFAULT_STALE_MINUTES = 15;
 const DEFAULT_OFFLINE_MINUTES = 45;
 const DEFAULT_COOLDOWN_MINUTES = 60;
 const HIGH_NOTIFICATION_DELAY_SECONDS = 60 * 60;
+export const TEMPERATURE_ONLINE_WINDOW_SECONDS = 10 * 60;
 
 let temperatureMonitoringSchemaEnsured = false;
 let temperatureMonitoringSchemaPromise: Promise<void> | null = null;
@@ -271,9 +272,74 @@ export async function loadLatestTemperatureSnapshots(
       businessId,
       limit
     )
-    .all<LatestTemperatureSnapshot>();
+    .all<LatestTemperatureSnapshotRow>();
 
-  return rows.results ?? [];
+  return (rows.results ?? []).map((snapshot) => deriveTemperatureSnapshotState(snapshot));
+}
+
+export function deriveTemperatureSnapshotState(
+  snapshot: LatestTemperatureSnapshotRow,
+  now = nowSeconds()
+): LatestTemperatureSnapshot {
+  const lastContactAt =
+    snapshot.last_seen_at !== null && Number.isFinite(snapshot.last_seen_at) && snapshot.last_seen_at > 0
+      ? snapshot.last_seen_at
+      : snapshot.ts !== null && Number.isFinite(snapshot.ts) && snapshot.ts > 0
+        ? snapshot.ts
+        : null;
+  const connectionStatus: TemperatureConnectionStatus =
+    lastContactAt === null
+      ? 'never'
+      : now - lastContactAt < TEMPERATURE_ONLINE_WINDOW_SECONDS
+        ? 'online'
+        : 'offline';
+
+  let condition: TemperatureCondition;
+  if (connectionStatus === 'never') {
+    condition = 'never';
+  } else if (connectionStatus === 'offline') {
+    condition = 'offline';
+  } else if (snapshot.is_alerting_enabled !== 1) {
+    condition = 'disabled';
+  } else if (snapshot.temperature !== null && snapshot.temperature > snapshot.high_threshold) {
+    condition = 'high';
+  } else if (snapshot.temperature !== null && snapshot.temperature <= snapshot.low_threshold) {
+    condition = 'low';
+  } else {
+    condition = 'normal';
+  }
+
+  return {
+    ...snapshot,
+    last_contact_at: lastContactAt,
+    temperature: connectionStatus === 'online' ? snapshot.temperature : null,
+    humidity_pct: connectionStatus === 'online' ? snapshot.humidity_pct : null,
+    connection_status: connectionStatus,
+    condition
+  };
+}
+
+export function temperatureExceptionsFromSnapshots(snapshots: LatestTemperatureSnapshot[]) {
+  return snapshots
+    .filter((snapshot) => ['high', 'low', 'offline', 'never'].includes(snapshot.condition))
+    .map<CurrentTemperatureException>((snapshot) => {
+      const eventType = snapshot.condition === 'high' || snapshot.condition === 'low'
+        ? snapshot.condition
+        : 'offline';
+      return {
+        sensorId: snapshot.sensor_id,
+        name: snapshot.name,
+        eventType,
+        temperature: eventType === 'offline' ? null : snapshot.temperature,
+        threshold:
+          eventType === 'high'
+            ? snapshot.high_threshold
+            : eventType === 'low'
+              ? snapshot.low_threshold
+              : null,
+        lastSeenAt: snapshot.last_contact_at
+      };
+    });
 }
 
 async function loadTemperatureSensorNames(db: DB, businessId: string) {
@@ -373,24 +439,6 @@ export async function saveTemperatureSensorSetting(
   if (!input.isAlertingEnabled) {
     await recoverSensorAlerts(db, input.businessId, sensorId);
   }
-}
-
-export async function loadActiveTemperatureAlerts(db: DB, businessId: string) {
-  await ensureTemperatureMonitoringSchema(db);
-  const rows = await db
-    .prepare(
-      `
-      SELECT *
-      FROM temperature_alert_events
-      WHERE business_id = ?
-        AND status = 'active'
-      ORDER BY last_seen_at DESC
-      LIMIT 100
-      `
-    )
-    .bind(businessId)
-    .all<TemperatureAlertEvent>();
-  return rows.results ?? [];
 }
 
 async function upsertTemperatureAlert(
@@ -593,7 +641,7 @@ export async function processTemperatureStaleAlerts(
         COALESCE(tss.offline_after_minutes, ?) AS offline_after_minutes,
         COALESCE(tss.alert_cooldown_minutes, ?) AS alert_cooldown_minutes,
         COALESCE(tss.is_alerting_enabled, 1) AS is_alerting_enabled,
-        MAX(t.ts) AS last_reading_ts
+        COALESCE(MAX(sn.last_seen_at), MAX(t.ts)) AS last_reading_ts
       FROM temperature_sensor_nodes sn
       LEFT JOIN temperature_sensor_settings tss
         ON tss.business_id = sn.business_id
@@ -645,7 +693,10 @@ export async function processTemperatureStaleAlerts(
 
   let processed = 0;
   for (const row of rows.results ?? []) {
-    if (row.is_alerting_enabled !== 1) continue;
+    if (row.is_alerting_enabled !== 1) {
+      await recoverSensorAlerts(db, businessId, row.sensor_id);
+      continue;
+    }
     if (!row.last_reading_ts) continue;
     const staleAt = row.last_reading_ts + row.stale_after_minutes * 60;
     const offlineAt = row.last_reading_ts + row.offline_after_minutes * 60;
@@ -661,9 +712,7 @@ export async function processTemperatureStaleAlerts(
 
     const connectivityType = eventType as 'stale' | 'offline';
     const oppositeType = connectivityType === 'offline' ? 'stale' : 'offline';
-    if (activeTypes.has(oppositeType)) {
-      await recoverSensorAlertTypes(db, businessId, row.sensor_id, [oppositeType]);
-    }
+    await recoverSensorAlertTypes(db, businessId, row.sensor_id, ['high', 'low', oppositeType]);
 
     if (!activeTypes.has(connectivityType)) {
       await upsertTemperatureAlert(db, {

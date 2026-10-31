@@ -21,9 +21,10 @@
   type NodeTemp = {
     sensorId: number;
     nodeName: string | null;
-    temperature: number;
+    temperature: number | null;
     humidityPct: number | null;
-    ts: number;
+    ts: number | null;
+    connectionStatus: 'online' | 'offline' | 'never';
   };
   type LatestTemperatureRow = {
     sensor_id: number;
@@ -31,6 +32,7 @@
     temperature: number | null;
     humidity_pct: number | null;
     ts: number | null;
+    connection_status: 'online' | 'offline' | 'never';
   };
   type MenuDoc = { id: string; title: string; file_url: string | null };
   type DailySpecial = {
@@ -216,14 +218,14 @@
     latestRows: LatestTemperatureRow[]
   ) {
     nodeTemps = latestRows
-      .filter((row) => row.temperature !== null && row.ts !== null)
       .slice(0, 3)
       .map((row) => ({
         sensorId: row.sensor_id,
         nodeName: row.name,
-        temperature: row.temperature as number,
+        temperature: row.connection_status === 'online' ? row.temperature : null,
         humidityPct: row.humidity_pct ?? null,
-        ts: row.ts as number
+        ts: row.connection_status === 'online' ? row.ts : null,
+        connectionStatus: row.connection_status
       }));
 
     const buckets = new Map<number, { sum: number; count: number }>();
@@ -290,10 +292,16 @@
     await clearGuidedQuery();
   }
 
-  $: latestTempTs = nodeTemps.length ? Math.max(...nodeTemps.map((node) => node.ts)) : 0;
+  $: currentTempTimes = nodeTemps
+    .map((node) => node.ts)
+    .filter((value): value is number => value !== null);
+  $: latestTempTs = currentTempTimes.length ? Math.max(...currentTempTimes) : 0;
   $: tempFreshText = latestTempTs ? secondsAgoLabel(latestTempTs) : 'no data';
   $: ideasFreshText = secondsAgoLabel(lastIdeasRefresh);
-  $: highTempNodes = nodeTemps.filter((node) => node.temperature > SAFE_TEMP_HIGH_F);
+  $: highTempNodes = nodeTemps.filter(
+    (node): node is NodeTemp & { temperature: number } =>
+      node.connectionStatus === 'online' && node.temperature !== null && node.temperature > SAFE_TEMP_HIGH_F
+  );
   $: activeSpecials = dailySpecials
     .filter((special) => special.content.trim().length > 0)
     .map((special) => ({
@@ -498,16 +506,20 @@
           {#each nodeTemps as node}
             <div
               class="node-pill"
-              class:hot={node.temperature > SAFE_TEMP_HIGH_F}
-              class:cold={node.temperature < SAFE_TEMP_LOW_F}
+              class:hot={node.temperature !== null && node.temperature > SAFE_TEMP_HIGH_F}
+              class:cold={node.temperature !== null && node.temperature < SAFE_TEMP_LOW_F}
             >
               <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
-              <span>
-                {node.temperature.toFixed(1)}F
-                {#if node.humidityPct !== null}
-                  / {node.humidityPct.toFixed(0)}%
-                {/if}
-              </span>
+              {#if node.connectionStatus === 'online' && node.temperature !== null}
+                <span>
+                  {node.temperature.toFixed(1)}F
+                  {#if node.humidityPct !== null}
+                    / {node.humidityPct.toFixed(0)}%
+                  {/if}
+                </span>
+              {:else}
+                <span class="offline-reading">Offline</span>
+              {/if}
             </div>
           {/each}
         {/if}

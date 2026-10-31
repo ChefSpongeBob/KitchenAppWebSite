@@ -62,13 +62,12 @@
       staffingSeries: Array<{ day: string; label: string; staffed: number; target: number }>;
     };
     temperatureAnomalies: Array<{
-      id: string;
       sensorId: number;
       name: string;
-      eventType: 'high' | 'low' | 'stale' | 'offline' | 'recovered';
+      eventType: 'high' | 'low' | 'offline';
       temperature: number | null;
       threshold: number | null;
-      lastSeenAt: number;
+      lastSeenAt: number | null;
     }>;
     summary: {
       pendingUsers: number;
@@ -253,8 +252,17 @@
   function anomalyLabel(eventType: string) {
     if (eventType === 'high') return 'High';
     if (eventType === 'low') return 'Low';
-    if (eventType === 'offline') return 'Offline';
-    return 'No recent reading';
+    return 'Offline';
+  }
+
+  function anomalyLastSeen(value: number | null) {
+    if (!value) return 'No check-in yet';
+    return `Last check-in ${new Date(value * 1000).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`;
   }
 
   function temperaturePosition(value: number | null) {
@@ -331,6 +339,7 @@
                   <div class="sensor-copy">
                     <strong>{anomaly.name}</strong>
                     <small>{anomalyLabel(anomaly.eventType)}</small>
+                    {#if anomaly.eventType === 'offline'}<small>{anomalyLastSeen(anomaly.lastSeenAt)}</small>{/if}
                   </div>
                   <div class="signal-rail" aria-hidden="true">
                     <i style={`width:${temperaturePosition(anomaly.temperature)}%`}></i>

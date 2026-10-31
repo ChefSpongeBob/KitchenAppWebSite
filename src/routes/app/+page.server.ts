@@ -273,9 +273,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
 
   const rows = tempsResult.results ?? [];
-  const nodeTemps = latestTemperatures
-    .filter((row) => row.temperature !== null && row.ts !== null)
-    .slice(0, 3);
+  const nodeTemps = latestTemperatures.slice(0, 3);
 
   const bucketAverages = new Map<number, { sum: number; count: number }>();
   for (const row of rows) {
@@ -308,9 +306,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     nodeTemps: nodeTemps.map((r) => ({
       sensorId: r.sensor_id,
       nodeName: r.name,
-      temperature: r.temperature as number,
+      temperature: r.connection_status === 'online' ? r.temperature : null,
       humidityPct: r.humidity_pct,
-      ts: r.ts as number
+      ts: r.connection_status === 'online' ? r.ts : null,
+      connectionStatus: r.connection_status
     })),
     tempSeries: { avg },
     refreshedAt: Math.floor(Date.now() / 1000)

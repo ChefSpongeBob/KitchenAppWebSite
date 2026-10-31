@@ -17,6 +17,9 @@
     temperature: number | null;
     humidity_pct: number | null;
     ts: number | null;
+    last_contact_at: number | null;
+    connection_status: 'online' | 'offline' | 'never';
+    condition: 'normal' | 'high' | 'low' | 'offline' | 'never' | 'disabled';
   };
 
   export let data: {
@@ -31,7 +34,9 @@
     initialNodes.filter((node) => node.humidity_pct !== null).map((node) => [node.sensor_id, node.humidity_pct as number])
   );
   let lastSeen: Record<number, number> = Object.fromEntries(
-    initialNodes.filter((node) => node.last_seen_at !== null).map((node) => [node.sensor_id, (node.last_seen_at as number) * 1000])
+    initialNodes
+      .filter((node) => node.last_contact_at !== null)
+      .map((node) => [node.sensor_id, (node.last_contact_at as number) * 1000])
   );
   let readingSeen: Record<number, number> = Object.fromEntries(
     initialNodes.filter((node) => node.ts !== null).map((node) => [node.sensor_id, (node.ts as number) * 1000])
@@ -66,7 +71,7 @@
         const sensor = Number(row.sensor_id);
         const temp = Number(row.temperature);
         const ts = Number(row.ts);
-        const lastSeenAt = Number(row.last_seen_at);
+        const lastSeenAt = Number(row.last_contact_at);
         if (!Number.isFinite(sensor)) continue;
         seenIds.add(sensor);
 
@@ -79,7 +84,7 @@
           humidityMap[sensor] = humidityPct;
         }
 
-        if (row.last_seen_at !== null && Number.isFinite(lastSeenAt)) seen[sensor] = lastSeenAt * 1000;
+        if (row.last_contact_at !== null && Number.isFinite(lastSeenAt)) seen[sensor] = lastSeenAt * 1000;
         if (row.ts !== null && Number.isFinite(ts)) readingTimes[sensor] = ts * 1000;
 
       }
@@ -134,7 +139,7 @@
   })();
   $: onlineCount = nodeIds.filter((node) => isOnline(lastSeen[node])).length;
   $: warningNodes = nodeIds
-    .filter((node) => latest[node] !== undefined && latest[node] > SAFE_TEMP_HIGH_F)
+    .filter((node) => isOnline(lastSeen[node]) && latest[node] !== undefined && latest[node] > SAFE_TEMP_HIGH_F)
     .map((node) => ({
       sensorId: node,
       name: nodeNames[node] ?? `Node ${node}`,
@@ -188,7 +193,7 @@
 {:else}
   <div class="grid">
     {#each nodeIds as node}
-      <div class="tile {tempClass(latest[node])}">
+      <div class="tile {tempClass(isOnline(lastSeen[node]) ? latest[node] : undefined)}">
         <div class="node-head">
           <div class="node-title">
             <span class="material-icons" aria-hidden="true">device_thermostat</span>
@@ -197,7 +202,7 @@
           <span class:offline={!isOnline(lastSeen[node])}>{isOnline(lastSeen[node]) ? 'Online' : 'Online !'}</span>
         </div>
 
-        {#if latest[node] !== undefined}
+        {#if isOnline(lastSeen[node]) && latest[node] !== undefined}
           <div class="temp">{latest[node].toFixed(1)}F</div>
           {#if humidity[node] !== undefined}
             <small class="humidity">Humidity: {humidity[node].toFixed(0)}%</small>
@@ -205,7 +210,9 @@
           <small class="seen">Last update: {formatTime(readingSeen[node])}</small>
         {:else}
           <div class="temp offline">--</div>
-          <small class="seen">No recent data</small>
+          <small class="seen">
+            {lastSeen[node] ? `Last check-in: ${formatTime(lastSeen[node])}` : 'No readings yet'}
+          </small>
         {/if}
       </div>
     {/each}

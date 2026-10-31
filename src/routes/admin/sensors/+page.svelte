@@ -65,21 +65,11 @@
     is_alerting_enabled: number;
   };
 
-  type ActiveAlert = {
-    id: string;
-    sensor_id: number;
-    event_type: 'high' | 'low' | 'stale' | 'offline' | 'recovered';
-    temperature: number | null;
-    threshold: number | null;
-    last_seen_at: number;
-  };
-
   export let data: {
     nodeNames: NodeName[];
     gateways: GatewayDevice[];
     sensorNodes: SensorNode[];
     sensorSettings: SensorSetting[];
-    activeAlerts: ActiveAlert[];
   };
 
   let feedbackMessage = '';
@@ -91,13 +81,6 @@
   let wifiPassword = '';
   let setupError = '';
   const ONLINE_WINDOW_SECONDS = 10 * 60;
-  const alertPriority: Record<ActiveAlert['event_type'], number> = {
-    offline: 0,
-    high: 1,
-    low: 2,
-    stale: 3,
-    recovered: 4
-  };
 
   $: gatewayDevices = data.gateways;
   $: activeSensorNodes = data.sensorNodes.filter((node) => node.isActive === 1);
@@ -117,19 +100,6 @@
       ...activeSensorNodes.map((node) => node.sensorId)
     ])
   ).sort((a, b) => a - b);
-  $: currentAlerts = (() => {
-    const alerts = new Map<number, ActiveAlert>();
-    for (const alert of data.activeAlerts) {
-      const current = alerts.get(alert.sensor_id);
-      if (!current || alertPriority[alert.event_type] < alertPriority[current.event_type]) {
-        alerts.set(alert.sensor_id, alert);
-      }
-    }
-    return Array.from(alerts.values()).sort(
-      (a, b) => alertPriority[a.event_type] - alertPriority[b.event_type] || b.last_seen_at - a.last_seen_at
-    );
-  })();
-  $: activeAlertCount = currentAlerts.length;
 
   function formatShortTime(value: number | null) {
     if (!value) return 'None';
@@ -173,14 +143,6 @@
         is_alerting_enabled: 1
       }
     );
-  }
-
-  function alertLabel(value: ActiveAlert['event_type']) {
-    if (value === 'high') return 'High';
-    if (value === 'low') return 'Low';
-    if (value === 'stale') return 'Stale';
-    if (value === 'offline') return 'Offline';
-    return 'Recovered';
   }
 
   const withFeedback: SubmitFunction = () => {
@@ -297,34 +259,8 @@
         <div><span>Gateways Online</span><strong>{onlineGatewayCount}/{registeredGatewayCount}</strong></div>
         <div><span>Sensors Online</span><strong>{onlineSensorCount}/{registeredSensorCount}</strong></div>
         <div><span>Last Check-In</span><strong>{formatShortTime(latestCheckIn)}</strong></div>
-        <div><span>Active Alerts</span><strong>{activeAlertCount}</strong></div>
         <div><span>Alert Rules</span><strong>{sensorIds.length}</strong></div>
       </div>
-    </section>
-
-    <section class="alerts-section">
-      <header class="section-title">
-        <h2>Active Alerts</h2>
-        <span>{activeAlertCount}</span>
-      </header>
-      {#if currentAlerts.length === 0}
-        <p class="empty-line">No active alerts.</p>
-      {:else}
-        <div class="alert-list">
-          {#each currentAlerts as alert}
-            <div class="alert-row" data-alert-type={alert.event_type}>
-              <div>
-                <strong>{sensorName(alert.sensor_id)}</strong>
-                <small>
-                  {alertLabel(alert.event_type)}
-                  {#if alert.temperature !== null} | {alert.temperature.toFixed(1)}F{/if}
-                  | {formatDateTime(alert.last_seen_at)}
-                </small>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
     </section>
 
     <section class="equipment-section">
@@ -531,7 +467,6 @@
   }
 
   .status-section,
-  .alerts-section,
   .equipment-section,
   .registration-section,
   .rules-section {
@@ -551,7 +486,7 @@
 
   .status-strip {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .status-strip > div {
@@ -628,39 +563,6 @@
     padding: 0.85rem 1rem;
     color: var(--color-text-muted);
     font-size: 0.78rem;
-  }
-
-  .alert-row {
-    min-height: 3.65rem;
-    padding: 0.65rem 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    border-bottom: 1px solid var(--color-divider);
-  }
-
-  .alert-row:last-child {
-    border-bottom: 0;
-  }
-
-  .alert-row > div {
-    display: grid;
-    gap: 0.12rem;
-  }
-
-  .alert-row small {
-    color: var(--color-text-muted);
-  }
-
-  .alert-row[data-alert-type='high'],
-  .alert-row[data-alert-type='offline'] {
-    box-shadow: inset 2px 0 color-mix(in srgb, var(--color-error) 68%, transparent);
-  }
-
-  .alert-row[data-alert-type='low'],
-  .alert-row[data-alert-type='stale'] {
-    box-shadow: inset 2px 0 color-mix(in srgb, var(--color-warning) 68%, transparent);
   }
 
   .equipment-group + .equipment-group {
@@ -999,11 +901,6 @@
     .unit-row > summary > span:nth-child(3),
     .rule-row > summary > span:nth-child(2) {
       display: none;
-    }
-
-    .alert-row {
-      align-items: flex-start;
-      flex-direction: column;
     }
 
     .wifi-fields {
