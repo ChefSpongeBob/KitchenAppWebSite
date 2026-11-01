@@ -7,6 +7,7 @@ import {
   claimTemperatureGateway,
   claimTemperatureSensorNode,
   loadGatewayProvisioningSession,
+  loadGatewayConnectionStatus,
   loadTemperatureGateways,
   loadTemperatureSensorNodes,
   revokeTemperatureSensorNode
@@ -16,7 +17,6 @@ import {
   loadTemperatureSensorSettings,
   saveTemperatureSensorSetting
 } from '$lib/server/temperatureMonitoring';
-import { isNativeAppRequest } from '$lib/server/authCookies';
 import { checkRateLimit, rateLimitFailure, writeAuditLogSafe } from '$lib/server/security';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -38,12 +38,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-  gateway_setup: async ({ request, locals, getClientAddress }) => {
+  gateway_setup: async ({ request, locals, getClientAddress, setHeaders }) => {
     requireAdmin(locals.userRole);
-    if (!isNativeAppRequest(request)) {
-      return fail(403, { error: 'Open Crimini on your phone to connect gateway Wi-Fi.' });
-    }
-
+    setHeaders({ 'cache-control': 'no-store' });
     const db = locals.DB;
     if (!db) return fail(503, { error: 'Database not configured.' });
     const businessId = requireBusinessId(locals);
@@ -76,6 +73,35 @@ export const actions: Actions = {
     }
   },
 
+  gateway_connection: async ({ request, locals, setHeaders }) => {
+    requireAdmin(locals.userRole);
+    setHeaders({ 'cache-control': 'no-store' });
+    const db = locals.DB;
+    if (!db) return fail(503, { error: 'Database not configured.' });
+    const businessId = requireBusinessId(locals);
+    const formData = await request.formData();
+    const gatewayId = String(formData.get('gateway_id') ?? '').trim();
+    const startedAt = Number(formData.get('started_at'));
+    const now = Math.floor(Date.now() / 1000);
+    if (!gatewayId || !Number.isSafeInteger(startedAt) || startedAt <= 0 || startedAt > now || now - startedAt > 86400) {
+      return fail(400, { error: 'Start Wi-Fi setup again.' });
+    }
+    const limit = await checkRateLimit(db, {
+      action: 'gateway-connection-check',
+      identifier: `${businessId}:${locals.userId ?? 'unknown'}:${gatewayId}`,
+      limit: 30,
+      windowSeconds: 5 * 60,
+      blockSeconds: 60
+    });
+    if (!limit.allowed) return rateLimitFailure('Please wait before checking again.');
+    try {
+      const lastSeenAt = await loadGatewayConnectionStatus(db, businessId, gatewayId);
+      return { connected: lastSeenAt !== null && lastSeenAt > startedAt && now - lastSeenAt < 600, lastSeenAt };
+    } catch (error) {
+      return fail(400, { error: error instanceof Error ? error.message : 'Connection could not be checked.' });
+    }
+  },
+
   register_gateway: async ({ request, locals }) => {
     requireAdmin(locals.userRole);
     const db = locals.DB;
@@ -91,17 +117,16 @@ export const actions: Actions = {
     if (!displayName) return fail(400, { error: 'Name is required.' });
 
     try {
-      await claimTemperatureGateway(db, {
+      const gateway = await claimTemperatureGateway(db, {
         businessId,
         serial,
         displayName,
         createdBy: locals.userId ?? null
       });
+      return { success: true, deviceName: displayName, gatewayId: gateway.id };
     } catch (error) {
       return fail(400, { error: error instanceof Error ? error.message : 'Gateway could not be registered.' });
     }
-
-    return { success: true, deviceName: displayName };
   },
 
   register_sensor: async ({ request, locals }) => {

@@ -79,10 +79,10 @@ assertIncludes(
   'gateway Wi-Fi setup is scoped to the signed-in business'
 );
 
-assertIncludes(
+assertNotIncludes(
   'src/routes/admin/sensors/+page.server.ts',
   'isNativeAppRequest(request)',
-  'gateway Wi-Fi setup is exposed only through the native app flow'
+  'gateway Wi-Fi guidance supports desktop and phone setup'
 );
 
 assertIncludes(

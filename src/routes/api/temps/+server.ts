@@ -227,6 +227,11 @@ export const POST: RequestHandler = async ({ platform, request, url, locals }) =
     return json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  if (body && typeof body === 'object' && !Array.isArray(body) &&
+      Object.keys(body).length === 1 && (body as { gateway_status?: unknown }).gateway_status === true) {
+    return json({ connected: true }, { headers: { 'cache-control': 'no-store' } });
+  }
+
   const rawItems =
     body && typeof body === 'object' && !Array.isArray(body) && Array.isArray((body as { readings?: unknown }).readings)
       ? ((body as { readings: unknown[] }).readings)

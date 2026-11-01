@@ -1,13 +1,16 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiProv.h>
+#include <DNSServer.h>
+#include <WebServer.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_ieee802154.h>
 #include <esp_wifi.h>
+#include <esp_random.h>
 #include <freertos/queue.h>
 #include <mbedtls/md.h>
 #include <time.h>
+#include "GatewaySetupPage.h"
 
 #ifndef ARDUINO_XIAO_ESP32C6
 #error "Select XIAO_ESP32C6 in Arduino IDE for this gateway."
@@ -31,6 +34,9 @@ constexpr uint32_t BATCH_WINDOW_MS = 120000;
 constexpr uint32_t RADIO_QUIET_PERIOD_MS = 1500;
 constexpr uint32_t RETRY_INTERVAL_MS = 60000;
 constexpr uint32_t RADIO_SILENCE_RECOVERY_MS = 720000;
+constexpr uint32_t WIFI_SETUP_AFTER_FAILURE_MS = 600000;
+constexpr uint32_t WIFI_SETUP_TIMEOUT_MS = 600000;
+constexpr uint32_t GATEWAY_STATUS_INTERVAL_MS = 300000;
 
 struct RadioFrame {
   uint8_t bytes[128];
@@ -78,29 +84,13 @@ RecentPacket recentPackets[RECENT_PACKET_COUNT] = {};
 size_t recentPacketCount = 0;
 size_t nextRecentPacket = 0;
 uint32_t lastRadioDiagnostic = 0;
-volatile bool provisioningConnected = false;
-char provisioningServiceName[32] = {};
+uint32_t wifiFailureSince = 0;
+uint32_t lastGatewayContact = 0;
+uint32_t lastGatewayStatusAttempt = 0;
+char provisioningServiceName[33] = {};
 char provisioningProof[33] = {};
 
-void onProvisioningEvent(arduino_event_t* event) {
-  switch (event->event_id) {
-    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      provisioningConnected = true;
-      Serial.println("Gateway Wi-Fi connected");
-      break;
-    case ARDUINO_EVENT_PROV_START:
-      Serial.println("Gateway ready for Crimini Wi-Fi setup");
-      break;
-    case ARDUINO_EVENT_PROV_CRED_FAIL:
-      Serial.println("Gateway Wi-Fi setup failed; retry in Crimini");
-      break;
-    case ARDUINO_EVENT_PROV_CRED_SUCCESS:
-      Serial.println("Gateway Wi-Fi details accepted");
-      break;
-    default:
-      break;
-  }
-}
+bool sendGatewayStatus();
 
 bool buildProvisioningIdentity() {
   const mbedtls_md_info_t* sha256 = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
@@ -114,7 +104,7 @@ bool buildProvisioningIdentity() {
                  credentialHash) != 0) return false;
 
   char message[64] = {};
-  snprintf(message, sizeof(message), "crimini-wifi-v1:%s", GATEWAY_SERIAL);
+  snprintf(message, sizeof(message), "crimini-setup-wifi-v1:%s", GATEWAY_SERIAL);
   if (mbedtls_md_hmac(sha256,
                       credentialHash,
                       sizeof(credentialHash),
@@ -126,8 +116,8 @@ bool buildProvisioningIdentity() {
   }
 
   const size_t serialLength = strlen(GATEWAY_SERIAL);
-  const char* suffix = serialLength > 28 ? GATEWAY_SERIAL + serialLength - 28 : GATEWAY_SERIAL;
-  snprintf(provisioningServiceName, sizeof(provisioningServiceName), "CR_%s", suffix);
+  const char* suffix = serialLength > 24 ? GATEWAY_SERIAL + serialLength - 24 : GATEWAY_SERIAL;
+  snprintf(provisioningServiceName, sizeof(provisioningServiceName), "Crimini-%s", suffix);
   for (size_t index = 0; index < 16; ++index) {
     snprintf(provisioningProof + index * 2, 3, "%02x", proofDigest[index]);
   }
@@ -143,32 +133,222 @@ bool hasStoredWifiCredentials() {
   return esp_wifi_get_config(WIFI_IF_STA, &configuration) == ESP_OK && configuration.sta.ssid[0] != '\0';
 }
 
-bool provisionWifiIfNeeded() {
-  if (hasStoredWifiCredentials()) {
-    WiFi.disconnect(true, false);
+String jsonString(const String& value) {
+  String result = "\"";
+  for (size_t index = 0; index < value.length(); ++index) {
+    const uint8_t c = value[index];
+    if (c == '"' || c == '\\') {
+      result += '\\';
+      result += static_cast<char>(c);
+    } else if (c < 0x20) {
+      char escaped[7];
+      snprintf(escaped, sizeof(escaped), "\\u%04x", c);
+      result += escaped;
+    } else result += static_cast<char>(c);
+  }
+  return result + '"';
+}
+
+bool runGatewayWifiSetup() {
+  if (!buildProvisioningIdentity()) return false;
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.setAutoReconnect(false);
+  wifi_config_t previous = {};
+  const bool hadStoredNetwork = esp_wifi_get_config(WIFI_IF_STA, &previous) == ESP_OK && previous.sta.ssid[0];
+  WiFi.disconnect(false, false);
+  // Test new credentials in RAM; commit only after the authenticated cloud check succeeds.
+  if (esp_wifi_set_storage(WIFI_STORAGE_RAM) != ESP_OK ||
+      !WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0)) ||
+      !WiFi.softAP(provisioningServiceName, provisioningProof, 1, false, 1)) {
+    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
     WiFi.mode(WIFI_OFF);
+    memset(&previous, 0, sizeof(previous));
+    memset(provisioningProof, 0, sizeof(provisioningProof));
+    return false;
+  }
+  memset(provisioningProof, 0, sizeof(provisioningProof));
+
+  uint8_t nonce[16];
+  char setupToken[33] = {};
+  esp_fill_random(nonce, sizeof(nonce));
+  for (size_t index = 0; index < sizeof(nonce); ++index) snprintf(setupToken + index * 2, 3, "%02x", nonce[index]);
+  memset(nonce, 0, sizeof(nonce));
+
+  WebServer server(IPAddress(192, 168, 4, 1), 80);
+  DNSServer dns;
+  const char* headers[] = { "X-Setup-Token", "Origin", "Content-Length" };
+  server.collectHeaders(headers, 3);
+  const uint32_t openedAt = millis();
+  uint32_t joinStartedAt = 0, lastStoredRetry = openedAt, lastCloudCheck = 0, connectedAt = 0;
+  bool needsJoin = false, joining = false, checkingCloud = false, connected = false, finish = false;
+  bool scanStarted = false, testingStoredNetwork = false;
+  char pendingSsid[33] = {}, pendingPassword[64] = {};
+  String state = "ready", statusMessage = "";
+
+  auto reply = [&](int status, const String& body) {
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("X-Content-Type-Options", "nosniff");
+    server.send(status, "application/json", body);
+  };
+  auto authorized = [&]() {
+    const String host = server.hostHeader();
+    const String origin = server.header("Origin");
+    const String supplied = server.header("X-Setup-Token");
+    uint8_t diff = supplied.length() == 32 ? 0 : 1;
+    for (size_t index = 0; index < 32; ++index) diff |= setupToken[index] ^ (index < supplied.length() ? supplied[index] : 0);
+    if ((host != "192.168.4.1" && host != "192.168.4.1:80") ||
+        (origin.length() && origin != "http://192.168.4.1") || diff) {
+      reply(403, "{\"error\":\"Reopen gateway setup.\"}");
+      return false;
+    }
+    return true;
+  };
+  server.on("/", HTTP_GET, [&]() {
+    if (server.hostHeader() != "192.168.4.1" && server.hostHeader() != "192.168.4.1:80") {
+      server.sendHeader("Location", "http://192.168.4.1/");
+      server.send(302);
+      return;
+    }
+    String page(FPSTR(GATEWAY_SETUP_PAGE));
+    page.replace("%TOKEN%", setupToken);
+    page.replace("%SERIAL%", GATEWAY_SERIAL);
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Referrer-Policy", "no-referrer");
+    server.sendHeader("X-Content-Type-Options", "nosniff");
+    server.sendHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-" + String(setupToken) +
+      "'; style-src 'nonce-" + String(setupToken) + "'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+    server.send(200, "text/html; charset=utf-8", page);
+  });
+  server.on("/networks", HTTP_GET, [&]() {
+    if (!authorized()) return;
+    if (joining || checkingCloud || connected) { reply(409, "{\"error\":\"Wait for the connection to finish.\"}"); return; }
+    if (!scanStarted) { WiFi.scanNetworks(true); scanStarted = true; }
+    const int count = WiFi.scanComplete();
+    if (count == WIFI_SCAN_RUNNING) { reply(202, "{\"scanning\":true}"); return; }
+    String body = "{\"networks\":[";
+    size_t added = 0;
+    for (int index = 0; index < count && added < 25; ++index) {
+      const String ssid = WiFi.SSID(index);
+      if (!ssid.length() || ssid == provisioningServiceName) continue;
+      bool duplicate = false;
+      for (int earlier = 0; earlier < index; ++earlier) if (WiFi.SSID(earlier) == ssid) { duplicate = true; break; }
+      if (duplicate) continue;
+      if (added++) body += ',';
+      body += jsonString(ssid);
+    }
+    WiFi.scanDelete(); scanStarted = false;
+    reply(count < 0 ? 503 : 200, count < 0 ? "{\"error\":\"Network search failed. Try again.\"}" : body + "]}");
+  });
+  server.on("/connect", HTTP_POST, [&]() {
+    if (!authorized()) return;
+    if (joining || checkingCloud || connected || scanStarted) { reply(409, "{\"error\":\"Wait a moment, then try again.\"}"); return; }
+    const String ssid = server.arg("ssid"), password = server.arg("password");
+    if (server.header("Content-Length").toInt() > 1024 || !ssid.length() || ssid.length() > 32 ||
+        password.length() > 63 || (password.length() && password.length() < 8) ||
+        strlen(ssid.c_str()) != ssid.length() || strlen(password.c_str()) != password.length()) {
+      reply(400, "{\"error\":\"Check the network name and password.\"}"); return;
+    }
+    ssid.toCharArray(pendingSsid, sizeof(pendingSsid));
+    password.toCharArray(pendingPassword, sizeof(pendingPassword));
+    testingStoredNetwork = false;
+    needsJoin = true;
+    reply(202, "{\"connecting\":true}");
+  });
+  server.on("/status", HTTP_GET, [&]() {
+    if (authorized()) reply(200, "{\"state\":" + jsonString(state) + ",\"message\":" + jsonString(statusMessage) + "}");
+  });
+  server.on("/finish", HTTP_POST, [&]() {
+    if (!authorized()) return;
+    if (!connected) { reply(409, "{\"error\":\"Finish connecting first.\"}"); return; }
+    finish = true;
+    reply(200, "{\"complete\":true}");
+  });
+  server.onNotFound([&]() {
+    if (server.method() != HTTP_GET) { reply(404, "{\"error\":\"Not found.\"}"); return; }
+    server.sendHeader("Location", "http://192.168.4.1/"); server.send(302);
+  });
+  if (!dns.start(53, "*", IPAddress(192, 168, 4, 1))) {
+    Serial.println("Gateway setup: open http://192.168.4.1/ directly");
+  }
+  server.begin();
+  Serial.printf("Gateway Wi-Fi setup ready: %s\n", provisioningServiceName);
+
+  while (!finish && (!hadStoredNetwork || millis() - openedAt < WIFI_SETUP_TIMEOUT_MS)) {
+    dns.processNextRequest(); server.handleClient();
+    const uint32_t now = millis();
+    if (connected && now - connectedAt >= 30000) break;
+    if (!connected && !needsJoin && !joining && !checkingCloud && !scanStarted && hadStoredNetwork &&
+        WiFi.softAPgetStationNum() == 0 && now - lastStoredRetry >= 30000) {
+      memcpy(pendingSsid, previous.sta.ssid, 32);
+      memcpy(pendingPassword, previous.sta.password, 63);
+      testingStoredNetwork = true; needsJoin = true; lastStoredRetry = now;
+    }
+    if (needsJoin) {
+      WiFi.disconnect(false, false);
+      WiFi.begin(pendingSsid, pendingPassword);
+      memset(pendingSsid, 0, sizeof(pendingSsid)); memset(pendingPassword, 0, sizeof(pendingPassword));
+      needsJoin = false; joining = true; joinStartedAt = now;
+      state = "joining"; statusMessage = "Connecting to Wi-Fi...";
+    }
+    if (joining && WiFi.status() == WL_CONNECTED) {
+      joining = false; checkingCloud = true; lastCloudCheck = now - 15000;
+      state = "verifying"; statusMessage = "Wi-Fi connected. Connecting to Crimini...";
+    } else if (joining && now - joinStartedAt >= 20000) {
+      WiFi.disconnect(false, false); joining = false;
+      state = testingStoredNetwork ? "ready" : "error";
+      statusMessage = testingStoredNetwork ? "" : "Could not join Wi-Fi. Check the password and try again.";
+    }
+    if (checkingCloud && now - lastCloudCheck >= 15000) {
+      lastCloudCheck = now;
+      if (WiFi.status() != WL_CONNECTED) {
+        checkingCloud = false; state = "error"; statusMessage = "Wi-Fi disconnected. Try connecting again.";
+      } else if (sendGatewayStatus()) {
+        wifi_config_t accepted = {};
+        const bool saved = esp_wifi_get_config(WIFI_IF_STA, &accepted) == ESP_OK &&
+          esp_wifi_set_storage(WIFI_STORAGE_FLASH) == ESP_OK && esp_wifi_set_config(WIFI_IF_STA, &accepted) == ESP_OK;
+        memset(&accepted, 0, sizeof(accepted));
+        esp_wifi_set_storage(WIFI_STORAGE_RAM);
+        checkingCloud = false;
+        if (saved) { connected = true; connectedAt = millis(); state = "connected"; statusMessage = "Connected to Crimini."; }
+        else { state = "error"; statusMessage = "Could not save Wi-Fi. Try connecting again."; }
+      } else if (now - joinStartedAt >= 90000) {
+        checkingCloud = false; state = "error"; statusMessage = "Wi-Fi connected, but Crimini could not be reached. Check the restaurant's internet and try again.";
+      }
+    }
+    delay(10);
+  }
+  server.stop(); dns.stop(); WiFi.scanDelete();
+  WiFi.disconnect(false, false); WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_storage(WIFI_STORAGE_FLASH);
+  if (!connected) esp_wifi_set_config(WIFI_IF_STA, &previous);
+  memset(&previous, 0, sizeof(previous)); memset(setupToken, 0, sizeof(setupToken));
+  memset(pendingSsid, 0, sizeof(pendingSsid)); memset(pendingPassword, 0, sizeof(pendingPassword));
+  WiFi.setAutoReconnect(true);
+  WiFi.mode(WIFI_OFF);
+  return connected;
+}
+
+bool provisionWifiIfNeeded() {
+  const bool stored = hasStoredWifiCredentials();
+  if (stored) {
+    WiFi.begin();
+    const uint32_t started = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - started < 7000) delay(100);
+    if (WiFi.status() == WL_CONNECTED) {
+      sendGatewayStatus();
+      WiFi.disconnect(true, false); WiFi.mode(WIFI_OFF);
+      return true;
+    }
+    WiFi.disconnect(true, false); WiFi.mode(WIFI_OFF);
+    // Keep receiving normally through short router outages before offering network setup.
+    wifiFailureSince = millis();
     return true;
   }
-  if (!buildProvisioningIdentity()) return false;
-
-  provisioningConnected = false;
-  WiFi.onEvent(onProvisioningEvent);
-  WiFiProv.beginProvision(
-    NETWORK_PROV_SCHEME_BLE,
-    NETWORK_PROV_SCHEME_HANDLER_FREE_BLE,
-    NETWORK_PROV_SECURITY_1,
-    provisioningProof,
-    provisioningServiceName,
-    nullptr,
-    nullptr,
-    false
-  );
-  while (!provisioningConnected) delay(100);
-  delay(500);
+  const bool connected = runGatewayWifiSetup();
   WiFi.disconnect(true, false);
   WiFi.mode(WIFI_OFF);
-  memset(provisioningProof, 0, sizeof(provisioningProof));
-  return true;
+  return connected;
 }
 
 void reportRadioIssue(const char* message) {
@@ -346,7 +526,11 @@ bool connectWifi() {
   WiFi.begin();
   const uint32_t started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < 7000) delay(100);
-  if (WiFi.status() != WL_CONNECTED) return false;
+  if (WiFi.status() != WL_CONNECTED) {
+    if (!wifiFailureSince) wifiFailureSince = millis();
+    return false;
+  }
+  wifiFailureSince = 0;
   if (time(nullptr) < 1700000000) {
     configTime(0, 0, "time.cloudflare.com", "pool.ntp.org");
     const uint32_t clockStarted = millis();
@@ -385,6 +569,48 @@ esp_err_t onHttpEvent(esp_http_client_event_t* event) {
     }
   }
   return ESP_OK;
+}
+
+bool sendGatewayStatus() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  if (time(nullptr) < 1700000000) {
+    configTime(0, 0, "time.cloudflare.com", "pool.ntp.org");
+    const uint32_t started = millis();
+    while (time(nullptr) < 1700000000 && millis() - started < 10000) delay(100);
+    if (time(nullptr) < 1700000000) return false;
+  }
+  String response;
+  esp_http_client_config_t config = {};
+  config.url = API_URL;
+  config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.event_handler = onHttpEvent;
+  config.user_data = &response;
+  config.timeout_ms = 10000;
+  esp_http_client_handle_t request = esp_http_client_init(&config);
+  if (!request) return false;
+  const char body[] = "{\"gateway_status\":true}";
+  esp_http_client_set_method(request, HTTP_METHOD_POST);
+  esp_http_client_set_header(request, "Content-Type", "application/json");
+  esp_http_client_set_header(request, "x-device-id", GATEWAY_SERIAL);
+  esp_http_client_set_header(request, "x-device-key", FACTORY_GATEWAY_CREDENTIAL);
+  esp_http_client_set_post_field(request, body, sizeof(body) - 1);
+  const esp_err_t result = esp_http_client_perform(request);
+  const bool connected = result == ESP_OK && esp_http_client_get_status_code(request) == 200 &&
+    response.indexOf("\"connected\":true") >= 0;
+  esp_http_client_cleanup(request);
+  if (connected) lastGatewayContact = millis();
+  return connected;
+}
+
+void checkIdleGatewayConnection() {
+  lastGatewayStatusAttempt = millis();
+  if (!pauseRadioForWifi()) return;
+  const bool connected = connectWifi() && sendGatewayStatus();
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  delay(20);
+  if (!resumeRadioReceiver() && !resetRadioReceiver()) reportRadioIssue("receiver did not resume after gateway check-in");
+  Serial.println(connected ? "Gateway cloud check-in succeeded" : "Gateway cloud check-in unavailable; will retry");
 }
 
 bool uploadReadings() {
@@ -433,6 +659,7 @@ bool uploadReadings() {
       const int rejected = rejectedField >= 0 ? response.substring(rejectedField + 11).toInt() : -1;
       uploaded = (status == 200 || status == 201) && accepted >= 0 && rejected >= 0 &&
                   accepted + rejected == static_cast<int>(submittedCount);
+      if (uploaded) lastGatewayContact = millis();
       Serial.printf("Crimini upload: HTTP %d, accepted %d, rejected %d/%u\n", status, accepted, rejected,
                     static_cast<unsigned>(submittedCount));
       esp_http_client_cleanup(request);
@@ -484,10 +711,21 @@ void setup() {
   const uint32_t now = millis();
   lastAuthenticatedPacket = now;
   lastRadioRecovery = now;
+  lastGatewayStatusAttempt = now;
   Serial.printf("Gateway %s listening on channel %u\n", GATEWAY_SERIAL, RADIO_CHANNEL);
 }
 
 void loop() {
+  if (wifiFailureSince && millis() - wifiFailureSince >= WIFI_SETUP_AFTER_FAILURE_MS) {
+    if (pauseRadioForWifi() && esp_ieee802154_disable() == ESP_OK) {
+      runGatewayWifiSetup();
+      wifiFailureSince = 0;
+      lastAuthenticatedPacket = millis();
+      lastRadioRecovery = millis();
+      consecutiveRadioRecoveries = 0;
+      if (!resumeRadioReceiver()) reportRadioIssue("receiver did not resume after Wi-Fi setup");
+    }
+  }
   RadioFrame incoming = {};
   size_t processedFrames = 0;
   while (receivedFrames && processedFrames < MAX_FRAMES_PER_LOOP &&
@@ -502,6 +740,10 @@ void loop() {
   const bool batchFull = readingCount >= MAX_PENDING_NODES;
   const bool radioQuiet = now - lastAuthenticatedPacket >= RADIO_QUIET_PERIOD_MS;
   const bool uploadDue = retryScheduled ? retryDue : (batchDue || batchFull);
+  if (!readingCount && now - lastGatewayContact >= GATEWAY_STATUS_INTERVAL_MS &&
+      now - lastGatewayStatusAttempt >= GATEWAY_STATUS_INTERVAL_MS && radioQuiet) {
+    checkIdleGatewayConnection();
+  }
   if (readingCount && uploadDue && radioQuiet) {
     if (!uploadReadings()) {
       retryAt = millis() + RETRY_INTERVAL_MS;

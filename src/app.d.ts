@@ -41,7 +41,9 @@ declare global {
 			DB: D1Database;
 			MEDIA_BUCKET?: R2Bucket;
 			userId?: string;
+			sessionId?: string;
 			userRole?: string;
+			platformStaff?: import('./lib/server/platformStaff').PlatformStaff;
 			featureModes?: AppFeatureModes;
 			businessId?: string;
 			businessName?: string;

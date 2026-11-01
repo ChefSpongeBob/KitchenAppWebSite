@@ -8,6 +8,9 @@ import { loadUserBusinessMemberships } from '$lib/server/business';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const featureModes: AppFeatureModes = locals.featureModes ?? defaultAppFeatureModes;
+	if (locals.platformStaff) {
+		return { user: null, featureModes, featureAccess: buildFeatureAccess(featureModes, null) };
+	}
 	if (!locals.userId) {
 		return {
 			user: null,

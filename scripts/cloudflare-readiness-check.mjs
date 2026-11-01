@@ -43,6 +43,13 @@ if (wrangler) {
 
 const packageJson = JSON.parse(read('package.json') || '{}');
 const scripts = packageJson.scripts ?? {};
+// Windows npm installs can prune these optional entries even though Linux npm ci requires them.
+const lockedPackages = JSON.parse(read('package-lock.json') || '{}').packages ?? {};
+expect('Cross-platform emnapi dependencies remain in the lockfile',
+  ['@emnapi/core', '@emnapi/runtime'].every(name => {
+    const entry = lockedPackages[`node_modules/${name}`];
+    return entry?.version && entry?.resolved && entry?.integrity;
+  }));
 expect('Remote migration script targets crimini-production database', scripts['db:migrations:apply:remote'] === 'npx wrangler d1 migrations apply crimini-production --remote');
 expect('Local migration script uses DB binding', scripts['db:migrations:apply:local'] === 'npx wrangler d1 migrations apply DB --local');
 expect('Static checks include Cloudflare readiness', String(scripts['test:static'] ?? '').includes('test:cloudflare-readiness'));

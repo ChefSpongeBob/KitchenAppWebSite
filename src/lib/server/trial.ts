@@ -172,6 +172,7 @@ async function deleteByBusinessIdAcrossTables(db: D1, businessId: string) {
 	]);
 	const tables = await listTables(db);
 	for (const tableName of tables) {
+    if (tableName.startsWith('platform_staff_')) continue;
 		if (excluded.has(tableName)) continue;
 		const columns = await tableColumns(db, tableName);
 		if (!columns.has('business_id')) continue;
@@ -210,6 +211,7 @@ async function deleteUserScopedData(db: D1, userId: string) {
 	const excluded = new Set(['users', 'business_users', 'trial_denials']);
 	const tables = await listTables(db);
 	for (const tableName of tables) {
+    if (tableName.startsWith('platform_staff_')) continue;
 		if (excluded.has(tableName)) continue;
 		const columns = await tableColumns(db, tableName);
 		if (!columns.has('user_id')) continue;
@@ -236,6 +238,9 @@ async function purgeBusinessWorkspaceData(db: D1, businessId: string) {
 			.bind(userId)
 			.first<{ 1: number }>();
 		if (membership) continue;
+		const platformMember = await db.prepare('SELECT user_id FROM platform_staff_members WHERE user_id = ? LIMIT 1')
+			.bind(userId).first();
+		if (platformMember) continue;
 
 		await deleteUserScopedData(db, userId);
 		await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
@@ -576,6 +581,7 @@ export async function createBusinessLifecycleSnapshot(
 	const tableCounts: Record<string, number> = {};
 
 	for (const tableName of tables) {
+		if (tableName.startsWith('platform_staff_')) continue;
 		const columns = await tableColumns(db, tableName);
 		if (!columns.has('business_id')) continue;
 		const row = await db

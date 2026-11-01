@@ -1,16 +1,26 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-10-10
+Updated: 2026-10-31 (platform staff extension; existing baseline retained)
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
+## Platform Staff Extension
+
+- Migration `0107_platform_staff_console.sql` adds `platform_staff_members`, `platform_staff_audit`, and `iot_device_reservations` as explicitly classified platform/system tables, not restaurant-managed records.
+- `/staff` and every child load/action require active platform membership after normal session validation, independently of tenant role/subscription. `/login?staff=1` uses the same login verification and a separate staff destination.
+- `/staff/businesses` reads a bounded business directory; `/staff/businesses/[id]` reads selected business contact/status, membership/equipment counts, and subscription status fields only. No HR records, credentials, or store tokens.
+- `/staff/equipment` reads factory inventory without credential fields; equipment-authorized actions reserve or release unused equipment with transactional platform audit. Gateway claiming reads reservations and database triggers reject another tenant's claim.
+- `/staff/activity` is owner-only. No platform grant is available through tenant signup, manager permissions, or a public API. Initial-owner bootstrap is an explicit operator command for an existing active account.
+- `/staff/health?business=<id>` reads only the selected business's active gateway contact timestamps and, for owner/support, safe queued-notification status metadata. All lists are paginated and manually refreshed. Equipment-only staff never query notification history. Delivery attempts must match both event ID and business ID; no message/recipient/payload/provider-error fields are selected. Migration 0108 adds `idx_operational_events_staff_queue` and `idx_operational_attempts_staff_recent`; no new table or telemetry writes.
+- Migration 0109 adds session-bound password/passkey confirmation, WebAuthn public credentials and challenges, membership revisions, audit target IDs, and database last-owner guards. `/staff/security` verifies the existing password and rotates the current session token without changing its expiry or restaurant membership, then requires a user-verified passkey on the configured domain. Staff reads require both factors within eight hours; writes within 15 minutes. `/staff/team` is owner-only, grants existing active identities, and transactionally audits changes. Role/access/password changes invalidate staff confirmation and pending challenges; tenant cleanup excludes all `platform_staff_*` records and retains platform identities, including revoked staff. Passkey registration/verification/removal is same-origin, rate-limited, bounded to five keys and one five-minute challenge per session; no private key is stored. Existing-key verification is required before adding another, and the last key cannot be removed through the app. These controls affect platform staff only, not restaurant logins.
+
 ## Summary
 
-- Tables inventoried: 104
-- Tables with `business_id`: 88
+- Tables inventoried: 114 (production export plus migrations 0107 and 0109)
+- Tables with `business_id`: 94
 - Tables with approved alternate tenant columns: 2
-- Approved global/system/root tables: 15
-- Tables with `user_id`: 37
+- Approved global/system/root tables: 21
+- Tables with `user_id`: 46
 
 ## Inventory Caveats
 
@@ -2594,3 +2604,117 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `scripts/core-feature-actions-check.mjs` [reference]
   - `scripts/ensure-tenant-columns.mjs` [reference]
   - `src/lib/server/tenant.ts` [reference]
+
+### platform_staff_members
+
+**Columns**
+  - `user_id` TEXT (PRIMARY KEY; users.id, ON DELETE CASCADE)
+  - `staff_role` TEXT (owner/support/equipment)
+  - `revision` INTEGER (NOT NULL, DEFAULT 1; incremented on access changes)
+  - `is_active` INTEGER (0/1)
+  - `granted_by` TEXT (users.id, ON DELETE SET NULL)
+  - `created_at` INTEGER
+  - `updated_at` INTEGER
+
+**Code Usage**
+  - `src/lib/server/platformStaff.ts` [select, platform authorization]
+  - `scripts/bootstrap-platform-owner.mjs` [insert, explicit first-owner bootstrap]
+  - `src/hooks.server.ts` [staff routes after validated session, before tenant context]
+
+### communication_consent_events
+
+**Columns**
+  - `id` TEXT (PRIMARY KEY)
+  - `user_id` TEXT (users.id, ON DELETE CASCADE)
+  - `business_id` TEXT (optional context; businesses.id, ON DELETE SET NULL)
+  - `channel` TEXT (email/sms)
+  - `granted` INTEGER (0/1)
+  - `disclosure_version` TEXT
+  - `source` TEXT
+  - `recorded_at` INTEGER
+
+**Code Usage**
+  - Migration `0099_communication_consent_records.sql` [existing per-user consent history]
+  - `scripts/db-governance-check.mjs` [approved global/system table with optional business context]
+
+### platform_staff_audit
+
+**Columns**
+  - `id` TEXT (PRIMARY KEY)
+  - `actor_user_id` TEXT
+  - `target_user_id` TEXT (optional target identity; no FK cascade)
+  - `action` TEXT
+  - `business_id` TEXT (optional target; not tenant-owned)
+  - `device_serial` TEXT
+  - `reason` TEXT
+  - `created_at` INTEGER
+
+**Code Usage**
+  - `src/lib/server/platformStaff.ts` [transactional insert]
+  - `/staff/activity` `src/routes/staff/activity/+page.server.ts` [owner-only bounded select]
+  - Migration 0107 [membership insertion audit trigger]
+  - `src/lib/server/platformStaffAdministration.ts` [transactional staff grants/revocations]
+  - `/staff/security` [transactional password-confirmation audit, no credentials]
+
+### platform_staff_step_up
+
+**Columns**
+  - `session_id` TEXT (PRIMARY KEY; sessions.id, ON DELETE CASCADE)
+  - `user_id` TEXT (platform_staff_members.user_id, ON DELETE CASCADE)
+  - `membership_revision` INTEGER (NOT NULL)
+  - `verified_at` INTEGER (NOT NULL, Unix seconds)
+  - `passkey_verified_at` INTEGER (nullable; password confirmation alone cannot grant staff access)
+
+**Code Usage**
+  - `src/lib/server/platformStaff.ts` [session/user/revision/expiry authorization checks]
+  - `src/hooks.server.ts` [staff-only verification redirect; no tenant billing bypass]
+  - `/staff/security` [password verification, proof upsert, session-token rotation]
+  - Migration 0109 [proof invalidation on membership/account/password changes]
+  - `src/lib/server/trial.ts` [explicitly excluded from tenant cleanup]
+
+### platform_staff_passkeys
+
+**Columns**
+  - `credential_id` TEXT (PRIMARY KEY)
+  - `user_id` TEXT (platform_staff_members.user_id, ON DELETE CASCADE)
+  - `rp_id` TEXT (NOT NULL; configured domain)
+  - `public_key` TEXT (NOT NULL; base64url COSE public key, never a private key)
+  - `counter` INTEGER (NOT NULL, DEFAULT 0)
+  - `name` TEXT (NOT NULL)
+  - `created_at` INTEGER (NOT NULL)
+  - `last_used_at` INTEGER
+
+**Code Usage**
+  - `src/lib/server/platformPasskeys.ts` [bounded own-account credential management, signature/counter verification]
+  - `/staff/security/passkeys` [same-origin, rate-limited POST; no restaurant-login changes]
+  - `src/lib/server/trial.ts` [excluded from tenant cleanup]
+
+### platform_staff_challenges
+
+**Columns**
+  - `session_id` TEXT (PRIMARY KEY; sessions.id, ON DELETE CASCADE)
+  - `user_id` TEXT (platform_staff_members.user_id, ON DELETE CASCADE)
+  - `membership_revision` INTEGER (NOT NULL)
+  - `purpose` TEXT (register/authenticate)
+  - `challenge` TEXT (NOT NULL)
+  - `rp_id` TEXT (NOT NULL)
+  - `expires_at` INTEGER (NOT NULL; five-minute maximum)
+
+**Code Usage**
+  - `src/lib/server/platformPasskeys.ts` [one challenge per session, consumed transactionally]
+  - Migration 0109 [cleared on membership/account/password changes]
+  - `src/lib/server/trial.ts` [excluded from tenant cleanup]
+
+### iot_device_reservations
+
+**Columns**
+  - `serial` TEXT (PRIMARY KEY; iot_device_inventory.serial, ON DELETE CASCADE)
+  - `business_id` TEXT (businesses.id, ON DELETE CASCADE)
+  - `reserved_by` TEXT (users.id, ON DELETE SET NULL)
+  - `created_at` INTEGER
+
+**Code Usage**
+  - `src/lib/server/platformStaff.ts` [platform-authorized reservation/release]
+  - `/staff/equipment` `src/routes/staff/equipment/+page.server.ts` [bounded select]
+  - `src/lib/server/temperatureDeviceProvisioning.ts` [tenant gateway claim restriction]
+  - Migration 0107 [reservation/claim concurrency triggers]

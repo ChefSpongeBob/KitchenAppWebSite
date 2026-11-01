@@ -4,11 +4,11 @@
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
+  import { onMount, tick } from 'svelte';
   import { pushToast } from '$lib/client/toasts';
   import {
-    GatewayProvisioning,
-    isGatewayProvisioningAvailable,
-    type GatewayWifiNetwork
+    readGatewaySetupProgress,
+    saveGatewaySetupProgress
   } from '$lib/client/gatewayProvisioning';
   import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -74,11 +74,12 @@
 
   let feedbackMessage = '';
   let setupGatewayId = '';
-  let setupStage: 'idle' | 'scanning' | 'ready' | 'connecting' | 'complete' = 'idle';
-  let setupNetworks: GatewayWifiNetwork[] = [];
-  let selectedSsid = '';
-  let customSsid = '';
-  let wifiPassword = '';
+  let setupBusy = false;
+  let setupStep: 1 | 2 | 3 = 1;
+  let setupStartedAt = 0;
+  let setupNetworkName = '';
+  let setupNetworkPassword = '';
+  let setupComplete = false;
   let setupError = '';
   const ONLINE_WINDOW_SECONDS = 10 * 60;
 
@@ -164,84 +165,117 @@
     };
   };
 
-  const beginGatewaySetup: SubmitFunction = ({ cancel, formData }) => {
-    if (!isGatewayProvisioningAvailable()) {
-      cancel();
-      pushToast('Open Crimini on your phone to connect gateway Wi-Fi.', 'error');
-      return;
-    }
-
-    setupGatewayId = String(formData.get('gateway_id') ?? '');
-    setupStage = 'scanning';
-    setupNetworks = [];
-    selectedSsid = '';
-    customSsid = '';
-    wifiPassword = '';
-    setupError = '';
-
-    return async ({ result }) => {
-      const payload = result.type === 'success' || result.type === 'failure'
-        ? result.data as {
-            error?: string;
-            provisioning?: { serviceName: string; proofOfPossession: string };
-          }
-        : undefined;
-
-      if (result.type !== 'success' || !payload?.provisioning) {
-        setupStage = 'idle';
-        setupError = payload?.error ?? 'Gateway setup could not start.';
-        pushToast(setupError, 'error');
-        return;
-      }
-
-      try {
-        const response = await GatewayProvisioning.scanNetworks(payload.provisioning);
-        setupNetworks = response.networks;
-        selectedSsid = response.networks[0]?.ssid ?? '__other';
-        setupStage = 'ready';
-      } catch (error) {
-        setupStage = 'idle';
-        setupError = error instanceof Error ? error.message : 'Gateway was not found nearby.';
-        pushToast(setupError, 'error');
-      }
+  const registerGateway: SubmitFunction = async (submission) => {
+    const showFeedback = await withFeedback(submission);
+    return async (response) => {
+      await showFeedback?.(response);
+      if (response.result.type !== 'success') return;
+      const gatewayId = response.result.data?.gatewayId;
+      if (typeof gatewayId !== 'string') return;
+      submission.formElement.reset();
+      await tick();
+      const setupForm = document.getElementById(`gateway-setup-${gatewayId}`);
+      if (setupForm instanceof HTMLFormElement) setupForm.requestSubmit();
     };
   };
 
-  async function connectGatewayWifi() {
-    const ssid = (selectedSsid === '__other' ? customSsid : selectedSsid).trim();
-    if (!ssid) {
-      setupError = 'Choose or enter a Wi-Fi network.';
+  onMount(() => {
+    const progress = readGatewaySetupProgress();
+    if (!progress || !data.gateways.some((gateway) => gateway.id === progress.gatewayId &&
+        gateway.businessId === progress.businessId && gateway.isActive === 1)) return;
+    setupGatewayId = progress.gatewayId;
+    setupStartedAt = progress.startedAt;
+    setupStep = progress.step;
+  });
+
+  function setSetupStep(step: 1 | 2 | 3) {
+    setupStep = step;
+    setupError = '';
+    const gateway = data.gateways.find((device) => device.id === setupGatewayId);
+    if (gateway && setupStartedAt) saveGatewaySetupProgress({
+      gatewayId: gateway.id,
+      businessId: gateway.businessId,
+      startedAt: setupStartedAt,
+      step
+    });
+  }
+
+  const beginGatewaySetup: SubmitFunction = ({ cancel, formData }) => {
+    if (setupBusy) {
+      cancel();
       return;
     }
-
-    setupStage = 'connecting';
+    closeGatewaySetup();
+    setupGatewayId = String(formData.get('gateway_id') ?? '');
+    setupBusy = true;
     setupError = '';
+    return async ({ result }) => {
+      setupBusy = false;
+      const payload = result.type === 'success' || result.type === 'failure'
+        ? result.data as {
+            error?: string;
+            provisioning?: { networkName: string; networkPassword: string; startedAt: number };
+          }
+        : undefined;
+      if (result.type !== 'success' || !payload?.provisioning) {
+        setupError = payload?.error ?? 'Gateway setup could not start.';
+        return;
+      }
+      setupNetworkName = payload.provisioning.networkName;
+      setupNetworkPassword = payload.provisioning.networkPassword;
+      setupStartedAt = payload.provisioning.startedAt;
+      setSetupStep(1);
+      await tick();
+      const setupPanel = document.getElementById(`gateway-wifi-${setupGatewayId}`);
+      setupPanel?.scrollIntoView({ block: 'start' });
+      setupPanel?.focus({ preventScroll: true });
+    };
+  };
+
+  const checkGatewayConnection: SubmitFunction = ({ cancel }) => {
+    if (setupBusy) {
+      cancel();
+      return;
+    }
+    setupBusy = true;
+    setupError = '';
+    return async ({ result }) => {
+      setupBusy = false;
+      if (result.type !== 'success') {
+        setupError = result.type === 'failure'
+          ? String(result.data?.error ?? 'Connection could not be checked.')
+          : 'Reconnect to your normal Wi-Fi, then check again.';
+        return;
+      }
+      if (!result.data?.connected) {
+        setupError = 'No new gateway check-in yet. Wait a moment, then check again.';
+        return;
+      }
+      setupComplete = true;
+      setupNetworkPassword = '';
+      saveGatewaySetupProgress(null);
+      await invalidateAll();
+    };
+  };
+
+  async function copySetupPassword() {
     try {
-      await GatewayProvisioning.provisionNetwork({ ssid, password: wifiPassword });
-      wifiPassword = '';
-      setupStage = 'complete';
-      pushToast('Gateway connected to Wi-Fi.', 'success');
-    } catch (error) {
-      wifiPassword = '';
-      setupStage = 'ready';
-      setupError = error instanceof Error ? error.message : 'Gateway could not connect to Wi-Fi.';
-      pushToast(setupError, 'error');
+      await navigator.clipboard.writeText(setupNetworkPassword);
+      pushToast('Setup password copied.', 'success');
+    } catch {
+      setupError = 'Select and copy the setup password shown here.';
     }
   }
 
-  async function closeGatewaySetup() {
-    try {
-      await GatewayProvisioning.disconnect();
-    } catch {
-      // The gateway may already have disconnected after successful setup.
-    }
+  function closeGatewaySetup() {
     setupGatewayId = '';
-    setupStage = 'idle';
-    setupNetworks = [];
-    selectedSsid = '';
-    customSsid = '';
-    wifiPassword = '';
+    setupStep = 1;
+    setupStartedAt = 0;
+    setupNetworkName = '';
+    setupNetworkPassword = '';
+    setupComplete = false;
     setupError = '';
+    saveGatewaySetupProgress(null);
   }
 </script>
 
@@ -273,6 +307,7 @@
         {:else}
           <div class="unit-list">
             {#each gatewayDevices as device}
+              <div class="gateway-unit">
               <details class="unit-row" class:muted={device.isActive !== 1}>
                 <summary>
                   <span class="unit-name"><span class="material-icons" aria-hidden="true">router</span><strong>{device.displayName}</strong></span>
@@ -289,58 +324,75 @@
                   <div><span>Registered</span><strong>{formatDateTime(device.createdAt)}</strong></div>
                 </div>
                 {#if device.isActive === 1}
-                  {#if setupGatewayId === device.id}
-                    <div class="wifi-setup">
-                      {#if setupStage === 'scanning'}
-                        <p>Finding gateway...</p>
-                      {:else if setupStage === 'ready' || setupStage === 'connecting'}
-                        <div class="wifi-fields">
-                          <label>
-                            <span>Wi-Fi Network</span>
-                            <select bind:value={selectedSsid} disabled={setupStage === 'connecting'}>
-                              {#each setupNetworks as network}
-                                <option value={network.ssid}>{network.ssid}</option>
-                              {/each}
-                              <option value="__other">Other network</option>
-                            </select>
-                          </label>
-                          {#if selectedSsid === '__other'}
-                            <label><span>Network Name</span><input bind:value={customSsid} maxlength="32" disabled={setupStage === 'connecting'} /></label>
-                          {/if}
-                          <label><span>Wi-Fi Password</span><input type="password" bind:value={wifiPassword} maxlength="63" autocomplete="new-password" disabled={setupStage === 'connecting'} /></label>
-                        </div>
-                        {#if setupError}<p class="setup-error">{setupError}</p>{/if}
-                        <div class="setup-actions">
-                          <button type="button" on:click={closeGatewaySetup} disabled={setupStage === 'connecting'}>Cancel</button>
-                          <button type="button" on:click={connectGatewayWifi} disabled={setupStage === 'connecting'}>
-                            {setupStage === 'connecting' ? 'Connecting...' : 'Connect'}
-                          </button>
-                        </div>
-                      {:else if setupStage === 'complete'}
-                        <div class="setup-complete">
-                          <strong>Wi-Fi connected.</strong>
-                          <button type="button" on:click={closeGatewaySetup}>Close</button>
-                        </div>
-                      {:else if setupError}
-                        <div class="setup-complete">
-                          <span class="setup-error">{setupError}</span>
-                          <button type="button" on:click={closeGatewaySetup}>Close</button>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
-                  <div class="gateway-actions">
-                    <form method="POST" action="?/gateway_setup" use:enhance={beginGatewaySetup}>
-                      <input type="hidden" name="gateway_id" value={device.id} />
-                      <button type="submit" disabled={setupStage === 'scanning' || setupStage === 'connecting'}>Connect Wi-Fi</button>
-                    </form>
-                    <form method="POST" action="?/revoke_iot_device" use:enhance={withFeedback}>
-                      <input type="hidden" name="id" value={device.id} />
-                      <button type="submit" class="danger">Revoke Gateway</button>
-                    </form>
-                  </div>
+                  <form method="POST" action="?/revoke_iot_device" use:enhance={withFeedback} class="danger-line">
+                    <input type="hidden" name="id" value={device.id} />
+                    <button type="submit" class="danger" disabled={setupBusy}>Revoke Gateway</button>
+                  </form>
                 {/if}
               </details>
+                {#if device.isActive === 1}
+                  <div class="gateway-actions">
+                    <form id={`gateway-setup-${device.id}`} method="POST" action="?/gateway_setup" use:enhance={beginGatewaySetup}>
+                      <input type="hidden" name="gateway_id" value={device.id} />
+                      <button type="submit" disabled={setupBusy}
+                        aria-expanded={setupGatewayId === device.id} aria-controls={`gateway-wifi-${device.id}`}>
+                        {setupBusy && setupGatewayId === device.id ? 'Opening...' : 'Wi-Fi Setup'}
+                      </button>
+                    </form>
+                  </div>
+                  {#if setupGatewayId === device.id}
+                    <div class="wifi-setup" id={`gateway-wifi-${device.id}`} tabindex="-1" role="region" aria-label={`Wi-Fi setup for ${device.displayName}`}>
+                      {#if setupComplete}
+                        <div class="setup-complete" role="status">
+                          <strong>Connected to Crimini.</strong>
+                          <button type="button" on:click={closeGatewaySetup}>Done</button>
+                        </div>
+                      {:else if setupStartedAt}
+                        <nav class="setup-steps" aria-label="Gateway Wi-Fi setup">
+                          {#each ['Connect to Gateway', 'Set Restaurant Wi-Fi', 'Check Connection'] as title, index}
+                            <button type="button" class:active={setupStep === index + 1}
+                              aria-current={setupStep === index + 1 ? 'step' : undefined}
+                              disabled={setupBusy} on:click={() => setSetupStep((index + 1) as 1 | 2 | 3)}>
+                              {index + 1}. {title}
+                            </button>
+                          {/each}
+                        </nav>
+                        <div class="setup-content">
+                          {#if setupStep === 1}
+                            <p>Plug in your gateway. In your computer or phone's Wi-Fi settings, join the network below. Choose to stay connected if it says there is no internet.</p>
+                            {#if setupNetworkPassword}
+                              <dl class="setup-details">
+                                <div><dt>Network</dt><dd>{setupNetworkName}</dd></div>
+                                <div><dt>Setup Password</dt><dd><code>{setupNetworkPassword}</code><button type="button" on:click={copySetupPassword}>Copy</button></dd></div>
+                              </dl>
+                            {:else}
+                              <p>Click Wi-Fi Setup above to show the gateway network and setup password again.</p>
+                            {/if}
+                            <details class="setup-help"><summary>Network not showing?</summary><p>Keep your computer or phone near the gateway. If it has a saved network, setup opens after it cannot reconnect for 10 minutes.</p></details>
+                          {:else if setupStep === 2}
+                            <p>Open gateway setup, choose your restaurant's 2.4 GHz Wi-Fi, and enter its password. Keep this Crimini page open.</p>
+                            <a class="setup-link" href="http://192.168.4.1/" target="_blank" rel="noopener noreferrer">Open Gateway Setup</a>
+                            <details class="setup-help"><summary>Setup page not opening?</summary><p>Check that you are connected to the gateway's temporary Wi-Fi. Open http://192.168.4.1/ in your browser.</p></details>
+                          {:else}
+                            <p>Reconnect your computer or phone to its normal Wi-Fi, then check the gateway connection.</p>
+                            <form method="POST" action="?/gateway_connection" use:enhance={checkGatewayConnection}>
+                              <input type="hidden" name="gateway_id" value={device.id} />
+                              <input type="hidden" name="started_at" value={setupStartedAt} />
+                              <button type="submit" disabled={setupBusy}>{setupBusy ? 'Checking...' : 'Check Connection'}</button>
+                            </form>
+                          {/if}
+                        </div>
+                        <div class="setup-actions">
+                          <button type="button" on:click={closeGatewaySetup} disabled={setupBusy}>Cancel</button>
+                          {#if setupStep > 1}<button type="button" disabled={setupBusy} on:click={() => setSetupStep((setupStep - 1) as 1 | 2)}>Back</button>{/if}
+                          {#if setupStep < 3}<button type="button" disabled={setupBusy} on:click={() => setSetupStep((setupStep + 1) as 2 | 3)}>Continue</button>{/if}
+                        </div>
+                      {/if}
+                      {#if setupError}<p class="setup-error" role="alert">{setupError}</p>{/if}
+                    </div>
+                  {/if}
+                {/if}
+              </div>
             {/each}
           </div>
         {/if}
@@ -390,12 +442,13 @@
       <header class="section-title"><h2>Register Equipment</h2></header>
       <details class="register-panel">
         <summary><span>Temp Sensor Gateway</span><span class="material-icons" aria-hidden="true">expand_more</span></summary>
-        <form method="POST" action="?/register_gateway" use:enhance={withFeedback}>
+        <form method="POST" action="?/register_gateway" use:enhance={registerGateway}>
           <div class="field-grid">
             <label><span>Gateway Serial</span><input name="external_device_id" required /></label>
             <label><span>Name</span><input name="display_name" required /></label>
           </div>
           <div class="button-line"><button type="submit">Register Gateway</button></div>
+          <p class="empty-line">Wi-Fi setup follows registration.</p>
         </form>
       </details>
 
@@ -708,11 +761,72 @@
     color: color-mix(in srgb, var(--color-error) 76%, var(--color-text));
   }
 
-  .wifi-fields {
+  .setup-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.2rem;
     padding: 0.8rem 1rem;
+  }
+
+  .setup-steps button {
+    font-weight: var(--weight-regular, 400);
+  }
+
+  .setup-steps button.active {
+    font-weight: var(--weight-bold);
+  }
+
+  .setup-content {
+    padding: 0 1rem 1rem;
+    max-width: 680px;
+    font-size: 0.8rem;
+  }
+
+  .setup-content p {
+    margin: 0 0 0.8rem;
+    line-height: 1.6;
+  }
+
+  .setup-details {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.72rem;
+    gap: 0.6rem;
+    margin: 0.9rem 0;
+  }
+
+  .setup-details > div {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .setup-details dt {
+    color: var(--color-text-muted);
+  }
+
+  .setup-details dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .setup-help {
+    margin-top: 0.8rem;
+    color: var(--color-text-muted);
+  }
+
+  .setup-help summary {
+    cursor: pointer;
+    padding: 0.25rem 0;
+  }
+
+  .setup-help p {
+    margin-top: 0.4rem;
+  }
+
+  .setup-link {
+    display: inline-block;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-divider);
+    color: var(--color-text);
+    text-decoration: none;
   }
 
   .setup-complete {
@@ -903,8 +1017,5 @@
       display: none;
     }
 
-    .wifi-fields {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

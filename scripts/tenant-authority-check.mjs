@@ -50,11 +50,13 @@ assertCheck(
 assertCheck(
   'employee deletion is tenant-safe and leaves the deleted profile route',
   admin.includes('const hasOtherMembership = await hasOtherBusinessMembership(db, userId, businessId);') &&
+    admin.includes('const retainIdentity = hasOtherMembership || await hasPlatformStaffMembership(db, userId);') &&
+    admin.includes('if (!retainIdentity) {') &&
     admin.includes('await db.batch(statements);') &&
-    admin.includes('targetUserId: hasOtherMembership ? userId : null') &&
+    admin.includes('targetUserId: retainIdentity ? userId : null') &&
     admin.includes("throw redirect(303, '/admin/users');") &&
     employeeDetail.includes('use:enhance={deleteEmployee}'),
-  'Employee deletion must atomically remove only the current membership, preserve accounts used by other businesses, avoid dangling audit references, and redirect to the staff roster.'
+  'Employee deletion must atomically remove only the current membership, preserve other-business and platform identities, avoid dangling audit references, and redirect to the staff roster.'
 );
 
 assertCheck(

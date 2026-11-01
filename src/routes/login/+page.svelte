@@ -88,7 +88,7 @@
 			</div>
 		{/if}
 
-		<form method="POST" action="?/login" class="auth-form" use:enhance={enhanceLogin}>
+		<form method="POST" action={$page.url.searchParams.get('staff') === '1' ? '?/login&staff=1' : '?/login'} class="auth-form" use:enhance={enhanceLogin}>
 			<div class="auth-form-head">
 				<h2>{registrationComplete ? 'Login' : 'Sign in'}</h2>
 			</div>
@@ -157,7 +157,7 @@
 				</div>
 				<div class="session-actions">
 					<a href={activeSession.continuePath || '/app'} class="auth-secondary-button">Continue</a>
-					<form method="POST" action="?/not_you" use:enhance>
+					<form method="POST" action={$page.url.searchParams.get('staff') === '1' ? '?/not_you&staff=1' : '?/not_you'} use:enhance>
 						<button type="submit" class="auth-link-button">Not you?</button>
 					</form>
 				</div>

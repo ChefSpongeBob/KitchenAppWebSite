@@ -274,32 +274,43 @@ expect('src/routes/app/+page.svelte', 'dashboard suppresses old temperatures aft
   source.includes('<span class="offline-reading">Offline</span>')
 );
 
-expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway receives restaurant Wi-Fi through secure BLE provisioning', (source) =>
-  source.includes('#include <WiFiProv.h>') &&
-  source.includes('NETWORK_PROV_SCHEME_BLE') &&
-  source.includes('NETWORK_PROV_SECURITY_1') &&
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway hosts protected Wi-Fi setup for desktop and phone browsers', (source) =>
+  source.includes('WiFi.softAP(provisioningServiceName, provisioningProof') &&
+  source.includes('WIFI_STORAGE_RAM') &&
+  source.includes('Content-Security-Policy') &&
+  source.includes('X-Setup-Token') &&
+  source.includes('sendGatewayStatus()') &&
   source.includes('provisionWifiIfNeeded()') &&
   source.includes('WiFi.begin()') &&
+  !source.includes('WiFiProv') &&
   !source.includes('WIFI_NAME') &&
   !source.includes('WIFI_PASSWORD')
 );
 
-expect('src/routes/admin/sensors/+page.svelte', 'gateway Wi-Fi credentials remain phone-to-gateway only', (source) =>
-  source.includes('GatewayProvisioning.provisionNetwork') &&
-  source.includes("wifiPassword = ''") &&
-  source.includes('Connect Wi-Fi')
+expect('src/routes/admin/sensors/+page.svelte', 'registered gateway guidance returns to a tenant-scoped connection check', (source) =>
+  source.includes('Connect to Gateway') &&
+  source.includes('Set Restaurant Wi-Fi') &&
+  source.includes('Check Connection') &&
+  source.includes('?/gateway_connection') &&
+  source.includes('readGatewaySetupProgress') &&
+  !source.includes('GatewayProvisioning.provisionNetwork')
 );
 
-expect('android/app/src/main/java/com/nexusnorthsystems/crimini/GatewayProvisioningPlugin.java', 'Android uses Espressif secure BLE provisioning', (source) =>
-  source.includes('ESPProvisionManager') &&
-  source.includes('ESPConstants.SecurityType.SECURITY_1') &&
-  source.includes('activeDevice.provision(ssid, password')
+expect('firmware/arduino/CriminiTempGateway/GatewaySetupPage.h', 'gateway setup page submits credentials locally and safely renders network names', (source) =>
+  source.includes("request('/connect'") &&
+  source.includes("new URLSearchParams({ssid,password})") &&
+  source.includes("new Option(network,network)") &&
+  source.includes("byId('password').value=''") &&
+  !source.includes('innerHTML') &&
+  !source.includes('https://')
 );
 
-expect('ios/App/CapApp-SPM/Sources/CapApp-SPM/GatewayProvisioningPlugin.swift', 'iOS uses Espressif secure BLE provisioning', (source) =>
-  source.includes('import ESPProvision') &&
-  source.includes('security: .secure') &&
-  source.includes('device.provision(ssid: ssid, passPhrase: password)')
+expect('android/app/src/main/AndroidManifest.xml', 'gateway setup no longer requests Android Bluetooth permissions', (source) =>
+  !source.includes('BLUETOOTH') && !source.includes('ACCESS_FINE_LOCATION')
+);
+
+expect('ios/App/App/Info.plist', 'gateway setup no longer requests iOS Bluetooth permissions', (source) =>
+  !source.includes('NSBluetoothAlwaysUsageDescription')
 );
 
 expect('src/routes/api/internal/temperature-monitoring/process/+server.ts', 'stale processor is internal-token protected', (source) =>
@@ -362,3 +373,5 @@ for (const check of checks) {
 }
 
 if (failed.length) process.exit(1);
+
+await import('./gateway-wifi-behavior-check.mjs');

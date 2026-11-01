@@ -31,6 +31,7 @@ import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
 import { wrapProductionSchemaGuard } from '$lib/server/schemaGuard';
 import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
 import { processOperationalEvents } from '$lib/server/operationalEvents';
+import { findPlatformStaff, isPlatformStaffPath, isStaffSecurityPath, loadStaffStepUp, STAFF_SESSION_SECONDS } from '$lib/server/platformStaff';
 
 const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
 	'/admin',
@@ -251,7 +252,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (!sessionToken) {
 		if (isPrivateRoute) {
 			clearSessionCookies(event);
-			throw redirect(303, '/login');
+			throw redirect(303, isPlatformStaffPath(pathname) ? '/login?staff=1' : '/login');
 		}
 		return resolvePublicOrAuthRoute();
 	}
@@ -389,6 +390,43 @@ export const handle: Handle = async ({ event, resolve }) => {
 			// Normalize to a single canonical cookie key only when legacy key was used.
 			if (!event.cookies.get(primaryCookie)) {
 				setSessionCookies(event, sessionToken);
+			}
+		}
+
+		// Platform staff never inherit authority from a restaurant role or billing state.
+		if (isPlatformStaffPath(pathname) || (pathname === '/login' && event.url.searchParams.get('staff') === '1')) {
+			let staff;
+			try {
+				staff = await findPlatformStaff(db, session.found_user_id);
+			} catch (error) {
+				logOperationalError({ event: 'platform_staff_lookup_failed', request: event.request, route: pathname, error });
+				return applySecurityHeaders(new Response('Staff console unavailable.', {
+					status: 503, headers: { 'cache-control': 'no-store' }
+				}));
+			}
+			if (isPlatformStaffPath(pathname) && !staff) {
+				return applySecurityHeaders(new Response('Staff access required.', {
+					status: 403, headers: { 'cache-control': 'no-store' }
+				}));
+			}
+			if (staff) {
+				event.locals.userId = session.found_user_id;
+				event.locals.sessionId = session.id;
+				event.locals.platformStaff = staff;
+				let staffVerified = false;
+				try {
+					staffVerified = !isPlatformStaffPath(pathname) || isStaffSecurityPath(pathname) ||
+						Boolean(await loadStaffStepUp(db, staff.userId, session.id, now, STAFF_SESSION_SECONDS));
+				} catch (error) {
+					logOperationalError({ event: 'platform_staff_verification_failed', request: event.request, route: pathname, error });
+					return applySecurityHeaders(new Response('Staff console unavailable.', {
+						status: 503, headers: { 'cache-control': 'no-store' }
+					}));
+				}
+				if (!staffVerified) {
+					throw redirect(303, `/staff/security?next=${encodeURIComponent(pathname + event.url.search)}`);
+				}
+				return resolveWithNoStore();
 			}
 		}
 

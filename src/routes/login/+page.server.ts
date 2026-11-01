@@ -22,6 +22,7 @@ import {
 } from '$lib/server/security';
 import { getTurnstileSiteKey, validateTurnstileSubmission } from '$lib/server/turnstile';
 import type { PageServerLoad } from './$types';
+import { findPlatformStaff } from '$lib/server/platformStaff';
 
 const GENERIC_LOGIN_ERROR = 'We could not sign you in with those details. Check your email and password and try again.';
 
@@ -31,6 +32,9 @@ async function resolvePostLoginPath(
 	businessId: string | null | undefined,
 	url?: URL
 ) {
+	if (url?.searchParams.get('staff') === '1') {
+		return await findPlatformStaff(db, userId) ? '/staff' : '/app';
+	}
 	if (url?.searchParams.get('onboarding') === '1') {
 		return '/settings?onboarding=1';
 	}
@@ -184,9 +188,9 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 };
 
 export const actions: Actions = {
-	not_you: async ({ cookies, locals, request }) => {
+	not_you: async ({ cookies, locals, request, url }) => {
 		await revokeActiveSession(locals.DB, cookies, request);
-		throw redirect(303, '/login?switch=1');
+		throw redirect(303, url.searchParams.get('staff') === '1' ? '/login?staff=1&switch=1' : '/login?switch=1');
 	},
 	login: async ({ request, cookies, locals, platform, getClientAddress, url }) => {
 		let email = '';
@@ -350,6 +354,10 @@ export const actions: Actions = {
 
 			const now = Math.floor(Date.now() / 1000);
 			const expires = now + 60 * 60 * 24 * 30;
+			const staffLogin = url.searchParams.get('staff') === '1';
+			if (staffLogin && !await findPlatformStaff(db, user.id)) {
+				return fail(403, { error: 'Staff access required.', email });
+			}
 
 			// A fresh sign-in should replace this browser's previous account context.
 			await revokeActiveSession(db, cookies, request);
@@ -431,8 +439,8 @@ export const actions: Actions = {
 					.run();
 			}
 
-			let businessContext = await getUserBusinessContext(db, user.id);
-			if (!businessContext) {
+			let businessContext = staffLogin ? null : await getUserBusinessContext(db, user.id);
+			if (!businessContext && !staffLogin) {
 				if (!dev) {
 					await db
 						.prepare(

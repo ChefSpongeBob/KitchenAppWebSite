@@ -69,6 +69,7 @@ import {
 } from '$lib/server/itemAttachments';
 import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
 import { normalizeFormText, normalizePlainTextInput } from '$lib/server/inputSanitizer';
+import { hasPlatformStaffMembership } from '$lib/server/platformStaff';
 
 type D1 = App.Platform['env']['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -6163,13 +6164,14 @@ export async function deleteUser(request: Request, locals: App.Locals) {
 
   const now = Math.floor(Date.now() / 1000);
   const hasOtherMembership = await hasOtherBusinessMembership(db, userId, businessId);
+  const retainIdentity = hasOtherMembership || await hasPlatformStaffMembership(db, userId);
   const statements = [
     db
       .prepare(`DELETE FROM business_users WHERE business_id = ? AND user_id = ?`)
       .bind(businessId, userId)
   ];
 
-  if (!hasOtherMembership) {
+  if (!retainIdentity) {
     statements.push(
       db.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, userId),
       db
@@ -6181,18 +6183,18 @@ export async function deleteUser(request: Request, locals: App.Locals) {
 
   await db.batch(statements);
 
-  if (hasOtherMembership) await syncUserAppRoleFromMemberships(db, userId);
+  if (retainIdentity) await syncUserAppRoleFromMemberships(db, userId);
 
   await writeAuditLogSafe(db, {
     action: 'user_deleted_from_business',
     request,
     businessId,
     actorUserId: locals.userId ?? null,
-    targetUserId: hasOtherMembership ? userId : null,
+    targetUserId: retainIdentity ? userId : null,
     email: target.email,
     metadata: {
       removedUserId: userId,
-      accountDeleted: !hasOtherMembership
+      accountDeleted: !retainIdentity
     }
   });
 

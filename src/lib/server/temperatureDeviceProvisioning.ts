@@ -16,6 +16,7 @@ type InventoryRow = {
   claim_status: 'available' | 'claimed' | 'revoked';
   claimed_business_id: string | null;
   claimed_iot_device_id: string | null;
+  reserved_business_id: string | null;
 };
 
 type IoTDeviceRow = {
@@ -35,8 +36,10 @@ type IoTDeviceRow = {
 export type GatewayProvisioningSession = {
   gatewayId: string;
   serial: string;
-  serviceName: string;
-  proofOfPossession: string;
+  networkName: string;
+  networkPassword: string;
+  setupUrl: string;
+  startedAt: number;
 };
 
 type TemperatureSensorNodeRow = {
@@ -139,7 +142,7 @@ function bytesFromHex(value: string) {
 }
 
 function provisioningServiceName(serial: string) {
-  return `CR_${serial.slice(-28)}`;
+  return `Crimini-${serial.slice(-24)}`;
 }
 
 async function provisioningProof(serial: string, credentialHash: string) {
@@ -151,7 +154,7 @@ async function provisioningProof(serial: string, credentialHash: string) {
     ['sign']
   );
   const signature = new Uint8Array(
-    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`crimini-wifi-v1:${serial}`))
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`crimini-setup-wifi-v1:${serial}`))
   );
   return Array.from(signature.slice(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -259,10 +262,12 @@ async function loadInventory(db: D1, serial: string, deviceType: InventoryRow['d
   return db
     .prepare(
       `
-      SELECT serial, device_type, hardware_model, firmware_version, key_hash, key_prefix,
-             claim_status, claimed_business_id, claimed_iot_device_id
-      FROM iot_device_inventory
-      WHERE serial = ? AND device_type = ?
+      SELECT i.serial, i.device_type, i.hardware_model, i.firmware_version, i.key_hash, i.key_prefix,
+             i.claim_status, i.claimed_business_id, i.claimed_iot_device_id,
+             r.business_id AS reserved_business_id
+      FROM iot_device_inventory i
+      LEFT JOIN iot_device_reservations r ON r.serial = i.serial
+      WHERE i.serial = ? AND i.device_type = ?
       LIMIT 1
       `
     )
@@ -317,9 +322,23 @@ export async function loadGatewayProvisioningSession(
   return {
     gatewayId: gateway.id,
     serial,
-    serviceName: provisioningServiceName(serial),
-    proofOfPossession: await provisioningProof(serial, gateway.key_hash)
+    networkName: provisioningServiceName(serial),
+    networkPassword: await provisioningProof(serial, gateway.key_hash),
+    setupUrl: 'http://192.168.4.1/',
+    startedAt: Math.floor(Date.now() / 1000)
   };
+}
+
+export async function loadGatewayConnectionStatus(db: D1, businessId: string, gatewayId: string) {
+  const gateway = await db.prepare(`
+    SELECT last_seen_at
+    FROM iot_devices
+    WHERE id = ? AND business_id = ? AND device_type = 'sensor_gateway'
+      AND is_active = 1 AND revoked_at IS NULL
+    LIMIT 1
+  `).bind(gatewayId, businessId).first<{ last_seen_at: number | null }>();
+  if (!gateway) throw new Error('Gateway is not active in this business.');
+  return gateway.last_seen_at;
 }
 
 export async function loadTemperatureSensorNodes(db: D1, businessId: string) {
@@ -411,6 +430,9 @@ export async function claimTemperatureGateway(
 
   const inventory = await loadInventory(db, serial, 'sensor_gateway');
   if (!inventory) throw new Error('Gateway serial is not in device inventory.');
+  if (inventory.reserved_business_id && inventory.reserved_business_id !== input.businessId) {
+    throw new Error('Gateway is reserved for another business.');
+  }
   if (inventory.claim_status === 'revoked') throw new Error('Gateway serial is not available.');
   if (inventory.claimed_business_id && inventory.claimed_business_id !== input.businessId) {
     throw new Error('Gateway serial is already assigned.');

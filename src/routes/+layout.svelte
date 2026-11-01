@@ -272,6 +272,7 @@
     "/billing"
   ];
   $: isOnboardingRoute = currentPath === "/register" || currentPath.startsWith("/register/");
+  $: isStaffRoute = currentPath === "/staff" || currentPath.startsWith("/staff/");
   $: isMarketingRoute =
     marketingExactRoutes.has(currentPath) ||
     marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix));
@@ -452,7 +453,7 @@
   <meta name="apple-touch-fullscreen" content="yes" />
 </svelte:head>
 
-{#if !isOnboardingRoute}
+{#if !isOnboardingRoute && !isStaffRoute}
   {#if !isAppChromeRoute}
   <header class="marketing-header">
     <div class="marketing-shell">

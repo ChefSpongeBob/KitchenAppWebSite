@@ -83,6 +83,12 @@ const alternateTenantColumns = new Map([
 ]);
 
 const approvedGlobalTables = new Map([
+  ['platform_staff_members', 'explicit platform authority independent of tenant roles'],
+  ['platform_staff_step_up', 'session-bound platform password confirmation; no tenant credentials or HR data'],
+  ['platform_staff_passkeys', 'platform-only WebAuthn public credentials, never authenticator private keys'],
+  ['platform_staff_challenges', 'short-lived one-use platform WebAuthn challenges bound to user and session'],
+  ['platform_staff_audit', 'platform-only maintenance audit; optional target business, never tenant-owned'],
+  ['iot_device_reservations', 'platform equipment reservations checked against the authenticated tenant at claim time'],
   ['app_feature_flags', 'global app feature definitions used to seed business feature rows'],
   ['businesses', 'root tenant registry'],
   ['d1_migrations', 'Cloudflare D1 migration bookkeeping'],
@@ -136,10 +142,10 @@ for (const table of allTables) {
   unclassified.push(table);
 }
 
-const tenantMissingFromSource = tenantWithBusinessId.filter((table) => !tenantTables.has(table));
+const tenantMissingFromSource = tenantWithBusinessId.filter((table) => !tenantTables.has(table) && !approvedGlobalTables.has(table));
 pushCheck(
   checks,
-  'every business_id table is listed in TENANT_TABLES',
+  'every business_id table has explicit tenant or platform classification',
   tenantMissingFromSource.length === 0,
   tenantMissingFromSource.join(', ')
 );
