@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
-import * as webauthn from '@simplewebauthn/server';
-import { encodeCBOR } from '@levischuck/tiny-cbor';
-import { build } from 'esbuild';
-import { Miniflare } from 'miniflare';
 
 function load(path, deps, extraSource = '') {
   const exports = {};
@@ -50,6 +46,23 @@ sqlite.exec(`INSERT INTO platform_staff_members (user_id,staff_role,is_active,gr
   INSERT INTO iot_device_inventory(serial,device_type,key_hash,key_prefix,claim_status,created_at,updated_at)
     VALUES ('gateway-a','sensor_gateway','${'a'.repeat(64)}','prefix','available',1,1),
            ('gateway-b','sensor_gateway','${'b'.repeat(64)}','prefix','available',1,1);`);
+sqlite.exec(`INSERT INTO platform_staff_passkeys VALUES('old-credential','owner','criminiops.com','old-public-key',0,'Old key',1,NULL);
+  INSERT INTO platform_staff_challenges VALUES('owner-session','owner',1,'register','old-challenge','criminiops.com',1);`);
+const auditBeforeRemoval = sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_audit').get().n;
+sqlite.exec(readFileSync('migrations/0110_remove_staff_passkeys.sql','utf8'));
+for (const table of ['platform_staff_passkeys','platform_staff_challenges']) {
+  assert.equal(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table), undefined);
+}
+assert.deepEqual(sqlite.prepare('PRAGMA table_info(platform_staff_step_up)').all().map(row => row.name),
+  ['session_id','user_id','membership_revision','verified_at']);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_step_up').get().n, 0);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_audit').get().n, auditBeforeRemoval);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_members').get().n, 3);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM sessions').get().n, 2);
+sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('owner-session','owner',now);
+assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
+console.log('PASS cleanup removes old credentials/challenges, requires fresh confirmation, and preserves identities, sessions, memberships, and audit');
+
 function statement(sql) {
   let values = [];
   return {
@@ -116,7 +129,7 @@ assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM iot_device_reservations W
 assert.throws(() => sqlite.exec("UPDATE platform_staff_members SET is_active=0 WHERE user_id='owner'"), /active platform owner/);
 sqlite.exec("DELETE FROM platform_staff_step_up WHERE user_id='owner'");
 await assert.rejects(staff.reserveGateway(db, owner, 'gateway-b', 'b', 'Expired actor', 'owner-session'), { status: 409 });
-sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('owner-session','owner',now,now);
+sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('owner-session','owner',now);
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM platform_staff_audit WHERE action='gateway_reserved'").get().n, 2);
 console.log('PASS assignments are audited atomically, roll back on audit failure, and reject stale authority');
 
@@ -344,7 +357,7 @@ assert.equal(sqlite.prepare("SELECT staff_role FROM platform_staff_members WHERE
 assert.equal(sqlite.prepare("SELECT role FROM users WHERE id='manager'").get().role, 'admin', 'No tenant/global role mutation');
 await assert.rejects(administration.changeStaffMembership(db, owner, 'owner-session', addStaff), { status: 409 });
 await assert.rejects(administration.changeStaffMembership(db, owner, 'manager-session', { ...addStaff, userId: 'manager', revision: 1 }), { status: 409 });
-sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('manager-session', 'manager', now,now);
+sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('manager-session', 'manager', now);
 await administration.changeStaffMembership(db, owner, 'owner-session', { ...addStaff, userId: 'manager', revision: 1, active: 0 });
 assert.equal(await staff.loadStaffStepUp(db, 'manager', 'manager-session'), null);
 assert.equal(sqlite.prepare("SELECT revoked_at FROM sessions WHERE id='manager-session'").get().revoked_at, null);
@@ -399,14 +412,14 @@ sqlite.exec(`INSERT INTO business_store_entitlements
     ('subscription-b','b','manager','app_store','product-b','plan_large','active','OTHER TENANT TOKEN','OTHER TENANT PAYLOAD',1,1);
   INSERT INTO sessions VALUES('support-session','support',NULL,${now + 3600},NULL,'hashed-support-token',${now}),
     ('equipment-session','equipment',NULL,${now + 3600},NULL,'hashed-equipment-token',${now});
-  INSERT INTO platform_staff_step_up SELECT s.id,s.user_id,m.revision,${now},${now}
+  INSERT INTO platform_staff_step_up SELECT s.id,s.user_id,m.revision,${now}
     FROM sessions s JOIN platform_staff_members m ON m.user_id=s.user_id WHERE s.user_id IN ('support','equipment');`);
 const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '$lib/server/platformStaff': staff });
 const activityPage = load('src/routes/staff/activity/+page.server.ts', { '$lib/server/platformStaff': staff });
 const staffEntry = load('src/routes/staff/+page.server.ts', { '@sveltejs/kit': { redirect }, '$lib/server/platformStaff': staff });
 const staffLayout = load('src/routes/staff/+layout.server.ts', { '$lib/server/platformStaff': staff });
 const staffPaths = ['/staff','/staff/businesses','/staff/businesses/a','/staff/equipment','/staff/health',
-  '/staff/team','/staff/activity','/staff/security','/staff/security/passkeys'];
+  '/staff/team','/staff/activity','/staff/security'];
 const tenantCallsBeforeMatrix = tenantCalls;
 for (const path of staffPaths) {
   const event = hookEvent(path, 'manager-token');
@@ -454,20 +467,16 @@ for (const [loader, path, field] of [[directory,'businesses','businesses'],[inve
   const literalWildcard = await loader.load({ locals: ownerLocals, url: new URL(`https://criminiops.com/staff/${path}?q=%25`) });
   assert.equal(literalWildcard[field].length,0);
 }
-console.log('PASS all nine staff paths deny anonymous/nonstaff/forged-role/CSRF access; actual owner/support/equipment loads respect roles, tenant selection, secret exclusion, and pagination');
+console.log('PASS all eight staff paths deny anonymous/nonstaff/forged-role/CSRF access; actual owner/support/equipment loads respect roles, tenant selection, secret exclusion, and pagination');
 
 const auth = load('src/lib/server/auth.ts', {});
 const passwordEnv = { PASSWORD_PEPPER: 'test-only-platform-confirmation-pepper' };
 sqlite.prepare('UPDATE users SET password_hash=? WHERE id=?').run(await auth.hashPassword('Staff-test-password!', passwordEnv), 'owner');
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null, 'Password changes invalidate staff verification');
 let rateAllowed = true;
-const passkeys = load('src/lib/server/platformPasskeys.ts', {
-  '$app/environment': { dev: false }, '@sveltejs/kit': kit, '@simplewebauthn/server': webauthn, './platformStaff': staff
-});
 const securityPage = load('src/routes/staff/security/+page.server.ts', {
   '@sveltejs/kit': { ...kit, redirect, fail: (status, data) => ({ status, data }) },
   '$lib/server/auth': auth, '$lib/server/platformStaff': staff,
-  '$lib/server/platformPasskeys': passkeys,
   '$lib/server/authCookies': { getSessionCookieName: () => 'session', getSessionCookieOptions: () => ({ path: '/', httpOnly: true }) },
   '$lib/server/security': { checkRateLimit: async opts => ({ allowed: rateAllowed }), rateLimitFailure: error => ({ status: 429, error }) }
 });
@@ -491,135 +500,29 @@ assert.equal(rotatedToken, null);
 assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash, 'hashed-owner-token');
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null);
 sqlite.exec('DROP TRIGGER test_audit_failure');
-await assert.rejects(securityPage.actions.default(securityEvent('Staff-test-password!')), { location: '/staff/security?next=%2Fstaff%2Fteam' });
+// The password-only deployment must work before the obsolete DB column is removed.
+sqlite.exec('ALTER TABLE platform_staff_step_up ADD COLUMN passkey_verified_at INTEGER');
+await assert.rejects(securityPage.actions.default(securityEvent('Staff-test-password!')), { location: '/staff/team' });
 assert.ok(rotatedToken);
 assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash, await auth.hashSessionToken(rotatedToken));
-assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null, 'Password alone never unlocks staff access');
-assert.ok(await passkeys.staffPasswordConfirmed(db, 'owner', 'owner-session'));
+assert.ok(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), 'Approved password confirmation unlocks only explicit staff membership');
+assert.ok(await staff.requireStaffStepUp(ownerLocals));
+sqlite.exec('ALTER TABLE platform_staff_step_up DROP COLUMN passkey_verified_at');
+assert.ok(await staff.requireStaffStepUp(ownerLocals));
 assert.equal(JSON.stringify(sqlite.prepare('SELECT * FROM platform_staff_audit').all()).includes('Staff-test-password!'), false);
 console.log('PASS real password verification, rate denial, session-token rotation, audit rollback, and secret-free responses');
-const invalidStaffDomain = await securityPage.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/security'), platform: { env: { APP_BASE_URL: 'not-a-url' } } });
-assert.equal(invalidStaffDomain.passkeyDomainReady, false);
-assert.equal(invalidStaffDomain.canonicalStaffUrl, null);
-
-const relyingParty = passkeys.staffPasskeyOrigin(new URL('https://criminiops.com/staff/security'), 'https://criminiops.com');
-assert.throws(() => passkeys.staffPasskeyOrigin(new URL('https://attacker.invalid/staff/security'), 'https://criminiops.com'), { status: 400 });
-const bytes = value => Buffer.from(value).toString('base64url');
-const digest = async value => new Uint8Array(await crypto.subtle.digest('SHA-256', value));
-const keyPair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-const jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
-const credentialId = crypto.getRandomValues(new Uint8Array(32));
-const cose = encodeCBOR(new Map([[1,2],[3,-7],[-1,1],[-2,new Uint8Array(Buffer.from(jwk.x,'base64url'))],[-3,new Uint8Array(Buffer.from(jwk.y,'base64url'))]]));
-function clientData(type, challenge, origin = relyingParty.origin) {
-  return new TextEncoder().encode(JSON.stringify({ type, challenge, origin, crossOrigin: false }));
-}
-async function registrationResponse(options, origin = relyingParty.origin, flags = 0x45, id = credentialId) {
-  const authData = Buffer.concat([await digest(new TextEncoder().encode(relyingParty.rpID)), Buffer.from([flags]), Buffer.alloc(4),
-    Buffer.alloc(16), Buffer.from([0, id.length]), id, cose]);
-  return { id: bytes(id), rawId: bytes(id), type: 'public-key', clientExtensionResults: {}, response: {
-    clientDataJSON: bytes(clientData('webauthn.create', options.challenge, origin)),
-    attestationObject: bytes(encodeCBOR(new Map([['fmt','none'], ['attStmt',new Map()], ['authData',new Uint8Array(authData)]]))), transports: ['internal'] } };
-}
-const registerOptions = await passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'register');
-assert.equal(registerOptions.authenticatorSelection.userVerification, 'required');
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'register', await registrationResponse(registerOptions, 'https://attacker.invalid')), /origin/i);
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'register', await registrationResponse(registerOptions, relyingParty.origin, 0x41)), /verification/i);
-sqlite.exec("CREATE TRIGGER test_audit_failure BEFORE INSERT ON platform_staff_audit BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;");
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'register', await registrationResponse(registerOptions)), /test audit failure/);
-assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_passkeys').get().n, 0);
-assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null);
-sqlite.exec('DROP TRIGGER test_audit_failure');
-const registration = await registrationResponse(registerOptions);
-await passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'register', registration, 'Main passkey');
-assert.ok(await staff.loadStaffStepUp(db, 'owner', 'owner-session'));
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'register', registration), { status: 400 });
-await assert.rejects(passkeys.removeStaffPasskey(db, owner, 'owner-session', relyingParty.rpID, registration.id), { status: 409 });
-sqlite.exec("UPDATE platform_staff_step_up SET passkey_verified_at=NULL WHERE user_id='owner'");
-await assert.rejects(passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'register'), { status: 403 });
-async function authenticationResponse(options, counter = 1, origin = relyingParty.origin) {
-  const data = clientData('webauthn.get', options.challenge, origin);
-  const count = Buffer.alloc(4); count.writeUInt32BE(counter);
-  const authData = Buffer.concat([await digest(new TextEncoder().encode(relyingParty.rpID)), Buffer.from([0x05]), count]);
-  const signed = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keyPair.privateKey, Buffer.concat([authData, await digest(data)])));
-  const integer = raw => { let start = 0; while (start < raw.length - 1 && raw[start] === 0) start++;
-    const value = Buffer.from(raw.slice(start)); const padded = value[0] & 0x80 ? Buffer.concat([Buffer.from([0]),value]) : value;
-    return Buffer.concat([Buffer.from([2,padded.length]),padded]); };
-  const body = Buffer.concat([integer(signed.slice(0,32)),integer(signed.slice(32))]);
-  return { id: registration.id, rawId: registration.id, type: 'public-key', clientExtensionResults: {}, response: {
-    authenticatorData: bytes(authData), clientDataJSON: bytes(data), signature: bytes(Buffer.concat([Buffer.from([0x30,body.length]),body])) } };
-}
-const authenticationOptions = await passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate');
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate', await authenticationResponse(authenticationOptions, 1, 'https://attacker.invalid')), /origin/i);
-const assertion = await authenticationResponse(authenticationOptions);
-await passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate', assertion);
-assert.ok(await staff.loadStaffStepUp(db, 'owner', 'owner-session'));
-assert.equal(sqlite.prepare('SELECT counter FROM platform_staff_passkeys').get().counter, 1);
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate', assertion), { status: 400 });
-const replayCounterOptions = await passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate');
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate', await authenticationResponse(replayCounterOptions, 1)), /counter/i);
-const extraOptions = await passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'register');
-const extraRegistration = await registrationResponse(extraOptions, relyingParty.origin, 0x45, crypto.getRandomValues(new Uint8Array(32)));
-await passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'register', extraRegistration, 'Backup passkey');
-await passkeys.removeStaffPasskey(db, owner, 'owner-session', relyingParty.rpID, extraRegistration.id);
-assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null, 'Removal invalidates all staff proofs');
-sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,NULL)').run('owner-session','owner',now);
-const expiredOptions = await passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate');
-sqlite.exec('UPDATE platform_staff_challenges SET expires_at=1');
-await assert.rejects(passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate', await authenticationResponse(expiredOptions, 2)), { status: 400 });
-const finalOptions = await passkeys.beginStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate');
-await passkeys.finishStaffPasskey(db, owner, 'owner-session', relyingParty, 'authenticate', await authenticationResponse(finalOptions, 2));
-console.log('PASS real WebAuthn signatures/registration, required user verification, domain binding, replay/counter/expiry denial, audit rollback, backup enrollment, and last-passkey protection');
-
-const passkeyEndpoint = load('src/routes/staff/security/passkeys/+server.ts', {
-  '@sveltejs/kit': { ...kit, json: (data, options) => new Response(JSON.stringify(data), options), isHttpError: err => Boolean(err.status) },
-  '$lib/server/platformStaff': staff, '$lib/server/platformPasskeys': passkeys,
-  '$lib/server/security': { checkRateLimit: async () => ({ allowed: rateAllowed }) }
-});
-function passkeyEvent(body, origin = 'https://criminiops.com', locals = ownerLocals) {
-  return { locals, platform: { env: { APP_BASE_URL: 'https://criminiops.com' } },
-    url: new URL('https://criminiops.com/staff/security/passkeys'),
-    request: new Request('https://criminiops.com/staff/security/passkeys', {
-      method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: typeof body === 'string' ? body : JSON.stringify(body)
-    }) };
-}
-assert.equal((await passkeyEndpoint.POST(passkeyEvent({ action: 'options', purpose: 'authenticate' }, 'https://attacker.invalid'))).status, 403);
-assert.equal((await passkeyEndpoint.POST(passkeyEvent('x'.repeat(32769)))).status, 413);
-assert.equal((await passkeyEndpoint.POST(passkeyEvent({ action: 'options', purpose: 'unexpected' })) ).status, 400);
-await assert.rejects(passkeyEndpoint.POST(passkeyEvent({}, 'https://criminiops.com', { DB: db, userId: 'manager' })), { status: 403 });
-rateAllowed = false;
-assert.equal((await passkeyEndpoint.POST(passkeyEvent({ action: 'options', purpose: 'authenticate' }))).status, 429);
-rateAllowed = true;
-const endpointOptions = await passkeyEndpoint.POST(passkeyEvent({ action: 'options', purpose: 'authenticate' }));
-assert.equal(endpointOptions.status, 200);
-assert.equal(endpointOptions.headers.get('cache-control'), 'no-store');
-assert.equal((await passkeyEndpoint.POST(passkeyEvent({ action: 'remove', id: registration.id }))).status, 409);
-console.log('PASS actual passkey endpoint rejects CSRF, nonstaff, oversized/invalid requests, rate abuse, and last-key removal');
-
-// Execute the library's real cryptographic verification in Cloudflare's local Workers runtime.
-const cryptoBundle = await build({ stdin: { contents: `
-  import { verifyRegistrationResponse, verifyAuthenticationResponse } from '@simplewebauthn/server';
-  export default { async fetch(request) {
-    const fixture = await request.json();
-    const registration = await verifyRegistrationResponse({ response: fixture.registration,
-      expectedChallenge: fixture.registrationChallenge, expectedOrigin: 'https://criminiops.com',
-      expectedRPID: 'criminiops.com', requireUserVerification: true, supportedAlgorithmIDs: [-7, -257] });
-    if (!registration.verified) return new Response('registration failed', { status: 400 });
-    const authentication = await verifyAuthenticationResponse({ response: fixture.assertion,
-      expectedChallenge: fixture.authenticationChallenge, expectedOrigin: 'https://criminiops.com',
-      expectedRPID: 'criminiops.com', requireUserVerification: true, credential: registration.registrationInfo.credential });
-    return Response.json({ registration: registration.verified, authentication: authentication.verified });
-  }};`, resolveDir: process.cwd(), sourcefile: 'staff-passkey-runtime-test.js' },
-  bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2022', external: ['node:crypto'] });
-const runtime = new Miniflare({ modules: true, script: cryptoBundle.outputFiles[0].text,
-  compatibilityDate: '2026-02-07', compatibilityFlags: ['nodejs_compat'] });
-try {
-  const response = await runtime.dispatchFetch('https://passkey-runtime.invalid', { method: 'POST', body: JSON.stringify({
-    registration, assertion, registrationChallenge: registerOptions.challenge, authenticationChallenge: authenticationOptions.challenge
-  }) });
-  assert.equal(response.status, 200, await response.clone().text());
-  assert.deepEqual(await response.json(), { registration: true, authentication: true });
-} finally { await runtime.dispose(); }
-console.log('PASS real WebAuthn registration and authentication signatures verify inside the Cloudflare Workers runtime');
+const confirmedPage = await securityPage.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/security?next=/staff/team') });
+assert.equal(confirmedPage.verified, true);
+assert.equal(confirmedPage.next, '/staff/team');
+assert.deepEqual(Object.keys(confirmedPage).sort(), ['next','verified']);
+assert.equal(staff.isStaffSecurityPath('/staff/security/passkeys'), false);
+const securityUi = readFileSync('src/routes/staff/security/+page.svelte','utf8');
+assert.match(securityUi, /<form method="POST"/);
+assert.equal(/webauthn|passkey|navigator\.credentials/i.test(securityUi), false);
+assert.equal(existsSync('src/routes/staff/security/passkeys/+server.ts'), false);
+const packageManifest = JSON.parse(readFileSync('package.json','utf8'));
+assert.equal(Object.keys(packageManifest.dependencies).some(name => name.startsWith('@simplewebauthn/')), false);
+console.log('PASS staff confirmation uses an ordinary password form with no browser credential or replacement factor');
 
 sqlite.exec(`DELETE FROM business_users WHERE business_id IN ('a','b') AND user_id IN ('owner','manager');
   INSERT INTO businesses(id,name,status) VALUES('cleanup','Cleanup tenant','active');

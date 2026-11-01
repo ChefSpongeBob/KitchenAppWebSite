@@ -21,15 +21,14 @@ export async function loadStaffStepUp(db: DB, userId: string, sessionId: string,
     JOIN users u ON u.id = p.user_id
     WHERE p.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
       AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
-      AND p.passkey_verified_at > ? AND p.passkey_verified_at <= ?
-    LIMIT 1`).bind(userId, sessionId, now, now - maxAge, now, now - maxAge, now)
+    LIMIT 1`).bind(userId, sessionId, now, now - maxAge, now)
     .first<{ verified_at: number }>();
 }
 
 export async function requireStaffStepUp(locals: App.Locals, roles?: PlatformStaffRole[]) {
   const staff = await requirePlatformStaff(locals, roles);
   if (!locals.sessionId || !await loadStaffStepUp(locals.DB, staff.userId, locals.sessionId)) {
-    error(403, 'Verify your password and passkey in Security before making changes.');
+    error(403, 'Confirm your password in Security before making changes.');
   }
   return staff;
 }
@@ -44,7 +43,7 @@ export function isPlatformStaffPath(pathname: string) {
 }
 
 export function isStaffSecurityPath(pathname: string) {
-  return pathname === '/staff/security' || pathname === '/staff/security/passkeys';
+  return pathname === '/staff/security';
 }
 
 export async function findPlatformStaff(db: DB, userId: string): Promise<PlatformStaff | null> {
@@ -76,12 +75,11 @@ export const STAFF_CHANGE_AUTHORITY_SQL = `EXISTS (
   JOIN sessions s ON s.id = p.session_id AND s.user_id = p.user_id
   WHERE m.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
     AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
-    AND p.passkey_verified_at > ? AND p.passkey_verified_at <= ?
     AND m.staff_role IN (?, ?)
 )`;
 
 export function staffChangeBindings(staff: PlatformStaff, sessionId: string, now: number, roles: [PlatformStaffRole, PlatformStaffRole]) {
-  return [staff.userId, sessionId, now, now - STAFF_STEP_UP_SECONDS, now, now - STAFF_STEP_UP_SECONDS, now, ...roles];
+  return [staff.userId, sessionId, now, now - STAFF_STEP_UP_SECONDS, now, ...roles];
 }
 
 export function staffPageNumber(value: string | null) {

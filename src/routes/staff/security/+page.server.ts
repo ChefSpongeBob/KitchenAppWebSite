@@ -4,22 +4,10 @@ import { hashSessionToken, verifyPassword } from '$lib/server/auth';
 import { getSessionCookieName, getSessionCookieOptions } from '$lib/server/authCookies';
 import { checkRateLimit, rateLimitFailure } from '$lib/server/security';
 import { loadStaffStepUp, requirePlatformStaff, staffReturnPath } from '$lib/server/platformStaff';
-import { listStaffPasskeys, staffPasskeyOrigin, staffPasswordConfirmed } from '$lib/server/platformPasskeys';
 
-export const load: PageServerLoad = async ({ locals, url, platform }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requirePlatformStaff(locals, undefined, true);
-  let rpID: string | null = null;
-  let canonicalStaffUrl: string | null = null;
-  try {
-    const base = new URL(platform?.env.APP_BASE_URL ?? '');
-    if (base.protocol === 'https:') canonicalStaffUrl = new URL('/staff/security', base).href;
-  } catch { /* A missing or invalid domain must not produce a broken link. */ }
-  try { rpID = staffPasskeyOrigin(url, platform?.env.APP_BASE_URL).rpID; } catch { /* Show the canonical-domain link instead of starting WebAuthn here. */ }
   return { next: staffReturnPath(url.searchParams.get('next')),
-    passkeys: rpID ? await listStaffPasskeys(locals.DB, staff.userId, rpID) : [],
-    passkeyDomainReady: Boolean(rpID),
-    canonicalStaffUrl,
-    passwordConfirmed: Boolean(locals.sessionId && await staffPasswordConfirmed(locals.DB, staff.userId, locals.sessionId)),
     verified: Boolean(locals.sessionId && await loadStaffStepUp(locals.DB, staff.userId, locals.sessionId)) };
 };
 
@@ -58,18 +46,15 @@ export const actions: Actions = {
       locals.DB.prepare(`INSERT INTO platform_staff_step_up (session_id, user_id, membership_revision, verified_at)
         SELECT ?, ?, ?, ? WHERE changes() = 1
         ON CONFLICT(session_id) DO UPDATE SET membership_revision = excluded.membership_revision,
-          verified_at = excluded.verified_at, passkey_verified_at = NULL`)
+          verified_at = excluded.verified_at`)
         .bind(sessionId, staff.userId, row.revision, now),
       locals.DB.prepare(`INSERT INTO platform_staff_audit (id, actor_user_id, target_user_id, action, reason, created_at)
         SELECT ?, ?, ?, 'staff_password_confirmed', 'Session password confirmation', ? WHERE changes() = 1`)
-        .bind(crypto.randomUUID(), staff.userId, staff.userId, now),
-      locals.DB.prepare(`DELETE FROM platform_staff_challenges WHERE session_id = ?
-        AND EXISTS (SELECT 1 FROM sessions WHERE id = ? AND session_token_hash = ?)`)
-        .bind(sessionId, sessionId, hash)
+        .bind(crypto.randomUUID(), staff.userId, staff.userId, now)
     ]).catch(() => null);
     if (!results) return fail(503, { error: 'Password confirmation could not be saved. Try again shortly.' });
     if (results[0].meta.changes !== 1) return fail(409, { error: 'Your session changed. Sign in again.' });
     cookies.set(getSessionCookieName(), token, { ...getSessionCookieOptions(request), maxAge: Math.max(0, row.expires_at - now) });
-    redirect(303, `/staff/security?next=${encodeURIComponent(staffReturnPath(url.searchParams.get('next')))}`);
+    redirect(303, staffReturnPath(url.searchParams.get('next')));
   }
 };

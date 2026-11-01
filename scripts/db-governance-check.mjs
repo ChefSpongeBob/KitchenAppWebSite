@@ -85,8 +85,6 @@ const alternateTenantColumns = new Map([
 const approvedGlobalTables = new Map([
   ['platform_staff_members', 'explicit platform authority independent of tenant roles'],
   ['platform_staff_step_up', 'session-bound platform password confirmation; no tenant credentials or HR data'],
-  ['platform_staff_passkeys', 'platform-only WebAuthn public credentials, never authenticator private keys'],
-  ['platform_staff_challenges', 'short-lived one-use platform WebAuthn challenges bound to user and session'],
   ['platform_staff_audit', 'platform-only maintenance audit; optional target business, never tenant-owned'],
   ['iot_device_reservations', 'platform equipment reservations checked against the authenticated tenant at claim time'],
   ['app_feature_flags', 'global app feature definitions used to seed business feature rows'],
