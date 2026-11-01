@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+  import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
   import EmptyState from '$lib/components/ui/EmptyState.svelte';
   import { nativeServerUrl } from '$lib/client/nativeServerUrl';
 
@@ -118,10 +118,10 @@
     }
 
     try {
-      const pdfjs = await import('pdfjs-dist');
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
-      const loadingTask = pdfjs.getDocument(nativeServerUrl(src));
+      const loadingTask = pdfjs.getDocument({ url: nativeServerUrl(src) });
       const pdf = await loadingTask.promise;
 
       const nextPages: string[] = [];
@@ -147,7 +147,6 @@
 
         await page.render({
           canvas,
-          canvasContext: context,
           viewport
         }).promise;
 

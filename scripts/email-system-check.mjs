@@ -120,7 +120,7 @@ expect('workers/operational-email-dispatcher/wrangler.jsonc', 'scheduled dispatc
 
 expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 3 email status', (source) =>
   source.includes('3. Email and operational events') &&
-  source.includes('Verify Resend delivery for invites') &&
+  /Verify (?:real )?Resend (?:inbox )?delivery for invites/.test(source) &&
   source.includes('RESEND_API_KEY') &&
   source.includes('Process operational events and confirm recipients are correct')
 );

@@ -7,7 +7,7 @@ Use this as the single source of truth for continuing Crimini without guessing o
 - Repo path: `c:\Users\spong\Desktop\SoftwareKitchenNNS`
 - GitHub: `https://github.com/ChefSpongeBob/KitchenAppWebSite`
 - Live domain: `https://criminiops.com`
-- Current hold: production/live-domain tenant testing waits for trademark confirmation.
+- Current hold: public customer launch awaits legal/business approval. `criminiops.com` is online for controlled testing; public signup remains closed.
 - Stack: SvelteKit, Cloudflare Pages, Cloudflare D1, Cloudflare R2, Capacitor.
 - Product: Crimini by NNS, LLC.
 
@@ -88,7 +88,7 @@ npm.cmd run test:legal-readiness
 npm.cmd run smoke:local
 ```
 
-Live gates wait until the trademark/domain hold is lifted:
+Run live gates against the controlled production deployment; these do not open public signup:
 
 ```powershell
 npm.cmd run schema:readiness:prod
@@ -133,9 +133,9 @@ Before production migrations, Create/confirm backup before migrations.
 
 ## Current Progress
 
-- Last full static validation: 2026-10-31 after the staff-maintenance closing pass; native production UI build and expanded staff SQL/Workers tests also passed. This is functional validation, not closure of the open dependency-security gate.
+- Last full static validation: 2026-10-31, including the pre-framework real SQL/action, email, PDF, and namespace-migration regressions. Web/native UI builds and sync passed. This does not close the remaining dependency-security gate.
 - Current repository status: functional foundations and staff-console code are validated, but dependency-security remediation and deployment/manual gates remain open. Do not interpret passing static tests as public-launch clearance.
-- Current hold: public production launch and live-domain customer onboarding still wait for trademark/LLC timing, final legal/payroll review, store setup, and live operational integrations.
+- Current hold: public customer launch still waits for trademark/LLC timing, final legal/payroll review, store setup, and live operational integrations. Controlled live-domain testing is already available.
 - Phase status: Phases 1-18 and code-readiness parts of 20-22 are locally validated by scripts. Store, native-device, legal, live-domain, hardware, and edge-dashboard items remain manual/external.
 - The camera subsystem is not part of the launch application; its routes, bindings, purchase paths, and active UI have been removed.
 - Launch pricing remains aligned: Small `$29/mo`, Medium `$49/mo`, and Large `$69/mo`. Temperature monitoring is an optional `$17/mo` add-on for up to 12 active sensors, plus `$2/mo` for every active sensor from 13 through the 25-sensor self-service ceiling.
@@ -170,7 +170,7 @@ Current scripts/builds cover the functional foundations below. This does not clo
 - Scheduling code foundation: departments, roles, availability, time off, templates, autosave drafts, publish, open shifts, offers, approvals, My Schedule, and bounded schedule/report queries.
 - Employee invite/onboarding/HR code foundation: invite role paths, packet requirements, sensitive vault encryption, HR-sensitive permission checks, audited reads, onboarding reports, and private media.
 - Email code foundation: branded transactional helper, Resend integration, invite/approval/password reset/onboarding/operational email event wiring, idempotency, and delivery failure logging.
-- Native push foundation: Capacitor plugin, token storage/revoke endpoints, user preferences, and native client registration plumbing.
+- Native push registration foundation only: Capacitor plugin, token storage/revoke endpoints, user preferences, and native client registration plumbing. Server-side APNs/FCM delivery is not implemented and is deferred by the user; do not describe it as only waiting for credentials.
 - Temperature monitoring code foundation: gateway/node serial model, device auth, tenant-scoped temperature/humidity ingest, packet sequence/nonce/LQI diagnostics, thresholds, alert events, automatic recovery, stale processor endpoint, history/report wiring, and bounded ingest.
 - Billing/store lifecycle code foundation: native purchase submission, pending entitlements, Apple/Google verification paths, token-gated webhooks, entitlement reconciliation, and launch pricing.
 - Cloudflare readiness: Pages config, D1/R2 bindings, schema guard, Node version, package lock, no old copied-app Cloudflare bindings, and deploy readiness checks.
@@ -178,7 +178,7 @@ Current scripts/builds cover the functional foundations below. This does not clo
 
 ## Remaining Launch Work
 
-Dependency security gate (2026-10-31, open): production-only audit reports 10 affected packages (three critical, three high, four moderate); the full audit reports 22 (three critical, twelve high, five moderate, two low). The full audit also covers SvelteKit/shipped serialization code, not just tooling. Review/remediate Capacitor Android/iOS 8.4.0 (GHSA-rvm3-566m-v7fv), PDF.js 5.7.284 (GHSA-hq66-cqwq-w95j), SvelteKit/devalue, Vite/PostCSS/source-map-js/nanoid, Wrangler/Miniflare/sharp/undici, and the CLI tar/xmldom/glob/minimatch/brace-expansion/rimraf chain. Deepmerge has no published patched release in the checked 4.x line; assess its build-config-only use rather than suppressing the alert. Audit findings are dependency flags, not proof of exploitation. The next-major-pass sequence below owns remediation; no framework or dependency upgrade has started. No `audit fix --force`, incompatible CLI downgrade, or hiding unresolved advisories. Maintainer references: https://github.com/ionic-team/capacitor/security/advisories/GHSA-rvm3-566m-v7fv and https://github.com/mozilla/pdf.js/security/advisories/GHSA-hq66-cqwq-w95j.
+Dependency security gate (2026-10-31, open): the initial baseline was 10 production/22 full-tree affected packages, including three critical. The pre-framework pass patches Capacitor to exact 8.4.3, PDF.js to exact 6.4.299, and compatible transitive serialization/archive/XML/CSS/HTTP dependencies. Final audit results are recorded at the checkpoint below; the baseline is not the current count. Framework/build-tool findings remain launch blockers until resolved or explicitly assessed. Deepmerge has no published patched release in the checked 4.x line; assess its build-config-only use rather than suppressing the alert. Audit findings are dependency flags, not proof of exploitation. No `audit fix --force`, incompatible CLI downgrade, or hidden findings. Maintainer references: https://github.com/ionic-team/capacitor/security/advisories/GHSA-rvm3-566m-v7fv and https://github.com/mozilla/pdf.js/security/advisories/GHSA-hq66-cqwq-w95j.
 
 This is the only active completion list. Work it in order and do not create scattered task lists.
 
@@ -219,11 +219,27 @@ Staff Completion And Security Redesign (Deferred; Required Before Launch):
 
 Order: preserve simple access for current review, complete the framework/dependency-security pass next, then return to this staff-completion sequence before launch. No security redesign is authorized by this documentation update alone.
 
+### Pre-Framework Checkpoint (2026-10-31)
+
+Approved scope: reconcile this list, execute real database/action regressions, rehearse restore without production writes, patch compatible native/PDF dependencies, and validate email behavior. No framework migration, staff-auth redesign, pricing change, hardware flashing, or phone installation.
+
+- Added isolated in-memory tests using the schema-only D1 fixture through 0110 and migration 0111. They execute actual scheduling, creator, report, invite/profile/onboarding, and operational-email modules rather than relying only on source-text checks. Synthetic identities exist only in the test process, never in app routes or production.
+- Found incorrect global slug uniqueness in `checklist_sections`, `list_sections`, and `documents`. Migration 0111 replaces it with per-business uniqueness while preserving all columns, IDs, child items, and file references. Rollback, same-name two-tenant creation, exhaustive tenant-table uniqueness review, and readiness-definition tests cover the correction. Deployment status must be recorded after execution below.
+- Restored both ignored local/production exports in isolated SQLite, checked integrity/foreign keys, rehearsed migrations, and compared every preserved row. This does not complete Cloudflare-hosted disaster recovery, R2 object recovery, or deployment rollback.
+- Email tests intercept Resend requests and cover tenant/department/consent recipients, direct invite/reset links, approval targeting, escaping, idempotency, failure/retry, and deliberate exclusion of temperature emails. The sender now has a 15-second timeout, refuses redirects, and requires a provider acceptance ID. Real inbox delivery remains unverified by these tests.
+- Capacitor core/CLI/Android/iOS are pinned to 8.4.3; PDF.js is pinned to 6.4.299 with matching legacy renderer/worker for browser compatibility and the current canvas API. Compatible transitive patches stay within existing parent ranges. SvelteKit, Vite, Wrangler, TypeScript, Node, and adapters remain unchanged. Installed native apps require a rebuilt binary, not just a web deployment.
+- Notification delivery is deferred by explicit user decision on 2026-10-31. No delivery ledger, push sender, SMS sender, related migration, or new retry pipeline was added. Existing registration/preferences remain; server-side APNs/FCM delivery and provider-level deduplication/retry handling need their own approved pass.
+- Final audit: 11 full-tree affected packages (zero critical, four high, five moderate, two low); production-install tree has four moderate and zero high/critical. Remaining full-tree packages: `@capacitor/cli`, `glob`, `minimatch`, `rimraf`, `@sveltejs/kit`, `@sveltejs/vite-plugin-svelte`, `deepmerge`, `miniflare`, `sharp`, `vite`, and `wrangler`. Framework findings can affect deployed code despite npm's dev-dependency classification. No alert is suppressed; the remaining security gate stays open.
+- Migration 0111 is applied locally and in production after fresh ignored `.db-backups/before-content-namespaces[-local]-20261031.sql` exports and offline rehearsal. Before/after exports confirm all existing rows in 111 application tables are identical, including identities, memberships, item rows, and file references; integrity/foreign keys pass and no staging tables remain. D1 migration bookkeeping is the only added record. No restaurant accounts, passwords, reservations, or device credentials changed.
+- Validation passed: full `test:static` (zero type errors/warnings), web/native UI builds, Capacitor sync, actual workflow/PDF tests and final Cloudflare build on exact Node 22.13.0, clean Linux-targeted npm 10.9.2 installation (207 packages), local/production restore rehearsals, and Android `:app:assembleDebug` (92 tasks). No phone installation or firmware flashing. iOS compilation is still a macOS/Xcode gate; debug compilation does not prove store signing or device behavior.
+- Dispatcher read-only schedule/deployment lookup returned Cloudflare 403 with the current API token. Its current cron/uptime remains unverified; no worker redeployment, secret change, or wider token permission was made. Verify in the dashboard with the owner before closing that integration gate.
+- Release/deployment verification remains pending the validated checkpoint push. Do not treat this pass as public-launch approval.
+
 ### Next Major Pass: Framework And Dependency Security
 
-Planned after the staff-console code checkpoint; not started. The user asked to finish staff maintenance first and retain this larger upgrade in the single list. Do not bundle it into an unrelated UI, firmware, or database edit.
+Framework migration remains unstarted. The compatible native/PDF and transitive pre-work is tracked above; do not repeat it or bundle the migration into unrelated UI, firmware, or database edits.
 
-1. Patch critical native/PDF dependencies first, regenerate native dependency references, and validate PDF rendering/worker compatibility and unchanged native networking/billing/push. The native fixes require rebuilt binaries; a website deployment alone does not repair an already installed app. Establish a validated repository checkpoint before framework migration.
+1. Confirm the pre-framework checkpoint is validated and pushed, then retain its PDF/native regression tests. Real device networking/billing/push tests remain open; a website deployment alone does not repair an already installed app.
 2. Inventory and migrate to stable SvelteKit 3 with compatible Cloudflare/static adapters, Node >=22.17, TypeScript 6, Svelte >=5.57.1, and compatible Vite/plugin versions. Move configuration from `svelte.config.js` to the Vite plugin, preserve separate web/native build outputs, and update Cloudflare build-version configuration deliberately. Official guide: https://svelte.dev/docs/kit/migrating-to-sveltekit-3.
 3. Migrate Cloudflare environment/context access, hook/types, cookies, form actions/status handling, navigation/invalidation, aliases/env imports, and build/test harnesses as required by the guide. Preserve tenant authority, primary-password hashing, exact native-origin/CSRF checks, session semantics, store callbacks, and sensitive-data access. No redesign, feature changes, or data/schema restructuring by assumption.
 4. Resolve the remaining dependency tree deliberately, including build tooling and the existing overrides. Use compatible patched versions, verify any necessary transitive API override with real tooling tests, retain complete cross-platform lock metadata, and test a clean Linux install with Cloudflare's npm version. Re-audit the full and production dependency trees. Any unpatched upstream finding needs a documented applicability/mitigation decision, not suppression or a claim of zero risk.
@@ -244,22 +260,23 @@ Planned after the staff-console code checkpoint; not started. The user asked to 
 - Fix any failed behavior before adding real restaurant data.
 
 3. Email and operational events
-- Verify Resend delivery for invites, onboarding, approvals, password reset, schedules, shifts, time off, lists, billing, and temperature alerts.
+- Verify real Resend inbox delivery for invites, onboarding, approvals, password reset, schedules, shifts, time off, lists, and billing. Temperature events deliberately do not send email.
 - Process operational events and confirm recipients are correct, deduped, tenant scoped, and not exposed to unrelated users.
 
-4. Native push notifications
-- Configure APNs and FCM credentials.
+4. Native push notifications (deferred; separate approved pass)
+- Implement the missing server-side APNs/FCM delivery path and agree on bounded, tenant-scoped retries/deduplication before configuring provider credentials. Token registration/preferences alone do not deliver notifications. No ledger implementation is approved in the current pass.
+- SMS delivery is also unimplemented; provider consent/revocation/STOP/HELP handling needs its own completion before enabling texts.
 - Test token registration, refresh, logout revoke, user preferences, and real event-triggered notifications on iOS and Android builds.
 
 5. Temperature hardware
 - Provision gateway and sensor-node serials into `iot_device_inventory`.
 - Claim a gateway in `/admin/sensors`, assign sensor nodes, ingest gateway-authenticated readings, and confirm wrong tenant, wrong gateway, unassigned, and revoked readings are rejected.
-- Gateway Wi-Fi setup uses a protected temporary gateway network and a local browser page, reachable from Registered Equipment on desktop or phone. Review the compact UI/copy with the owner before pushing. Bluetooth provisioning plugins, dependencies, and permission prompts are removed.
+- Gateway Wi-Fi setup uses a protected temporary gateway network and a local browser page, reachable from Registered Equipment on desktop or phone. The app guide is already pushed; physical provisioning and final wording/layout review remain open. Bluetooth provisioning plugins, dependencies, and permission prompts are removed.
 - Physical provisioning checks remain open: claim by serial and confirm registration automatically opens and focuses that gateway's Wi-Fi guide on the same page; join the exact gateway setup network using its displayed setup password; select or enter restaurant Wi-Fi; test incorrect password, hidden SSID, interrupted setup, retry, gateway reboot, and router reboot; reconnect the computer/phone to normal Wi-Fi and require a new authenticated gateway check-in. Confirm no restaurant SSID/password enters D1, Cloudflare logs, audit metadata, or app storage.
 - Verify recovery timing on real hardware: after 10 minutes of failed Wi-Fi joins the gateway pauses radio reception and offers setup. Existing credentials are preserved until Wi-Fi and the authenticated cloud check succeed. With a saved network, setup times out after 10 minutes and normal receive/retry resumes. While no user is attached, the setup loop also retries the saved network. Check multiple nearby gateways, restoration of the old router, and transition to a replacement router. Setup requires a Wi-Fi-capable computer or phone; the public site does not contact local addresses in the background.
 - Confirm gateway-only check-in and Wi-Fi failure recovery with no registered nodes: the gateway checks in every five idle minutes when there is no recent successful upload. These status-only requests must not insert temperatures, refresh sensor timestamps, or affect other tenants.
 - Tune thresholds by sensor type and verify high, low, stale, offline, recovery, dashboard, polling, and report behavior.
-- Deploy the operational dispatcher with its `DB` binding and `SMOKE_INTERNAL_TOKEN`; it processes tenant temperature stale/offline alerts in bounded batches every five minutes.
+- Verify the already-requested dispatcher deployment, `DB` binding, secret, and scheduled execution. Its cron runs each minute for operational email; temperature stale/offline processing is bounded and runs every five minutes. Queue entries alone do not prove scheduler uptime.
 - Validate gateway outage recovery: retain only the latest transient reading per node, recover after Wi-Fi/API interruption, resume IEEE 802.15.4 receive mode, report gateway health while nodes are quiet, and complete a 24-hour bench soak plus a controlled network-outage test before restaurant deployment.
 - Phase 5 hardware pass: `firmware/arduino/CriminiTempNode/` and `firmware/arduino/CriminiTempGateway/` are separate Arduino IDE sketches. The node sends three authenticated AHT20 temperature/humidity bursts with randomized spacing; the gateway adds RSSI/LQI and posts authenticated latest-reading batches. Real-board provisioning and recovery validation remain open; no hardware is flashed by source/build validation.
 - Phase 5 remaining needs: flash real boards, validate battery draw, radio range, enclosure performance, final FCC/module compliance, and live sensor ingest under private tenant testing.
@@ -321,7 +338,7 @@ Planned after the staff-console code checkpoint; not started. The user asked to 
 - Enable Managed WAF, OWASP rules where available, auth-route rate limits/challenges, alerting, and log monitoring.
 - Keep service endpoints token/device-auth protected instead of challenge-gated: billing webhooks, internal smoke/schema readiness, temperature ingest, temperature alert processing, and operational-event processing.
 - Watch `schema_readiness_failed`, `tenant_access_denied`, `billing_conversion_failed`, `billing_cancel_failed`, repeated 500s, media denials, device auth failures, notification failures, and deployment failures.
-- Run one D1 export/restore drill in a non-production target and one rollback drill from a known-good deployment.
+- Isolated SQLite export/restore and row-preserving migration drills are covered at the pre-framework checkpoint. Still rehearse Cloudflare-hosted recovery, R2 object recovery, and rollback from a known-good deployment without modifying production data.
 
 15. UI and accessibility final pass
 - Walk app, admin, auth, onboarding, billing, schedule, reports, tools, docs, menus, and marketing in desktop/mobile and light/dark modes.
@@ -329,8 +346,8 @@ Planned after the staff-console code checkpoint; not started. The user asked to 
 
 16. Legal, public site, and business readiness
 - Complete qualified review of privacy, terms, billing terms, support contact, account deletion, employee forms, trial/payment/cancellation wording, device monitoring, and retention language.
-- Keep `criminiops.com` offline until trademark/LLC timing is safe.
-- Re-run production smoke after the domain is attached for public launch.
+- Keep public customer launch/signup closed until trademark/LLC timing is safe; controlled testing on the already-online domain is allowed.
+- Re-run production smoke on the exact release commit before public launch.
 
 17. Launch candidate
 - Freeze feature changes.

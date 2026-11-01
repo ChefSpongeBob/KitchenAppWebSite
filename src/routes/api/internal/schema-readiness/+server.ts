@@ -63,6 +63,9 @@ const REQUIRED_CORE_TABLES = [
 ];
 
 const REQUIRED_CORE_INDEXES = [
+  'idx_checklist_sections_business_slug',
+  'idx_list_sections_business_domain_slug',
+  'idx_documents_business_slug_active',
   'idx_operational_events_staff_queue',
   'idx_operational_attempts_staff_recent',
 	'idx_platform_staff_audit_created',
@@ -186,20 +189,25 @@ async function missingCoreTables(db: App.Platform['env']['DB']) {
 }
 
 async function missingCoreIndexes(db: App.Platform['env']['DB']) {
+	const namespaceDefinitions: Record<string, RegExp> = {
+		idx_checklist_sections_business_slug: /CREATE\s+UNIQUE\s+INDEX[\s\S]*ON\s+checklist_sections\s*\(\s*business_id\s*,\s*slug\s*\)/i,
+		idx_list_sections_business_domain_slug: /CREATE\s+UNIQUE\s+INDEX[\s\S]*ON\s+list_sections\s*\(\s*business_id\s*,\s*domain\s*,\s*slug\s*\)/i,
+		idx_documents_business_slug_active: /CREATE\s+UNIQUE\s+INDEX[\s\S]*ON\s+documents\s*\(\s*business_id\s*,\s*slug\s*\)/i
+	};
 	const missing: string[] = [];
 	for (const indexName of REQUIRED_CORE_INDEXES) {
 		const row = await db
 			.prepare(
 				`
-				SELECT name
+				SELECT name, sql
 				FROM sqlite_master
 				WHERE type = 'index' AND name = ?
 				LIMIT 1
 				`
 			)
 			.bind(indexName)
-			.first<{ name: string }>();
-		if (!row?.name) missing.push(indexName);
+			.first<{ name: string; sql: string | null }>();
+		if (!row?.name || (namespaceDefinitions[indexName] && !namespaceDefinitions[indexName].test(row.sql ?? ''))) missing.push(indexName);
 	}
 	return missing;
 }

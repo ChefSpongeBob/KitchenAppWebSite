@@ -92,10 +92,11 @@ expect('src/routes/api/internal/schema-readiness/+server.ts', 'schema readiness 
   source.includes("'idx_push_devices_business_active_user'")
 );
 
-expect('docs/PROJECT_HANDOFF.md', 'handoff tracks native push foundation status', (source) =>
+expect('docs/PROJECT_HANDOFF.md', 'handoff distinguishes registration from deferred push delivery', (source) =>
   source.includes('4. Native push notifications') &&
-  source.includes('Native push foundation') &&
-  source.includes('APNs and FCM credentials')
+  source.includes('Native push registration foundation only') &&
+  source.includes('Server-side APNs/FCM delivery is not implemented') &&
+  source.includes('Notification delivery is deferred by explicit user decision')
 );
 
 const failed = checks.filter((check) => !check.ok);

@@ -1,6 +1,6 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-10-31 (platform staff extension; existing baseline retained)
+Updated: 2026-10-31 (platform staff and tenant-content namespace correction)
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
@@ -14,12 +14,22 @@ This file is the working map for DB table names, column names, and the code path
 - `/staff/health?business=<id>` reads only the selected business's active gateway contact timestamps and, for owner/support, safe queued-notification status metadata. All lists are paginated and manually refreshed. Equipment-only staff never query notification history. Delivery attempts must match both event ID and business ID; no message/recipient/payload/provider-error fields are selected. Migration 0108 adds `idx_operational_events_staff_queue` and `idx_operational_attempts_staff_recent`; no new table or telemetry writes.
 - Migrations 0109 and 0110 provide session-bound password confirmation, membership revisions, audit targets, and database last-owner guards. `/staff/security` verifies the existing password and rotates the current session token without changing expiry or restaurant membership; staff reads require confirmation within eight hours and mutations within 15 minutes. `/staff/team` is owner-only, grants existing active identities, and audits changes transactionally. Role/access/password changes invalidate confirmation. Migration 0110 removes the rejected passkey credential/challenge tables and proof column; no replacement factor is introduced. Tenant cleanup excludes platform records and retains active/revoked platform identities. These controls affect platform staff only, not restaurant logins.
 
+## Tenant Content Namespaces (Migration 0111)
+
+- `checklist_sections`: unique `(business_id, slug)`, not global `slug`.
+- `list_sections`: unique `(business_id, domain, slug)`, not global `(domain, slug)`.
+- `documents`: unique `(business_id, slug)`, not global `slug`. The legacy index name `idx_documents_business_slug_active` is retained; its key is business and slug, not active status.
+- The creator and document routes already check names within the active business. The old global constraints contradicted those queries and blocked different restaurants from using the same titles; this is not a routing or authorization change.
+- Rebuild preserves every existing column, ID, timestamp, child item, and file reference. Only `checklist_items` and `list_items` have cascade dependencies on these parent tables; migration staging restores those rows within the transaction. No final new table, tenant, redirect, or seeded content.
+- `test:schema-namespaces` executes rollback, preservation, cross-tenant/same-tenant uniqueness, every tenant table's unique-index review, and actual schema-readiness checks. Globally unique invite codes, factory device/node serials, and global shift-reference keys remain intentional; tenant names and content are not shared.
+- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies 0111. It contains no exported account/business/HR rows. Live execution status is recorded only in `PROJECT_HANDOFF.md`.
+
 ## Summary
 
-- Tables inventoried: 112 (production export plus platform migrations through 0110)
+- Tables inventoried: 112, including D1 migration bookkeeping (0111 changes constraints, not the table count)
 - Tables with `business_id`: 94
 - Tables with approved alternate tenant columns: 2
-- Approved global/system/root tables: 19
+- Approved global/system/root classifications: 19 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
 - Tables with `user_id`: 44
 
 ## Inventory Caveats
@@ -32,7 +42,7 @@ This file is the working map for DB table names, column names, and the code path
 
 These are not runtime failures by themselves, but they are exactly the kind of mismatch that can cause bad assumptions later.
 
-- None found
+- Migration 0111 corrects the three global content-namespace constraints listed above. No guessed column names or application workflow rewrite is part of that correction.
 
 ## Tenant Scope Anchors
 

@@ -79,7 +79,7 @@
 		"test:apple-store": "node ./scripts/apple-store-readiness-check.mjs",
 		"test:google-play": "node ./scripts/google-play-readiness-check.mjs",
 		"test:legal-readiness": "node ./scripts/legal-readiness-check.mjs",
-		"test:static": "npm run check && npm run build && npm run mobile:check && npm run test:tenant-authority && npm run test:authorization-capabilities && npm run test:operational-events && npm run test:email-system && npm run test:native-push && npm run test:temperature-monitoring && npm run test:tenant-isolation && npm run test:db-governance && npm run test:iot-device-auth && npm run test:media-access && npm run test:production-schema && npm run test:report-exports && npm run test:scale-performance && npm run test:auth-abuse && npm run test:hr-onboarding && npm run test:admin-consolidation && npm run test:core-feature-actions && npm run test:billing-lifecycle && npm run test:malicious-user-hardening && npm run test:store-release && npm run test:cloudflare-readiness && npm run test:security-headers && npm run test:observability && npm run test:ui-polish && npm run test:apple-store && npm run test:google-play && npm run test:legal-readiness && npm run test:platform-staff",
+		"test:static": "npm run check && npm run build && npm run mobile:check && npm run test:tenant-authority && npm run test:authorization-capabilities && npm run test:operational-events && npm run test:email-system && npm run test:native-push && npm run test:temperature-monitoring && npm run test:tenant-isolation && npm run test:db-governance && npm run test:iot-device-auth && npm run test:media-access && npm run test:production-schema && npm run test:report-exports && npm run test:scale-performance && npm run test:auth-abuse && npm run test:hr-onboarding && npm run test:admin-consolidation && npm run test:core-feature-actions && npm run test:billing-lifecycle && npm run test:malicious-user-hardening && npm run test:store-release && npm run test:cloudflare-readiness && npm run test:security-headers && npm run test:observability && npm run test:ui-polish && npm run test:apple-store && npm run test:google-play && npm run test:legal-readiness && npm run test:platform-staff && npm run test:workflow-behavior && npm run test:email-delivery-behavior && npm run test:schema-namespaces && npm run test:pdf-runtime",
 		"ops:activate-test-tenant": "node ./scripts/activate-test-tenant.mjs",
 		"ops:provision-temp-gateway": "node ./scripts/provision-temperature-gateway.mjs",
 		"db:migrations:normalize:local": "node ./scripts/normalize-d1-migrations.mjs --local",
@@ -94,7 +94,12 @@
 		"lint": "prettier --check .",
 		"format": "prettier --write .",
 		"test:platform-staff": "node ./scripts/platform-staff-check.mjs",
-		"ops:bootstrap-platform-owner": "node ./scripts/bootstrap-platform-owner.mjs"
+		"ops:bootstrap-platform-owner": "node ./scripts/bootstrap-platform-owner.mjs",
+		"test:workflow-behavior": "node ./scripts/workflow-behavior-check.mjs",
+		"db:restore:drill": "node ./scripts/restore-drill.mjs",
+		"test:email-delivery-behavior": "node ./scripts/email-delivery-behavior-check.mjs",
+		"test:schema-namespaces": "node ./scripts/schema-namespace-behavior-check.mjs",
+		"test:pdf-runtime": "node ./scripts/pdf-runtime-check.mjs"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-cloudflare": "^7.2.9",
@@ -110,12 +115,12 @@
 		"wrangler": "^4.102.0"
 	},
 	"dependencies": {
-		"@capacitor/android": "^8.4.0",
-		"@capacitor/cli": "^8.4.0",
-		"@capacitor/core": "^8.4.0",
-		"@capacitor/ios": "^8.4.0",
+		"@capacitor/android": "8.4.3",
+		"@capacitor/cli": "8.4.3",
+		"@capacitor/core": "8.4.3",
+		"@capacitor/ios": "8.4.3",
 		"@capacitor/push-notifications": "^8.1.1",
-		"pdfjs-dist": "^5.7.284",
+		"pdfjs-dist": "6.4.299",
 		"tesseract.js": "^6.0.1"
 	},
 	"overrides": {

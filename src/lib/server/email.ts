@@ -127,6 +127,8 @@ export async function sendTransactionalEmail({
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      redirect: 'error',
+      signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${env?.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
@@ -156,6 +158,9 @@ export async function sendTransactionalEmail({
     }
 
     const data = (await response.json()) as { id?: string };
+    if (typeof data?.id !== 'string' || !data.id.trim()) {
+      return { sent: false, reason: 'Email provider did not confirm acceptance.' };
+    }
     return {
       sent: true,
       id: data.id
