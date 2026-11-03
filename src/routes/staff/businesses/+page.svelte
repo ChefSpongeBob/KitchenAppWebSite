@@ -19,7 +19,6 @@
   </table>
 </div>
 <nav class="staff-pagination" aria-label="Business pages">
-  {#if data.page > 1}<a href={`?${new URLSearchParams({ q: data.q, page: String(data.page - 1) })}`}>Previous</a>{/if}
-  <span>Page {data.page}</span>
-  {#if data.hasNext && data.page < 1000}<a href={`?${new URLSearchParams({ q: data.q, page: String(data.page + 1) })}`}>Next</a>{/if}
+  {#if data.hasPrevious}<a href={`?${new URLSearchParams({ q: data.q })}`}>First Results</a>{/if}
+  {#if data.next}<a href={`?${new URLSearchParams({ q: data.q, afterName: data.next.name, afterId: data.next.id })}`}>More Businesses</a>{/if}
 </nav>

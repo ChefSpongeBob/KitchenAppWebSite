@@ -87,6 +87,8 @@ const approvedGlobalTables = new Map([
   ['platform_staff_step_up', 'session-bound platform password and email verification; no tenant credentials or HR data'],
   ['platform_staff_email_challenges', 'short-lived session-bound staff email verification; no restaurant access or HR data'],
   ['platform_staff_audit', 'platform-only maintenance audit; optional target business, never tenant-owned'],
+  ['platform_diagnostic_issues', 'platform-only grouped diagnostics; verified business context, no customer content'],
+  ['platform_request_metrics', 'platform-only hourly request aggregates; separate global and business scopes'],
   ['iot_device_reservations', 'platform equipment reservations checked against the authenticated tenant at claim time'],
   ['app_feature_flags', 'global app feature definitions used to seed business feature rows'],
   ['businesses', 'root tenant registry'],

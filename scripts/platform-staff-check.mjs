@@ -63,6 +63,9 @@ sqlite.exec(readFileSync('migrations/0112_staff_email_verification.sql', 'utf8')
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_step_up').get().n, 0);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_audit').get().n, auditBeforeRemoval);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM sessions').get().n, 2);
+sqlite.exec(`CREATE TABLE account_audit_logs(id TEXT PRIMARY KEY,business_id TEXT,action TEXT,actor_user_id TEXT,target_user_id TEXT,created_at INTEGER);
+CREATE TABLE announcement_history(id TEXT PRIMARY KEY,business_id TEXT,content TEXT,created_by TEXT,created_at INTEGER);`);
+sqlite.exec(readFileSync('migrations/0113_staff_diagnostics_dashboard.sql','utf8'));
 sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('owner-session','owner',now,now);
 assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
 console.log('PASS cleanup removes old credentials/challenges, requires fresh confirmation, and preserves identities, sessions, memberships, and audit');
@@ -137,7 +140,7 @@ sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('own
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM platform_staff_audit WHERE action='gateway_reserved'").get().n, 2);
 console.log('PASS assignments are audited atomically, roll back on audit failure, and reject stale authority');
 
-const directory = load('src/routes/staff/businesses/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
+const directory = load('src/routes/staff/businesses/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff });
 sqlite.exec(`ALTER TABLE businesses ADD COLUMN slug TEXT; ALTER TABLE businesses ADD COLUMN plan_tier TEXT;
   ALTER TABLE businesses ADD COLUMN contact_email TEXT; ALTER TABLE businesses ADD COLUMN contact_phone TEXT;
   ALTER TABLE businesses ADD COLUMN created_at INTEGER;`);
@@ -264,6 +267,7 @@ const hooks = load('src/hooks.server.ts', {
   '#lib/auth/routeCapabilities.ts': { resolveBusinessCapabilityForPath: () => null },
   '#lib/server/schemaGuard.ts': { wrapProductionSchemaGuard: db => db },
   '#lib/server/observability.ts': { logOperationalEvent: () => {}, logOperationalError: () => {} },
+  '#lib/server/platformDiagnostics.ts': { recordRequestDiagnostic: async () => {} },
   '#lib/server/operationalEvents.ts': {}, '#lib/server/platformStaff.ts': staff
 });
 function hookEvent(path, token = 'owner-token', options = {}) {
@@ -418,9 +422,12 @@ sqlite.exec(`INSERT INTO business_store_entitlements
     ('equipment-session','equipment',NULL,${now + 3600},NULL,'hashed-equipment-token',${now});
   INSERT INTO platform_staff_step_up SELECT s.id,s.user_id,m.revision,${now},${now}
     FROM sessions s JOIN platform_staff_members m ON m.user_id=s.user_id WHERE s.user_id IN ('support','equipment');`);
-const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff });
+const dashboard = load('src/lib/server/platformStaffDashboard.ts', { '@sveltejs/kit': kit,
+  '#lib/server/platformStaff.ts': staff, '#lib/server/platformHealth.ts': health,
+  '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 } });
+const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffDashboard.ts': dashboard });
 const activityPage = load('src/routes/staff/activity/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
-const staffEntry = load('src/routes/staff/+page.server.ts', { '@sveltejs/kit': { redirect }, '#lib/server/platformStaff.ts': staff });
+const staffEntry = load('src/routes/staff/+page.server.ts', { '#lib/server/platformStaff.ts':staff, '#lib/server/platformStaffDashboard.ts':dashboard });
 const staffLayout = load('src/routes/staff/+layout.server.ts', { '#lib/server/platformStaff.ts': staff });
 const staffPaths = ['/staff','/staff/businesses','/staff/businesses/a','/staff/equipment','/staff/health',
   '/staff/team','/staff/activity','/staff/security'];
@@ -437,7 +444,7 @@ assert.equal(tenantCalls, tenantCallsBeforeMatrix, 'Staff requests never bootstr
 for (const role of ['owner','support','equipment']) {
   const locals = { DB: db, userId: role, sessionId: `${role}-session` };
   const event = { locals, params: { id: 'a' }, url: new URL('https://criminiops.com/staff/health?business=a'), setHeaders(headers) { assert.equal(headers['cache-control'],'no-store'); } };
-  await assert.rejects(staffEntry.load(event), { location: '/staff/businesses' });
+  assert.equal((await staffEntry.load(event)).diagnostics.canViewApplication, role !== 'equipment');
   assert.equal((await staffLayout.load(event)).staff.role, role);
   assert.equal((await directory.load(event)).businesses.length, 2);
   assert.equal((await inventory.load(event)).canAssign, role !== 'support');
@@ -465,7 +472,8 @@ for (let i = 0; i < 22; i++) {
 }
 for (const [loader, path, field] of [[directory,'businesses','businesses'],[inventory,'equipment','equipment']]) {
   const firstPage = await loader.load({ locals: ownerLocals, url: new URL(`https://criminiops.com/staff/${path}`) });
-  const secondPage = await loader.load({ locals: ownerLocals, url: new URL(`https://criminiops.com/staff/${path}?page=2`) });
+  const query = firstPage.next ? new URLSearchParams({ afterName: firstPage.next.name, afterId: firstPage.next.id }).toString() : 'page=2';
+  const secondPage = await loader.load({ locals: ownerLocals, url: new URL(`https://criminiops.com/staff/${path}?${query}`) });
   assert.equal(firstPage[field].length,20); assert.equal(firstPage.hasNext,true);
   assert.equal(secondPage[field].length,4); assert.equal(secondPage.hasNext,false);
   const literalWildcard = await loader.load({ locals: ownerLocals, url: new URL(`https://criminiops.com/staff/${path}?q=%25`) });

@@ -42,6 +42,7 @@ declare global {
 			sessionId?: string;
 			userRole?: string;
 			platformStaff?: import('./lib/server/platformStaff').PlatformStaff;
+			platformDiagnosticStatus?: number;
 			featureModes?: AppFeatureModes;
 			businessId?: string;
 			businessName?: string;

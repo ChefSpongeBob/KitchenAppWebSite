@@ -1,3 +1,5 @@
+import { cleanupPlatformDiagnostics } from '../../src/lib/server/platformDiagnostics.ts';
+
 function processorUrl(baseUrl) {
   return `${String(baseUrl || 'https://criminiops.com').replace(/\/+$/, '')}/api/internal/operational-events/process`;
 }
@@ -102,6 +104,10 @@ export default {
     const scheduledMinute = Math.floor(Number(controller?.scheduledTime ?? Date.now()) / 60000);
     if (scheduledMinute % 5 === 0) {
       jobs.push(dispatchTemperatureAlerts(env));
+    }
+    if (scheduledMinute % 60 === 0 && env.DB) {
+      jobs.push(cleanupPlatformDiagnostics(env.DB).then(summary => console.log('Diagnostic retention cleanup complete.', summary))
+        .catch(() => console.warn('Diagnostic retention cleanup unavailable.')));
     }
     ctx.waitUntil(Promise.all(jobs));
   }

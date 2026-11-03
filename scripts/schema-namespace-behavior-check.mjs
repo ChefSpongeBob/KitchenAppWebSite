@@ -55,6 +55,7 @@ try {
     }
   }
   sqlite.exec(readFileSync('migrations/0112_staff_email_verification.sql','utf8'));
+  sqlite.exec(readFileSync('migrations/0113_staff_diagnostics_dashboard.sql','utf8'));
   const readiness = loadServerModules({ '#lib/server/observability.ts': { logOperationalEvent() {} } })('src/routes/api/internal/schema-readiness/+server.ts');
   const check = await readiness.GET({ locals: { DB: test.db, env: { SMOKE_INTERNAL_TOKEN: 'test-internal-token' } },
     request: new Request('https://criminiops.com/api/internal/schema-readiness', { headers: { 'x-smoke-token': 'test-internal-token' } }) });

@@ -1,6 +1,6 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-11-02 (staff email verification; restaurant authority unchanged)
+Updated: 2026-11-02 (staff email verification and operations dashboard; restaurant authority unchanged)
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
@@ -23,14 +23,14 @@ This file is the working map for DB table names, column names, and the code path
 - The creator and document routes already check names within the active business. The old global constraints contradicted those queries and blocked different restaurants from using the same titles; this is not a routing or authorization change.
 - Rebuild preserves every existing column, ID, timestamp, child item, and file reference. Only `checklist_items` and `list_items` have cascade dependencies on these parent tables; migration staging restores those rows within the transaction. No final new table, tenant, redirect, or seeded content.
 - `test:schema-namespaces` executes rollback, preservation, cross-tenant/same-tenant uniqueness, every tenant table's unique-index review, and actual schema-readiness checks. Globally unique invite codes, factory device/node serials, and global shift-reference keys remain intentional; tenant names and content are not shared.
-- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies 0111. It contains no exported account/business/HR rows. Live execution status is recorded only in `PROJECT_HANDOFF.md`.
+- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies 0111-0113. It contains no exported account/business/HR rows. Live execution status is recorded only in `PROJECT_HANDOFF.md`.
 
 ## Summary
 
-- Tables inventoried: 113, including D1 migration bookkeeping (0112 adds one staff-only table)
-- Tables with `business_id`: 94
+- Tables inventoried: 115, including D1 migration bookkeeping (0113 adds two platform diagnostics tables)
+- Tables with `business_id`: 96
 - Tables with approved alternate tenant columns: 2
-- Approved global/system/root classifications: 20 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
+- Approved global/system/root classifications: 22 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
 - Tables with `user_id`: 45
 
 ## Inventory Caveats
@@ -2706,6 +2706,49 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `/staff/security` [ordinary code forms; masked destination only in page data]
   - Migration 0112 [invalidates on staff membership/account/password/address change]
   - `/api/internal/schema-readiness` [table, columns, and both indexes]
+
+### platform_diagnostic_issues
+
+**Columns**
+  - `id` TEXT (PRIMARY KEY; SHA-256 of verified scope, route, known operation, kind, and status class)
+  - `business_id` TEXT (nullable businesses.id, ON DELETE CASCADE; NULL is platform context)
+  - `area` TEXT (NOT NULL; fixed application area)
+  - `route_id` TEXT (NOT NULL; server route pattern, never the user-supplied path/query)
+  - `operation` TEXT (NOT NULL; allowlisted action name or HTTP method)
+  - `kind` TEXT (NOT NULL; server_error, access_denied, slow_request)
+  - `status` INTEGER (NOT NULL; response/verified guard status)
+  - `occurrences` INTEGER (NOT NULL; grouped recorded count since first_seen_at)
+  - `first_seen_at` INTEGER (NOT NULL; Unix seconds)
+  - `last_seen_at` INTEGER (NOT NULL; Unix seconds)
+  - `max_duration_ms` INTEGER (NOT NULL; bounded server response time)
+  - `last_request_id` TEXT (NOT NULL; validated Cloudflare ray or server-generated UUID, not a session token)
+
+**Code Usage**
+  - `src/lib/server/platformDiagnostics.ts` and `src/hooks.server.ts` [best-effort safe upsert; no business workflow writes]
+  - `src/lib/server/platformStaffDashboard.ts` [guarded bounded cursor reads and labels]
+  - `/staff`, `/staff/businesses/[id]?view=application` [read-only overview/investigation]
+  - Existing operational dispatcher [bounded hourly expiry cleanup; no security/audit deletion]
+  - Migration 0113 [global/business/kind/area recent indexes; tenant-delete cascade]
+
+### platform_request_metrics
+
+**Columns**
+  - `scope_key` TEXT (composite PRIMARY KEY; platform or business:<verified ID>)
+  - `business_id` TEXT (nullable businesses.id, ON DELETE CASCADE)
+  - `bucket` INTEGER (composite PRIMARY KEY; Unix seconds rounded down to hour)
+  - `success_samples` INTEGER (NOT NULL, DEFAULT 0)
+  - `sample_duration_ms` INTEGER (NOT NULL, DEFAULT 0)
+  - `sample_max_ms` INTEGER (NOT NULL, DEFAULT 0)
+  - `server_errors` INTEGER (NOT NULL, DEFAULT 0)
+  - `access_denials` INTEGER (NOT NULL, DEFAULT 0)
+  - `slow_requests` INTEGER (NOT NULL, DEFAULT 0)
+
+**Code Usage**
+  - `src/lib/server/platformDiagnostics.ts` [atomic global/business aggregates; seven-day cleanup eligibility]
+  - `src/lib/server/platformStaffDashboard.ts` [scope/time-indexed aggregation, max 168 buckets]
+  - Staff dashboard and selected-business Application tab [sampled latency, not CPU/DB infrastructure metrics]
+  - `/api/internal/schema-readiness` [table, columns, indexes]
+  - Tenant deletion [cascade scoped rows; unidentifiable platform counters remain]
 
 ### iot_device_reservations
 

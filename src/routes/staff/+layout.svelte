@@ -11,6 +11,7 @@
 <Layout>
   <PageHeader title="Crimini Staff" />
   <nav class="staff-nav" aria-label="Staff console">
+    <a href="/staff" aria-current={$page.url.pathname === '/staff' ? 'page' : undefined}>Dashboard</a>
     <a href="/staff/businesses" aria-current={$page.url.pathname.startsWith('/staff/businesses') ? 'page' : undefined}>Businesses</a>
     <a href="/staff/equipment" aria-current={$page.url.pathname === '/staff/equipment' ? 'page' : undefined}>Equipment</a>
     <a href="/staff/health" aria-current={$page.url.pathname === '/staff/health' ? 'page' : undefined}>System Health</a>
@@ -43,4 +44,49 @@
   .staff-workspace :global(dd) { margin: 0.3rem 0 0; overflow-wrap: anywhere; }
   .staff-workspace :global(.staff-feedback) { padding-block: 0.7rem; border-block: 1px solid var(--color-divider); }
   .staff-workspace :global(.staff-feedback.error) { color: var(--color-error); }
+  .staff-workspace :global(.staff-dashboard) { display: grid; gap: 1rem; padding-bottom: 2rem; }
+  .staff-workspace :global(.staff-panel), .staff-workspace :global(.staff-command) { position: relative; padding-block: 1rem; }
+  .staff-workspace :global(.staff-panel)::before, .staff-workspace :global(.staff-command)::before { content: ''; position: absolute; inset: 0 0 auto; height: 1px; background: linear-gradient(90deg, transparent, var(--color-divider) 10%, var(--color-divider) 85%, transparent); }
+  .staff-workspace :global(.staff-command) { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; align-items: center; gap: 1rem; }
+  .staff-workspace :global(.staff-command-title) { display: flex; align-items: center; gap: 0.7rem; }
+  .staff-workspace :global(.staff-command-title small) { color: var(--color-text-muted); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .staff-workspace :global(.staff-command-title h2) { margin: 0.2rem 0 0; }
+  .staff-workspace :global(.staff-snapshot) { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; }
+  .staff-workspace :global(.staff-snapshot > div) { padding: 0.5rem 0.8rem; border-left: 1px solid var(--color-divider); }
+  .staff-workspace :global(.staff-snapshot dd) { font-size: 1.25rem; font-weight: 600; }
+  .staff-workspace :global(.staff-dashboard-toolbar), .staff-workspace :global(.staff-check-time) { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8rem; }
+  .staff-workspace :global(.staff-check-time) { font-size: 0.72rem; color: var(--color-text-muted); }
+  .staff-workspace :global(.staff-dashboard-columns) { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1.6rem; }
+  .staff-workspace :global(.staff-dashboard-main), .staff-workspace :global(.staff-dashboard-aside) { min-width: 0; }
+  .staff-workspace :global(.staff-panel-heading) { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; margin-bottom: 0.85rem; }
+  .staff-workspace :global(.staff-panel-heading h2) { margin: 0; }
+  .staff-workspace :global(.staff-panel-heading > span), .staff-workspace :global(.staff-panel-heading a), .staff-workspace :global(.staff-note) { font-size: 0.72rem; color: var(--color-text-muted); }
+  .staff-workspace :global(.staff-filters select) { min-width: 8rem; }
+  .staff-workspace :global(.staff-issue) { padding: 0.9rem 0 0.9rem 0.7rem; border-left: 2px solid var(--color-divider); border-bottom: 1px solid var(--color-divider); }
+  .staff-workspace :global(.staff-issue-error) { border-left-color: var(--color-error); }
+  .staff-workspace :global(.staff-issue-title), .staff-workspace :global(.staff-issue-detail) { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.9rem; font-size: 0.8rem; }
+  .staff-workspace :global(.staff-issue-title > span), .staff-workspace :global(.staff-issue-detail) { color: var(--color-text-muted); }
+  .staff-workspace :global(.staff-issue-detail) { margin-top: 0.4rem; font-size: 0.7rem; overflow-wrap: anywhere; }
+  .staff-workspace :global(.staff-issue-facts) { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 0.65rem; margin: 0.8rem 0; }
+  .staff-workspace :global(.staff-issue-facts dt) { font-size: 0.65rem; }
+  .staff-workspace :global(.staff-issue-facts dd) { font-size: 0.72rem; }
+  .staff-workspace :global(.staff-reference) { font-size: 0.68rem; overflow-wrap: anywhere; }
+  .staff-workspace :global(.staff-reference summary) { cursor: pointer; width: fit-content; border-bottom: 1px solid var(--color-divider); }
+  .staff-workspace :global(.staff-empty) { padding: 1rem 0; font-size: 0.8rem; color: var(--color-text-muted); }
+  .staff-workspace :global(.staff-cell-meta) { display: block; margin-top: 0.25rem; color: var(--color-text-muted); font-size: 0.68rem; }
+  .staff-workspace :global(.staff-warning) { font-weight: 600; }
+  .staff-workspace :global(.staff-workspace-links) { display: grid; }
+  .staff-workspace :global(.staff-workspace-links a) { display: flex; align-items: center; gap: 0.8rem; padding: 1rem 0; text-decoration: none; border-bottom: 1px solid var(--color-divider); color: var(--color-text); }
+  .staff-workspace :global(.staff-workspace-links small) { display: block; font-size: 0.7rem; color: var(--color-text-muted); margin-top: 0.25rem; }
+  .staff-workspace :global(.staff-activity-list) { list-style: none; padding: 0; margin: 0; }
+  .staff-workspace :global(.staff-activity-list li) { display: grid; gap: 0.3rem; padding: 0.8rem 0; border-bottom: 1px solid var(--color-divider); font-size: 0.75rem; }
+  .staff-workspace :global(.staff-activity-list time) { color: var(--color-text-muted); font-size: 0.68rem; }
+  .staff-workspace :global(.staff-business-tabs) { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
+  .staff-workspace :global(.staff-business-tabs a) { font-size: 0.8rem; text-decoration: none; color: var(--color-text); border-bottom: 1px solid var(--color-divider); padding-block: 0.4rem; }
+  .staff-workspace :global(.staff-business-tabs a[aria-current]) { font-weight: 700; border-bottom-color: currentColor; }
+  @media (max-width: 850px) {
+    .staff-workspace :global(.staff-dashboard-columns) { grid-template-columns: 1fr; gap: 0.5rem; }
+    .staff-workspace :global(.staff-command) { grid-template-columns: 1fr; }
+    .staff-workspace :global(.staff-issue-facts) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
 </style>

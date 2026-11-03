@@ -34,6 +34,7 @@ import { wrapProductionSchemaGuard } from '#lib/server/schemaGuard.ts';
 import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
 import { processOperationalEvents } from '#lib/server/operationalEvents.ts';
 import { findPlatformStaff, isPlatformStaffPath, isStaffSecurityPath, loadStaffStepUp, STAFF_SESSION_SECONDS } from '#lib/server/platformStaff.ts';
+import { recordRequestDiagnostic } from '#lib/server/platformDiagnostics.ts';
 
 const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
 	'/admin',
@@ -138,7 +139,7 @@ function applySecurityHeaders(response: Response) {
 	return response;
 }
 
-export const handle: Handle = async ({ event, resolve }) => {
+const handleRequest: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 	if (building && pathname === '/[fallback]') {
 		return applySecurityHeaders(await resolve(event));
@@ -576,6 +577,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				event.locals.businessCapabilities
 			)
 		) {
+			event.locals.platformDiagnosticStatus = 403;
 			logOperationalEvent({
 				level: 'warn',
 				event: 'tenant_access_denied',
@@ -602,6 +604,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 					event.locals.businessCapabilities
 				)
 			) {
+				event.locals.platformDiagnosticStatus = 403;
 				logOperationalEvent({
 					level: 'warn',
 					event: 'tenant_access_denied',
@@ -622,6 +625,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (isRedirect(error)) {
 			throw error;
 		}
+		event.locals.platformDiagnosticStatus = 500;
 		logOperationalError({
 			event: 'request_guard_error',
 			request: event.request,
@@ -634,5 +638,25 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(303, '/login?error=session');
 		}
 		return resolvePublicOrAuthRoute();
+	}
+};
+
+export const handle: Handle = async ({ event, resolve }) => {
+	const started = performance.now();
+	const capture = (status: number) => {
+		if (building) return;
+		const recording = recordRequestDiagnostic(event, event.locals.platformDiagnosticStatus ?? status, performance.now() - started)
+			.catch(() => console.warn('Platform diagnostic recording unavailable.'));
+		// Telemetry must never change the response, session, or result of a business operation.
+		try { waitUntil(recording); } catch { void recording; }
+	};
+	try {
+		const response = await handleRequest({ event, resolve });
+		capture(response.status);
+		return response;
+	} catch (error) {
+		const status = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 500;
+		capture(Number.isInteger(status) && status >= 300 && status <= 599 ? status : 500);
+		throw error;
 	}
 };
