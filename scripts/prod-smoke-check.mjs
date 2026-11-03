@@ -159,13 +159,14 @@ async function main() {
       const forgotBody = new URLSearchParams({ email }).toString();
       const forgotResponse = await request('/forgot-password', {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json', 'x-sveltekit-action': 'true' },
         body: forgotBody
       });
-      if (forgotResponse.status >= 200 && forgotResponse.status < 400) {
+      const forgotResult = await forgotResponse.json().catch(() => null);
+      if (forgotResponse.ok && forgotResult?.type === 'success') {
         logPass(`Forgot-password submit (${forgotResponse.status})`);
       } else {
-        logFail(`Forgot-password submit expected <400, got ${forgotResponse.status}`);
+        logFail(`Forgot-password submit expected a successful action, got HTTP ${forgotResponse.status}, ${forgotResult?.type ?? 'non-action response'}`);
       }
 
       if (runAdminChecks) {

@@ -127,7 +127,7 @@ export async function sendTransactionalEmail({
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${env?.RESEND_API_KEY}`,
@@ -144,6 +144,11 @@ export async function sendTransactionalEmail({
         reply_to: replyTo || env?.RESEND_REPLY_TO_EMAIL || undefined
       })
     });
+
+    if (response.status >= 300 && response.status < 400) {
+      console.error('Resend email send failed:', response.status, 'Redirect rejected.');
+      return { sent: false, reason: 'Email provider returned an unexpected redirect.' };
+    }
 
     if (!response.ok) {
       const body = await response.text();

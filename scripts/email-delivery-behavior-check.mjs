@@ -14,12 +14,15 @@ let responseMode = 'accepted';
 globalThis.fetch = async (url, options) => {
   assert.equal(url, 'https://api.resend.com/emails');
   assert.equal(options.method, 'POST');
-  assert.equal(options.redirect, 'error');
+  assert.equal(options.redirect, 'manual');
   assert.ok(options.signal instanceof AbortSignal);
   const headers = new Headers(options.headers);
   assert.equal(headers.get('authorization'), 'Bearer test-only-provider-key');
   sent.push({ body: JSON.parse(options.body), idempotencyKey: headers.get('idempotency-key') });
   if (responseMode === 'network-error') throw new Error('Simulated network error');
+  if (responseMode.startsWith('redirect-')) return new Response(null, {
+    status: Number(responseMode.slice('redirect-'.length)), headers: { location: 'https://untrusted.example.invalid' }
+  });
   return Response.json(responseMode === 'missing-id' ? {} : { id: `test-provider-id-${sent.length}` });
 };
 function insert(table, row) {
@@ -67,11 +70,19 @@ try {
   const originalError = console.error;
   console.error = () => {};
   try {
+    for (const status of [301, 302, 303, 307, 308]) {
+      responseMode = `redirect-${status}`;
+      const before = sent.length;
+      const result = await email.sendTransactionalEmail({ env, to: 'employee-a@example.invalid', subject: 'Test', html: '', text: '' });
+      assert.equal(result.sent, false);
+      assert.equal(result.reason, 'Email provider returned an unexpected redirect.');
+      assert.equal(sent.length, before + 1, 'Provider redirects must never forward credentials');
+    }
     responseMode = 'network-error';
     assert.equal((await process('onboarding.package.approved')).retrying, 1);
   } finally { console.error = originalError; }
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM operational_events WHERE delivery_status='pending'").get().n, 1);
   assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
-  console.log('PASS real email/queue behavior: tenant/department/consent routing, approval target, escaped invite/reset links, idempotency, missing receipt, retry, and no temperature email');
+  console.log('PASS real email/queue behavior: tenant/department/consent routing, approval target, escaped invite/reset links, idempotency, rejected redirects, missing receipt, retry, and no temperature email');
   console.log('Provider requests were intercepted; no real messages or production writes occurred.');
 } finally { globalThis.fetch = originalFetch; test.close(); }

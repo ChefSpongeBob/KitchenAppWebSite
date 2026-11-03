@@ -101,7 +101,7 @@
 		"ops:bootstrap-platform-owner": "node ./scripts/bootstrap-platform-owner.mjs",
 		"test:workflow-behavior": "node ./scripts/workflow-behavior-check.mjs",
 		"db:restore:drill": "node ./scripts/restore-drill.mjs",
-		"test:email-delivery-behavior": "node ./scripts/email-delivery-behavior-check.mjs",
+		"test:email-delivery-behavior": "node ./scripts/email-delivery-behavior-check.mjs && node ./scripts/email-worker-check.mjs",
 		"test:schema-namespaces": "node ./scripts/schema-namespace-behavior-check.mjs",
 		"test:pdf-runtime": "node ./scripts/pdf-runtime-check.mjs",
 		"test:native-transport": "node ./scripts/native-transport-check.mjs"
