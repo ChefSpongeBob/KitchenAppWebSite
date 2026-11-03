@@ -1,11 +1,11 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ScheduleTimeSelect from '$lib/components/ui/ScheduleTimeSelect.svelte';
-  import ScheduleBuilderCell from '$lib/components/ui/ScheduleBuilderCell.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import ScheduleTimeSelect from '#lib/components/ui/ScheduleTimeSelect.svelte';
+  import ScheduleBuilderCell from '#lib/components/ui/ScheduleBuilderCell.svelte';
   import { applyAction, deserialize, enhance } from '$app/forms';
   import { invalidate } from '$app/navigation';
-  import { pushToast } from '$lib/client/toasts';
+  import { pushToast } from '#lib/client/toasts.ts';
   import {
     scheduleEndLabels,
     scheduleDetailOptionsFor,
@@ -13,8 +13,8 @@
     formatScheduleWeekRange,
     weekdayIndexFromDate,
     type ScheduleDepartment
-  } from '$lib/assets/schedule';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  } from '#lib/assets/schedule.ts';
+  import type { SubmitFunction } from '$app/forms';
   import { onDestroy } from 'svelte';
 
   type UserOption = {

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { page } from '$app/stores';
-  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
+  import EmptyState from '#lib/components/ui/EmptyState.svelte';
 
   $: status = $page.status;
   $: message = $page.error?.message ?? 'This page could not be loaded.';

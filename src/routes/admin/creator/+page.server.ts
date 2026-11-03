@@ -27,9 +27,9 @@ import {
   updateListItem,
   updateListSection,
   updateRecipe
-} from '$lib/server/admin';
-import { attachTargetToItem, createItemAttachment, deleteItemAttachment } from '$lib/server/itemAttachments';
-import { requireBusinessId } from '$lib/server/tenant';
+} from '#lib/server/admin.ts';
+import { attachTargetToItem, createItemAttachment, deleteItemAttachment } from '#lib/server/itemAttachments.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   requireAdmin(locals.userRole);

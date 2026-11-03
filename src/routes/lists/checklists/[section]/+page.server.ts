@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { createChecklistPage } from '$lib/server/checklists';
+import { createChecklistPage } from '#lib/server/checklists.ts';
 
 function toTitle(value: string) {
   return value

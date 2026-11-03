@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import {
   ALL_BUSINESS_CAPABILITIES,
   defaultPermissionTemplateForRole,
@@ -6,9 +6,9 @@ import {
   resolveBusinessCapabilities,
   type BusinessCapability,
   type BusinessCapabilityOverrides
-} from '$lib/server/permissions';
+} from '#lib/server/permissions.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 let businessSchemaEnsured = false;
 let businessSchemaPromise: Promise<void> | null = null;

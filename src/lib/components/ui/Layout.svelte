@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
   import { fly } from 'svelte/transition';
 
   export let padded = true;

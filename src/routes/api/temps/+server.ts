@@ -1,14 +1,14 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { cleanupExpiredTemps } from '$lib/server/retention';
-import { allowIoTIngest, authenticateIoTDevice } from '$lib/server/iotIngest';
-import { ensureTenantSchema } from '$lib/server/tenant';
-import { normalizeDeviceSerial } from '$lib/server/temperatureSensors';
-import { resolveGatewayNodeReading } from '$lib/server/temperatureDeviceProvisioning';
+import { cleanupExpiredTemps } from '#lib/server/retention.ts';
+import { allowIoTIngest, authenticateIoTDevice } from '#lib/server/iotIngest.ts';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { normalizeDeviceSerial } from '#lib/server/temperatureSensors.ts';
+import { resolveGatewayNodeReading } from '#lib/server/temperatureDeviceProvisioning.ts';
 import {
   evaluateTemperatureReadings,
   loadLatestTemperatureSnapshots,
   type TemperatureReading
-} from '$lib/server/temperatureMonitoring';
+} from '#lib/server/temperatureMonitoring.ts';
 
 type TempRow = {
   sensor_id: number;
@@ -91,7 +91,7 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
 }
 
 async function resolveReadingSensor(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   businessId: string,
   gatewayDeviceId: string,
   row: RawTempRow
@@ -111,8 +111,8 @@ async function resolveReadingSensor(
   });
 }
 
-export const GET: RequestHandler = async ({ platform, url, request, locals }) => {
-  const db = platform?.env?.DB;
+export const GET: RequestHandler = async ({ url, request, locals }) => {
+  const db = locals.env.DB;
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }
@@ -200,8 +200,8 @@ export const GET: RequestHandler = async ({ platform, url, request, locals }) =>
   });
 };
 
-export const POST: RequestHandler = async ({ platform, request, url, locals }) => {
-  const db = platform?.env?.DB;
+export const POST: RequestHandler = async ({ request, url, locals }) => {
+  const db = locals.env.DB;
   if (!db) {
     return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   }

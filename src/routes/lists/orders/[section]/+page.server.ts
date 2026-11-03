@@ -1,5 +1,5 @@
 import type { Actions, PageServerLoad } from './$types';
-import { createListPage } from '$lib/server/preplist';
+import { createListPage } from '#lib/server/preplist.ts';
 
 function toTitle(value: string) {
   return value

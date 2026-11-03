@@ -4,9 +4,9 @@ import {
 	refreshBusinessBillingState,
 	updateStoreEntitlementLifecycle,
 	type StoreEntitlementStatus
-} from '$lib/server/storeBilling';
-import { verifyStorePurchase } from '$lib/server/storeVerification';
-import { bearerTokenFromRequest, constantTimeTokenEqual } from '$lib/server/requestTokens';
+} from '#lib/server/storeBilling.ts';
+import { verifyStorePurchase } from '#lib/server/storeVerification.ts';
+import { bearerTokenFromRequest, constantTimeTokenEqual } from '#lib/server/requestTokens.ts';
 
 function base64UrlDecodeJson<T>(input: string): T {
 	const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -14,7 +14,7 @@ function base64UrlDecodeJson<T>(input: string): T {
 	return JSON.parse(atob(padded)) as T;
 }
 
-function authorized(request: Request, env: App.Platform['env'] | undefined) {
+function authorized(request: Request, env: App.RuntimeEnv | undefined) {
 	const token = env?.BILLING_WEBHOOK_TOKEN?.trim();
 	if (!token) return false;
 
@@ -102,7 +102,7 @@ function mapAppleStatus(
 }
 
 async function markWebhook(
-	db: App.Platform['env']['DB'],
+	db: App.RuntimeEnv['DB'],
 	store: 'app_store',
 	eventId: string,
 	status: 'processed' | 'failed' | 'ignored'
@@ -121,12 +121,12 @@ async function markWebhook(
 		.run();
 }
 
-export const POST: RequestHandler = async ({ request, platform, locals }) => {
-	if (!authorized(request, platform?.env)) {
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!authorized(request, locals.env)) {
 		return json({ ok: false, error: 'Unauthorized.' }, { status: 401 });
 	}
 
-	const db = locals.DB ?? platform?.env?.DB;
+	const db = locals.DB ?? locals.env.DB;
 	if (!db) return json({ ok: false, error: 'Database unavailable.' }, { status: 503 });
 
 	const body = (await request.json().catch(() => ({}))) as { signedPayload?: string };
@@ -172,7 +172,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	const lifecycle = mapAppleStatus(notification.eventType, notification.subtype, transaction);
-	const verification = await verifyStorePurchase(platform?.env ?? ({ DB: db } as App.Platform['env']), {
+	const verification = await verifyStorePurchase(locals.env ?? ({ DB: db } as App.RuntimeEnv), {
 		store: 'app_store',
 		productId: transaction.productId,
 		originalTransactionId: transaction.originalTransactionId ?? null,

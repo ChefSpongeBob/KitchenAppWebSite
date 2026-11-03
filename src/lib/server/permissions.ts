@@ -25,4 +25,4 @@ export {
   type BusinessCapabilityOverrides,
   type BusinessRole,
   type PermissionTemplate
-} from '$lib/auth/roles';
+} from '#lib/auth/roles.ts';

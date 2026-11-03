@@ -1,10 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { processOperationalEvents } from '$lib/server/operationalEvents';
-import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
-import { constantTimeTokenEqual, internalTokenFromRequest } from '$lib/server/requestTokens';
+import { processOperationalEvents } from '#lib/server/operationalEvents.ts';
+import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
+import { constantTimeTokenEqual, internalTokenFromRequest } from '#lib/server/requestTokens.ts';
 
-function readInternalToken(platform: App.Platform | undefined) {
-  const platformValue = platform?.env?.SMOKE_INTERNAL_TOKEN;
+function readInternalToken(env: App.RuntimeEnv | undefined) {
+  const platformValue = env?.SMOKE_INTERNAL_TOKEN;
   if (typeof platformValue === 'string' && platformValue.trim()) return platformValue.trim();
   const nodeProcess = (
     globalThis as typeof globalThis & {
@@ -18,8 +18,8 @@ function suppliedToken(request: Request) {
   return internalTokenFromRequest(request);
 }
 
-function isAuthorized(request: Request, platform: App.Platform | undefined) {
-  const expected = readInternalToken(platform);
+function isAuthorized(request: Request, env: App.RuntimeEnv | undefined) {
+  const expected = readInternalToken(env);
   const supplied = suppliedToken(request);
   return constantTimeTokenEqual(expected, supplied);
 }
@@ -39,12 +39,12 @@ async function readLimit(request: Request) {
   return 50;
 }
 
-export const POST: RequestHandler = async ({ request, platform, locals }) => {
-  if (!isAuthorized(request, platform)) {
+export const POST: RequestHandler = async ({ request, locals }) => {
+  if (!isAuthorized(request, locals.env)) {
     return json({ ok: false, error: 'Not found.' }, { status: 404 });
   }
 
-  const db = locals.DB ?? platform?.env?.DB;
+  const db = locals.DB ?? locals.env.DB;
   if (!db) {
     logOperationalEvent({
       level: 'error',
@@ -58,7 +58,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
   try {
     const limit = await readLimit(request);
     const result = await processOperationalEvents(db, {
-      env: platform?.env,
+      env: locals.env,
       request,
       limit
     });

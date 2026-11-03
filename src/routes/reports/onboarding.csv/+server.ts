@@ -1,9 +1,9 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { hasReportsAccess } from '$lib/server/permissions';
-import { requireBusinessId } from '$lib/server/tenant';
-import { csvEscape } from '$lib/server/history';
-import { loadOnboardingReport } from '$lib/server/reports';
+import { hasReportsAccess } from '#lib/server/permissions.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { csvEscape } from '#lib/server/history.ts';
+import { loadOnboardingReport } from '#lib/server/reports.ts';
 
 function csvTimestamp(value: number | null) {
   return value ? new Date(value * 1000).toISOString() : '';

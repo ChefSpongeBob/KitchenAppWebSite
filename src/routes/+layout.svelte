@@ -2,26 +2,29 @@
   import "../app.css";
   import { onMount } from "svelte";
   import { afterNavigate } from "$app/navigation";
-  import { browser } from "$app/environment";
-  import { navigating, page } from "$app/stores";
-  import { primaryNav, publicNav, type NavItem } from "$lib/assets/navigation";
+  import { browser } from "$app/env";
+  import { navigating as navigatingState, page as pageState } from "$app/state";
+  import { toStore } from "svelte/store";
+  const navigating = toStore(() => navigatingState.to ? { ...navigatingState } : null);
+  const page = toStore(() => ({ ...pageState }));
+  import { primaryNav, publicNav, type NavItem } from "#lib/assets/navigation.ts";
   import {
     canRoleAccessFeature,
     defaultAppFeatureModes,
     type AppFeatureKey,
     type AppFeatureModes
-  } from "$lib/features/appFeatures";
+  } from "#lib/features/appFeatures.ts";
   import {
     hasBusinessCapability,
     hasManagementAccess,
     hasReportsAccess,
     hasVendorAccess,
     type BusinessCapability
-  } from "$lib/auth/roles";
-  import { resolveBusinessCapabilityForPath } from "$lib/auth/routeCapabilities";
-  import { managerNavigationGroups } from "$lib/navigation/managerNavigation";
-  import ToastStack from "$lib/components/ui/ToastStack.svelte";
-  import { nativeServerUrl } from "$lib/client/nativeServerUrl";
+  } from "#lib/auth/roles.ts";
+  import { resolveBusinessCapabilityForPath } from "#lib/auth/routeCapabilities.ts";
+  import { managerNavigationGroups } from "#lib/navigation/managerNavigation.ts";
+  import ToastStack from "#lib/components/ui/ToastStack.svelte";
+  import { nativeServerUrl } from "#lib/client/nativeServerUrl.ts";
 
   type FeatureAwareNavItem = NavItem & {
     featureKey?: AppFeatureKey;
@@ -42,7 +45,7 @@
     businessPlan: string;
     businessRole: string;
     businessPermissionTemplate: string;
-    businessCapabilities: import('$lib/auth/roles').BusinessCapability[];
+    businessCapabilities: import('#lib/auth/roles.ts').BusinessCapability[];
     businessLogoUrl: string | null;
   };
 
@@ -56,7 +59,7 @@
           businessLogoUrl?: string | null;
           businessRole?: string | null;
           businessPermissionTemplate?: string | null;
-          businessCapabilities?: import('$lib/auth/roles').BusinessCapability[];
+          businessCapabilities?: import('#lib/auth/roles.ts').BusinessCapability[];
           businessOnboardingComplete?: boolean;
           businesses?: BusinessMembership[];
           preferredTheme?: "dark" | "light";
@@ -158,7 +161,7 @@
   }
 
   async function startNativePushRegistration() {
-    const module = await import("$lib/client/pushNotifications");
+    const module = await import("#lib/client/pushNotifications.ts");
     await module.registerNativePushNotifications();
   }
 
@@ -406,7 +409,7 @@
     requestAnimationFrame(setupScrollReveal);
 
     if (browser && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      navigator.serviceWorker.register("/service-worker.js", { type: "module" }).catch((error) => {
         console.error("Service worker registration failed:", error);
       });
     }

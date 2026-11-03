@@ -1,6 +1,8 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { page } from '$app/stores';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
   import type { PageData, ActionData } from './$types';
   export let data: PageData;
   export let form: ActionData;

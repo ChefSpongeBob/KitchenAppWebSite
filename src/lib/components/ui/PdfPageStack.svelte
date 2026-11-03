@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-  import EmptyState from '$lib/components/ui/EmptyState.svelte';
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  import EmptyState from '#lib/components/ui/EmptyState.svelte';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   export let src = '';
   export let title = 'Document';

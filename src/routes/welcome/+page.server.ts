@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
-import { hasAdminAccess } from '$lib/server/permissions';
+import { hasAdminAccess } from '#lib/server/permissions.ts';
 import type { PageServerLoad } from './$types';
-import type { WelcomeTourVariant } from '$lib/server/userPreferences';
+import type { WelcomeTourVariant } from '#lib/server/userPreferences.ts';
 
 function resolveWelcomeVariant(locals: App.Locals): WelcomeTourVariant {
   return hasAdminAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)

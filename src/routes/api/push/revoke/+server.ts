@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { revokePushDevice } from '$lib/server/pushNotifications';
+import { revokePushDevice } from '#lib/server/pushNotifications.ts';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   if (!locals.userId || !locals.businessId) {

@@ -54,15 +54,15 @@ try {
       assert.ok(allowedGlobal.has(name + ':' + columns.join(',')), `Unreviewed global unique constraint in tenant table ${name}: ${columns}`);
     }
   }
-  const readiness = loadServerModules({ '$lib/server/observability': { logOperationalEvent() {} } })('src/routes/api/internal/schema-readiness/+server.ts');
-  const check = await readiness.GET({ locals: { DB: test.db }, platform: { env: { SMOKE_INTERNAL_TOKEN: 'test-internal-token' } },
+  const readiness = loadServerModules({ '#lib/server/observability.ts': { logOperationalEvent() {} } })('src/routes/api/internal/schema-readiness/+server.ts');
+  const check = await readiness.GET({ locals: { DB: test.db, env: { SMOKE_INTERNAL_TOKEN: 'test-internal-token' } },
     request: new Request('https://criminiops.com/api/internal/schema-readiness', { headers: { 'x-smoke-token': 'test-internal-token' } }) });
   const payload = await check.json();
   for (const name of ['idx_checklist_sections_business_slug','idx_list_sections_business_domain_slug','idx_documents_business_slug_active']) {
     assert.equal(payload.missingCoreIndexes.includes(name),false);
   }
   sqlite.exec('DROP INDEX idx_checklist_sections_business_slug; CREATE INDEX idx_checklist_sections_business_slug ON checklist_sections(business_id, slug)');
-  const invalid = await readiness.GET({ locals: { DB: test.db }, platform: { env: { SMOKE_INTERNAL_TOKEN: 'test-internal-token' } },
+  const invalid = await readiness.GET({ locals: { DB: test.db, env: { SMOKE_INTERNAL_TOKEN: 'test-internal-token' } },
     request: new Request('https://criminiops.com/api/internal/schema-readiness', { headers: { 'x-smoke-token': 'test-internal-token' } }) });
   assert.ok((await invalid.json()).missingCoreIndexes.includes('idx_checklist_sections_business_slug'), 'An index name alone must not pass readiness');
   console.log('PASS content-namespace migration: rollback is atomic, existing child rows/URLs preserved, identical names allowed across tenants and rejected within each tenant');

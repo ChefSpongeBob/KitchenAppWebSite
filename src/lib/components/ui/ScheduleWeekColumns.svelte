@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatScheduleTimeLabel } from '$lib/assets/schedule';
+  import { formatScheduleTimeLabel } from '#lib/assets/schedule.ts';
 
   type Shift = {
     id: string;

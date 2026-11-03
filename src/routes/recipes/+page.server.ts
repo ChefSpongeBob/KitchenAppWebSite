@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
-import { loadAdminRecipeCategories } from '$lib/server/admin';
-import { requireBusinessId } from '$lib/server/tenant';
+import { loadAdminRecipeCategories } from '#lib/server/admin.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const db = locals.DB;

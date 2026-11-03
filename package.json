@@ -3,8 +3,11 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
 	"engines": {
-		"node": ">=22.13.0"
+		"node": ">=22.17.0"
 	},
 	"scripts": {
 		"dev": "vite dev",
@@ -13,6 +16,7 @@
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:worker": "tsc -p src/service-worker/tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"db:migrate:local": "npx wrangler d1 execute crimini-production --local --file=./migrations/0001_init.sql",
 		"db:migrate:remote": "npx wrangler d1 execute crimini-production --remote --file=./migrations/0001_init.sql",
@@ -79,7 +83,7 @@
 		"test:apple-store": "node ./scripts/apple-store-readiness-check.mjs",
 		"test:google-play": "node ./scripts/google-play-readiness-check.mjs",
 		"test:legal-readiness": "node ./scripts/legal-readiness-check.mjs",
-		"test:static": "npm run check && npm run build && npm run mobile:check && npm run test:tenant-authority && npm run test:authorization-capabilities && npm run test:operational-events && npm run test:email-system && npm run test:native-push && npm run test:temperature-monitoring && npm run test:tenant-isolation && npm run test:db-governance && npm run test:iot-device-auth && npm run test:media-access && npm run test:production-schema && npm run test:report-exports && npm run test:scale-performance && npm run test:auth-abuse && npm run test:hr-onboarding && npm run test:admin-consolidation && npm run test:core-feature-actions && npm run test:billing-lifecycle && npm run test:malicious-user-hardening && npm run test:store-release && npm run test:cloudflare-readiness && npm run test:security-headers && npm run test:observability && npm run test:ui-polish && npm run test:apple-store && npm run test:google-play && npm run test:legal-readiness && npm run test:platform-staff && npm run test:workflow-behavior && npm run test:email-delivery-behavior && npm run test:schema-namespaces && npm run test:pdf-runtime",
+		"test:static": "npm run check && npm run check:worker && npm run build && npm run mobile:check && npm run test:tenant-authority && npm run test:authorization-capabilities && npm run test:operational-events && npm run test:email-system && npm run test:native-push && npm run test:temperature-monitoring && npm run test:tenant-isolation && npm run test:db-governance && npm run test:iot-device-auth && npm run test:media-access && npm run test:production-schema && npm run test:report-exports && npm run test:scale-performance && npm run test:auth-abuse && npm run test:hr-onboarding && npm run test:admin-consolidation && npm run test:core-feature-actions && npm run test:billing-lifecycle && npm run test:malicious-user-hardening && npm run test:store-release && npm run test:cloudflare-readiness && npm run test:security-headers && npm run test:observability && npm run test:ui-polish && npm run test:apple-store && npm run test:google-play && npm run test:legal-readiness && npm run test:platform-staff && npm run test:workflow-behavior && npm run test:email-delivery-behavior && npm run test:schema-namespaces && npm run test:pdf-runtime && npm run test:native-transport",
 		"ops:activate-test-tenant": "node ./scripts/activate-test-tenant.mjs",
 		"ops:provision-temp-gateway": "node ./scripts/provision-temperature-gateway.mjs",
 		"db:migrations:normalize:local": "node ./scripts/normalize-d1-migrations.mjs --local",
@@ -99,20 +103,21 @@
 		"db:restore:drill": "node ./scripts/restore-drill.mjs",
 		"test:email-delivery-behavior": "node ./scripts/email-delivery-behavior-check.mjs",
 		"test:schema-namespaces": "node ./scripts/schema-namespace-behavior-check.mjs",
-		"test:pdf-runtime": "node ./scripts/pdf-runtime-check.mjs"
+		"test:pdf-runtime": "node ./scripts/pdf-runtime-check.mjs",
+		"test:native-transport": "node ./scripts/native-transport-check.mjs"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-cloudflare": "^7.2.9",
-		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.65.2",
-		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@sveltejs/adapter-cloudflare": "8.0.2",
+		"@sveltejs/adapter-static": "4.0.1",
+		"@sveltejs/kit": "3.1.1",
+		"@sveltejs/vite-plugin-svelte": "7.3.1",
 		"prettier": "^3.8.4",
 		"prettier-plugin-svelte": "^3.4.1",
-		"svelte": "^5.56.3",
-		"svelte-check": "^4.6.0",
-		"typescript": "^5.9.3",
-		"vite": "^8.0.16",
-		"wrangler": "^4.102.0"
+		"svelte": "5.57.3",
+		"svelte-check": "4.7.7",
+		"typescript": "6.0.3",
+		"vite": "8.3.5",
+		"wrangler": "4.156.0"
 	},
 	"dependencies": {
 		"@capacitor/android": "8.4.3",
@@ -124,7 +129,6 @@
 		"tesseract.js": "^6.0.1"
 	},
 	"overrides": {
-		"cookie": "^1.1.1",
 		"esbuild": "^0.28.1",
 		"undici": "^7.28.0",
 		"ws": "^8.21.0"

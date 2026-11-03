@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
-import { requireBusinessId } from '$lib/server/tenant';
-import { loadLatestTemperatureSnapshots } from '$lib/server/temperatureMonitoring';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { loadLatestTemperatureSnapshots } from '#lib/server/temperatureMonitoring.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   const db = locals.DB;

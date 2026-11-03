@@ -1,6 +1,6 @@
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 export type ReportRange = {
   startDate: string;

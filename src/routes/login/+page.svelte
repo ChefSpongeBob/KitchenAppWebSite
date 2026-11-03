@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { page } from '$app/stores';
-	import type { SubmitFunction } from '@sveltejs/kit';
-	import TurnstileWidget from '$lib/components/security/TurnstileWidget.svelte';
-	import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
-	import AuthShell from '$lib/components/ui/AuthShell.svelte';
+	import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
+	import type { SubmitFunction } from '$app/forms';
+	import TurnstileWidget from '#lib/components/security/TurnstileWidget.svelte';
+	import AppInstallCard from '#lib/components/ui/AppInstallCard.svelte';
+	import AuthShell from '#lib/components/ui/AuthShell.svelte';
 
 	export let form:
 		| {

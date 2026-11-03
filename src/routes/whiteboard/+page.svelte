@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { pushToast } from '$lib/client/toasts';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import { pushToast } from '#lib/client/toasts.ts';
 
   type Idea = { id: string; text: string; votes: number };
   type Offset = { x: number; y: number; r: number };

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
-  import ReportToolbar from '$lib/components/ui/ReportToolbar.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import ManagerSectionNav from '#lib/components/ui/ManagerSectionNav.svelte';
+  import ReportToolbar from '#lib/components/ui/ReportToolbar.svelte';
 
   type LogItem = {
     id: string;

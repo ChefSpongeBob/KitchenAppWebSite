@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { STAFF_CHANGE_AUTHORITY_SQL, staffChangeBindings, type PlatformStaff, type PlatformStaffRole } from './platformStaff';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 export async function changeStaffMembership(db: DB, actor: PlatformStaff, sessionId: string,
   input: { email?: string; userId?: string; role: PlatformStaffRole; active: number; revision: number; reason: string }) {

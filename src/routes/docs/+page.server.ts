@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
-import { loadAdminDocumentCategories } from '$lib/server/admin';
-import { requireBusinessId } from '$lib/server/tenant';
+import { loadAdminDocumentCategories } from '#lib/server/admin.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 type DocRow = {
   id: string;

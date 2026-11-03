@@ -1,10 +1,10 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { error, fail } from '@sveltejs/kit';
-import { ensureTenantSchema } from '$lib/server/tenant';
-import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
-import { recordListItemActivity, recordListSubmission } from '$lib/server/history';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
-import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { loadItemAttachmentsForItems, type ItemAttachment } from '#lib/server/itemAttachments.ts';
+import { recordListItemActivity, recordListSubmission } from '#lib/server/history.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
+import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
 
 type ItemRow = {
   id: string;
@@ -17,7 +17,7 @@ type ItemRow = {
   attachments?: ItemAttachment[];
 };
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 type PreplistLocals = {
   DB?: DB;
   userId?: string | null;

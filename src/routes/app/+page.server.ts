@@ -1,14 +1,14 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { buildFeatureAccess, defaultAppFeatureModes } from '$lib/features/appFeatures';
-import { loadHomepageAnnouncement } from '$lib/server/announcements';
-import { loadDailySpecials } from '$lib/server/dailySpecials';
-import { loadEmployeeSpotlight } from '$lib/server/employeeSpotlight';
-import { loadTodayShifts } from '$lib/server/schedules';
-import { requireBusinessId } from '$lib/server/tenant';
-import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { loadLatestTemperatureSnapshots } from '$lib/server/temperatureMonitoring';
+import { buildFeatureAccess, defaultAppFeatureModes } from '#lib/features/appFeatures.ts';
+import { loadHomepageAnnouncement } from '#lib/server/announcements.ts';
+import { loadDailySpecials } from '#lib/server/dailySpecials.ts';
+import { loadEmployeeSpotlight } from '#lib/server/employeeSpotlight.ts';
+import { loadTodayShifts } from '#lib/server/schedules.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '#lib/server/userPreferences.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { loadLatestTemperatureSnapshots } from '#lib/server/temperatureMonitoring.ts';
 
 type HomeTask = {
   id: string;

@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   export let entries: ReportExportEntry[] = [];
   export let empty = 'No report exports yet.';

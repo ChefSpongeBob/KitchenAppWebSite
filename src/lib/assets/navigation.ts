@@ -1,4 +1,4 @@
-import type { AppFeatureKey } from '$lib/features/appFeatures';
+import type { AppFeatureKey } from '#lib/features/appFeatures.ts';
 
 export type NavItem = {
   label: string;

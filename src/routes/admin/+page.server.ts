@@ -22,27 +22,27 @@ import {
   saveEmployeeSpotlight,
   updateAdminReminder,
   usersHasIsActiveColumn
-} from '$lib/server/admin';
+} from '#lib/server/admin.ts';
 import {
   canRoleAccessFeature,
   type AppFeatureKey,
   type AppFeatureMode,
   buildFeatureAccess,
   defaultAppFeatureModes
-} from '$lib/features/appFeatures';
-import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '$lib/server/userPreferences';
-import { requireBusinessId } from '$lib/server/tenant';
-import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
+} from '#lib/features/appFeatures.ts';
+import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '#lib/server/userPreferences.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
 import {
   countPendingScheduleRequests,
   loadScheduleAssignableUsers,
   loadScheduleManagerDepartments,
   loadScheduleSettings
-} from '$lib/server/schedules';
+} from '#lib/server/schedules.ts';
 import {
   loadLatestTemperatureSnapshots,
   temperatureExceptionsFromSnapshots
-} from '$lib/server/temperatureMonitoring';
+} from '#lib/server/temperatureMonitoring.ts';
 
 function isoDate(date = new Date()) {
   const y = date.getFullYear();

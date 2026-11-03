@@ -1,8 +1,8 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireBusinessId } from '$lib/server/tenant';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 
 function textValue(form: FormData, key: string, maxLength: number) {
 	return normalizeFormText(form, key, { maxLength });

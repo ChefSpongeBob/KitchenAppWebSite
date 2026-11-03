@@ -1,12 +1,12 @@
 <script lang="ts">
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
-  import type { SubmitFunction } from '@sveltejs/kit';
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { pushToast } from '$lib/client/toasts';
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  import type { SubmitFunction } from '$app/forms';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import ManagerSectionNav from '#lib/components/ui/ManagerSectionNav.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import { pushToast } from '#lib/client/toasts.ts';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type RegistryData = {
     legalName: string;

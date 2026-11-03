@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { hasReportsAccess } from '$lib/server/permissions';
-import { requireBusinessId } from '$lib/server/tenant';
-import { loadListHistoryReport } from '$lib/server/history';
+import { hasReportsAccess } from '#lib/server/permissions.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { loadListHistoryReport } from '#lib/server/history.ts';
 
 type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
 

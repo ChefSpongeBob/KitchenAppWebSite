@@ -5,11 +5,11 @@ import {
 	sha256Hex,
 	updateStoreEntitlementLifecycle,
 	type StoreEntitlementStatus
-} from '$lib/server/storeBilling';
-import { verifyStorePurchase } from '$lib/server/storeVerification';
-import { bearerTokenFromRequest, constantTimeTokenEqual } from '$lib/server/requestTokens';
+} from '#lib/server/storeBilling.ts';
+import { verifyStorePurchase } from '#lib/server/storeVerification.ts';
+import { bearerTokenFromRequest, constantTimeTokenEqual } from '#lib/server/requestTokens.ts';
 
-function authorized(request: Request, env: App.Platform['env'] | undefined) {
+function authorized(request: Request, env: App.RuntimeEnv | undefined) {
 	const token = env?.BILLING_WEBHOOK_TOKEN?.trim();
 	if (!token) return false;
 
@@ -87,7 +87,7 @@ function fallbackGoogleStatus(notificationType?: number): {
 }
 
 async function markWebhook(
-	db: App.Platform['env']['DB'],
+	db: App.RuntimeEnv['DB'],
 	store: 'google_play',
 	eventId: string,
 	status: 'processed' | 'failed' | 'ignored'
@@ -106,12 +106,12 @@ async function markWebhook(
 		.run();
 }
 
-export const POST: RequestHandler = async ({ request, platform, locals }) => {
-	if (!authorized(request, platform?.env)) {
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!authorized(request, locals.env)) {
 		return json({ ok: false, error: 'Unauthorized.' }, { status: 401 });
 	}
 
-	const db = locals.DB ?? platform?.env?.DB;
+	const db = locals.DB ?? locals.env.DB;
 	if (!db) return json({ ok: false, error: 'Database unavailable.' }, { status: 503 });
 
 	const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -161,7 +161,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		return json({ ok: true, status: 'unmatched' }, { status: 202 });
 	}
 
-	const verification = await verifyStorePurchase(platform?.env ?? ({ DB: db } as App.Platform['env']), {
+	const verification = await verifyStorePurchase(locals.env ?? ({ DB: db } as App.RuntimeEnv), {
 		store: 'google_play',
 		productId: subscription.subscriptionId,
 		purchaseToken: subscription.purchaseToken

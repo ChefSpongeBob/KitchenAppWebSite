@@ -1,10 +1,10 @@
 import { error, fail } from '@sveltejs/kit';
-import { ensureTenantSchema } from '$lib/server/tenant';
-import { loadItemAttachmentsForItems, type ItemAttachment } from '$lib/server/itemAttachments';
-import { recordListItemActivity } from '$lib/server/history';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { loadItemAttachmentsForItems, type ItemAttachment } from '#lib/server/itemAttachments.ts';
+import { recordListItemActivity } from '#lib/server/history.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 type ChecklistLocals = {
   DB?: DB;
   businessId?: string | null;

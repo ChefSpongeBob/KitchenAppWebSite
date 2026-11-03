@@ -1,33 +1,33 @@
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
-import { dev } from '$app/environment';
-import { hashSessionToken, verifyPassword } from '$lib/server/auth';
+import { dev } from '$app/env';
+import { hashSessionToken, verifyPassword } from '#lib/server/auth.ts';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName,
 	getSessionCookieOptions
-} from '$lib/server/authCookies';
+} from '#lib/server/authCookies.ts';
 import {
 	ACTIVE_BUSINESS_COOKIE,
 	getActiveBusinessCookieDeleteOptions
-} from '$lib/server/activeBusiness';
-import { hasColumn } from '$lib/server/dbSchema';
-import { bootstrapBusinessForUser, getUserBusinessContext } from '$lib/server/business';
-import { effectiveAppRoleFromBusinessRole } from '$lib/server/permissions';
+} from '#lib/server/activeBusiness.ts';
+import { hasColumn } from '#lib/server/dbSchema.ts';
+import { bootstrapBusinessForUser, getUserBusinessContext } from '#lib/server/business.ts';
+import { effectiveAppRoleFromBusinessRole } from '#lib/server/permissions.ts';
 import {
 	checkRateLimit,
 	clearRateLimit,
 	getRequestIpAddress,
 	rateLimitFailure,
 	writeAuditLogSafe
-} from '$lib/server/security';
-import { getTurnstileSiteKey, validateTurnstileSubmission } from '$lib/server/turnstile';
+} from '#lib/server/security.ts';
+import { getTurnstileSiteKey, validateTurnstileSubmission } from '#lib/server/turnstile.ts';
 import type { PageServerLoad } from './$types';
-import { findPlatformStaff } from '$lib/server/platformStaff';
+import { findPlatformStaff } from '#lib/server/platformStaff.ts';
 
 const GENERIC_LOGIN_ERROR = 'We could not sign you in with those details. Check your email and password and try again.';
 
 async function resolvePostLoginPath(
-	db: App.Platform['env']['DB'],
+	db: App.RuntimeEnv['DB'],
 	userId: string,
 	businessId: string | null | undefined,
 	url?: URL
@@ -59,19 +59,19 @@ async function resolvePostLoginPath(
 	return onboardingPackage?.id ? '/settings?onboarding=1' : '/app';
 }
 
-async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
+async function hasEmailNormalizedColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'email_normalized');
 }
 
-async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
+async function hasIsActiveColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'is_active');
 }
 
-async function hasRoleColumn(db: App.Platform['env']['DB']) {
+async function hasRoleColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'role');
 }
 
-async function resolvePrimaryBusinessIdForUser(db: App.Platform['env']['DB'], userId: string) {
+async function resolvePrimaryBusinessIdForUser(db: App.RuntimeEnv['DB'], userId: string) {
 	const row = await db
 		.prepare(
 			`
@@ -115,7 +115,7 @@ function resolveSessionToken(cookies: Parameters<PageServerLoad>[0]['cookies']) 
 }
 
 async function revokeActiveSession(
-	db: App.Platform['env']['DB'] | undefined,
+	db: App.RuntimeEnv['DB'] | undefined,
 	cookies: Parameters<Actions['default']>[0]['cookies'],
 	request: Request
 ) {
@@ -144,8 +144,8 @@ async function revokeActiveSession(
 	cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 }
 
-export const load: PageServerLoad = async ({ locals, platform, url }) => {
-	const turnstileSiteKey = getTurnstileSiteKey(platform?.env);
+export const load: PageServerLoad = async ({ locals, url }) => {
+	const turnstileSiteKey = getTurnstileSiteKey(locals.env);
 	const db = locals.DB;
 	if (!db || !locals.userId) {
 		return { activeSession: null, turnstileSiteKey };
@@ -192,7 +192,7 @@ export const actions: Actions = {
 		await revokeActiveSession(locals.DB, cookies, request);
 		throw redirect(303, url.searchParams.get('staff') === '1' ? '/login?staff=1&switch=1' : '/login?switch=1');
 	},
-	login: async ({ request, cookies, locals, platform, getClientAddress, url }) => {
+	login: async ({ request, cookies, locals, getClientAddress, url }) => {
 		let email = '';
 		try {
 			const formData = await request.formData();
@@ -228,7 +228,7 @@ export const actions: Actions = {
 			}
 
 			const turnstile = await validateTurnstileSubmission({
-				env: platform?.env,
+				env: locals.env,
 				formData,
 				request
 			});
@@ -338,7 +338,7 @@ export const actions: Actions = {
 				return fail(403, { error: 'Your account is not active yet. Contact your workspace admin for access.', email });
 			}
 
-			const passwordCheck = await verifyPassword(password, user.password_hash, platform?.env);
+			const passwordCheck = await verifyPassword(password, user.password_hash, locals.env);
 			if (!passwordCheck.valid) {
 				const auditBusinessId = await resolvePrimaryBusinessIdForUser(db, user.id);
 				await writeAuditLogSafe(db, {

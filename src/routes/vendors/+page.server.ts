@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { hasVendorAccess } from '$lib/server/permissions';
-import { requireBusinessId } from '$lib/server/tenant';
-import { loadVendors } from '$lib/server/vendors';
+import { hasVendorAccess } from '#lib/server/permissions.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { loadVendors } from '#lib/server/vendors.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!hasVendorAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {

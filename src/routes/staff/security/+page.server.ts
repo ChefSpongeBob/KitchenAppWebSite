@@ -1,9 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { hashSessionToken, verifyPassword } from '$lib/server/auth';
-import { getSessionCookieName, getSessionCookieOptions } from '$lib/server/authCookies';
-import { checkRateLimit, rateLimitFailure } from '$lib/server/security';
-import { loadStaffStepUp, requirePlatformStaff, staffReturnPath } from '$lib/server/platformStaff';
+import { hashSessionToken, verifyPassword } from '#lib/server/auth.ts';
+import { getSessionCookieName, getSessionCookieOptions } from '#lib/server/authCookies.ts';
+import { checkRateLimit, rateLimitFailure } from '#lib/server/security.ts';
+import { loadStaffStepUp, requirePlatformStaff, staffReturnPath } from '#lib/server/platformStaff.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requirePlatformStaff(locals, undefined, true);
@@ -12,7 +12,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ locals, request, platform, cookies, url }) => {
+  default: async ({ locals, request, cookies, url }) => {
     const staff = await requirePlatformStaff(locals, undefined, true);
     const sessionId = locals.sessionId;
     if (!sessionId) return fail(401, { error: 'Sign in again.' });
@@ -30,7 +30,7 @@ export const actions: Actions = {
       .first<{ password_hash: string; revision: number; session_token_hash: string; expires_at: number }>();
     if (!row?.password_hash) return fail(401, { error: 'Sign in again.' });
     let valid = false;
-    try { valid = (await verifyPassword(password, row.password_hash, platform?.env)).valid; }
+    try { valid = (await verifyPassword(password, row.password_hash, locals.env)).valid; }
     catch { return fail(503, { error: 'Password confirmation is unavailable. Try again shortly.' }); }
     if (!valid) return fail(400, { error: 'Password could not be confirmed.' });
     const now = Math.floor(Date.now() / 1000);

@@ -1,5 +1,5 @@
 import type { LayoutServerLoad } from './$types';
-import { requirePlatformStaff } from '$lib/server/platformStaff';
+import { requirePlatformStaff } from '#lib/server/platformStaff.ts';
 
 export const load: LayoutServerLoad = async ({ locals, url, setHeaders }) => {
   setHeaders({ 'cache-control': 'no-store' });

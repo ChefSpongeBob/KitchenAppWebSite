@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { requireBusinessId } from '$lib/server/tenant';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 type ChecklistSectionRow = {
   slug: string;

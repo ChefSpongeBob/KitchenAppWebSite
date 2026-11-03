@@ -1,16 +1,16 @@
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TURNSTILE_TIMEOUT_MS = 4500;
 
-export function getTurnstileSiteKey(env?: Partial<App.Platform['env']> | null) {
+export function getTurnstileSiteKey(env?: Partial<App.RuntimeEnv> | null) {
 	return String(env?.TURNSTILE_SITE_KEY ?? '').trim();
 }
 
-export function isTurnstileConfigured(env?: Partial<App.Platform['env']> | null) {
+export function isTurnstileConfigured(env?: Partial<App.RuntimeEnv> | null) {
 	return Boolean(getTurnstileSiteKey(env) && String(env?.TURNSTILE_SECRET_KEY ?? '').trim());
 }
 
 export async function validateTurnstileSubmission(args: {
-	env?: Partial<App.Platform['env']> | null;
+	env?: Partial<App.RuntimeEnv> | null;
 	formData: FormData;
 	request: Request;
 }) {

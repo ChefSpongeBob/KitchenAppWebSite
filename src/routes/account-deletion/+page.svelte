@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import Layout from '$lib/components/ui/Layout.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
 
 	export let form:
 		| {

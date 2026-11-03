@@ -1,7 +1,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { buildQuarterHourOptions, scheduleWeekdays } from '$lib/assets/schedule';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  import { buildQuarterHourOptions, scheduleWeekdays } from '#lib/assets/schedule.ts';
+  import type { SubmitFunction } from '$app/forms';
 
   type AvailabilityEntry = {
     weekday: number;

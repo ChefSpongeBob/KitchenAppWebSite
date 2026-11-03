@@ -1,7 +1,7 @@
-import { dev } from '$app/environment';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { dev } from '$app/env';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 type ListDomain = 'preplists' | 'inventory' | 'orders';
 type ActivityDomain = ListDomain | 'checklists';
 

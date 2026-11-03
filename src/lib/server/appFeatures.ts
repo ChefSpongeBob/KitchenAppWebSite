@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import {
   appFeatureDefinitions,
   defaultAppFeatureModes,
@@ -6,9 +6,9 @@ import {
   type AppFeatureMode,
   type AppFeatureModes,
   normalizeAppFeatureModes
-} from '$lib/features/appFeatures';
+} from '#lib/features/appFeatures.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 let featureSchemaEnsured = false;
 let ensureFeatureSchemaPromise: Promise<void> | null = null;

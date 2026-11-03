@@ -1,7 +1,7 @@
 <script>
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ListIndex from '$lib/components/ui/ListIndex.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import ListIndex from '#lib/components/ui/ListIndex.svelte';
 
   const lists = [
     { href: '/lists/preplists', title: 'Prep Lists', description: 'Prep counts and production targets.' },

@@ -1,6 +1,6 @@
 ﻿<script lang="ts">
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import { PLAN_PRICES, SENSOR_PRICING } from '$lib/billing/pricing';
+	import Layout from '#lib/components/ui/Layout.svelte';
+	import { PLAN_PRICES, SENSOR_PRICING } from '#lib/billing/pricing.ts';
 
 	const plans = [
 		{

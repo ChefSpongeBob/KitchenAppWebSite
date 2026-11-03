@@ -5,10 +5,10 @@ import {
 	loadEmployeeOnboardingDashboard,
 	toggleBusinessPosition,
 	updateBusinessPosition
-} from '$lib/server/admin';
-import { ensureDefaultBusinessPositions, loadBusinessPositions } from '$lib/server/business';
-import { ALL_BUSINESS_CAPABILITIES, normalizeBusinessRole } from '$lib/server/permissions';
-import { hasBusinessCapability } from '$lib/server/permissions';
+} from '#lib/server/admin.ts';
+import { ensureDefaultBusinessPositions, loadBusinessPositions } from '#lib/server/business.ts';
+import { ALL_BUSINESS_CAPABILITIES, normalizeBusinessRole } from '#lib/server/permissions.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
 
 const peopleViews = new Set(['overview', 'team', 'hr', 'access']);
 

@@ -1,4 +1,4 @@
-import type { D1Database, ExecutionContext, R2Bucket } from '@cloudflare/workers-types';
+import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { AppFeatureModes } from './lib/features/appFeatures';
 import type { BusinessCapability, BusinessCapabilityOverrides } from './lib/auth/roles';
 
@@ -6,9 +6,7 @@ import type { BusinessCapability, BusinessCapabilityOverrides } from './lib/auth
 // for information about these interfaces
 declare global {
 	namespace App {
-		interface Platform {
-			ctx: ExecutionContext;
-			env: {
+		interface RuntimeEnv {
 				DB: D1Database;
 				DOC_MEDIA?: R2Bucket;
 				RESEND_API_KEY?: string;
@@ -34,10 +32,10 @@ declare global {
 				PUBLIC_SIGNUP_ENABLED?: string;
 				OWNER_SIGNUP_ALLOWLIST?: string;
 				PASSWORD_PEPPER?: string;
-			};
 		}
 
 		interface Locals {
+			env: RuntimeEnv;
 			DB: D1Database;
 			MEDIA_BUCKET?: R2Bucket;
 			userId?: string;

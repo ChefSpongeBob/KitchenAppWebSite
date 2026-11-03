@@ -1,8 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { loadAdminNodeNames, requireAdmin } from '$lib/server/admin';
-import { revokeIoTDevice } from '$lib/server/iotIngest';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { loadAdminNodeNames, requireAdmin } from '#lib/server/admin.ts';
+import { revokeIoTDevice } from '#lib/server/iotIngest.ts';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
 import {
   claimTemperatureGateway,
   claimTemperatureSensorNode,
@@ -11,13 +11,13 @@ import {
   loadTemperatureGateways,
   loadTemperatureSensorNodes,
   revokeTemperatureSensorNode
-} from '$lib/server/temperatureDeviceProvisioning';
+} from '#lib/server/temperatureDeviceProvisioning.ts';
 import {
   defaultTemperatureSetting,
   loadTemperatureSensorSettings,
   saveTemperatureSensorSetting
-} from '$lib/server/temperatureMonitoring';
-import { checkRateLimit, rateLimitFailure, writeAuditLogSafe } from '$lib/server/security';
+} from '#lib/server/temperatureMonitoring.ts';
+import { checkRateLimit, rateLimitFailure, writeAuditLogSafe } from '#lib/server/security.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);

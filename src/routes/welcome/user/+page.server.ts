@@ -1,7 +1,7 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
-import { hasAdminAccess } from '$lib/server/permissions';
+import { hasAdminAccess } from '#lib/server/permissions.ts';
 import type { PageServerLoad } from './$types';
-import { ensureUserPreferencesSchema, markWelcomeTourComplete } from '$lib/server/userPreferences';
+import { ensureUserPreferencesSchema, markWelcomeTourComplete } from '#lib/server/userPreferences.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.userId || !locals.DB) {

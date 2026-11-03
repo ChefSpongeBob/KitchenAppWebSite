@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
+	import PageHeader from '#lib/components/ui/PageHeader.svelte';
 
 	type IngredientRow = {
 		id: string;

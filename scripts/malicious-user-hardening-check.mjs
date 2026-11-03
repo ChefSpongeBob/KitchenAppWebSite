@@ -150,8 +150,8 @@ expect('src/routes/register/+page.server.ts', 'signup abuse is rate limited befo
 expect('src/routes/register/+page.server.ts', 'public owner signup is closed unless explicitly enabled or allowlisted', (source) =>
   source.includes('PUBLIC_SIGNUP_ENABLED') &&
   source.includes('OWNER_SIGNUP_ALLOWLIST') &&
-  source.includes('isPublicSignupEnabled(platform?.env)') &&
-  source.includes('isOwnerSignupAllowlisted(platform?.env, email)') &&
+  source.includes('isPublicSignupEnabled(locals.env)') &&
+  source.includes('isOwnerSignupAllowlisted(locals.env, email)') &&
   source.includes('Public signup is not available right now.')
 );
 
@@ -295,7 +295,7 @@ expect('src/routes/api/whiteboard/+server.ts', 'whiteboard stored ideas use plai
 );
 
 expect('src/lib/server/admin.ts', 'admin creator stored text uses shared plain-text normalization helpers', (source) =>
-  source.includes("import { normalizeFormText, normalizePlainTextInput } from '$lib/server/inputSanitizer'") &&
+  source.includes("import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSanitizer.ts'") &&
   source.includes('function formMultilineString') &&
   source.includes("normalizeFormText(f, 'ingredients'") &&
   source.includes("formMultilineString(formData, 'content', 2000)")

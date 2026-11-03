@@ -1,11 +1,11 @@
 import { fail, type Actions } from '@sveltejs/kit';
-import { dev } from '$app/environment';
-import { checkRateLimit, getRequestIpAddress, hashedAuditValue } from '$lib/server/security';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
-import { sendAccountDeletionRequestEmail } from '$lib/server/email';
+import { dev } from '$app/env';
+import { checkRateLimit, getRequestIpAddress, hashedAuditValue } from '#lib/server/security.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
+import { sendAccountDeletionRequestEmail } from '#lib/server/email.ts';
 
 export const actions: Actions = {
-	default: async ({ request, locals, platform, url, getClientAddress }) => {
+	default: async ({ request, locals, url, getClientAddress }) => {
 		let email = '';
 		let workspaceName = '';
 
@@ -81,7 +81,7 @@ export const actions: Actions = {
 				.run();
 
 			const emailResult = await sendAccountDeletionRequestEmail({
-				env: platform?.env,
+				env: locals.env,
 				origin: url.origin,
 				userEmail: email,
 				workspaceName,

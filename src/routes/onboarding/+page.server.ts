@@ -5,9 +5,9 @@ import {
   loadEmployeeOnboarding,
   submitEmployeeOnboardingItem,
   submitEmployeeOnboardingPacket
-} from '$lib/server/admin';
+} from '#lib/server/admin.ts';
 
-export const load: PageServerLoad = async ({ locals, platform }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.userId || !locals.businessId || !locals.DB) throw redirect(303, '/login');
 
   const [user, profile, onboarding] = await Promise.all([
@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
       .first<{ id: string; display_name: string | null; email: string }>(),
     loadAdminEmployeeProfile(locals.DB, locals.userId, locals.businessId),
     loadEmployeeOnboarding(locals.DB, locals.userId, locals.businessId, {
-      env: platform?.env,
+      env: locals.env,
       actorUserId: locals.userId,
       actorBusinessRole: locals.businessRole,
       actorPermissionTemplate: locals.businessPermissionTemplate,
@@ -30,7 +30,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 };
 
 export const actions: Actions = {
-  submit_item: ({ request, locals, platform }) =>
-    submitEmployeeOnboardingItem(request, locals, platform?.env),
+  submit_item: ({ request, locals }) =>
+    submitEmployeeOnboardingItem(request, locals, locals.env),
   submit_packet: ({ request, locals }) => submitEmployeeOnboardingPacket(request, locals)
 };

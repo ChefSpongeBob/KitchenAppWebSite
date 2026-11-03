@@ -1,7 +1,7 @@
-import { dev } from '$app/environment';
-import { sha256Hex } from '$lib/server/auth';
+import { dev } from '$app/env';
+import { sha256Hex } from '#lib/server/auth.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 const SEVEN_DAYS_SECONDS = 60 * 60 * 24 * 7;
 const TABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;

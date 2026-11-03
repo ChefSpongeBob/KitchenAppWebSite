@@ -1,6 +1,6 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 export type PushPlatform = 'ios' | 'android' | 'web' | 'unknown';
 

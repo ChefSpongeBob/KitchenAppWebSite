@@ -42,11 +42,21 @@ if (wrangler) {
 }
 
 const packageJson = JSON.parse(read('package.json') || '{}');
+expect('Native and web server build directories stay separate',
+  read('vite.config.ts').includes("outDir: nativeBuild ? '.svelte-kit/native' : '.svelte-kit'"));
 const scripts = packageJson.scripts ?? {};
 // Windows npm installs can prune these optional entries even though Linux npm ci requires them.
 const lockedPackages = JSON.parse(read('package-lock.json') || '{}').packages ?? {};
-expect('Cross-platform emnapi dependencies remain in the lockfile',
-  ['@emnapi/core', '@emnapi/runtime'].every(name => {
+expect('Release lockfile has no local filesystem links',
+  Object.values(lockedPackages).every(entry => !entry.link && !String(entry.resolved ?? '').startsWith('file:')) &&
+  Object.values(lockedPackages['']?.dependencies ?? {}).every(version => !String(version).startsWith('file:')));
+expect('Release lockfile matches declared direct dependencies',
+  ['dependencies', 'devDependencies'].every(group => JSON.stringify(lockedPackages['']?.[group] ?? {}) === JSON.stringify(packageJson[group] ?? {})));
+const requiredEmnapi = new Set(Object.values(lockedPackages).flatMap(entry =>
+  Object.keys({ ...entry.dependencies, ...entry.optionalDependencies }).filter(name => name.startsWith('@emnapi/'))
+));
+expect('Declared cross-platform emnapi dependencies remain in the lockfile',
+  [...requiredEmnapi].every(name => {
     const entry = lockedPackages[`node_modules/${name}`];
     return entry?.version && entry?.resolved && entry?.integrity;
   }));

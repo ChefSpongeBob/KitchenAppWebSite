@@ -1,8 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { getBusinessTrialAccess } from '$lib/server/trial';
-import { readBusinessEntitlements, readStoreProducts } from '$lib/server/storeBilling';
-import { logOperationalError } from '$lib/server/observability';
-import { hasBusinessCapability } from '$lib/server/permissions';
+import { getBusinessTrialAccess } from '#lib/server/trial.ts';
+import { readBusinessEntitlements, readStoreProducts } from '#lib/server/storeBilling.ts';
+import { logOperationalError } from '#lib/server/observability.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
 
 function googleManageUrl(packageName: string | undefined, productId?: string | null) {
 	const params = new URLSearchParams();
@@ -12,7 +12,7 @@ function googleManageUrl(packageName: string | undefined, productId?: string | n
 	return `https://play.google.com/store/account/subscriptions${query ? `?${query}` : ''}`;
 }
 
-export const GET: RequestHandler = async ({ locals, platform, request }) => {
+export const GET: RequestHandler = async ({ locals, request }) => {
 	if (!locals.DB || !locals.userId || !locals.businessId) {
 		return json({ ok: false, error: 'Sign in required.' }, { status: 401 });
 	}
@@ -66,7 +66,7 @@ export const GET: RequestHandler = async ({ locals, platform, request }) => {
 					},
 					googlePlay: {
 						productId: googleProductId,
-						url: googleManageUrl(platform?.env?.GOOGLE_PLAY_PACKAGE_NAME, googleProductId)
+						url: googleManageUrl(locals.env.GOOGLE_PLAY_PACKAGE_NAME, googleProductId)
 					}
 				}
 			},

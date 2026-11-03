@@ -1,10 +1,10 @@
 import { redirect, type Actions } from '@sveltejs/kit';
-import { hashSessionToken } from '$lib/server/auth';
+import { hashSessionToken } from '#lib/server/auth.ts';
 import {
 	ACTIVE_BUSINESS_COOKIE,
 	getActiveBusinessCookieDeleteOptions
-} from '$lib/server/activeBusiness';
-import { getSessionCookieDeleteOptions, getSessionCookieName } from '$lib/server/authCookies';
+} from '#lib/server/activeBusiness.ts';
+import { getSessionCookieDeleteOptions, getSessionCookieName } from '#lib/server/authCookies.ts';
 
 export const actions: Actions = {
 	default: async ({ cookies, locals, request }) => {

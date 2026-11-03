@@ -1,9 +1,9 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
-import { hasBusinessCapability } from '$lib/server/permissions';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 export type ItemAttachmentTargetType = 'recipe' | 'document';
 export type ItemAttachmentSourceType = 'list_item' | 'checklist_item';

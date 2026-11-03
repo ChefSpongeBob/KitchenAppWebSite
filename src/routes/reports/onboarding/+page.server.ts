@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { hasReportsAccess } from '$lib/server/permissions';
-import { requireBusinessId } from '$lib/server/tenant';
-import { loadOnboardingReport } from '$lib/server/reports';
+import { hasReportsAccess } from '#lib/server/permissions.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { loadOnboardingReport } from '#lib/server/reports.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!hasReportsAccess(locals.businessRole, locals.businessPermissionTemplate, locals.businessCapabilities)) {

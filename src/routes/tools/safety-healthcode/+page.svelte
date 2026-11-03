@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
+	import PageHeader from '#lib/components/ui/PageHeader.svelte';
 
 	const cookTemps = [
 		{ food: 'Poultry, stuffing, reheated leftovers', temp: '165 F', note: 'Chicken, turkey, stuffed items, casseroles, reheats.' },

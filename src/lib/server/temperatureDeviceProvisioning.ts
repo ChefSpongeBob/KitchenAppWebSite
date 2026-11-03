@@ -1,8 +1,8 @@
-import { dev } from '$app/environment';
-import { ensureIoTDeviceSchema, type IoTDeviceRecord } from '$lib/server/iotIngest';
-import { normalizeDeviceSerial, sensorNodeIdFromSerial } from '$lib/server/temperatureSensors';
+import { dev } from '$app/env';
+import { ensureIoTDeviceSchema, type IoTDeviceRecord } from '#lib/server/iotIngest.ts';
+import { normalizeDeviceSerial, sensorNodeIdFromSerial } from '#lib/server/temperatureSensors.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 let schemaEnsured = false;
 

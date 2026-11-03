@@ -6,9 +6,9 @@ import {
   getDailySpecialStorageCategory,
   loadDailySpecials,
   userCanEditDailySpecials
-} from '$lib/server/dailySpecials';
-import { ensureTenantSchema } from '$lib/server/tenant';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
+} from '#lib/server/dailySpecials.ts';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.userId) {

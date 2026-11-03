@@ -1,12 +1,12 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
-  import TempGraph from '$lib/components/ui/TempGraph.svelte';
-  import GuidedSpotlightTour from '$lib/components/ui/GuidedSpotlightTour.svelte';
-  import { startVisiblePolling } from '$lib/client/polling';
-  import { formatScheduleTimeLabel } from '$lib/assets/schedule';
-  import { buildFeatureAccess, defaultAppFeatureModes, type AppFeatureAccess } from '$lib/features/appFeatures';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import SchoolOfFish from '#lib/components/ui/SchoolOfFish.svelte';
+  import TempGraph from '#lib/components/ui/TempGraph.svelte';
+  import GuidedSpotlightTour from '#lib/components/ui/GuidedSpotlightTour.svelte';
+  import { startVisiblePolling } from '#lib/client/polling.ts';
+  import { formatScheduleTimeLabel } from '#lib/assets/schedule.ts';
+  import { buildFeatureAccess, defaultAppFeatureModes, type AppFeatureAccess } from '#lib/features/appFeatures.ts';
   import { onMount } from 'svelte';
 
   type HomeTask = {
@@ -269,9 +269,8 @@
     current.searchParams.delete('guided');
     const query = current.searchParams.toString();
     await goto(`${current.pathname}${query ? `?${query}` : ''}${current.hash}`, {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true
+      replace: true,
+      reset: false
     });
   }
 

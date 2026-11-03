@@ -1,12 +1,12 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail, isRedirect, redirect } from '@sveltejs/kit';
-import { hashPassword, sha256Hex } from '$lib/server/auth';
+import { hashPassword, sha256Hex } from '#lib/server/auth.ts';
 import {
   ensurePasswordResetSchema,
   findValidPasswordResetByTokenHash,
   validateNewPassword
-} from '$lib/server/passwordReset';
-import { revokeUserSessions, writeAuditLogSafe } from '$lib/server/security';
+} from '#lib/server/passwordReset.ts';
+import { revokeUserSessions, writeAuditLogSafe } from '#lib/server/security.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-  default: async ({ request, params, locals, platform, getClientAddress }) => {
+  default: async ({ request, params, locals, getClientAddress }) => {
     try {
       const db = locals.DB;
       if (!db) {
@@ -57,7 +57,7 @@ export const actions: Actions = {
       }
 
       const now = Math.floor(Date.now() / 1000);
-      const passwordHash = await hashPassword(password, platform?.env);
+      const passwordHash = await hashPassword(password, locals.env);
 
       await db.batch([
         db

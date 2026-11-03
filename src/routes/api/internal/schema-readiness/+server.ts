@@ -1,8 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { verifyTenantSchema } from '$lib/server/tenant';
-import { logOperationalEvent } from '$lib/server/observability';
-import { isSensitiveEncryptionConfigured } from '$lib/server/sensitive';
-import { bearerTokenFromRequest, constantTimeTokenEqual } from '$lib/server/requestTokens';
+import { verifyTenantSchema } from '#lib/server/tenant.ts';
+import { logOperationalEvent } from '#lib/server/observability.ts';
+import { isSensitiveEncryptionConfigured } from '#lib/server/sensitive.ts';
+import { bearerTokenFromRequest, constantTimeTokenEqual } from '#lib/server/requestTokens.ts';
 
 const REQUIRED_CORE_TABLES = [
 	'platform_staff_members',
@@ -155,13 +155,13 @@ const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
 	]
 };
 
-function missingRequiredSecrets(env: App.Platform['env'] | undefined) {
+function missingRequiredSecrets(env: App.RuntimeEnv | undefined) {
 	const missing: string[] = [];
 	if (!isSensitiveEncryptionConfigured(env)) missing.push('SENSITIVE_DATA_KEY');
 	return missing;
 }
 
-function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
+function isAuthorized(request: Request, env: App.RuntimeEnv | undefined) {
 	const token = env?.SMOKE_INTERNAL_TOKEN?.trim();
 	if (!token) return false;
 	const headerToken = request.headers.get('x-smoke-token')?.trim();
@@ -169,7 +169,7 @@ function isAuthorized(request: Request, env: App.Platform['env'] | undefined) {
 	return constantTimeTokenEqual(token, headerToken) || constantTimeTokenEqual(token, bearer);
 }
 
-async function missingCoreTables(db: App.Platform['env']['DB']) {
+async function missingCoreTables(db: App.RuntimeEnv['DB']) {
 	const missing: string[] = [];
 	for (const table of REQUIRED_CORE_TABLES) {
 		const row = await db
@@ -188,7 +188,7 @@ async function missingCoreTables(db: App.Platform['env']['DB']) {
 	return missing;
 }
 
-async function missingCoreIndexes(db: App.Platform['env']['DB']) {
+async function missingCoreIndexes(db: App.RuntimeEnv['DB']) {
 	const namespaceDefinitions: Record<string, RegExp> = {
 		idx_checklist_sections_business_slug: /CREATE\s+UNIQUE\s+INDEX[\s\S]*ON\s+checklist_sections\s*\(\s*business_id\s*,\s*slug\s*\)/i,
 		idx_list_sections_business_domain_slug: /CREATE\s+UNIQUE\s+INDEX[\s\S]*ON\s+list_sections\s*\(\s*business_id\s*,\s*domain\s*,\s*slug\s*\)/i,
@@ -212,7 +212,7 @@ async function missingCoreIndexes(db: App.Platform['env']['DB']) {
 	return missing;
 }
 
-async function missingCoreColumns(db: App.Platform['env']['DB']) {
+async function missingCoreColumns(db: App.RuntimeEnv['DB']) {
 	const missing: Array<{ table: string; column: string }> = [];
 	for (const [table, requiredColumns] of Object.entries(REQUIRED_CORE_COLUMNS)) {
 		const rows = await db
@@ -227,12 +227,12 @@ async function missingCoreColumns(db: App.Platform['env']['DB']) {
 	return missing;
 }
 
-export const GET: RequestHandler = async ({ request, platform, locals }) => {
-	if (!isAuthorized(request, platform?.env)) {
+export const GET: RequestHandler = async ({ request, locals }) => {
+	if (!isAuthorized(request, locals.env)) {
 		return json({ ok: false, error: 'Unauthorized.' }, { status: 401 });
 	}
 
-	const db = locals.DB ?? platform?.env?.DB;
+	const db = locals.DB ?? locals.env.DB;
 	if (!db) {
 		logOperationalEvent({
 			level: 'error',
@@ -249,7 +249,7 @@ export const GET: RequestHandler = async ({ request, platform, locals }) => {
 		missingCoreColumns(db),
 		verifyTenantSchema(db)
 	]);
-	const secrets = missingRequiredSecrets(platform?.env);
+	const secrets = missingRequiredSecrets(locals.env);
 	const ok =
 		coreTables.length === 0 &&
 		coreIndexes.length === 0 &&

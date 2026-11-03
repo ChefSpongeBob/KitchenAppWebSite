@@ -1,6 +1,6 @@
 import { fail, type Actions } from '@sveltejs/kit';
-import { dev } from '$app/environment';
-import { sendPasswordResetEmail } from '$lib/server/email';
+import { dev } from '$app/env';
+import { sendPasswordResetEmail } from '#lib/server/email.ts';
 import {
 	createPasswordResetRecord,
 	deletePasswordResetRecordById,
@@ -8,14 +8,14 @@ import {
 	findUserByEmail,
 	generatePasswordResetToken,
 	genericResetRequestSuccess
-} from '$lib/server/passwordReset';
-import { sha256Hex } from '$lib/server/auth';
+} from '#lib/server/passwordReset.ts';
+import { sha256Hex } from '#lib/server/auth.ts';
 import {
 	checkRateLimit,
 	getRequestIpAddress,
 	rateLimitFailure,
 	writeAuditLogSafe
-} from '$lib/server/security';
+} from '#lib/server/security.ts';
 
 const MIN_RESET_RESPONSE_MS = 450;
 
@@ -28,7 +28,7 @@ async function finishResetRequest(startedAt: number, email: string) {
 }
 
 export const actions: Actions = {
-	default: async ({ request, locals, platform, url, getClientAddress }) => {
+	default: async ({ request, locals, url, getClientAddress }) => {
 		const startedAt = Date.now();
 		let email = '';
 
@@ -113,7 +113,7 @@ export const actions: Actions = {
 			});
 
 			const emailResult = await sendPasswordResetEmail({
-				env: platform?.env,
+				env: locals.env,
 				origin: url.origin,
 				userEmail: user.email,
 				displayName: user.display_name,

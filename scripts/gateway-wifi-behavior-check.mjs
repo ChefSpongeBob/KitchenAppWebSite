@@ -37,9 +37,9 @@ const db = {
   }
 };
 const provisioning = loadSource('src/lib/server/temperatureDeviceProvisioning.ts', {
-  '$app/environment': { dev: false },
-  '$lib/server/iotIngest': {},
-  '$lib/server/temperatureSensors': { normalizeDeviceSerial: value => value.toLowerCase() }
+  '$app/env': { dev: false },
+  '#lib/server/iotIngest.ts': {},
+  '#lib/server/temperatureSensors.ts': { normalizeDeviceSerial: value => value.toLowerCase() }
 });
 const session = await provisioning.loadGatewayProvisioningSession(db, 'business-a', 'gateway-a');
 assert.equal(session.networkName, `Crimini-${serial}`);
@@ -55,18 +55,18 @@ const audit = [];
 let registrationInput;
 const actionsModule = loadSource('src/routes/admin/sensors/+page.server.ts', {
   '@sveltejs/kit': { fail: (status, data) => ({ status, data }) },
-  '$lib/server/admin': { requireAdmin: role => { if (role !== 'admin') throw Error('Access denied'); } },
-  '$lib/server/iotIngest': {},
-  '$lib/server/tenant': { requireBusinessId: locals => locals.businessId, ensureTenantSchema: async () => {} },
-  '$lib/server/temperatureDeviceProvisioning': {
+  '#lib/server/admin.ts': { requireAdmin: role => { if (role !== 'admin') throw Error('Access denied'); } },
+  '#lib/server/iotIngest.ts': {},
+  '#lib/server/tenant.ts': { requireBusinessId: locals => locals.businessId, ensureTenantSchema: async () => {} },
+  '#lib/server/temperatureDeviceProvisioning.ts': {
     ...provisioning,
     claimTemperatureGateway: async (_db, input) => {
       registrationInput = input;
       return { id: 'new-gateway-a', serial: input.serial };
     }
   },
-  '$lib/server/temperatureMonitoring': {},
-  '$lib/server/security': { checkRateLimit: async () => ({ allowed: true }), writeAuditLogSafe: async (_db, entry) => audit.push(entry) }
+  '#lib/server/temperatureMonitoring.ts': {},
+  '#lib/server/security.ts': { checkRateLimit: async () => ({ allowed: true }), writeAuditLogSafe: async (_db, entry) => audit.push(entry) }
 });
 function event(fields, businessId = 'business-a', userRole = 'admin') {
   const form = new FormData();
@@ -139,17 +139,16 @@ console.log('PASS desktop setup requires management access and a fresh check-in 
 let authenticated = true;
 const api = loadSource('src/routes/api/temps/+server.ts', {
   '@sveltejs/kit': { json: (value, options) => Response.json(value, options) },
-  '$lib/server/retention': {},
-  '$lib/server/iotIngest': { authenticateIoTDevice: async () => authenticated ? { id: 'gateway-a', businessId: 'business-a' } : null },
-  '$lib/server/tenant': { ensureTenantSchema: async () => {} },
-  '$lib/server/temperatureSensors': { normalizeDeviceSerial: value => value.toLowerCase() },
-  '$lib/server/temperatureDeviceProvisioning': {},
-  '$lib/server/temperatureMonitoring': {}
+  '#lib/server/retention.ts': {},
+  '#lib/server/iotIngest.ts': { authenticateIoTDevice: async () => authenticated ? { id: 'gateway-a', businessId: 'business-a' } : null },
+  '#lib/server/tenant.ts': { ensureTenantSchema: async () => {} },
+  '#lib/server/temperatureSensors.ts': { normalizeDeviceSerial: value => value.toLowerCase() },
+  '#lib/server/temperatureDeviceProvisioning.ts': {},
+  '#lib/server/temperatureMonitoring.ts': {}
 });
 async function gatewayRequest(body) {
   return api.POST({
-    platform: { env: { DB: { prepare: () => { throw Error('Status check must not write sensor readings'); } } } },
-    locals: {},
+    locals: { env: { DB: { prepare: () => { throw Error('Status check must not write sensor readings'); } } } },
     url: new URL('https://criminiops.com/api/temps'),
     request: new Request('https://criminiops.com/api/temps', { method: 'POST', body: JSON.stringify(body) })
   });

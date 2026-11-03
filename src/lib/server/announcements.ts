@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
 export type HomepageAnnouncement = {
   content: string;
@@ -24,7 +24,7 @@ function homepageAnnouncementId(businessId?: string | null) {
 }
 
 async function ensureOptionalColumn(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   tableName: string,
   columnName: string,
   definition: string
@@ -38,7 +38,7 @@ async function ensureOptionalColumn(
   }
 }
 
-export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
+export async function ensureAnnouncementsSchema(db: App.RuntimeEnv['DB']) {
   if (!dev) {
     announcementsSchemaEnsured = true;
     return;
@@ -107,7 +107,7 @@ export async function ensureAnnouncementsSchema(db: App.Platform['env']['DB']) {
 }
 
 async function cleanupAnnouncementHistory(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   businessId: string,
   force = false
 ) {
@@ -123,7 +123,7 @@ async function cleanupAnnouncementHistory(
 }
 
 export async function loadAnnouncementHistory(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   businessId: string,
   limit = 40
 ) {
@@ -168,7 +168,7 @@ export async function loadAnnouncementHistory(
 }
 
 export async function deleteAnnouncementHistoryEntry(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   businessId: string,
   historyId: string
 ) {
@@ -179,7 +179,7 @@ export async function deleteAnnouncementHistoryEntry(
     .run();
 }
 
-export async function loadHomepageAnnouncement(db: App.Platform['env']['DB'], businessId?: string | null) {
+export async function loadHomepageAnnouncement(db: App.RuntimeEnv['DB'], businessId?: string | null) {
   await ensureAnnouncementsSchema(db);
 
   const id = homepageAnnouncementId(businessId);
@@ -219,7 +219,7 @@ export function getHomepageAnnouncementId(businessId?: string | null) {
 }
 
 export async function saveHomepageAnnouncement(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   businessId: string,
   userId: string | null | undefined,
   content: string

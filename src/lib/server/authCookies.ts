@@ -1,4 +1,4 @@
-﻿import { dev } from '$app/environment';
+﻿import { dev } from '$app/env';
 
 const NATIVE_APP_MARKERS = ['CriminiNative/', 'Capacitor'];
 

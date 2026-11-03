@@ -1,16 +1,16 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import ManagerSectionNav from '#lib/components/ui/ManagerSectionNav.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import { onMount, tick } from 'svelte';
-  import { pushToast } from '$lib/client/toasts';
+  import { pushToast } from '#lib/client/toasts.ts';
   import {
     readGatewaySetupProgress,
     saveGatewaySetupProgress
-  } from '$lib/client/gatewayProvisioning';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  } from '#lib/client/gatewayProvisioning.ts';
+  import type { SubmitFunction } from '$app/forms';
 
   type NodeName = {
     sensor_id: number;

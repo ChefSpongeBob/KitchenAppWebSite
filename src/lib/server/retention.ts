@@ -1,4 +1,4 @@
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 const TEMP_RETENTION_SECONDS = 60 * 60 * 24 * 3;
 const LEGACY_TIMESTAMP_FLOOR = 1_577_836_800; // January 1, 2020 UTC

@@ -7,9 +7,9 @@ import {
   loadScheduleDepartments,
   loadScheduleManagerDepartments,
   loadScheduleWeek
-} from '$lib/server/schedules';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { requireBusinessId } from '$lib/server/tenant';
+} from '#lib/server/schedules.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 function canManageSchedule(locals: App.Locals) {
   return hasBusinessCapability(

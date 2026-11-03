@@ -1,6 +1,6 @@
-import { hasBusinessCapability, isBusinessAdminRole, type BusinessCapability } from '$lib/server/permissions';
-import { dev } from '$app/environment';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { hasBusinessCapability, isBusinessAdminRole, type BusinessCapability } from '#lib/server/permissions.ts';
+import { dev } from '$app/env';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
 
 export const dailySpecialCategories = ['item-1', 'item-2', 'item-3', 'item-4'] as const;
 let dailySpecialsSchemaEnsured = false;
@@ -38,7 +38,7 @@ function displayDailySpecialCategory(category: string, businessId?: string | nul
     : null;
 }
 
-export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
+export async function ensureDailySpecialsSchema(db: App.RuntimeEnv['DB']) {
   if (!dev) {
     dailySpecialsSchemaEnsured = true;
     return;
@@ -79,7 +79,7 @@ export async function ensureDailySpecialsSchema(db: App.Platform['env']['DB']) {
 }
 
 export async function userCanEditDailySpecials(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   userId: string | null | undefined,
   role: string | null | undefined,
   businessId?: string | null,
@@ -112,7 +112,7 @@ export async function userCanEditDailySpecials(
   return Boolean(row);
 }
 
-export async function loadDailySpecials(db: App.Platform['env']['DB'], businessId?: string | null) {
+export async function loadDailySpecials(db: App.RuntimeEnv['DB'], businessId?: string | null) {
   await ensureDailySpecialsSchema(db);
   await ensureTenantSchema(db, true);
 

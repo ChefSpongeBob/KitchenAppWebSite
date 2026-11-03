@@ -1,47 +1,47 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
-import { hashPassword, hashSessionToken } from '$lib/server/auth';
-import { getSessionCookieName, getSessionCookieOptions } from '$lib/server/authCookies';
+import { hashPassword, hashSessionToken } from '#lib/server/auth.ts';
+import { getSessionCookieName, getSessionCookieOptions } from '#lib/server/authCookies.ts';
 import {
 	ACTIVE_BUSINESS_COOKIE,
 	getActiveBusinessCookieOptions
-} from '$lib/server/activeBusiness';
-import { hasColumn } from '$lib/server/dbSchema';
+} from '#lib/server/activeBusiness.ts';
+import { hasColumn } from '#lib/server/dbSchema.ts';
 import {
 	ensureBusinessSchema,
 	ensureDefaultBusinessPositions,
 	loadPositionCapabilityOverrides,
 	reserveBusinessSlug
-} from '$lib/server/business';
+} from '#lib/server/business.ts';
 import {
 	ensureEmployeeOnboardingRequirement,
 	ensureEmployeeProfilesTable,
 	loadEmployeeOnboarding
-} from '$lib/server/admin';
+} from '#lib/server/admin.ts';
 import {
 	LIABILITY_AGREEMENT_KEY,
 	LIABILITY_AGREEMENT_VERSION,
 	recordLegalAgreementAcceptance
-} from '$lib/server/legal';
+} from '#lib/server/legal.ts';
 import {
 	getBusinessTrialAccess,
 	getRequestIpAddress,
 	initializeBusinessTrial
-} from '$lib/server/trial';
-import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
-import { validateNewPassword } from '$lib/server/passwordReset';
-import { checkRateLimit, writeAuditLog, writeAuditLogSafe } from '$lib/server/security';
-import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
+} from '#lib/server/trial.ts';
+import { upsertStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
+import { validateNewPassword } from '#lib/server/passwordReset.ts';
+import { checkRateLimit, writeAuditLog, writeAuditLogSafe } from '#lib/server/security.ts';
+import { ensureUserPreferencesSchema } from '#lib/server/userPreferences.ts';
 import {
 	effectiveAppRoleFromBusinessRole,
 	normalizeBusinessRole,
 	resolveBusinessCapabilities
-} from '$lib/server/permissions';
-import { sendSignupConfirmationEmail } from '$lib/server/email';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
-import { ensureScheduleSchema } from '$lib/server/schedules';
-import { COMMUNICATION_CONSENT_VERSION } from '$lib/communicationConsent';
+} from '#lib/server/permissions.ts';
+import { sendSignupConfirmationEmail } from '#lib/server/email.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
+import { ensureScheduleSchema } from '#lib/server/schedules.ts';
+import { COMMUNICATION_CONSENT_VERSION } from '#lib/communicationConsent.ts';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'schedule' | 'purchase';
@@ -121,19 +121,19 @@ const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	enterprise: 'enterprise'
 };
 
-async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
+async function hasEmailNormalizedColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'email_normalized');
 }
 
-async function hasIsActiveColumn(db: App.Platform['env']['DB']) {
+async function hasIsActiveColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'is_active');
 }
 
-async function hasRoleColumn(db: App.Platform['env']['DB']) {
+async function hasRoleColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'role');
 }
 
-async function cleanupPartialRegisteredUser(db: App.Platform['env']['DB'], userId: string) {
+async function cleanupPartialRegisteredUser(db: App.RuntimeEnv['DB'], userId: string) {
 	await db.prepare(`DELETE FROM user_preferences WHERE user_id = ?`).bind(userId).run();
 	await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
 }
@@ -146,7 +146,7 @@ async function createRegistrationSession({
 	businessId,
 	now
 }: {
-	db: App.Platform['env']['DB'];
+	db: App.RuntimeEnv['DB'];
 	cookies: Parameters<Actions['default']>[0]['cookies'];
 	request: Request;
 	userId: string;
@@ -268,11 +268,11 @@ function parseRegistrationScheduleSetup(value: string): {
 	return { departments, error: null };
 }
 
-function isPublicSignupEnabled(env: App.Platform['env'] | undefined) {
+function isPublicSignupEnabled(env: App.RuntimeEnv | undefined) {
 	return env?.PUBLIC_SIGNUP_ENABLED?.trim().toLowerCase() === 'true';
 }
 
-function isOwnerSignupAllowlisted(env: App.Platform['env'] | undefined, email: string) {
+function isOwnerSignupAllowlisted(env: App.RuntimeEnv | undefined, email: string) {
 	const normalizedEmail = email.trim().toLowerCase();
 	if (!normalizedEmail) return false;
 	const values = String(env?.OWNER_SIGNUP_ALLOWLIST ?? '')
@@ -367,9 +367,9 @@ function registerFailure(
 }
 
 export const actions: Actions = {
-	default: async ({ request, locals, url, cookies, platform }) => {
+	default: async ({ request, locals, url, cookies }) => {
 		let submittedValues: Partial<RegisterFormValues> = {};
-		let registerDb: App.Platform['env']['DB'] | null = null;
+		let registerDb: App.RuntimeEnv['DB'] | null = null;
 		let registerEmail = '';
 		let registerPhase = 'start';
 		let registrationMediaCommitted = false;
@@ -534,7 +534,7 @@ export const actions: Actions = {
 					purchaseMode: 'buy_now'
 				});
 			}
-			if (!inviteCode && !dev && !isPublicSignupEnabled(platform?.env) && !isOwnerSignupAllowlisted(platform?.env, email)) {
+			if (!inviteCode && !dev && !isPublicSignupEnabled(locals.env) && !isOwnerSignupAllowlisted(locals.env, email)) {
 				return registerFailure(403, 'Public signup is not available right now.', 'security', submittedValues);
 			}
 			if (!inviteCode && liabilityAgreementVersion && liabilityAgreementVersion !== LIABILITY_AGREEMENT_VERSION) {
@@ -847,7 +847,7 @@ export const actions: Actions = {
 
 			registerPhase = 'password_hash';
 			const userId = crypto.randomUUID();
-			const passwordHash = await hashPassword(password, platform?.env);
+			const passwordHash = await hashPassword(password, locals.env);
 			let resolvedBusinessId: string | null = null;
 
 			registerPhase = 'create_user';
@@ -1464,7 +1464,7 @@ export const actions: Actions = {
 				});
 				if (onboarding.packageId) {
 					await loadEmployeeOnboarding(db, userId, resolvedBusinessId, {
-						env: platform?.env,
+						env: locals.env,
 						actorUserId: userId
 					});
 					await recordOperationalEventBestEffort(
@@ -1510,7 +1510,7 @@ export const actions: Actions = {
 			registerPhase = 'signup_confirmation_email';
 			if (!inviteCode) {
 				const emailResult = await sendSignupConfirmationEmail({
-					env: platform?.env,
+					env: locals.env,
 					origin: url.origin,
 					ownerEmail: email,
 					ownerName: accountDisplayName,
@@ -1584,15 +1584,15 @@ export const actions: Actions = {
 	}
 };
 
-export const load: PageServerLoad = async ({ url, platform }) => {
+export const load: PageServerLoad = async ({ url, locals }) => {
 	const inviteCode = String(url.searchParams.get('invite') || url.searchParams.get('code') || '')
 		.trim()
 		.toUpperCase();
 	let onboardingRequired = false;
 	let inviteEmail = '';
-	if (inviteCode && platform?.env?.DB) {
+	if (inviteCode && locals.env.DB) {
 		const now = Math.floor(Date.now() / 1000);
-		const invite = await platform.env.DB.prepare(
+		const invite = await locals.env.DB.prepare(
 			`
 			SELECT onboarding_required, email_normalized
 			FROM business_invites
@@ -1608,7 +1608,7 @@ export const load: PageServerLoad = async ({ url, platform }) => {
 		onboardingRequired = invite?.onboarding_required === 1;
 		inviteEmail = String(invite?.email_normalized ?? '').trim().toLowerCase();
 		if (!inviteEmail) {
-			const legacyInvite = await platform.env.DB.prepare(
+			const legacyInvite = await locals.env.DB.prepare(
 				`
 				SELECT email_normalized
 				FROM user_invites

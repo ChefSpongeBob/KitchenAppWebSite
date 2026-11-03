@@ -12,7 +12,7 @@ function validDownloadUrl(value: string | undefined) {
 	}
 }
 
-export const load: PageServerLoad = async ({ locals, platform, url }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.userId || !locals.businessId || !locals.DB) {
 		throw redirect(303, '/login?registered=success&onboarding=1');
 	}
@@ -32,7 +32,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 		displayName: String(user?.display_name ?? '').trim(),
 		businessName: locals.businessName ?? '',
 		onboardingRequired: url.searchParams.get('onboarding') === '1',
-		appStoreUrl: validDownloadUrl(platform?.env?.APP_STORE_DOWNLOAD_URL),
-		googlePlayUrl: validDownloadUrl(platform?.env?.GOOGLE_PLAY_DOWNLOAD_URL)
+		appStoreUrl: validDownloadUrl(locals.env.APP_STORE_DOWNLOAD_URL),
+		googlePlayUrl: validDownloadUrl(locals.env.GOOGLE_PLAY_DOWNLOAD_URL)
 	};
 };

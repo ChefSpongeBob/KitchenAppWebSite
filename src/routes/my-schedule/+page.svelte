@@ -1,18 +1,18 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import SchoolOfFish from '$lib/components/ui/SchoolOfFish.svelte';
-  import AvailabilityEditor from '$lib/components/ui/AvailabilityEditor.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import SchoolOfFish from '#lib/components/ui/SchoolOfFish.svelte';
+  import AvailabilityEditor from '#lib/components/ui/AvailabilityEditor.svelte';
   import {
     formatScheduleTimeLabel,
     formatScheduleWeekRange,
     isValidScheduleDepartment,
     type ScheduleDepartment
-  } from '$lib/assets/schedule';
+  } from '#lib/assets/schedule.ts';
   import { applyAction, enhance } from '$app/forms';
   import { invalidate } from '$app/navigation';
-  import { pushToast } from '$lib/client/toasts';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  import { pushToast } from '#lib/client/toasts.ts';
+  import type { SubmitFunction } from '$app/forms';
 
   export let data: {
     userId: string;

@@ -1,4 +1,4 @@
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 const SCHEMA_MUTATION_PATTERN =
 	/^\s*(?:--[^\n]*\n\s*)*(?:CREATE|ALTER|DROP|REINDEX|VACUUM|PRAGMA\s+writable_schema)\b/i;

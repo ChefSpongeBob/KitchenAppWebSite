@@ -1,4 +1,4 @@
-import type { BusinessCapability } from '$lib/auth/roles';
+import type { BusinessCapability } from '#lib/auth/roles.ts';
 
 const ROUTE_CAPABILITIES: ReadonlyArray<{
   prefix: string;

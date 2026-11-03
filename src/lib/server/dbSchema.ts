@@ -1,6 +1,6 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 const tableExistsCache = new Map<string, boolean>();
 const tableColumnsCache = new Map<string, Set<string>>();

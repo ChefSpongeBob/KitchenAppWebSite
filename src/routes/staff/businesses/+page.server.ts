@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { requirePlatformStaff, searchPattern, staffPageNumber, staffSearch } from '$lib/server/platformStaff';
+import { requirePlatformStaff, searchPattern, staffPageNumber, staffSearch } from '#lib/server/platformStaff.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   await requirePlatformStaff(locals);

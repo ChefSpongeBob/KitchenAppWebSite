@@ -1,5 +1,8 @@
 /// <reference lib="webworker" />
-import { build, files, version } from '$service-worker';
+import { version } from '$app/env';
+import { assets, immutable } from '$app/manifest';
+import { asset } from '$app/paths';
+import { self } from '$app/service-worker';
 
 const CACHE = `cache-${version}`;
 const PUBLIC_NAVIGATION_PATHS = new Set([
@@ -11,7 +14,7 @@ const PUBLIC_NAVIGATION_PATHS = new Set([
 	'/privacy',
 	'/account-deletion'
 ]);
-const ASSETS = [...build, ...files];
+const ASSETS = [...immutable.map(({ path }) => new URL(path, self.registration.scope).pathname), ...assets.map(({ path }) => asset(path))];
 
 function isPublicNavigationPath(pathname: string) {
 	return PUBLIC_NAVIGATION_PATHS.has(pathname);
@@ -98,9 +101,9 @@ self.addEventListener('fetch', (event) => {
 						caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
 						return networkResponse;
 					})
-					.catch(() => {
+					.catch(async () => {
 					if (event.request.mode === 'navigate') {
-						return caches.match('/');
+							return (await caches.match('/')) ?? new Response('Offline', { status: 503, statusText: 'Offline' });
 					}
 					return new Response('Offline', { status: 503, statusText: 'Offline' });
 					})

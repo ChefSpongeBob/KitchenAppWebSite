@@ -1,11 +1,11 @@
-type EmailEnv = Partial<App.Platform['env']> & {
+type EmailEnv = Partial<App.RuntimeEnv> & {
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   RESEND_REPLY_TO_EMAIL?: string;
   APP_BASE_URL?: string;
 };
 
-import { PLAN_PRICES } from '$lib/billing/pricing';
+import { PLAN_PRICES } from '#lib/billing/pricing.ts';
 
 export type EmailSendResult = {
   sent: boolean;

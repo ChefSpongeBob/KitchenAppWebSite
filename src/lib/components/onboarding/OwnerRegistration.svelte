@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { PLAN_PRICES, SENSOR_PRICING } from '$lib/billing/pricing';
+	import { PLAN_PRICES, SENSOR_PRICING } from '#lib/billing/pricing.ts';
 
 	type FormValues = {
 		displayName: string;

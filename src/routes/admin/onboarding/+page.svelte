@@ -1,13 +1,13 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
-  import OnboardingFormPreview from '$lib/components/ui/OnboardingFormPreview.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import ManagerSectionNav from '#lib/components/ui/ManagerSectionNav.svelte';
+  import OnboardingFormPreview from '#lib/components/ui/OnboardingFormPreview.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
-  import { pushToast } from '$lib/client/toasts';
-  import { businessRoleLabel } from '$lib/auth/roles';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  import { pushToast } from '#lib/client/toasts.ts';
+  import { businessRoleLabel } from '#lib/auth/roles.ts';
+  import type { SubmitFunction } from '$app/forms';
 
   type OnboardingTemplateItem = {
     id: string;

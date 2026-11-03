@@ -1,4 +1,4 @@
-import type { BillingStore } from '$lib/server/storeBilling';
+import type { BillingStore } from '#lib/server/storeBilling.ts';
 
 export type StoreVerificationResult = {
 	configured: boolean;
@@ -12,7 +12,7 @@ export type StoreVerificationResult = {
 	error?: string;
 };
 
-type Env = App.Platform['env'];
+type Env = App.RuntimeEnv;
 
 function base64UrlEncode(input: string | ArrayBuffer) {
 	const bytes =

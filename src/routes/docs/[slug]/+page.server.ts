@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireBusinessId } from '$lib/server/tenant';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 type DocRow = {
   title: string;

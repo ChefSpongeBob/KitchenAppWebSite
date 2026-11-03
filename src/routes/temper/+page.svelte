@@ -1,8 +1,8 @@
 ﻿<script lang="ts">
   import { onMount } from 'svelte';
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import { startVisiblePolling } from '$lib/client/polling';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import { startVisiblePolling } from '#lib/client/polling.ts';
 
   type TemperatureNode = {
     sensor_id: number;

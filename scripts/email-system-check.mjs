@@ -103,7 +103,7 @@ expect('src/routes/api/internal/operational-events/process/+server.ts', 'email d
 expect('src/hooks.server.ts', 'successful app mutations dispatch queued emails in the background', (source) =>
   source.includes('processOperationalEvents') &&
   source.includes('shouldDispatchOperationalEvents') &&
-  source.includes('event.platform.ctx.waitUntil(delivery)') &&
+  source.includes('waitUntil(delivery)') &&
   source.includes("pathname === '/api/internal/operational-events/process'")
 );
 

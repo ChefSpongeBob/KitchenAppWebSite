@@ -1,16 +1,16 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
-	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
+	import ManagerSectionNav from '#lib/components/ui/ManagerSectionNav.svelte';
+	import PageHeader from '#lib/components/ui/PageHeader.svelte';
 	import { onMount } from 'svelte';
 	import {
 		CriminiBilling,
 		nativeStoreForPlatform,
 		type NativeBillingProduct,
 		type NativeStore
-	} from '$lib/billing/nativeBilling';
-	import { SENSOR_PRICING, sensorMonthlyPrice } from '$lib/billing/pricing';
+	} from '#lib/billing/nativeBilling.ts';
+	import { SENSOR_PRICING, sensorMonthlyPrice } from '#lib/billing/pricing.ts';
 
 	export let data: {
 		business: {

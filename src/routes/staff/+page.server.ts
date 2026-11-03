@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { requirePlatformStaff } from '$lib/server/platformStaff';
+import { requirePlatformStaff } from '#lib/server/platformStaff.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

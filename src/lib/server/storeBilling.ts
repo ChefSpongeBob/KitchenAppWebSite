@@ -1,7 +1,7 @@
-import { dev } from '$app/environment';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+import { dev } from '$app/env';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 export type StoreBillingPreference = 'google_play' | 'app_store' | 'both';
 export type StoreBillingStatus = 'pending_setup' | 'queued' | 'active' | 'disabled';

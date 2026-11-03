@@ -1,8 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '$lib/server/temperatureMonitoring';
-import { staffPageNumber, type PlatformStaffRole } from '$lib/server/platformStaff';
+import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/server/temperatureMonitoring.ts';
+import { staffPageNumber, type PlatformStaffRole } from '#lib/server/platformStaff.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 export type StaffQueueStatus = 'pending' | 'processing' | 'failed';
 const PAGE_SIZE = 20;
 

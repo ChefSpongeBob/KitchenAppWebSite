@@ -1,6 +1,15 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+
+const webArtifacts = [
+  '.svelte-kit/output/server/index.js',
+  '.svelte-kit/cloudflare-tmp/server.js',
+  '.svelte-kit/cloudflare/_worker.js'
+].filter(existsSync);
+const digest = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+const originalWebArtifacts = new Map(webArtifacts.map((file) => [file, digest(file)]));
 
 const layoutOptionsPath = resolve('src/routes/+layout.ts');
 const existingLayoutOptions = existsSync(layoutOptionsPath)
@@ -30,6 +39,13 @@ try {
 
   if (result.error) throw result.error;
   if (result.status !== 0) process.exitCode = result.status ?? 1;
+  if (result.status === 0) {
+    for (const [file, hash] of originalWebArtifacts) {
+      if (!existsSync(file) || digest(file) !== hash) {
+        throw new Error(`Native build changed the web server artifact: ${file}`);
+      }
+    }
+  }
 } finally {
   rmSync(layoutOptionsPath, { force: true });
 }

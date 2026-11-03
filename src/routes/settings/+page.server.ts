@@ -1,29 +1,29 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
-import { getTableColumns } from '$lib/server/dbSchema';
+import { getTableColumns } from '#lib/server/dbSchema.ts';
 import {
   ensureEmployeeProfilesTable,
   loadAdminEmployeeProfile
-} from '$lib/server/admin';
+} from '#lib/server/admin.ts';
 import {
   loadScheduleDepartmentApprovalsByUser,
   loadUserPendingScheduleAvailabilityRequest,
   loadUserScheduleAvailability
-} from '$lib/server/schedules';
-import type { ScheduleDepartment } from '$lib/assets/schedule';
-import { getSessionCookieName } from '$lib/server/authCookies';
-import { hashSessionToken } from '$lib/server/auth';
+} from '#lib/server/schedules.ts';
+import type { ScheduleDepartment } from '#lib/assets/schedule.ts';
+import { getSessionCookieName } from '#lib/server/authCookies.ts';
+import { hashSessionToken } from '#lib/server/auth.ts';
 import {
   listUserSessions,
   revokeOtherUserSessions,
   revokeSessionById,
   writeAuditLog
-} from '$lib/server/security';
-import { ensureUserPreferencesSchema } from '$lib/server/userPreferences';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
-import { COMMUNICATION_CONSENT_VERSION } from '$lib/communicationConsent';
+} from '#lib/server/security.ts';
+import { ensureUserPreferencesSchema } from '#lib/server/userPreferences.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
+import { COMMUNICATION_CONSENT_VERSION } from '#lib/communicationConsent.ts';
 
-async function getUsersColumns(db: App.Platform['env']['DB']) {
+async function getUsersColumns(db: App.RuntimeEnv['DB']) {
   return getTableColumns(db, 'users');
 }
 

@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail, redirect } from '@sveltejs/kit';
 import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import {
@@ -7,38 +7,38 @@ import {
   loadAnnouncementHistory,
   loadHomepageAnnouncement,
   saveHomepageAnnouncement
-} from '$lib/server/announcements';
+} from '#lib/server/announcements.ts';
 import {
   ensureEmployeeSpotlightSchema,
   getEmployeeSpotlightId,
   loadEmployeeSpotlight
-} from '$lib/server/employeeSpotlight';
+} from '#lib/server/employeeSpotlight.ts';
 import {
   ensureScheduleSchema,
   loadScheduleDepartmentApprovalsByUser,
   loadScheduleDepartments,
   loadScheduleManagerDepartments
-} from '$lib/server/schedules';
+} from '#lib/server/schedules.ts';
 import {
   isValidScheduleDepartment,
   type ScheduleDepartment
-} from '$lib/assets/schedule';
-import { isEmailConfigured, sendEmployeeOnboardingPackageEmail, sendInviteEmail } from '$lib/server/email';
+} from '#lib/assets/schedule.ts';
+import { isEmailConfigured, sendEmployeeOnboardingPackageEmail, sendInviteEmail } from '#lib/server/email.ts';
 import {
   ensureBusinessSchema,
   loadBusinessPositions,
   loadPositionCapabilityOverrides,
   syncUserAppRoleFromMemberships,
   type BusinessPosition
-} from '$lib/server/business';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+} from '#lib/server/business.ts';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
 import {
   checkRateLimit,
   rateLimitFailure,
   revokeUserSessions,
   writeAuditLog,
   writeAuditLogSafe
-} from '$lib/server/security';
+} from '#lib/server/security.ts';
 import {
   canAccessEmployeeSensitiveData,
   decryptSensitiveJsonPayload,
@@ -48,7 +48,7 @@ import {
   isSensitiveOnboardingFormKey,
   sensitiveConfigurationFailure,
   writeSensitiveRecordAudit
-} from '$lib/server/sensitive';
+} from '#lib/server/sensitive.ts';
 import {
   isBusinessAdminRole,
   ALL_BUSINESS_CAPABILITIES,
@@ -59,19 +59,19 @@ import {
   resolveBusinessCapabilities,
   type BusinessCapability,
   type BusinessCapabilityOverrides
-} from '$lib/server/permissions';
+} from '#lib/server/permissions.ts';
 import {
   deleteAttachmentsForSourceItem,
   deleteAttachmentsForSourceItems,
   deleteAttachmentsForTarget,
   loadItemAttachmentsForItems,
   type ItemAttachment
-} from '$lib/server/itemAttachments';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
-import { normalizeFormText, normalizePlainTextInput } from '$lib/server/inputSanitizer';
-import { hasPlatformStaffMembership } from '$lib/server/platformStaff';
+} from '#lib/server/itemAttachments.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
+import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSanitizer.ts';
+import { hasPlatformStaffMembership } from '#lib/server/platformStaff.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 let creatorCategoryRegistryEnsured = false;
 let employeeProfilesTableEnsured = false;
 let employeeProfileEditRequestsTableEnsured = false;
@@ -219,7 +219,7 @@ export type AdminEmailStatus = {
   emailConfigured: boolean;
 };
 
-type EmailEnv = Partial<App.Platform['env']>;
+type EmailEnv = Partial<App.RuntimeEnv>;
 
 export type AdminAssignableUser = {
   id: string;
@@ -2477,7 +2477,7 @@ function sanitizeSensitiveOnboardingPayload(formKey: string, payload: Record<str
 
 async function storeSensitiveOnboardingFormPayload(
   db: D1,
-  env: Partial<App.Platform['env']> | undefined,
+  env: Partial<App.RuntimeEnv> | undefined,
   item: Pick<
     EmployeeOnboardingItem,
     'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'
@@ -2576,7 +2576,7 @@ async function storeSensitiveOnboardingFormPayload(
 
 async function decryptSensitiveOnboardingFormPayload(
   db: D1,
-  env: Partial<App.Platform['env']> | undefined,
+  env: Partial<App.RuntimeEnv> | undefined,
   item: Pick<
     EmployeeOnboardingItem,
     'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'
@@ -3458,7 +3458,7 @@ async function hydrateProfileBackedOnboardingItems(
   packageSentAt: number,
   items: EmployeeOnboardingItem[],
   packageId?: string,
-  env?: Partial<App.Platform['env']>
+  env?: Partial<App.RuntimeEnv>
 ) {
   if (!items.some((item) => item.status === 'pending' && (item.form_key === 'personal_information' || item.form_key === 'emergency_contact'))) {
     return items;
@@ -3550,11 +3550,11 @@ export async function loadEmployeeOnboarding(
   userId: string,
   businessId: string,
   options: {
-    env?: Partial<App.Platform['env']>;
+    env?: Partial<App.RuntimeEnv>;
     actorUserId?: string | null;
     actorBusinessRole?: string | null;
     actorPermissionTemplate?: string | null;
-    actorCapabilities?: readonly import('$lib/server/permissions').BusinessCapability[] | null;
+    actorCapabilities?: readonly import('#lib/server/permissions.ts').BusinessCapability[] | null;
     auditSensitiveRead?: boolean;
   } = {}
 ): Promise<EmployeeOnboardingState> {
@@ -6758,7 +6758,7 @@ export async function sendEmployeeOnboardingPackage(
 export async function submitEmployeeOnboardingItem(
   request: Request,
   locals: App.Locals,
-  env?: Partial<App.Platform['env']>
+  env?: Partial<App.RuntimeEnv>
 ) {
   if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;

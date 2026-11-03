@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
   import type { PageData } from './$types';
   export let data: PageData;
   const date = (value: number | null) => value ? new Date(value * 1000).toLocaleString() : 'None recorded';
   const statuses = ['failed', 'pending', 'processing'] as const;
   function viewUrl(changes: Record<string, string>) {
-    const params = new URLSearchParams($page.url.searchParams);
+    const params = new URLSearchParams($page.url.searchParams.toString());
     for (const [key, value] of Object.entries(changes)) params.set(key, value);
     return `/staff/health?${params}`;
   }

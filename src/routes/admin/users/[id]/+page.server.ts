@@ -22,20 +22,20 @@ import {
 	updateUserBusinessPermissions,
 	updateUserCapabilityOverrides,
 	verifyEmployeeI9
-} from '$lib/server/admin';
-import { ensureDefaultBusinessPositions, loadBusinessPositions } from '$lib/server/business';
+} from '#lib/server/admin.ts';
+import { ensureDefaultBusinessPositions, loadBusinessPositions } from '#lib/server/business.ts';
 import {
 	loadScheduleDepartments,
 	loadScheduleRoleAccessByUser,
 	loadScheduleRoleDefinitions,
 	saveUserScheduleRoleAccess
-} from '$lib/server/schedules';
-import { canAccessEmployeeSensitiveData } from '$lib/server/sensitive';
+} from '#lib/server/schedules.ts';
+import { canAccessEmployeeSensitiveData } from '#lib/server/sensitive.ts';
 import {
 	ALL_BUSINESS_CAPABILITIES,
 	hasBusinessCapability,
 	normalizeBusinessRole
-} from '$lib/server/permissions';
+} from '#lib/server/permissions.ts';
 
 const employeeSections = [
 	'profile',
@@ -47,7 +47,7 @@ const employeeSections = [
 ] as const;
 type EmployeeSection = (typeof employeeSections)[number];
 
-export const load: PageServerLoad = async ({ locals, params, platform, url }) => {
+export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const db = locals.DB;
 	const businessId = locals.businessId;
 	if (!db) throw error(503, 'Database not configured.');
@@ -165,7 +165,7 @@ export const load: PageServerLoad = async ({ locals, params, platform, url }) =>
 		loadScheduleRoleAccessByUser(db, businessId, [employee.id]),
 		shouldLoadOnboarding
 			? loadEmployeeOnboarding(db, employee.id, businessId, {
-					env: platform?.env,
+					env: locals.env,
 					actorUserId: locals.userId,
 					actorBusinessRole: locals.businessRole,
 					actorPermissionTemplate: locals.businessPermissionTemplate,
@@ -242,8 +242,8 @@ export const actions: Actions = {
 	add_verification_check: ({ request, locals }) => addEmployeeVerificationCheck(request, locals),
 	update_verification_check: ({ request, locals }) =>
 		updateEmployeeVerificationCheck(request, locals),
-	send_onboarding_package: ({ request, locals, url, platform }) =>
-		sendEmployeeOnboardingPackage(request, locals, url.origin, platform?.env),
+	send_onboarding_package: ({ request, locals, url }) =>
+		sendEmployeeOnboardingPackage(request, locals, url.origin, locals.env),
 	verify_i9: ({ request, locals }) => verifyEmployeeI9(request, locals),
 	approve_onboarding_packet: ({ request, locals }) =>
 		approveEmployeeOnboardingPackage(request, locals),

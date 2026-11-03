@@ -1,9 +1,9 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
-import { sha256Hex } from '$lib/server/auth';
-import { logOperationalEvent, logOperationalError } from '$lib/server/observability';
+import { sha256Hex } from '#lib/server/auth.ts';
+import { logOperationalEvent, logOperationalError } from '#lib/server/observability.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 export type RateLimitResult = {
   allowed: boolean;

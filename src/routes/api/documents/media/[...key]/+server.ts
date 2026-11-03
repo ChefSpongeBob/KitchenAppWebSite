@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
-import { logOperationalEvent } from '$lib/server/observability';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { canAccessEmployeeSensitiveData, writeSensitiveRecordAudit } from '$lib/server/sensitive';
+import { logOperationalEvent } from '#lib/server/observability.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { canAccessEmployeeSensitiveData, writeSensitiveRecordAudit } from '#lib/server/sensitive.ts';
 
 function decodeMediaKey(value: string) {
   try {
@@ -14,8 +14,8 @@ function decodeMediaKey(value: string) {
   }
 }
 
-export const GET: RequestHandler = async ({ params, platform, locals, request }) => {
-  const bucket = platform?.env?.DOC_MEDIA;
+export const GET: RequestHandler = async ({ params, locals, request }) => {
+  const bucket = locals.env.DOC_MEDIA;
   if (!bucket) {
     logOperationalEvent({
       level: 'error',

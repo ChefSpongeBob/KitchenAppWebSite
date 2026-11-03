@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 export type PlatformStaffRole = 'owner' | 'support' | 'equipment';
 export type PlatformStaff = { userId: string; role: PlatformStaffRole };
 export const STAFF_STEP_UP_SECONDS = 15 * 60;

@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { hasBusinessCapability, hasReportsAccess } from '$lib/server/permissions';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
+import { hasBusinessCapability, hasReportsAccess } from '#lib/server/permissions.ts';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
 
 function canManageTodoHistory(locals: App.Locals) {
 	return hasBusinessCapability(

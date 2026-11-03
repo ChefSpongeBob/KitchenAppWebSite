@@ -1,18 +1,18 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
 import {
   isValidScheduleDepartment,
   scheduleEndLabels,
   weekdayIndexFromDate,
   type ScheduleDepartment
-} from '$lib/assets/schedule';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
-import { recordSchedulePublishSnapshot } from '$lib/server/history';
-import { ensureBusinessSchema } from '$lib/server/business';
-import { hasBusinessCapability, normalizeBusinessRole } from '$lib/server/permissions';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+} from '#lib/assets/schedule.ts';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
+import { recordSchedulePublishSnapshot } from '#lib/server/history.ts';
+import { ensureBusinessSchema } from '#lib/server/business.ts';
+import { hasBusinessCapability, normalizeBusinessRole } from '#lib/server/permissions.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 export type ScheduleWeek = {
   id: string;

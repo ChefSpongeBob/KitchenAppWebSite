@@ -1,12 +1,12 @@
 ﻿<script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import AppInstallCard from '$lib/components/ui/AppInstallCard.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import AppInstallCard from '#lib/components/ui/AppInstallCard.svelte';
   import { applyAction, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
-  import { pushToast } from '$lib/client/toasts';
-  import { type ScheduleDepartment } from '$lib/assets/schedule';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  import { pushToast } from '#lib/client/toasts.ts';
+  import { type ScheduleDepartment } from '#lib/assets/schedule.ts';
+  import type { SubmitFunction } from '$app/forms';
 
   type Profile = {
     real_name: string;

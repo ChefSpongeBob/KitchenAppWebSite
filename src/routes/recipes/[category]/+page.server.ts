@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { requireBusinessId } from '$lib/server/tenant';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   const db = locals.DB;

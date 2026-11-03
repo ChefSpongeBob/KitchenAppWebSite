@@ -2,7 +2,7 @@ import {
   hasPrivilegedFeatureAccess,
   hasVendorAccess,
   type BusinessCapability
-} from '$lib/auth/roles';
+} from '#lib/auth/roles.ts';
 
 export type AppFeatureMode = 'all' | 'admin' | 'off';
 

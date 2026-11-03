@@ -25,7 +25,7 @@ function assertNotIncludes(file, needle, message) {
 
 assertIncludes(
   'src/hooks.server.ts',
-  'event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA;',
+  'event.locals.MEDIA_BUCKET = event.locals.env.DOC_MEDIA;',
   'document media uses the document bucket only'
 );
 

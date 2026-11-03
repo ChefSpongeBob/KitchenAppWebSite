@@ -1,7 +1,7 @@
 import { fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
-import { ensureBusinessSchema } from '$lib/server/business';
+import { requireAdmin } from '#lib/server/admin.ts';
+import { ensureBusinessSchema } from '#lib/server/business.ts';
 
 const BRAND_MEDIA_PREFIX = '/api/documents/media/';
 

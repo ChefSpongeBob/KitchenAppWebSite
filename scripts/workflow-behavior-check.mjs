@@ -6,8 +6,8 @@ const { sqlite } = test;
 const now = Math.floor(Date.now() / 1000);
 const emitted = [];
 const load = loadServerModules({
-  '$lib/server/observability': { logOperationalEvent() {}, logOperationalError() {} },
-  '$lib/server/operationalEvents': { async recordOperationalEventBestEffort(_db, event) { emitted.push(event); return null; } }
+  '#lib/server/observability.ts': { logOperationalEvent() {}, logOperationalError() {} },
+  '#lib/server/operationalEvents.ts': { async recordOperationalEventBestEffort(_db, event) { emitted.push(event); return null; } }
 });
 const db = load('src/lib/server/schemaGuard.ts').wrapProductionSchemaGuard(test.db, false);
 function insert(table, row) {
@@ -104,9 +104,9 @@ try {
   console.log('PASS actual report and CSV actions: selected tenant/date/submission, formula safety, quoting, filename, and staff denial');
 
   const register = loadServerModules({
-    '$lib/server/observability': { logOperationalEvent() {}, logOperationalError() {} },
-    '$lib/server/operationalEvents': { async recordOperationalEventBestEffort() { return null; } },
-    '$lib/server/trial': { getRequestIpAddress: () => '192.0.2.1', getBusinessTrialAccess: async () => ({ mode: 'active', allowApp: true }) }
+    '#lib/server/observability.ts': { logOperationalEvent() {}, logOperationalError() {} },
+    '#lib/server/operationalEvents.ts': { async recordOperationalEventBestEffort() { return null; } },
+    '#lib/server/trial.ts': { getRequestIpAddress: () => '192.0.2.1', getBusinessTrialAccess: async () => ({ mode: 'active', allowApp: true }) }
   })('src/routes/register/+page.server.ts');
   const email = 'invited@example.invalid';
   insert('business_invites', { id: 'invite-a', business_id: 'a', email, email_normalized: email,
@@ -118,7 +118,7 @@ try {
     user_address_line_1: '1 Example Lane', user_city: 'Example', user_state: 'CO', user_postal_code: '80000',
     email_updates: '0', sms_updates: '0', emergency_contact_name: 'Contact', emergency_contact_phone: '2025550111',
     emergency_contact_relationship: 'Friend' };
-  const registerEvent = fields => ({ locals: { DB: db }, platform: { env: { DB: db, PASSWORD_PEPPER: 'workflow-test-only-pepper',
+  const registerEvent = fields => ({ locals: { DB: db, env: { DB: db, PASSWORD_PEPPER: 'workflow-test-only-pepper',
       SENSITIVE_DATA_KEY: 'workflow-test-only-sensitive-key', SENSITIVE_DATA_KEY_VERSION: 'test', APP_BASE_URL: 'https://criminiops.com' } },
     request: formRequest(fields, '/register?invite=TEST-INVITE-A'), url: new URL('https://criminiops.com/register?invite=TEST-INVITE-A'),
     cookies: { get() { return undefined; }, set() {}, delete() {} } });

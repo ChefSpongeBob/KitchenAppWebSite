@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly, fade } from 'svelte/transition';
-  import { toasts, type ToastItem } from '$lib/client/toasts';
+  import { toasts, type ToastItem } from '#lib/client/toasts.ts';
 
   let items: ToastItem[] = [];
   const unsubscribe = toasts.subscribe((value) => {

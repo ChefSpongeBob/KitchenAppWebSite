@@ -7,11 +7,11 @@ import {
 	recordStorePurchaseEvent,
 	sha256Hex,
 	upsertPendingStoreEntitlement
-} from '$lib/server/storeBilling';
-import { upsertStoreBillingPlaceholder } from '$lib/server/storeBilling';
-import { verifyStorePurchase } from '$lib/server/storeVerification';
-import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
-import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
+} from '#lib/server/storeBilling.ts';
+import { upsertStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
+import { verifyStorePurchase } from '#lib/server/storeVerification.ts';
+import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
+import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
 
 function canManageBilling(
 	role: string | undefined,
@@ -25,7 +25,7 @@ function textValue(value: unknown) {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
-export const POST: RequestHandler = async ({ locals, platform, request }) => {
+export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.DB || !locals.userId || !locals.businessId) {
 		return json({ ok: false, error: 'Sign in required.' }, { status: 401 });
 	}
@@ -91,7 +91,7 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			rawPayload: eventPayload
 		});
 
-		const env = platform?.env ?? ({ DB: locals.DB } as App.Platform['env']);
+		const env = locals.env ?? ({ DB: locals.DB } as App.RuntimeEnv);
 		const verification = await verifyStorePurchase(env, {
 			store,
 			productId,

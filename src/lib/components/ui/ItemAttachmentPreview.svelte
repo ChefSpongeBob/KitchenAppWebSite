@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type ItemAttachment = {
     id: string;

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  import PdfPageStack from '#lib/components/ui/PdfPageStack.svelte';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   export let src = '';
   export let title = 'Onboarding form';

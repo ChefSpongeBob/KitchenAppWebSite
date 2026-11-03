@@ -164,21 +164,21 @@ expect('src/routes/docs/+page.server.ts', 'document listing avoids full document
 );
 
 expect('src/lib/server/tenant.ts', 'tenant schema repair is skipped on production request paths', (source) =>
-  source.includes("import { dev } from '$app/environment'") &&
+  source.includes("import { dev } from '$app/env'") &&
   source.includes('if (!dev)') &&
   source.includes('verifyTenantSchema')
 );
 
 expect('src/lib/server/business.ts', 'business schema repair is skipped on production request paths', (source) =>
-  source.includes("import { dev } from '$app/environment'") && source.includes('businessSchemaEnsured = true')
+  source.includes("import { dev } from '$app/env'") && source.includes('businessSchemaEnsured = true')
 );
 
 expect('src/lib/server/schedules.ts', 'schedule schema repair is skipped on production request paths', (source) =>
-  source.includes("import { dev } from '$app/environment'") && source.includes('scheduleSchemaEnsured = true')
+  source.includes("import { dev } from '$app/env'") && source.includes('scheduleSchemaEnsured = true')
 );
 
 expect('src/lib/server/admin.ts', 'admin schema repair helpers are skipped on production request paths', (source) =>
-  source.includes("import { dev } from '$app/environment'") &&
+  source.includes("import { dev } from '$app/env'") &&
   source.includes('employeeOnboardingTablesEnsured = true') &&
   !source.includes("'' AS details")
 );

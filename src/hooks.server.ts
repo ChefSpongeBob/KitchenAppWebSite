@@ -1,37 +1,39 @@
-import { building, dev } from '$app/environment';
-import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
-import { hashSessionToken } from '$lib/server/auth';
-import { canRoleAccessFeature, resolveFeatureKeyForUrl } from '$lib/features/appFeatures';
-import { loadAppFeatureModes } from '$lib/server/appFeatures';
-import { ensureTenantSchema } from '$lib/server/tenant';
+import { building, dev } from '$app/env';
+import { isRedirect, redirect } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { env, waitUntil } from 'cloudflare:workers';
+import { hashSessionToken } from '#lib/server/auth.ts';
+import { canRoleAccessFeature, resolveFeatureKeyForUrl } from '#lib/features/appFeatures.ts';
+import { loadAppFeatureModes } from '#lib/server/appFeatures.ts';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
 import {
 	bootstrapBusinessForUser,
 	getUserBusinessContext,
 	isBusinessOnboardingComplete
-} from '$lib/server/business';
+} from '#lib/server/business.ts';
 import {
 	ACTIVE_BUSINESS_COOKIE,
 	getActiveBusinessCookieDeleteOptions,
 	getActiveBusinessCookieOptions
-} from '$lib/server/activeBusiness';
+} from '#lib/server/activeBusiness.ts';
 import {
 	cancelTrialAndPurgeBusiness,
 	getBusinessTrialAccess,
 	getRequestIpAddress
-} from '$lib/server/trial';
+} from '#lib/server/trial.ts';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName,
 	getSessionCookieOptions,
 	isNativeAppRequest
-} from '$lib/server/authCookies';
-import { effectiveAppRoleFromBusinessRole } from '$lib/server/permissions';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { resolveBusinessCapabilityForPath } from '$lib/auth/routeCapabilities';
-import { wrapProductionSchemaGuard } from '$lib/server/schemaGuard';
-import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
-import { processOperationalEvents } from '$lib/server/operationalEvents';
-import { findPlatformStaff, isPlatformStaffPath, isStaffSecurityPath, loadStaffStepUp, STAFF_SESSION_SECONDS } from '$lib/server/platformStaff';
+} from '#lib/server/authCookies.ts';
+import { effectiveAppRoleFromBusinessRole } from '#lib/server/permissions.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { resolveBusinessCapabilityForPath } from '#lib/auth/routeCapabilities.ts';
+import { wrapProductionSchemaGuard } from '#lib/server/schemaGuard.ts';
+import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
+import { processOperationalEvents } from '#lib/server/operationalEvents.ts';
+import { findPlatformStaff, isPlatformStaffPath, isStaffSecurityPath, loadStaffStepUp, STAFF_SESSION_SECONDS } from '#lib/server/platformStaff.ts';
 
 const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
 	'/admin',
@@ -137,19 +139,19 @@ function applySecurityHeaders(response: Response) {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	const rawDb = event.platform?.env?.DB as App.Platform['env']['DB'];
-	event.locals.DB = rawDb
-		? wrapProductionSchemaGuard(
-				rawDb,
-				dev || event.platform?.env?.ALLOW_RUNTIME_SCHEMA_MUTATION === 'true'
-			)
-		: rawDb;
-	event.locals.MEDIA_BUCKET = event.platform?.env?.DOC_MEDIA;
-
 	const { pathname } = event.url;
 	if (building && pathname === '/[fallback]') {
 		return applySecurityHeaders(await resolve(event));
 	}
+	event.locals.env = env as App.RuntimeEnv;
+	const rawDb = event.locals.env.DB;
+	event.locals.DB = rawDb
+		? wrapProductionSchemaGuard(
+				rawDb,
+				dev || event.locals.env.ALLOW_RUNTIME_SCHEMA_MUTATION === 'true'
+			)
+		: rawDb;
+	event.locals.MEDIA_BUCKET = event.locals.env.DOC_MEDIA;
 	const isAuthRoute =
 		pathname.startsWith('/login') ||
 		pathname.startsWith('/register') ||
@@ -200,11 +202,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (
 			response.status < 500 &&
 			event.locals.DB &&
-			event.platform?.env &&
+			event.locals.env &&
 			shouldDispatchOperationalEvents(pathname, event.request.method)
 		) {
 			const delivery = processOperationalEvents(event.locals.DB, {
-				env: event.platform.env,
+				env: event.locals.env,
 				request: event.request,
 				limit: 25
 			}).catch((error) => {
@@ -217,7 +219,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 					error
 				});
 			});
-			event.platform.ctx.waitUntil(delivery);
+			waitUntil(delivery);
 		}
 		response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
 		response.headers.set('pragma', 'no-cache');

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import PageHeader from '$lib/components/ui/PageHeader.svelte';
-	import ManagerSectionNav from '$lib/components/ui/ManagerSectionNav.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
+	import PageHeader from '#lib/components/ui/PageHeader.svelte';
+	import ManagerSectionNav from '#lib/components/ui/ManagerSectionNav.svelte';
 	import { applyAction, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { pushToast } from '$lib/client/toasts';
+	import { pushToast } from '#lib/client/toasts.ts';
 	import {
 		businessCapabilityOptions,
 		businessRoleLabel,
@@ -12,8 +12,8 @@
 		resolveBusinessCapabilities,
 		type BusinessCapability,
 		type BusinessCapabilityOverrides
-	} from '$lib/auth/roles';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	} from '#lib/auth/roles.ts';
+	import type { SubmitFunction } from '$app/forms';
 
 	type UserOption = {
 		id: string;

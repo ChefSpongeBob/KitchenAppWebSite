@@ -1,5 +1,5 @@
 ﻿<script lang="ts">
-	import Layout from '$lib/components/ui/Layout.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
 	import { onMount } from 'svelte';
 
 	type CarouselSlide = {

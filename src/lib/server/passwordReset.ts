@@ -1,12 +1,12 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
-import { hasColumn } from '$lib/server/dbSchema';
+import { hasColumn } from '#lib/server/dbSchema.ts';
 
 const RESET_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const RESET_RECORD_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 let passwordResetSchemaEnsured = false;
 
-export async function ensurePasswordResetSchema(db: App.Platform['env']['DB']) {
+export async function ensurePasswordResetSchema(db: App.RuntimeEnv['DB']) {
   if (!dev) {
     passwordResetSchemaEnsured = true;
     return;
@@ -69,11 +69,11 @@ export function getPasswordResetExpiry(now = Math.floor(Date.now() / 1000)) {
   return now + RESET_TOKEN_TTL_SECONDS;
 }
 
-export async function hasEmailNormalizedColumn(db: App.Platform['env']['DB']) {
+export async function hasEmailNormalizedColumn(db: App.RuntimeEnv['DB']) {
   return hasColumn(db, 'users', 'email_normalized');
 }
 
-export async function findUserByEmail(db: App.Platform['env']['DB'], email: string) {
+export async function findUserByEmail(db: App.RuntimeEnv['DB'], email: string) {
   const hasNormalized = await hasEmailNormalizedColumn(db);
 
   return hasNormalized
@@ -120,7 +120,7 @@ export async function createPasswordResetRecord({
   tokenHash,
   requestedIp
 }: {
-  db: App.Platform['env']['DB'];
+  db: App.RuntimeEnv['DB'];
   userId: string;
   email: string;
   tokenHash: string;
@@ -167,7 +167,7 @@ export async function createPasswordResetRecord({
 }
 
 export async function deletePasswordResetRecordById(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   resetId: string | null | undefined
 ) {
   if (!resetId) return;
@@ -175,7 +175,7 @@ export async function deletePasswordResetRecordById(
 }
 
 export async function findValidPasswordResetByTokenHash(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   tokenHash: string
 ) {
   const now = Math.floor(Date.now() / 1000);

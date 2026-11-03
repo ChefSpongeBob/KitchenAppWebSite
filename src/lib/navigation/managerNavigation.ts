@@ -3,8 +3,8 @@ import {
 	defaultAppFeatureModes,
 	type AppFeatureKey,
 	type AppFeatureModes
-} from '$lib/features/appFeatures';
-import { hasBusinessCapability, type BusinessCapability } from '$lib/auth/roles';
+} from '#lib/features/appFeatures.ts';
+import { hasBusinessCapability, type BusinessCapability } from '#lib/auth/roles.ts';
 
 export type ManagerNavigationItem = {
 	id: string;

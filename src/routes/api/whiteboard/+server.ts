@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { ensureTenantSchema } from '$lib/server/tenant';
-import { normalizePlainTextInput } from '$lib/server/inputSanitizer';
+import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { normalizePlainTextInput } from '#lib/server/inputSanitizer.ts';
 
 type WhiteboardRow = {
   id: string;
@@ -13,8 +13,8 @@ function scopedBusinessId(locals: App.Locals) {
   return String(locals.businessId ?? '').trim();
 }
 
-export const GET: RequestHandler = async ({ platform, url, locals }) => {
-  const db = platform?.env?.DB;
+export const GET: RequestHandler = async ({ url, locals }) => {
+  const db = locals.env.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   await ensureTenantSchema(db);
   const businessId = scopedBusinessId(locals);
@@ -44,8 +44,8 @@ export const GET: RequestHandler = async ({ platform, url, locals }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ platform, request, locals }) => {
-  const db = platform?.env?.DB;
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const db = locals.env.DB;
   if (!db) return json({ error: 'D1 DB binding is missing' }, { status: 503 });
   await ensureTenantSchema(db);
   const businessId = scopedBusinessId(locals);

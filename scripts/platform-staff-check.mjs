@@ -109,8 +109,8 @@ await assert.rejects(staff.reserveGateway(db, { userId: 'support', role: 'suppor
 assert.throws(() => sqlite.prepare(`INSERT INTO iot_devices(id,business_id,device_type,external_device_id,is_active)
   VALUES('wrong','b','sensor_gateway','gateway-a',1)`).run(), /reserved for another business/);
 const provisioning = load('src/lib/server/temperatureDeviceProvisioning.ts', {
-  '$app/environment': { dev: false }, '$lib/server/iotIngest': {},
-  '$lib/server/temperatureSensors': { normalizeDeviceSerial: value => value.trim().toLowerCase() }
+  '$app/env': { dev: false }, '#lib/server/iotIngest.ts': {},
+  '#lib/server/temperatureSensors.ts': { normalizeDeviceSerial: value => value.trim().toLowerCase() }
 });
 await assert.rejects(provisioning.claimTemperatureGateway(db, { businessId: 'b', serial: 'gateway-a', displayName: 'Wrong' }), /reserved for another business/);
 const gateway = await provisioning.claimTemperatureGateway(db, { businessId: 'a', serial: 'gateway-a', displayName: 'Walk-in Gateway', createdBy: 'owner' });
@@ -133,7 +133,7 @@ sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('owner
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM platform_staff_audit WHERE action='gateway_reserved'").get().n, 2);
 console.log('PASS assignments are audited atomically, roll back on audit failure, and reject stale authority');
 
-const directory = load('src/routes/staff/businesses/+page.server.ts', { '$lib/server/platformStaff': staff });
+const directory = load('src/routes/staff/businesses/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
 sqlite.exec(`ALTER TABLE businesses ADD COLUMN slug TEXT; ALTER TABLE businesses ADD COLUMN plan_tier TEXT;
   ALTER TABLE businesses ADD COLUMN contact_email TEXT; ALTER TABLE businesses ADD COLUMN contact_phone TEXT;
   ALTER TABLE businesses ADD COLUMN created_at INTEGER;`);
@@ -142,7 +142,7 @@ assert.equal(found.businesses.length, 2);
 assert.equal((await directory.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/businesses?q=%27%20OR%201%3D1--') })).businesses.length, 0);
 const inventory = load('src/routes/staff/equipment/+page.server.ts', {
   '@sveltejs/kit': actionKit,
-  '$lib/server/platformStaff': staff, '$lib/server/security': maintenanceSecurity
+  '#lib/server/platformStaff.ts': staff, '#lib/server/security.ts': maintenanceSecurity
 });
 const list = await inventory.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/equipment') });
 assert.equal(list.equipment.length, 2);
@@ -157,8 +157,8 @@ sqlite.exec(readFileSync('migrations/0076_operational_events.sql', 'utf8'));
 sqlite.exec(readFileSync('migrations/0108_staff_health_indexes.sql', 'utf8'));
 sqlite.exec(readFileSync('migrations/0108_staff_health_indexes.sql', 'utf8'));
 const health = load('src/lib/server/platformHealth.ts', {
-  '@sveltejs/kit': kit, '$lib/server/platformStaff': staff,
-  '$lib/server/temperatureMonitoring': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 }
+  '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff,
+  '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 }
 });
 const healthNow = 2_000_000;
 assert.equal(health.gatewayConnection(healthNow - 599, healthNow), 'Online');
@@ -223,12 +223,12 @@ for (const [table, index, ordering, filter] of [
   assert.ok(plan.every(row => !row.detail.includes('TEMP B-TREE')));
 }
 const healthPage = load('src/routes/staff/health/+page.server.ts', {
-  '$lib/server/platformStaff': staff, '$lib/server/platformHealth': health,
-  '$lib/server/email': { isEmailConfigured: env => Boolean(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL) }
+  '#lib/server/platformStaff.ts': staff, '#lib/server/platformHealth.ts': health,
+  '#lib/server/email.ts': { isEmailConfigured: env => Boolean(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL) }
 });
 await assert.rejects(healthPage.load({ locals: { DB: db, userId: 'manager', businessRole: 'owner' }, setHeaders() {} }), { status: 403 });
-const healthResponse = await healthPage.load({ locals: ownerLocals,
-  platform: { env: { RESEND_API_KEY: 'PRIVATE RESEND KEY', RESEND_FROM_EMAIL: 'private@example.invalid' } },
+const healthResponse = await healthPage.load({ locals: { ...ownerLocals,
+  env: { RESEND_API_KEY: 'PRIVATE RESEND KEY', RESEND_FROM_EMAIL: 'private@example.invalid' } },
   url: new URL('https://criminiops.com/staff/health?business=a'),
   setHeaders(headers) { assert.equal(headers['cache-control'], 'no-store'); }
 });
@@ -239,32 +239,32 @@ console.log('PASS health uses indexed bounded tenant reads, safe status metadata
 const redirect = (status, location) => { throw Object.assign(Error('Redirect'), { status, location }); };
 let tenantCalls = 0;
 const hooks = load('src/hooks.server.ts', {
-  '$app/environment': { building: false, dev: false },
+  'cloudflare:workers': { env: { DB: db }, waitUntil: () => {} },
+  '$app/env': { building: false, dev: false },
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location) },
-  '$lib/server/auth': { hashSessionToken: async token => `hashed-${token}` },
-  '$lib/features/appFeatures': { resolveFeatureKeyForUrl: () => null },
-  '$lib/server/appFeatures': { loadAppFeatureModes: async () => ({}) },
-  '$lib/server/tenant': { ensureTenantSchema: async () => {} },
-  '$lib/server/business': {
+  '#lib/server/auth.ts': { hashSessionToken: async token => `hashed-${token}` },
+  '#lib/features/appFeatures.ts': { resolveFeatureKeyForUrl: () => null },
+  '#lib/server/appFeatures.ts': { loadAppFeatureModes: async () => ({}) },
+  '#lib/server/tenant.ts': { ensureTenantSchema: async () => {} },
+  '#lib/server/business.ts': {
     getUserBusinessContext: async () => { tenantCalls++; return { businessId: 'a', businessRole: 'user' }; },
     isBusinessOnboardingComplete: async () => true
   },
-  '$lib/server/activeBusiness': { ACTIVE_BUSINESS_COOKIE: 'active-business', getActiveBusinessCookieOptions: () => ({ path: '/' }), getActiveBusinessCookieDeleteOptions: () => ({ path: '/' }) },
-  '$lib/server/trial': { getBusinessTrialAccess: async () => ({ allowApp: false, shouldPurge: false }), getRequestIpAddress: () => '127.0.0.1' },
-  '$lib/server/authCookies': {
+  '#lib/server/activeBusiness.ts': { ACTIVE_BUSINESS_COOKIE: 'active-business', getActiveBusinessCookieOptions: () => ({ path: '/' }), getActiveBusinessCookieDeleteOptions: () => ({ path: '/' }) },
+  '#lib/server/trial.ts': { getBusinessTrialAccess: async () => ({ allowApp: false, shouldPurge: false }), getRequestIpAddress: () => '127.0.0.1' },
+  '#lib/server/authCookies.ts': {
     getSessionCookieName: () => 'session', getSessionCookieOptions: () => ({ path: '/' }),
     getSessionCookieDeleteOptions: () => ({ path: '/' }), isNativeAppRequest: () => false
   },
-  '$lib/server/permissions': { effectiveAppRoleFromBusinessRole: () => 'user', hasBusinessCapability: () => true },
-  '$lib/auth/routeCapabilities': { resolveBusinessCapabilityForPath: () => null },
-  '$lib/server/schemaGuard': { wrapProductionSchemaGuard: db => db },
-  '$lib/server/observability': { logOperationalEvent: () => {}, logOperationalError: () => {} },
-  '$lib/server/operationalEvents': {}, '$lib/server/platformStaff': staff
+  '#lib/server/permissions.ts': { effectiveAppRoleFromBusinessRole: () => 'user', hasBusinessCapability: () => true },
+  '#lib/auth/routeCapabilities.ts': { resolveBusinessCapabilityForPath: () => null },
+  '#lib/server/schemaGuard.ts': { wrapProductionSchemaGuard: db => db },
+  '#lib/server/observability.ts': { logOperationalEvent: () => {}, logOperationalError: () => {} },
+  '#lib/server/operationalEvents.ts': {}, '#lib/server/platformStaff.ts': staff
 });
 function hookEvent(path, token = 'owner-token', options = {}) {
   const url = new URL(`https://criminiops.com${path}`);
   return { url, request: new Request(url, options), locals: {},
-    platform: { env: { DB: db }, ctx: { waitUntil: () => {} } },
     cookies: { get: name => name === 'session' ? token : null, set: () => {}, delete: () => {} }
   };
 }
@@ -298,10 +298,10 @@ const loginSource = readFileSync('src/routes/login/+page.svelte', 'utf8');
 assert.ok(loginSource.includes("'?/login&staff=1' : '?/login'"), 'Staff destination must survive the actual named login form action');
 const login = load('src/routes/login/+page.server.ts', {
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location), fail: (status, data) => ({ status, data }) },
-  '$app/environment': { dev: false }, '$lib/server/auth': {}, '$lib/server/authCookies': {},
-  '$lib/server/activeBusiness': {}, '$lib/server/dbSchema': {}, '$lib/server/business': {},
-  '$lib/server/permissions': {}, '$lib/server/security': {}, '$lib/server/turnstile': {},
-  '$lib/server/platformStaff': staff
+  '$app/env': { dev: false }, '#lib/server/auth.ts': {}, '#lib/server/authCookies.ts': {},
+  '#lib/server/activeBusiness.ts': {}, '#lib/server/dbSchema.ts': {}, '#lib/server/business.ts': {},
+  '#lib/server/permissions.ts': {}, '#lib/server/security.ts': {}, '#lib/server/turnstile.ts': {},
+  '#lib/server/platformStaff.ts': staff
 });
 const loginForm = new FormData();
 loginForm.set('email', 'owner@example.invalid');
@@ -365,8 +365,8 @@ await assert.rejects(staff.requirePlatformStaff({ DB: db, userId: 'manager', ses
 await assert.rejects(administration.changeStaffMembership(db, owner, 'owner-session', { ...addStaff, userId: 'manager', revision: 1 }), { status: 409 });
 await assert.rejects(administration.changeStaffMembership(db, owner, 'owner-session', { ...addStaff, userId: 'owner', revision: 1, active: 0 }), { status: 400 });
 const staffTeam = load('src/routes/staff/team/+page.server.ts', {
-  '@sveltejs/kit': actionKit, '$lib/server/platformStaff': staff,
-  '$lib/server/platformStaffAdministration': administration, '$lib/server/security': maintenanceSecurity
+  '@sveltejs/kit': actionKit, '#lib/server/platformStaff.ts': staff,
+  '#lib/server/platformStaffAdministration.ts': administration, '#lib/server/security.ts': maintenanceSecurity
 });
 const roster = await staffTeam.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/team') });
 assert.equal(roster.members.length, 4);
@@ -414,10 +414,10 @@ sqlite.exec(`INSERT INTO business_store_entitlements
     ('equipment-session','equipment',NULL,${now + 3600},NULL,'hashed-equipment-token',${now});
   INSERT INTO platform_staff_step_up SELECT s.id,s.user_id,m.revision,${now}
     FROM sessions s JOIN platform_staff_members m ON m.user_id=s.user_id WHERE s.user_id IN ('support','equipment');`);
-const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '$lib/server/platformStaff': staff });
-const activityPage = load('src/routes/staff/activity/+page.server.ts', { '$lib/server/platformStaff': staff });
-const staffEntry = load('src/routes/staff/+page.server.ts', { '@sveltejs/kit': { redirect }, '$lib/server/platformStaff': staff });
-const staffLayout = load('src/routes/staff/+layout.server.ts', { '$lib/server/platformStaff': staff });
+const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff });
+const activityPage = load('src/routes/staff/activity/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
+const staffEntry = load('src/routes/staff/+page.server.ts', { '@sveltejs/kit': { redirect }, '#lib/server/platformStaff.ts': staff });
+const staffLayout = load('src/routes/staff/+layout.server.ts', { '#lib/server/platformStaff.ts': staff });
 const staffPaths = ['/staff','/staff/businesses','/staff/businesses/a','/staff/equipment','/staff/health',
   '/staff/team','/staff/activity','/staff/security'];
 const tenantCallsBeforeMatrix = tenantCalls;
@@ -476,14 +476,14 @@ assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null, 'P
 let rateAllowed = true;
 const securityPage = load('src/routes/staff/security/+page.server.ts', {
   '@sveltejs/kit': { ...kit, redirect, fail: (status, data) => ({ status, data }) },
-  '$lib/server/auth': auth, '$lib/server/platformStaff': staff,
-  '$lib/server/authCookies': { getSessionCookieName: () => 'session', getSessionCookieOptions: () => ({ path: '/', httpOnly: true }) },
-  '$lib/server/security': { checkRateLimit: async opts => ({ allowed: rateAllowed }), rateLimitFailure: error => ({ status: 429, error }) }
+  '#lib/server/auth.ts': auth, '#lib/server/platformStaff.ts': staff,
+  '#lib/server/authCookies.ts': { getSessionCookieName: () => 'session', getSessionCookieOptions: () => ({ path: '/', httpOnly: true }) },
+  '#lib/server/security.ts': { checkRateLimit: async opts => ({ allowed: rateAllowed }), rateLimitFailure: error => ({ status: 429, error }) }
 });
 let rotatedToken = null;
 function securityEvent(password) {
   const form = new FormData(); form.set('password', password);
-  return { locals: ownerLocals, platform: { env: passwordEnv }, url: new URL('https://criminiops.com/staff/security?next=/staff/team'),
+  return { locals: { ...ownerLocals, env: passwordEnv }, url: new URL('https://criminiops.com/staff/security?next=/staff/team'),
     request: new Request('https://criminiops.com/staff/security', { method: 'POST', body: form }),
     cookies: { set(name, token, options) { assert.equal(name, 'session'); assert.equal(options.httpOnly, true); rotatedToken = token; } } };
 }
@@ -530,7 +530,7 @@ sqlite.exec(`DELETE FROM business_users WHERE business_id IN ('a','b') AND user_
   INSERT INTO business_users VALUES('cleanup','owner',1),('cleanup','manager',1),('cleanup','ordinary',1);
   INSERT INTO platform_staff_audit(id,actor_user_id,action,business_id,reason,created_at)
     VALUES('cleanup-proof','owner','test-cleanup','cleanup','Preserve platform history',1);`);
-const trial = load('src/lib/server/trial.ts', { '$app/environment': { dev: false }, '$lib/server/auth': auth }, '\nexport { purgeBusinessWorkspaceData };');
+const trial = load('src/lib/server/trial.ts', { '$app/env': { dev: false }, '#lib/server/auth.ts': auth }, '\nexport { purgeBusinessWorkspaceData };');
 await trial.purgeBusinessWorkspaceData(db, 'cleanup');
 assert.ok(sqlite.prepare("SELECT id FROM users WHERE id='owner'").get());
 assert.ok(sqlite.prepare("SELECT id FROM users WHERE id='manager'").get(), 'Revoked staff identity is still platform-owned');

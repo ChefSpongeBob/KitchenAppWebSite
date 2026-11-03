@@ -14,12 +14,12 @@ import {
   sendEmployeeOnboardingPackage,
   saveBusinessHrSettings,
   updateEmployeeOnboardingTemplateItem
-} from '$lib/server/admin';
-import { loadScheduleDepartments } from '$lib/server/schedules';
-import { ensureDefaultBusinessPositions, loadBusinessPositions } from '$lib/server/business';
-import { requireBusinessId } from '$lib/server/tenant';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { normalizeBusinessRole } from '$lib/server/permissions';
+} from '#lib/server/admin.ts';
+import { loadScheduleDepartments } from '#lib/server/schedules.ts';
+import { ensureDefaultBusinessPositions, loadBusinessPositions } from '#lib/server/business.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { normalizeBusinessRole } from '#lib/server/permissions.ts';
 
 const onboardingViews = new Set(['invites', 'packets', 'forms']);
 
@@ -142,11 +142,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  create_user_invite: ({ request, locals, url, platform }) =>
-    createUserInvite(request, locals, url.origin, platform?.env),
+  create_user_invite: ({ request, locals, url }) =>
+    createUserInvite(request, locals, url.origin, locals.env),
   revoke_user_invite: ({ request, locals }) => revokeUserInvite(request, locals),
-  send_package: ({ request, locals, url, platform }) =>
-    sendEmployeeOnboardingPackage(request, locals, url.origin, platform?.env),
+  send_package: ({ request, locals, url }) =>
+    sendEmployeeOnboardingPackage(request, locals, url.origin, locals.env),
   install_standard_packet: ({ request, locals }) => installStandardEmployeeOnboardingTemplate(request, locals),
   create_item: ({ request, locals }) => createEmployeeOnboardingTemplateItem(request, locals),
   update_item: ({ request, locals }) => updateEmployeeOnboardingTemplateItem(request, locals),

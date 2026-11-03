@@ -1,6 +1,6 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 const TENANT_TABLES = [
   'account_audit_logs',

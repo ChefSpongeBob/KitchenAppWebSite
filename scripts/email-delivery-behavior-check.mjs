@@ -4,7 +4,7 @@ import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
 const test = createTestD1();
 const { sqlite, db } = test;
 const now = Math.floor(Date.now() / 1000);
-const load = loadServerModules({ '$lib/server/observability': { logOperationalEvent() {}, logOperationalError() {} } });
+const load = loadServerModules({ '#lib/server/observability.ts': { logOperationalEvent() {}, logOperationalError() {} } });
 const email = load('src/lib/server/email.ts');
 const events = load('src/lib/server/operationalEvents.ts');
 const env = { RESEND_API_KEY: 'test-only-provider-key', RESEND_FROM_EMAIL: 'Crimini <test@example.invalid>', APP_BASE_URL: 'https://criminiops.com' };

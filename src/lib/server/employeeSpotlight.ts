@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
 export type EmployeeSpotlight = {
   employeeName: string;
@@ -13,7 +13,7 @@ function employeeSpotlightId(businessId?: string | null) {
 }
 
 async function ensureOptionalColumn(
-  db: App.Platform['env']['DB'],
+  db: App.RuntimeEnv['DB'],
   tableName: string,
   columnName: string,
   definition: string
@@ -27,7 +27,7 @@ async function ensureOptionalColumn(
   }
 }
 
-export async function ensureEmployeeSpotlightSchema(db: App.Platform['env']['DB']) {
+export async function ensureEmployeeSpotlightSchema(db: App.RuntimeEnv['DB']) {
   if (!dev) {
     employeeSpotlightSchemaEnsured = true;
     return;
@@ -58,7 +58,7 @@ export async function ensureEmployeeSpotlightSchema(db: App.Platform['env']['DB'
   employeeSpotlightSchemaEnsured = true;
 }
 
-export async function loadEmployeeSpotlight(db: App.Platform['env']['DB'], businessId?: string | null) {
+export async function loadEmployeeSpotlight(db: App.RuntimeEnv['DB'], businessId?: string | null) {
   await ensureEmployeeSpotlightSchema(db);
 
   const id = employeeSpotlightId(businessId);

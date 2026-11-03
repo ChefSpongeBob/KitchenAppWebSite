@@ -2,8 +2,8 @@ import { error, redirect, type RequestHandler } from '@sveltejs/kit';
 import {
 	ACTIVE_BUSINESS_COOKIE,
 	getActiveBusinessCookieOptions
-} from '$lib/server/activeBusiness';
-import { getUserBusinessContext } from '$lib/server/business';
+} from '#lib/server/activeBusiness.ts';
+import { getUserBusinessContext } from '#lib/server/business.ts';
 
 function getSafeRedirectTarget(request: Request) {
 	const fallback = '/app';

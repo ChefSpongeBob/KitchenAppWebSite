@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import AuthShell from '$lib/components/ui/AuthShell.svelte';
+	import AuthShell from '#lib/components/ui/AuthShell.svelte';
 
 	export let data: { valid?: boolean; email?: string | null };
 	export let form: { error?: string } | undefined;

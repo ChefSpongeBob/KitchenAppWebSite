@@ -1,8 +1,8 @@
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
-import { hasTable } from '$lib/server/dbSchema';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
-import { hasBusinessCapability } from '$lib/server/permissions';
+import { hasTable } from '#lib/server/dbSchema.ts';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
 
 type TodoRow = {
 	id: string;

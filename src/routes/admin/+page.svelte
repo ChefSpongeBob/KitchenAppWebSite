@@ -1,12 +1,12 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { applyAction, enhance } from '$app/forms';
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import GuidedSpotlightTour from '$lib/components/ui/GuidedSpotlightTour.svelte';
-  import { pushToast } from '$lib/client/toasts';
-  import type { SubmitFunction } from '@sveltejs/kit';
-  import type { AppFeatureAccess } from '$lib/features/appFeatures';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import GuidedSpotlightTour from '#lib/components/ui/GuidedSpotlightTour.svelte';
+  import { pushToast } from '#lib/client/toasts.ts';
+  import type { SubmitFunction } from '$app/forms';
+  import type { AppFeatureAccess } from '#lib/features/appFeatures.ts';
 
   type Todo = {
     id: string;
@@ -205,9 +205,8 @@
     current.searchParams.delete('guided');
     const query = current.searchParams.toString();
     await goto(`${current.pathname}${query ? `?${query}` : ''}${current.hash}`, {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true
+      replace: true,
+      reset: false
     });
   }
 

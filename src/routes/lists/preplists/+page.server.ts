@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { requireBusinessId } from '$lib/server/tenant';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 type SectionRow = {
   slug: string;

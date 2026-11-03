@@ -3,8 +3,8 @@ import {
 	buildFeatureAccess,
 	defaultAppFeatureModes,
 	type AppFeatureModes
-} from '$lib/features/appFeatures';
-import { loadUserBusinessMemberships } from '$lib/server/business';
+} from '#lib/features/appFeatures.ts';
+import { loadUserBusinessMemberships } from '#lib/server/business.ts';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const featureModes: AppFeatureModes = locals.featureModes ?? defaultAppFeatureModes;

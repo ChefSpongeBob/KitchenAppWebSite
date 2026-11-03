@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
-import { requireBusinessId } from '$lib/server/tenant';
-import { createVendor, deleteVendor, loadVendors, updateVendor } from '$lib/server/vendors';
+import { requireAdmin } from '#lib/server/admin.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
+import { createVendor, deleteVendor, loadVendors, updateVendor } from '#lib/server/vendors.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);

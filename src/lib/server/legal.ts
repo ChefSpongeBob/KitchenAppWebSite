@@ -1,6 +1,6 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 export const LIABILITY_AGREEMENT_KEY = 'terms_of_service';
 export const LIABILITY_AGREEMENT_VERSION = '2026-10-05';

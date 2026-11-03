@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PdfPageStack from '$lib/components/ui/PdfPageStack.svelte';
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PdfPageStack from '#lib/components/ui/PdfPageStack.svelte';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type Doc = { title: string; content: string | null; file_url: string | null; category: string };
   export let data: { doc: Doc | null };

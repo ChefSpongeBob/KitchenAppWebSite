@@ -1,10 +1,10 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
-import { requireAdmin } from '$lib/server/admin';
-import { ensureTenantSchema, requireBusinessId } from '$lib/server/tenant';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
+import { requireAdmin } from '#lib/server/admin.ts';
+import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 let vendorSchemaEnsured = false;
 

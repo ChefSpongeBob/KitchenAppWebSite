@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { formatScheduleTimeLabel } from '$lib/assets/schedule';
-  import type { DraftShift, EmployeeRow, ScheduleDepartment } from '$lib/types/schedule-builder';
+  import { formatScheduleTimeLabel } from '#lib/assets/schedule.ts';
+  import type { DraftShift, EmployeeRow, ScheduleDepartment } from '#lib/types/schedule-builder.ts';
 
   export let cell: EmployeeRow['cells'][number];
   export let userId = '';

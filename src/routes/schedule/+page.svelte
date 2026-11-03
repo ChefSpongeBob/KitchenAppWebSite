@@ -1,12 +1,12 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import ScheduleWeekColumns from '$lib/components/ui/ScheduleWeekColumns.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import ScheduleWeekColumns from '#lib/components/ui/ScheduleWeekColumns.svelte';
   import {
     formatScheduleWeekRange,
     isValidScheduleDepartment,
     type ScheduleDepartment
-  } from '$lib/assets/schedule';
+  } from '#lib/assets/schedule.ts';
 
   export let data: {
     weekStart: string;

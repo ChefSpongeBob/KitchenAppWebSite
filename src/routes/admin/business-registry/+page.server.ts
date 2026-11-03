@@ -1,11 +1,11 @@
 import { fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
-import { ensureBusinessSchema } from '$lib/server/business';
-import { normalizeFormText } from '$lib/server/inputSanitizer';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { getBusinessTrialAccess } from '$lib/server/trial';
-import { readBusinessEntitlements, readStoreBillingPlaceholder } from '$lib/server/storeBilling';
+import { requireAdmin } from '#lib/server/admin.ts';
+import { ensureBusinessSchema } from '#lib/server/business.ts';
+import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { getBusinessTrialAccess } from '#lib/server/trial.ts';
+import { readBusinessEntitlements, readStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
 
 type RegistryPayload = {
   legalName: string;

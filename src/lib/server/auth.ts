@@ -8,7 +8,7 @@ const PASSWORD_KEY_BYTES = 32;
 const PASSWORD_SALT_BYTES = 16;
 const LOCAL_DEV_PASSWORD_PEPPER = 'crimini-local-development-password-pepper';
 
-type PasswordEnv = Partial<Pick<App.Platform['env'], 'PASSWORD_PEPPER'>>;
+type PasswordEnv = Partial<Pick<App.RuntimeEnv, 'PASSWORD_PEPPER'>>;
 
 function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes)

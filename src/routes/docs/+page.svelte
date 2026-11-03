@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
-  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import EmptyState from '#lib/components/ui/EmptyState.svelte';
 
   type DocItem = {
     id: string;

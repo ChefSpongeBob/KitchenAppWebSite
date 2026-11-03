@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { normalizeStore, readStoreProducts } from '$lib/server/storeBilling';
-import { logOperationalError } from '$lib/server/observability';
-import { hasBusinessCapability } from '$lib/server/permissions';
+import { normalizeStore, readStoreProducts } from '#lib/server/storeBilling.ts';
+import { logOperationalError } from '#lib/server/observability.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
 
 export const GET: RequestHandler = async ({ locals, url, request }) => {
 	if (!locals.DB || !locals.userId || !locals.businessId) {

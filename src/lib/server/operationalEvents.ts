@@ -1,13 +1,13 @@
-import { dev } from '$app/environment';
-import { getAppBaseUrl, renderCriminiEmail, sendTransactionalEmail } from '$lib/server/email';
-import { logOperationalError } from '$lib/server/observability';
+import { dev } from '$app/env';
+import { getAppBaseUrl, renderCriminiEmail, sendTransactionalEmail } from '#lib/server/email.ts';
+import { logOperationalError } from '#lib/server/observability.ts';
 import {
   resolveBusinessCapabilities,
   type BusinessCapability,
   type BusinessCapabilityOverrides
-} from '$lib/server/permissions';
+} from '#lib/server/permissions.ts';
 
-type DB = App.Platform['env']['DB'];
+type DB = App.RuntimeEnv['DB'];
 
 export type OperationalEventSeverity = 'info' | 'warning' | 'critical';
 export type OperationalEventStatus = 'pending' | 'processing' | 'delivered' | 'failed' | 'skipped';
@@ -792,7 +792,7 @@ async function loadEventEmailRecipients(db: DB, event: OperationalEventRow) {
   return loadTargetRecipient(db, event);
 }
 
-function eventEmailAction(event: OperationalEventRow, env: Partial<App.Platform['env']> | undefined) {
+function eventEmailAction(event: OperationalEventRow, env: Partial<App.RuntimeEnv> | undefined) {
   const baseUrl = getAppBaseUrl('https://criminiops.com', env);
   if (event.event_type === 'onboarding.package.submitted' && event.target_user_id) {
     return {
@@ -830,7 +830,7 @@ function retryDelaySeconds(attemptNumber: number) {
 
 async function deliverEventByEmail(
   db: DB,
-  env: Partial<App.Platform['env']> | undefined,
+  env: Partial<App.RuntimeEnv> | undefined,
   event: OperationalEventRow
 ) {
   const recipients = await loadEventEmailRecipients(db, event);
@@ -885,7 +885,7 @@ async function deliverEventByEmail(
 }
 
 type ProcessOperationalEventsArgs = {
-  env?: Partial<App.Platform['env']>;
+  env?: Partial<App.RuntimeEnv>;
   request?: Request;
   limit?: number;
   maxAttempts?: number;

@@ -1,14 +1,14 @@
 import { fail } from '@sveltejs/kit';
-import { hashedAuditValue } from '$lib/server/security';
+import { hashedAuditValue } from '#lib/server/security.ts';
 
-import { hasBusinessCapability } from '$lib/server/permissions';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
 
-type D1 = App.Platform['env']['DB'];
+type D1 = App.RuntimeEnv['DB'];
 
 export const HR_SENSITIVE_PERMISSION = 'hr_sensitive_access';
 export const SENSITIVE_ENCRYPTION_ALGORITHM = 'AES-GCM-256';
 
-type SensitiveEnv = Partial<App.Platform['env']>;
+type SensitiveEnv = Partial<App.RuntimeEnv>;
 
 export type SensitivePayloadContext = {
   businessId: string;
@@ -178,7 +178,7 @@ export async function canAccessEmployeeSensitiveData(
   actorBusinessRole: string | null | undefined,
   targetUserId?: string | null,
   actorPermissionTemplate?: string | null,
-  actorCapabilities?: readonly import('$lib/server/permissions').BusinessCapability[] | null
+  actorCapabilities?: readonly import('#lib/server/permissions.ts').BusinessCapability[] | null
 ) {
   if (!actorUserId || !businessId) return false;
   if (targetUserId && actorUserId === targetUserId) return true;

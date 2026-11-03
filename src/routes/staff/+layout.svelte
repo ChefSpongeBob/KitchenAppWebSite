@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { page } from '$app/stores';
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import type { LayoutData } from './$types';
   export let data: LayoutData;
 </script>

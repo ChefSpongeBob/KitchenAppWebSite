@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import Layout from '$lib/components/ui/Layout.svelte';
-	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import Layout from '#lib/components/ui/Layout.svelte';
+	import PageHeader from '#lib/components/ui/PageHeader.svelte';
 
 	export let data: {
 		entries: Array<{

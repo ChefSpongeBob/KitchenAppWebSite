@@ -1,12 +1,14 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { defaultAppFeatureModes } from '$lib/features/appFeatures';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
+  import { defaultAppFeatureModes } from '#lib/features/appFeatures.ts';
   import {
     canViewManagerNavigationItem,
     isManagerNavigationItemActive,
     managerNavigationGroups
-  } from '$lib/navigation/managerNavigation';
+  } from '#lib/navigation/managerNavigation.ts';
 
   $: currentPath = $page.url.pathname;
   $: currentSearch = $page.url.search;

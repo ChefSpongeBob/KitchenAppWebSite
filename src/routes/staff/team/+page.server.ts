@@ -1,8 +1,8 @@
 import { fail, isHttpError } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { loadStaffStepUp, requirePlatformStaff, requireStaffStepUp, staffPageNumber, type PlatformStaffRole } from '$lib/server/platformStaff';
-import { changeStaffMembership } from '$lib/server/platformStaffAdministration';
-import { checkRateLimit, rateLimitFailure } from '$lib/server/security';
+import { loadStaffStepUp, requirePlatformStaff, requireStaffStepUp, staffPageNumber, type PlatformStaffRole } from '#lib/server/platformStaff.ts';
+import { changeStaffMembership } from '#lib/server/platformStaffAdministration.ts';
+import { checkRateLimit, rateLimitFailure } from '#lib/server/security.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requirePlatformStaff(locals, ['owner']);

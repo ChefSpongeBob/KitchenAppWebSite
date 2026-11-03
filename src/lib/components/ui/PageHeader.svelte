@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { page } from '$app/stores';
-  import AdminEditorMenu from '$lib/components/ui/AdminEditorMenu.svelte';
-  import { isManagerWorkspacePath } from '$lib/navigation/managerNavigation';
+  import { page as pageState } from '$app/state';
+  import { toStore } from 'svelte/store';
+  const page = toStore(() => ({ ...pageState }));
+  import AdminEditorMenu from '#lib/components/ui/AdminEditorMenu.svelte';
+  import { isManagerWorkspacePath } from '#lib/navigation/managerNavigation.ts';
 
   export let title: string;
   export let subtitle: string | null = null;

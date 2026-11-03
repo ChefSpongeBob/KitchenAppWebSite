@@ -1,6 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
-import { requireAdmin } from '$lib/server/admin';
-import { requireBusinessId } from '$lib/server/tenant';
+import { requireAdmin } from '#lib/server/admin.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 import {
   addDays,
   applyScheduleTemplateToWeek,
@@ -40,7 +40,7 @@ import {
   saveScheduleTemplateFromWeek,
   saveScheduleAutofillPreference,
   saveScheduleWeekDraft
-} from '$lib/server/schedules';
+} from '#lib/server/schedules.ts';
 
 export const load: PageServerLoad = async ({ locals, url, depends }) => {
   requireAdmin(locals.userRole);

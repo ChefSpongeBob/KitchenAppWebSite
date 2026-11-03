@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { isValidScheduleDepartment } from '$lib/assets/schedule';
+import { isValidScheduleDepartment } from '#lib/assets/schedule.ts';
 import {
   addDays,
   cancelUserScheduleTimeOffRequest,
@@ -23,9 +23,9 @@ import {
   saveUserScheduleAvailability,
   withdrawScheduleOpenShiftRequest,
   withdrawScheduleShiftRequest
-} from '$lib/server/schedules';
-import { hasBusinessCapability } from '$lib/server/permissions';
-import { requireBusinessId } from '$lib/server/tenant';
+} from '#lib/server/schedules.ts';
+import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 import type { Actions } from './$types';
 
 function canManageSchedule(locals: App.Locals) {

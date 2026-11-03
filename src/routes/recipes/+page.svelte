@@ -1,7 +1,7 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import { goto } from '$app/navigation';
-  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import EmptyState from '#lib/components/ui/EmptyState.svelte';
 
   type RecipeIndexItem = {
     id: number;
@@ -32,9 +32,8 @@
   async function syncSearch(value: string) {
     const next = value.trim();
     await goto(next ? `/recipes?q=${encodeURIComponent(next)}` : '/recipes', {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true
+      replace: true,
+      reset: false
     });
   }
 </script>

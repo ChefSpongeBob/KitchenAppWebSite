@@ -1,15 +1,15 @@
 <script lang="ts">
-  import Layout from '$lib/components/ui/Layout.svelte';
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import Layout from '#lib/components/ui/Layout.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import ReportDataTable, {
     type ReportTableColumn,
     type ReportTableRow
-  } from '$lib/components/ui/ReportDataTable.svelte';
-  import ReportDateFilters from '$lib/components/ui/ReportDateFilters.svelte';
-  import ReportExportList, { type ReportExportEntry } from '$lib/components/ui/ReportExportList.svelte';
-  import ReportSummaryStrip, { type ReportMetric } from '$lib/components/ui/ReportSummaryStrip.svelte';
-  import ReportToolbar, { type ReportToolbarLink } from '$lib/components/ui/ReportToolbar.svelte';
-  import { nativeServerUrl } from '$lib/client/nativeServerUrl';
+  } from '#lib/components/ui/ReportDataTable.svelte';
+  import ReportDateFilters from '#lib/components/ui/ReportDateFilters.svelte';
+  import ReportExportList, { type ReportExportEntry } from '#lib/components/ui/ReportExportList.svelte';
+  import ReportSummaryStrip, { type ReportMetric } from '#lib/components/ui/ReportSummaryStrip.svelte';
+  import ReportToolbar, { type ReportToolbarLink } from '#lib/components/ui/ReportToolbar.svelte';
+  import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
   type ListHistoryRow = {

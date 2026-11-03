@@ -61,7 +61,7 @@ export function createTestD1(source) {
 
 export function loadServerModules(overrides = {}) {
   const cache = new Map();
-  const common = { '$app/environment': { dev: false, building: false, browser: false }, '@sveltejs/kit': kit, ...overrides };
+  const common = { '$app/env': { dev: false, building: false, browser: false }, '@sveltejs/kit': kit, ...overrides };
   function load(file) {
     const path = resolve(file);
     if (cache.has(path)) return cache.get(path);
@@ -72,8 +72,8 @@ export function loadServerModules(overrides = {}) {
     }).outputText;
     new Function('require', 'exports', source)(name => {
       if (name in common) return common[name];
-      if (name.startsWith('$lib/') || name.startsWith('.')) {
-        const base = name.startsWith('$lib/') ? resolve('src/lib', name.slice(5)) : resolve(dirname(path), name);
+      if (name.startsWith('#lib/') || name.startsWith('.')) {
+        const base = name.startsWith('#lib/') ? resolve('src/lib', name.slice(5)) : resolve(dirname(path), name);
         const target = [base, base + '.ts', base + '.js', base + '/index.ts'].find(candidate => existsSync(candidate));
         if (!target) throw Error(`Missing module ${name} from ${file}`);
         return load(target);

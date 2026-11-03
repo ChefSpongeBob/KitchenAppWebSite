@@ -1,25 +1,25 @@
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import {
 	cancelTrialAndPurgeBusiness,
 	convertBusinessToPaid,
 	ensureTrialSchema,
 	getBusinessTrialAccess,
 	getRequestIpAddress
-} from '$lib/server/trial';
+} from '#lib/server/trial.ts';
 import {
 	readBusinessEntitlements,
 	readStoreProducts,
 	readStoreBillingPlaceholder,
 	upsertStoreBillingPlaceholder
-} from '$lib/server/storeBilling';
+} from '#lib/server/storeBilling.ts';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName
-} from '$lib/server/authCookies';
-import { logOperationalError, logOperationalEvent } from '$lib/server/observability';
-import { hasBusinessCapability, type BusinessCapability } from '$lib/server/permissions';
-import { recordOperationalEventBestEffort } from '$lib/server/operationalEvents';
+} from '#lib/server/authCookies.ts';
+import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
+import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
+import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import type { PageServerLoad } from './$types';
 
 const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
@@ -50,7 +50,7 @@ function canManageBilling(
 	return hasBusinessCapability(role, permissionTemplate, 'manage_billing', capabilities);
 }
 
-export const load: PageServerLoad = async ({ locals, platform, url }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.userId || !locals.DB || !locals.businessId) {
 		throw redirect(303, '/login');
 	}
@@ -112,8 +112,8 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 		)?.product_id ??
 		null;
 	const googleManageParams = new URLSearchParams();
-	if (locals.businessId && platform?.env?.GOOGLE_PLAY_PACKAGE_NAME) {
-		googleManageParams.set('package', platform.env.GOOGLE_PLAY_PACKAGE_NAME);
+	if (locals.businessId && locals.env.GOOGLE_PLAY_PACKAGE_NAME) {
+		googleManageParams.set('package', locals.env.GOOGLE_PLAY_PACKAGE_NAME);
 	}
 	if (googleProductId) googleManageParams.set('sku', googleProductId);
 	const googleManageQuery = googleManageParams.toString();

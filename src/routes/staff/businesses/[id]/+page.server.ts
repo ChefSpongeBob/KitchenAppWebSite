@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requirePlatformStaff } from '$lib/server/platformStaff';
+import { requirePlatformStaff } from '#lib/server/platformStaff.ts';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
   await requirePlatformStaff(locals);

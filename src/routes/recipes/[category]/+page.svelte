@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import { goto } from '$app/navigation';
 
   type Recipe = {
@@ -89,9 +89,8 @@
   async function syncSearch(value: string) {
     const next = value.trim();
     await goto(next ? `/recipes/${category}?q=${encodeURIComponent(next)}` : `/recipes/${category}`, {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true
+      replace: true,
+      reset: false
     });
   }
 </script>

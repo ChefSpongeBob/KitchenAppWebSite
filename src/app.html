@@ -15,6 +15,21 @@
 				const apiOrigin = 'https://criminiops.com';
 				const localOrigin = window.location.origin;
 				const nativeFetch = window.fetch.bind(window);
+				const backendFetch = async (input, init) => {
+					const response = await nativeFetch(input, init);
+					if (!response.headers.has('x-sveltekit-version')) return response;
+
+					// A web deployment cannot replace JavaScript packaged in the native app.
+					const headers = new Headers(response.headers);
+					headers.delete('x-sveltekit-version');
+					const packagedResponse = new Response(response.body, {
+						status: response.status, statusText: response.statusText, headers
+					});
+					for (const property of ['url', 'redirected', 'type']) {
+						Object.defineProperty(packagedResponse, property, { value: response[property] });
+					}
+					return packagedResponse;
+				};
 				window.__CRIMINI_NATIVE__ = true;
 
 				if (window.location.pathname === '/') {
@@ -38,12 +53,12 @@
 						const remoteRequest = new Request(remoteUrl, input);
 						const headers = new Headers(init?.headers || remoteRequest.headers);
 						headers.set('X-Crimini-Native', '1');
-						return nativeFetch(new Request(remoteRequest, { ...init, headers, credentials: 'include' }));
+						return backendFetch(new Request(remoteRequest, { ...init, headers, credentials: 'include' }));
 					}
 
 					const headers = new Headers(init?.headers);
 					headers.set('X-Crimini-Native', '1');
-					return nativeFetch(remoteUrl, { ...init, headers, credentials: 'include' });
+					return backendFetch(remoteUrl, { ...init, headers, credentials: 'include' });
 				};
 			})();
 		</script>

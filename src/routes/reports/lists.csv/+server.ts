@@ -1,8 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { hasReportsAccess } from '$lib/server/permissions';
-import { csvEscape, loadListHistoryReport } from '$lib/server/history';
-import { requireBusinessId } from '$lib/server/tenant';
+import { hasReportsAccess } from '#lib/server/permissions.ts';
+import { csvEscape, loadListHistoryReport } from '#lib/server/history.ts';
+import { requireBusinessId } from '#lib/server/tenant.ts';
 
 type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
 

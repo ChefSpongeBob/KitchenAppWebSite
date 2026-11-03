@@ -5,9 +5,9 @@ import {
   isValidAppFeatureMode,
   type AppFeatureKey,
   type AppFeatureMode
-} from '$lib/features/appFeatures';
-import { requireAdmin } from '$lib/server/admin';
-import { loadAppFeatureModes, saveAppFeatureModes } from '$lib/server/appFeatures';
+} from '#lib/features/appFeatures.ts';
+import { requireAdmin } from '#lib/server/admin.ts';
+import { loadAppFeatureModes, saveAppFeatureModes } from '#lib/server/appFeatures.ts';
 
 export const load: PageServerLoad = async ({ locals }) => {
   requireAdmin(locals.userRole);
