@@ -20,6 +20,7 @@ export async function loadStaffStepUp(db: DB, userId: string, sessionId: string,
     JOIN sessions s ON s.id = p.session_id AND s.user_id = p.user_id
     JOIN users u ON u.id = p.user_id
     WHERE p.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
+      AND p.email_verified_at = p.verified_at
       AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
     LIMIT 1`).bind(userId, sessionId, now, now - maxAge, now)
     .first<{ verified_at: number }>();
@@ -28,7 +29,7 @@ export async function loadStaffStepUp(db: DB, userId: string, sessionId: string,
 export async function requireStaffStepUp(locals: App.Locals, roles?: PlatformStaffRole[]) {
   const staff = await requirePlatformStaff(locals, roles);
   if (!locals.sessionId || !await loadStaffStepUp(locals.DB, staff.userId, locals.sessionId)) {
-    error(403, 'Confirm your password in Security before making changes.');
+    error(403, 'Verify your email in Security before making changes.');
   }
   return staff;
 }
@@ -74,6 +75,7 @@ export const STAFF_CHANGE_AUTHORITY_SQL = `EXISTS (
   JOIN platform_staff_step_up p ON p.user_id = m.user_id AND p.membership_revision = m.revision
   JOIN sessions s ON s.id = p.session_id AND s.user_id = p.user_id
   WHERE m.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
+    AND p.email_verified_at = p.verified_at
     AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
     AND m.staff_role IN (?, ?)
 )`;

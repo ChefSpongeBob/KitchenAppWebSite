@@ -59,7 +59,11 @@ assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_step_up').get
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_audit').get().n, auditBeforeRemoval);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_members').get().n, 3);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM sessions').get().n, 2);
-sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('owner-session','owner',now);
+sqlite.exec(readFileSync('migrations/0112_staff_email_verification.sql', 'utf8'));
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_step_up').get().n, 0);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM platform_staff_audit').get().n, auditBeforeRemoval);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM sessions').get().n, 2);
+sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('owner-session','owner',now,now);
 assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
 console.log('PASS cleanup removes old credentials/challenges, requires fresh confirmation, and preserves identities, sessions, memberships, and audit');
 
@@ -129,7 +133,7 @@ assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM iot_device_reservations W
 assert.throws(() => sqlite.exec("UPDATE platform_staff_members SET is_active=0 WHERE user_id='owner'"), /active platform owner/);
 sqlite.exec("DELETE FROM platform_staff_step_up WHERE user_id='owner'");
 await assert.rejects(staff.reserveGateway(db, owner, 'gateway-b', 'b', 'Expired actor', 'owner-session'), { status: 409 });
-sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('owner-session','owner',now);
+sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('owner-session','owner',now,now);
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM platform_staff_audit WHERE action='gateway_reserved'").get().n, 2);
 console.log('PASS assignments are audited atomically, roll back on audit failure, and reject stale authority');
 
@@ -319,16 +323,16 @@ assert.equal(staff.staffReturnPath('//attacker.invalid/staff'), '/staff');
 assert.equal(staff.staffReturnPath('/staff/security'), '/staff');
 assert.equal(staff.staffReturnPath('/staff/equipment?business=a'), '/staff/equipment?business=a');
 await assert.rejects(staff.requirePlatformStaff({ DB: db, userId: 'owner', sessionId: 'manager-session' }), { status: 403 });
-sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?').run(now - 901);
+sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=?').run(now - 901,now - 901);
 await staff.requirePlatformStaff(ownerLocals);
 await assert.rejects(staff.requireStaffStepUp(ownerLocals), { status: 403 });
-sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?').run(now - 8 * 3600);
+sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=?').run(now - 8 * 3600,now - 8 * 3600);
 await assert.rejects(hooks.handle({ event: hookEvent('/staff/equipment'), resolve: async () => { throw Error('Unverified'); } }),
   { location: '/staff/security?next=%2Fstaff%2Fequipment' });
 assert.equal((await hooks.handle({ event: hookEvent('/staff/security'), resolve: async () => new Response('Confirm') })).status, 200);
-sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?').run(now + 100);
+sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=?').run(now + 100,now + 100);
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session', now), null);
-sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?').run(now);
+sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=?').run(now,now);
 sqlite.exec("UPDATE sessions SET revoked_at=1 WHERE id='owner-session'");
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null);
 sqlite.exec("UPDATE sessions SET revoked_at=NULL WHERE id='owner-session'");
@@ -357,7 +361,7 @@ assert.equal(sqlite.prepare("SELECT staff_role FROM platform_staff_members WHERE
 assert.equal(sqlite.prepare("SELECT role FROM users WHERE id='manager'").get().role, 'admin', 'No tenant/global role mutation');
 await assert.rejects(administration.changeStaffMembership(db, owner, 'owner-session', addStaff), { status: 409 });
 await assert.rejects(administration.changeStaffMembership(db, owner, 'manager-session', { ...addStaff, userId: 'manager', revision: 1 }), { status: 409 });
-sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?)').run('manager-session', 'manager', now);
+sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('manager-session', 'manager', now, now);
 await administration.changeStaffMembership(db, owner, 'owner-session', { ...addStaff, userId: 'manager', revision: 1, active: 0 });
 assert.equal(await staff.loadStaffStepUp(db, 'manager', 'manager-session'), null);
 assert.equal(sqlite.prepare("SELECT revoked_at FROM sessions WHERE id='manager-session'").get().revoked_at, null);
@@ -412,7 +416,7 @@ sqlite.exec(`INSERT INTO business_store_entitlements
     ('subscription-b','b','manager','app_store','product-b','plan_large','active','OTHER TENANT TOKEN','OTHER TENANT PAYLOAD',1,1);
   INSERT INTO sessions VALUES('support-session','support',NULL,${now + 3600},NULL,'hashed-support-token',${now}),
     ('equipment-session','equipment',NULL,${now + 3600},NULL,'hashed-equipment-token',${now});
-  INSERT INTO platform_staff_step_up SELECT s.id,s.user_id,m.revision,${now}
+  INSERT INTO platform_staff_step_up SELECT s.id,s.user_id,m.revision,${now},${now}
     FROM sessions s JOIN platform_staff_members m ON m.user_id=s.user_id WHERE s.user_id IN ('support','equipment');`);
 const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff });
 const activityPage = load('src/routes/staff/activity/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
@@ -474,55 +478,151 @@ const passwordEnv = { PASSWORD_PEPPER: 'test-only-platform-confirmation-pepper' 
 sqlite.prepare('UPDATE users SET password_hash=? WHERE id=?').run(await auth.hashPassword('Staff-test-password!', passwordEnv), 'owner');
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null, 'Password changes invalidate staff verification');
 let rateAllowed = true;
+let emailAccepted = true;
+let emailConfigured = true;
+const messages = [];
+const emailModule = {
+  isEmailConfigured: () => emailConfigured,
+  renderCriminiEmail: ({ body }) => body,
+  sendTransactionalEmail: async message => { messages.push(message); return { sent: emailAccepted }; }
+};
+const staffEmailModule = load('src/lib/server/platformStaffEmail.ts', {
+  '@sveltejs/kit': kit, '#lib/server/auth.ts': auth, '#lib/server/platformStaff.ts': staff,
+  '#lib/server/email.ts': emailModule
+});
 const securityPage = load('src/routes/staff/security/+page.server.ts', {
-  '@sveltejs/kit': { ...kit, redirect, fail: (status, data) => ({ status, data }) },
-  '#lib/server/auth.ts': auth, '#lib/server/platformStaff.ts': staff,
+  '@sveltejs/kit': { ...actionKit, redirect, isRedirect: error => Boolean(error.location) },
+  '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffEmail.ts': staffEmailModule,
   '#lib/server/authCookies.ts': { getSessionCookieName: () => 'session', getSessionCookieOptions: () => ({ path: '/', httpOnly: true }) },
-  '#lib/server/security.ts': { checkRateLimit: async opts => ({ allowed: rateAllowed }), rateLimitFailure: error => ({ status: 429, error }) }
+  '#lib/server/security.ts': { checkRateLimit: async () => ({ allowed: rateAllowed }), rateLimitFailure: error => ({ status: 429, error }) }
 });
 let rotatedToken = null;
-function securityEvent(password) {
-  const form = new FormData(); form.set('password', password);
-  return { locals: { ...ownerLocals, env: passwordEnv }, url: new URL('https://criminiops.com/staff/security?next=/staff/team'),
+function securityEvent(fields, locals = ownerLocals) {
+  const form = new FormData();
+  for (const [key,value] of Object.entries(fields)) form.set(key,value);
+  return { locals: { ...locals, env: passwordEnv }, url: new URL('https://criminiops.com/staff/security?next=/staff/team'),
     request: new Request('https://criminiops.com/staff/security', { method: 'POST', body: form }),
-    cookies: { set(name, token, options) { assert.equal(name, 'session'); assert.equal(options.httpOnly, true); rotatedToken = token; } } };
+    cookies: { set(name, token, options) {
+      assert.equal(name, 'session'); assert.equal(options.httpOnly, true);
+      assert.ok(options.maxAge <= 3600, 'Staff verification never extends the primary session'); rotatedToken = token;
+    } } };
 }
-assert.equal((await securityPage.actions.default(securityEvent('wrong'))).status, 400);
-assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null);
+const action = fields => securityPage.actions.default(securityEvent(fields));
+const sendFields = { intent: 'send', password: 'Staff-test-password!' };
+const challengeRow = () => sqlite.prepare("SELECT * FROM platform_staff_email_challenges WHERE session_id='owner-session'").get();
+function mailedCode() {
+  const value = messages.at(-1).text.match(/code is ([0-9]{6})/)[1];
+  assert.equal(messages.at(-1).sensitive, true);
+  assert.equal(challengeRow().code_hash.includes(value), false);
+  return value;
+}
+async function issue(fields = sendFields) {
+  sqlite.exec('UPDATE platform_staff_email_challenges SET created_at=created_at-61');
+  assert.equal((await action(fields)).sent, true);
+  return { intent: 'verify', challenge: challengeRow().challenge_id, code: mailedCode() };
+}
+const beforePasswordOnly = sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash;
+assert.equal((await action({ ...sendFields, password: 'wrong' })).status, 400);
+assert.equal(messages.length,0);
 rateAllowed = false;
-assert.equal((await securityPage.actions.default(securityEvent('Staff-test-password!'))).status, 429);
+assert.equal((await action(sendFields)).status, 429);
 rateAllowed = true;
+emailConfigured = false;
+assert.equal((await action(sendFields)).status, 503);
+emailConfigured = true;
+emailAccepted = false;
+assert.equal((await action(sendFields)).status, 503);
+assert.equal(challengeRow(),undefined);
+assert.equal(await staff.loadStaffStepUp(db,'owner','owner-session'),null);
+emailAccepted = true;
+const firstCode = await issue();
+assert.equal(messages.at(-1).to,'owner@example.invalid');
+assert.equal(rotatedToken,null);
+assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash,beforePasswordOnly);
+assert.equal(await staff.loadStaffStepUp(db,'owner','owner-session'),null,'Password alone cannot unlock staff tools');
+assert.equal((await action(sendFields)).status,429,'Account-wide resend cooldown is atomic');
+const pendingPage = await securityPage.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/security') });
+assert.equal(pendingPage.pending.id,firstCode.challenge);
+for (const secret of [firstCode.code,challengeRow().code_hash,beforePasswordOnly,'owner@example.invalid']) {
+  assert.equal(JSON.stringify(pendingPage).includes(secret),false);
+}
+const wrongCode = { ...firstCode, code: String((Number(firstCode.code)+1)%1_000_000).padStart(6,'0') };
+assert.equal((await action(wrongCode)).status,400);
+assert.equal(challengeRow().attempts,1);
 sqlite.exec("CREATE TRIGGER test_audit_failure BEFORE INSERT ON platform_staff_audit BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;");
-const confirmationFailure = await securityPage.actions.default(securityEvent('Staff-test-password!'));
-assert.equal(confirmationFailure.status, 503);
-assert.equal(JSON.stringify(confirmationFailure).includes('test audit failure'), false);
-assert.equal(rotatedToken, null);
-assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash, 'hashed-owner-token');
-assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null);
+assert.equal((await action(firstCode)).status,503);
+assert.equal(challengeRow().attempts,1,'Audit failure rolls back attempts and token/proof changes');
+assert.equal(rotatedToken,null);
+assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash,beforePasswordOnly);
 sqlite.exec('DROP TRIGGER test_audit_failure');
-// The password-only deployment must work before the obsolete DB column is removed.
-sqlite.exec('ALTER TABLE platform_staff_step_up ADD COLUMN passkey_verified_at INTEGER');
-await assert.rejects(securityPage.actions.default(securityEvent('Staff-test-password!')), { location: '/staff/team' });
+await assert.rejects(action(firstCode),{ location:'/staff/team' });
 assert.ok(rotatedToken);
-assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash, await auth.hashSessionToken(rotatedToken));
-assert.ok(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), 'Approved password confirmation unlocks only explicit staff membership');
-assert.ok(await staff.requireStaffStepUp(ownerLocals));
-sqlite.exec('ALTER TABLE platform_staff_step_up DROP COLUMN passkey_verified_at');
-assert.ok(await staff.requireStaffStepUp(ownerLocals));
-assert.equal(JSON.stringify(sqlite.prepare('SELECT * FROM platform_staff_audit').all()).includes('Staff-test-password!'), false);
-console.log('PASS real password verification, rate denial, session-token rotation, audit rollback, and secret-free responses');
-const confirmedPage = await securityPage.load({ locals: ownerLocals, url: new URL('https://criminiops.com/staff/security?next=/staff/team') });
-assert.equal(confirmedPage.verified, true);
-assert.equal(confirmedPage.next, '/staff/team');
-assert.deepEqual(Object.keys(confirmedPage).sort(), ['next','verified']);
-assert.equal(staff.isStaffSecurityPath('/staff/security/passkeys'), false);
+assert.equal(sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash,await auth.hashSessionToken(rotatedToken));
+assert.ok(await staff.loadStaffStepUp(db,'owner','owner-session'));
+assert.equal(challengeRow(),undefined);
+assert.equal((await action(firstCode)).status,400,'Consumed code cannot be replayed');
+const confirmedPage = await securityPage.load({ locals:ownerLocals,url:new URL('https://criminiops.com/staff/security?next=/staff/team') });
+assert.equal(confirmedPage.verified,true);
+assert.equal(confirmedPage.pending,null);
+console.log('PASS password + single-use emailed code, masked responses, provider failure, cooldown, rate limits, rotation and audit rollback');
+
+const attemptCode = await issue();
+const badAttempt = { ...attemptCode,code:String((Number(attemptCode.code)+1)%1_000_000).padStart(6,'0') };
+for (let i=0;i<5;i++) assert.equal((await action(badAttempt)).status,400);
+assert.equal(challengeRow().attempts,5);
+assert.equal((await action(attemptCode)).status,400,'Five failed attempts exhaust even the correct code');
+const replacement = await issue();
+assert.equal((await action(attemptCode)).status,400,'Resend invalidates the earlier challenge');
+sqlite.exec('UPDATE platform_staff_email_challenges SET expires_at=1');
+assert.equal((await action(replacement)).status,400,'Expired codes are denied');
+const crossSessionCode = await issue();
+const foreign = await securityPage.actions.default(securityEvent(crossSessionCode,{ DB:db,userId:'support',sessionId:'support-session' }));
+assert.equal(foreign.status,400);
+sqlite.exec("UPDATE sessions SET session_token_hash='another-login' WHERE id='owner-session'");
+assert.equal((await action(crossSessionCode)).status,400,'Rotated primary session invalidates an outstanding code');
+const changingPasswordCode = await issue();
+sqlite.exec("UPDATE users SET password_hash='changed' WHERE id='owner'");
+assert.equal(challengeRow(),undefined);
+assert.equal((await action(changingPasswordCode)).status,400);
+sqlite.prepare('UPDATE users SET password_hash=? WHERE id=?').run(await auth.hashPassword('Staff-test-password!',passwordEnv),'owner');
+assert.equal((await action({ ...sendFields,intent:'change_email',email:'new-owner@example.invalid' })).status,403,'No address change without the current email factor');
+await assert.rejects(action(await issue()),{ location:'/staff/team' });
+console.log('PASS expiry, five-attempt exhaustion, resend, cross-session replay, password changes and unverified address-change denial');
+
+sqlite.exec(`INSERT INTO sessions VALUES('owner-other-session','owner',NULL,${now+3600},NULL,'other-session-token',${now});
+  INSERT INTO platform_staff_step_up SELECT 'owner-other-session',user_id,revision,${now},${now} FROM platform_staff_members WHERE user_id='owner';`);
+const originalEmail = sqlite.prepare("SELECT email FROM users WHERE id='owner'").get().email;
+const changeCode = await issue({ ...sendFields,intent:'change_email',email:'new-owner@example.invalid' });
+assert.equal(messages.at(-1).to,'new-owner@example.invalid');
+assert.equal(sqlite.prepare("SELECT otp_email FROM platform_staff_members WHERE user_id='owner'").get().otp_email,null,'No address change until the new mailbox is verified');
+sqlite.exec("CREATE TRIGGER test_audit_failure BEFORE INSERT ON platform_staff_audit BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;");
+assert.equal((await action(changeCode)).status,503);
+assert.equal(sqlite.prepare("SELECT otp_email FROM platform_staff_members WHERE user_id='owner'").get().otp_email,null);
+assert.ok(await staff.loadStaffStepUp(db,'owner','owner-other-session'));
+sqlite.exec('DROP TRIGGER test_audit_failure');
+await assert.rejects(action(changeCode),{ location:'/staff/security?updated=1' });
+assert.equal(sqlite.prepare("SELECT otp_email FROM platform_staff_members WHERE user_id='owner'").get().otp_email,'new-owner@example.invalid');
+assert.equal(sqlite.prepare("SELECT email FROM users WHERE id='owner'").get().email,originalEmail);
+assert.equal(await staff.loadStaffStepUp(db,'owner','owner-other-session'),null,'Changing the factor revokes other staff confirmations');
+assert.ok(await staff.loadStaffStepUp(db,'owner','owner-session'));
+assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM platform_staff_email_challenges WHERE user_id='owner'").get().n,0);
+const afterChange = await issue();
+assert.equal(messages.at(-1).to,'new-owner@example.invalid');
+sqlite.exec("UPDATE platform_staff_members SET otp_email='operator-approved@example.invalid' WHERE user_id='owner'");
+assert.equal((await action(afterChange)).status,400);
+assert.equal(await staff.loadStaffStepUp(db,'owner','owner-session'),null);
+assert.ok(sqlite.prepare("SELECT id FROM platform_staff_audit WHERE action='staff_verification_email_updated' AND actor_user_id IS NULL AND target_user_id='owner'").get());
+assert.equal(sqlite.prepare("SELECT role FROM users WHERE id='owner'").get().role,'user');
+assert.equal(sqlite.prepare("SELECT email FROM users WHERE id='owner'").get().email,originalEmail);
+await assert.rejects(action(await issue()),{ location:'/staff/team' });
+for (const message of messages) assert.equal(JSON.stringify(sqlite.prepare('SELECT * FROM platform_staff_audit').all()).includes(message.text),false);
 const securityUi = readFileSync('src/routes/staff/security/+page.svelte','utf8');
-assert.match(securityUi, /<form method="POST"/);
-assert.equal(/webauthn|passkey|navigator\.credentials/i.test(securityUi), false);
-assert.equal(existsSync('src/routes/staff/security/passkeys/+server.ts'), false);
-const packageManifest = JSON.parse(readFileSync('package.json','utf8'));
-assert.equal(Object.keys(packageManifest.dependencies).some(name => name.startsWith('@simplewebauthn/')), false);
-console.log('PASS staff confirmation uses an ordinary password form with no browser credential or replacement factor');
+assert.match(securityUi,/<form method="POST"/);
+assert.ok(securityUi.includes('autocomplete="one-time-code"'));
+assert.equal(/webauthn|passkey|navigator\.credentials/i.test(securityUi),false);
+assert.equal(existsSync('src/routes/staff/security/passkeys/+server.ts'),false);
+assert.equal(Object.keys(JSON.parse(readFileSync('package.json','utf8')).dependencies).some(name=>name.startsWith('@simplewebauthn/')),false);
+console.log('PASS verified in-app email changes and audited operator updates invalidate other staff access, preserve restaurant identity, and use ordinary browser forms');
 
 sqlite.exec(`DELETE FROM business_users WHERE business_id IN ('a','b') AND user_id IN ('owner','manager');
   INSERT INTO businesses(id,name,status) VALUES('cleanup','Cleanup tenant','active');

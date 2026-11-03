@@ -106,7 +106,8 @@ export async function sendTransactionalEmail({
   html,
   text,
   replyTo,
-  idempotencyKey
+  idempotencyKey,
+  sensitive = false
 }: {
   env?: EmailEnv | null;
   to: string | string[];
@@ -115,6 +116,7 @@ export async function sendTransactionalEmail({
   text: string;
   replyTo?: string;
   idempotencyKey?: string;
+  sensitive?: boolean;
 }): Promise<EmailSendResult> {
   if (!isEmailConfigured(env)) {
     return {
@@ -152,7 +154,7 @@ export async function sendTransactionalEmail({
 
     if (!response.ok) {
       const body = await response.text();
-      const errorMessage = extractErrorMessage(body);
+      const errorMessage = sensitive ? '' : extractErrorMessage(body);
       console.error('Resend email send failed:', response.status, errorMessage || 'Provider rejected the request.');
       return {
         sent: false,
@@ -171,7 +173,7 @@ export async function sendTransactionalEmail({
       id: data.id
     };
   } catch (error) {
-    console.error('Resend request failed:', error);
+    console.error('Resend request failed:', sensitive ? 'Sensitive email request failed.' : error);
     return {
       sent: false,
       reason: 'Email provider request failed.'

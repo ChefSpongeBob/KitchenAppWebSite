@@ -22,6 +22,7 @@ export function createTestD1(source) {
     sqlite.exec('BEGIN');
     try {
       sqlite.exec(readFileSync('migrations/0111_tenant_content_slug_uniqueness.sql', 'utf8'));
+      sqlite.exec(readFileSync('migrations/0112_staff_email_verification.sql', 'utf8'));
       sqlite.exec('COMMIT');
     } catch (error) { sqlite.exec('ROLLBACK'); throw error; }
   }

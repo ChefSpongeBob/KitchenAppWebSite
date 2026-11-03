@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   export let data: PageData;
-  const labels: Record<string, string> = { gateway_reserved: 'Gateway Reserved', gateway_reservation_released: 'Reservation Released', platform_owner_bootstrapped: 'Platform Owner Enabled', staff_membership_added: 'Staff Added', staff_access_revoked: 'Staff Access Revoked', staff_access_updated: 'Staff Access Updated', staff_password_confirmed: 'Password Confirmed' };
+  const labels: Record<string, string> = { gateway_reserved: 'Gateway Reserved', gateway_reservation_released: 'Reservation Released', platform_owner_bootstrapped: 'Platform Owner Enabled', staff_membership_added: 'Staff Added', staff_access_revoked: 'Staff Access Revoked', staff_access_updated: 'Staff Access Updated', staff_password_confirmed: 'Password Confirmed', staff_email_verified: 'Email Verified', staff_verification_email_changed: 'New Email Verified', staff_verification_email_updated: 'Verification Email Updated' };
 </script>
 <h2>Activity</h2>
 <div class="staff-table-wrap"><table>

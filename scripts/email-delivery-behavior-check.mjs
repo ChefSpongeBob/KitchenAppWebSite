@@ -20,6 +20,7 @@ globalThis.fetch = async (url, options) => {
   assert.equal(headers.get('authorization'), 'Bearer test-only-provider-key');
   sent.push({ body: JSON.parse(options.body), idempotencyKey: headers.get('idempotency-key') });
   if (responseMode === 'network-error') throw new Error('Simulated network error');
+  if (responseMode === 'sensitive-error') return Response.json({ message: 'Sensitive code 123456' }, { status: 400 });
   if (responseMode.startsWith('redirect-')) return new Response(null, {
     status: Number(responseMode.slice('redirect-'.length)), headers: { location: 'https://untrusted.example.invalid' }
   });
@@ -80,6 +81,14 @@ try {
     }
     responseMode = 'network-error';
     assert.equal((await process('onboarding.package.approved')).retrying, 1);
+  } finally { console.error = originalError; }
+  const sensitiveLogs = [];
+  console.error = (...args) => sensitiveLogs.push(args.join(' '));
+  try {
+    responseMode = 'sensitive-error';
+    const failed = await email.sendTransactionalEmail({ env, to:'employee-a@example.invalid', subject:'Code', html:'123456', text:'123456', sensitive:true });
+    assert.equal(failed.sent,false);
+    assert.equal(JSON.stringify([failed,sensitiveLogs]).includes('123456'),false,'Provider error bodies must not leak a verification code');
   } finally { console.error = originalError; }
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM operational_events WHERE delivery_status='pending'").get().n, 1);
   assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);

@@ -1,6 +1,6 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-10-31 (platform staff and tenant-content namespace correction)
+Updated: 2026-11-02 (staff email verification; restaurant authority unchanged)
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
@@ -13,6 +13,7 @@ This file is the working map for DB table names, column names, and the code path
 - `/staff/activity` is owner-only. No platform grant is available through tenant signup, manager permissions, or a public API. Initial-owner bootstrap is an explicit operator command for an existing active account.
 - `/staff/health?business=<id>` reads only the selected business's active gateway contact timestamps and, for owner/support, safe queued-notification status metadata. All lists are paginated and manually refreshed. Equipment-only staff never query notification history. Delivery attempts must match both event ID and business ID; no message/recipient/payload/provider-error fields are selected. Migration 0108 adds `idx_operational_events_staff_queue` and `idx_operational_attempts_staff_recent`; no new table or telemetry writes.
 - Migrations 0109 and 0110 provide session-bound password confirmation, membership revisions, audit targets, and database last-owner guards. `/staff/security` verifies the existing password and rotates the current session token without changing expiry or restaurant membership; staff reads require confirmation within eight hours and mutations within 15 minutes. `/staff/team` is owner-only, grants existing active identities, and audits changes transactionally. Role/access/password changes invalidate confirmation. Migration 0110 removes the rejected passkey credential/challenge tables and proof column; no replacement factor is introduced. Tenant cleanup excludes platform records and retains active/revoked platform identities. These controls affect platform staff only, not restaurant logins.
+- Migration 0112 adds the subsequently approved password-plus-email-code flow. `platform_staff_members.otp_email` is a staff-only override (NULL uses the account email); restaurant login/profile email is not changed. `platform_staff_step_up.email_verified_at` must equal `verified_at` for reads and SQL-authorized writes. Codes are HMAC-hashed with the existing private password pepper, expire after ten minutes, permit five attempts, are session/revision/token/destination-bound and consumed atomically with session rotation, proof, and audit. `platform_staff_email_challenges` has one row per primary session; expiry cleanup is indexed and bounded on requests, not polled. In-app address changes require recent existing-factor verification, password confirmation and a code to the new mailbox. Address updates invalidate all other staff proofs/challenges and are audited by a DB trigger, including explicitly approved operator changes through this workspace. No platform self-enrollment, restaurant role change, HR access, or authentication bypass.
 
 ## Tenant Content Namespaces (Migration 0111)
 
@@ -26,11 +27,11 @@ This file is the working map for DB table names, column names, and the code path
 
 ## Summary
 
-- Tables inventoried: 112, including D1 migration bookkeeping (0111 changes constraints, not the table count)
+- Tables inventoried: 113, including D1 migration bookkeeping (0112 adds one staff-only table)
 - Tables with `business_id`: 94
 - Tables with approved alternate tenant columns: 2
-- Approved global/system/root classifications: 19 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
-- Tables with `user_id`: 44
+- Approved global/system/root classifications: 20 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
+- Tables with `user_id`: 45
 
 ## Inventory Caveats
 
@@ -2621,6 +2622,7 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `user_id` TEXT (PRIMARY KEY; users.id, ON DELETE CASCADE)
   - `staff_role` TEXT (owner/support/equipment)
   - `revision` INTEGER (NOT NULL, DEFAULT 1; incremented on access changes)
+  - `otp_email` TEXT (0112; nullable staff-only verification destination, defaults to users.email)
   - `is_active` INTEGER (0/1)
   - `granted_by` TEXT (users.id, ON DELETE SET NULL)
   - `created_at` INTEGER
@@ -2673,13 +2675,37 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `user_id` TEXT (platform_staff_members.user_id, ON DELETE CASCADE)
   - `membership_revision` INTEGER (NOT NULL)
   - `verified_at` INTEGER (NOT NULL, Unix seconds)
+  - `email_verified_at` INTEGER (0112; must equal `verified_at` for staff authority)
 
 **Code Usage**
   - `src/lib/server/platformStaff.ts` [session/user/revision/expiry authorization checks]
   - `src/hooks.server.ts` [staff-only verification redirect; no tenant billing bypass]
-  - `/staff/security` [password verification, proof upsert, session-token rotation]
+  - `/staff/security` and `src/lib/server/platformStaffEmail.ts` [password and email-code verification, proof upsert, session-token rotation]
   - Migrations 0109/0110 [proof invalidation on membership/account/password changes]
   - `src/lib/server/trial.ts` [explicitly excluded from tenant cleanup]
+
+### platform_staff_email_challenges
+
+**Columns**
+  - `session_id` TEXT (PRIMARY KEY; sessions.id, ON DELETE CASCADE)
+  - `user_id` TEXT (NOT NULL; platform_staff_members.user_id, ON DELETE CASCADE)
+  - `challenge_id` TEXT (NOT NULL, globally unique random challenge identifier; not the code)
+  - `membership_revision` INTEGER (NOT NULL)
+  - `session_token_hash` TEXT (NOT NULL; existing session-token binding)
+  - `purpose` TEXT (NOT NULL; sign_in or change_email)
+  - `source_email` TEXT (NOT NULL; current verification destination)
+  - `recipient_email` TEXT (NOT NULL; current or proposed destination)
+  - `code_hash` TEXT (NOT NULL; HMAC-SHA256, no plaintext code)
+  - `created_at` INTEGER (NOT NULL; Unix seconds)
+  - `expires_at` INTEGER (NOT NULL; Unix seconds)
+  - `sent_at` INTEGER (NULL until email provider acceptance)
+  - `attempts` INTEGER (NOT NULL; 0-5)
+
+**Code Usage**
+  - `src/lib/server/platformStaffEmail.ts` [bounded create/read/attempt/consume/cleanup]
+  - `/staff/security` [ordinary code forms; masked destination only in page data]
+  - Migration 0112 [invalidates on staff membership/account/password/address change]
+  - `/api/internal/schema-readiness` [table, columns, and both indexes]
 
 ### iot_device_reservations
 

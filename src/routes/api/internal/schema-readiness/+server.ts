@@ -7,6 +7,7 @@ import { bearerTokenFromRequest, constantTimeTokenEqual } from '#lib/server/requ
 const REQUIRED_CORE_TABLES = [
 	'platform_staff_members',
 	'platform_staff_step_up',
+	'platform_staff_email_challenges',
 	'platform_staff_audit',
 	'iot_device_reservations',
 	'users',
@@ -70,6 +71,8 @@ const REQUIRED_CORE_INDEXES = [
   'idx_operational_attempts_staff_recent',
 	'idx_platform_staff_audit_created',
 	'idx_platform_staff_step_up_user',
+	'idx_staff_email_challenges_user_created',
+	'idx_staff_email_challenges_expiry',
 	'idx_iot_reservations_business',
 	'idx_businesses_staff_name',
 	'idx_business_users_business_active_role',
@@ -140,8 +143,10 @@ const REQUIRED_CORE_INDEXES = [
 ];
 
 const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
-	platform_staff_members: ['user_id', 'staff_role', 'is_active', 'granted_by', 'created_at', 'updated_at', 'revision'],
-	platform_staff_step_up: ['session_id', 'user_id', 'membership_revision', 'verified_at'],
+	platform_staff_members: ['user_id', 'staff_role', 'is_active', 'granted_by', 'created_at', 'updated_at', 'revision', 'otp_email'],
+	platform_staff_step_up: ['session_id', 'user_id', 'membership_revision', 'verified_at', 'email_verified_at'],
+	platform_staff_email_challenges: ['session_id', 'user_id', 'challenge_id', 'membership_revision', 'session_token_hash',
+		'purpose', 'source_email', 'recipient_email', 'code_hash', 'created_at', 'expires_at', 'sent_at', 'attempts'],
 	platform_staff_audit: ['id', 'actor_user_id', 'target_user_id', 'action', 'business_id', 'device_serial', 'reason', 'created_at'],
 	iot_device_reservations: ['serial', 'business_id', 'reserved_by', 'created_at'],
 	schedule_weeks: [
