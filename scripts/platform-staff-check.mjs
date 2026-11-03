@@ -619,6 +619,7 @@ for (const message of messages) assert.equal(JSON.stringify(sqlite.prepare('SELE
 const securityUi = readFileSync('src/routes/staff/security/+page.svelte','utf8');
 assert.match(securityUi,/<form method="POST"/);
 assert.ok(securityUi.includes('autocomplete="one-time-code"'));
+assert.ok(securityUi.includes("pattern={'[0-9]{6}'}"),'Svelte must preserve the six-digit browser pattern rather than interpolate the braces');
 assert.equal(/webauthn|passkey|navigator\.credentials/i.test(securityUi),false);
 assert.equal(existsSync('src/routes/staff/security/passkeys/+server.ts'),false);
 assert.equal(Object.keys(JSON.parse(readFileSync('package.json','utf8')).dependencies).some(name=>name.startsWith('@simplewebauthn/')),false);

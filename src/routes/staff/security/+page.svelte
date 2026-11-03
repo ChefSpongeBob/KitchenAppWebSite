@@ -12,7 +12,7 @@
   <form method="POST" class="staff-toolbar">
     <input type="hidden" name="intent" value="verify" />
     <input type="hidden" name="challenge" value={data.pending.id} />
-    <label>Verification Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required /></label>
+    <label>Verification Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern={'[0-9]{6}'} minlength="6" maxlength="6" required /></label>
     <button type="submit">Verify Code</button>
   </form>
 {/if}
