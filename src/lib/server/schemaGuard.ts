@@ -55,7 +55,7 @@ export function wrapProductionSchemaGuard(db: D1, allowRuntimeSchemaMutation: bo
 	if (allowRuntimeSchemaMutation) return db;
 
 	return new Proxy(db, {
-		get(target, prop, receiver) {
+		get(target, prop) {
 			if (prop === 'prepare') {
 				return (sql: string) => {
 					if (isSchemaMutationSql(sql)) {
@@ -84,7 +84,9 @@ export function wrapProductionSchemaGuard(db: D1, allowRuntimeSchemaMutation: bo
 				};
 			}
 
-			return Reflect.get(target, prop, receiver);
+			// D1 methods/accessors use private fields that cannot be read through a Proxy receiver.
+			const value = Reflect.get(target, prop, target);
+			return typeof value === 'function' ? value.bind(target) : value;
 		}
 	}) as D1;
 }

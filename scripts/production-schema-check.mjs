@@ -1,4 +1,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { loadServerModules } from './helpers/test-d1.mjs';
 
 const checks = [];
 
@@ -86,3 +89,51 @@ for (const check of checks) {
 if (failed.length) {
   process.exit(1);
 }
+
+const { wrapProductionSchemaGuard } = loadServerModules()('src/lib/server/schemaGuard.ts');
+class BrandedDatabase {
+  #value = 42;
+  get marker() { return this.#value; }
+  batch() { return this.#value; }
+}
+const branded = new BrandedDatabase();
+const guarded = wrapProductionSchemaGuard(branded, false);
+assert.equal(guarded.batch(), 42, 'D1 methods must retain their original receiver');
+assert.equal(guarded.marker, 42, 'D1 accessors must retain their original receiver');
+assert.equal(wrapProductionSchemaGuard(branded, true), branded);
+
+const require = createRequire(import.meta.url);
+const tools = createRequire(require.resolve('wrangler/package.json'));
+const { Miniflare } = tools('miniflare');
+const { buildSync } = tools('esbuild');
+const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
+const { outputFiles } = buildSync({
+  stdin: { contents: `
+    import { wrapProductionSchemaGuard } from './src/lib/server/schemaGuard.ts';
+    export default { async fetch(_request, env) {
+      await env.DB.exec('CREATE TABLE runtime_guard_test (id TEXT PRIMARY KEY)');
+      const db = wrapProductionSchemaGuard(env.DB, false);
+      await db.batch(['one', 'two'].map(id => db.prepare('INSERT INTO runtime_guard_test (id) VALUES (?)').bind(id)));
+      let rolledBack = false;
+      try { await db.batch(['three', 'one'].map(id => db.prepare('INSERT INTO runtime_guard_test (id) VALUES (?)').bind(id))); }
+      catch { rolledBack = true; }
+      const blocked = await db.prepare('CREATE TABLE forbidden_guard_test (id TEXT)').run();
+      await db.exec('CREATE TABLE forbidden_exec_test (id TEXT)');
+      return Response.json({ rolledBack, blocked: blocked.meta.schemaMutationBlocked,
+        rows: (await db.prepare('SELECT id FROM runtime_guard_test ORDER BY id').all()).results,
+        forbidden: (await db.prepare("SELECT name FROM sqlite_master WHERE name IN ('forbidden_guard_test', 'forbidden_exec_test')").all()).results });
+    }};`, resolveDir: process.cwd(), sourcefile: 'schema-guard-runtime-check.js' },
+  bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false
+});
+const runtime = new Miniflare({
+  host: '127.0.0.1', port: 0, cf: false, telemetry: { enabled: false },
+  workers: [{ config: { name: 'schema-guard-runtime-check', compatibilityDate: config.compatibility_date,
+    compatibilityFlags: config.compatibility_flags, env: { DB: { type: 'd1', id: 'isolated-schema-guard' } },
+    manifest: { mainModule: 'index.js', modules: { 'index.js': { type: 'esm', contents: outputFiles[0].text } } } } }]
+});
+try {
+  const response = await runtime.dispatchFetch('https://runtime.example.invalid');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { rolledBack: true, blocked: true, rows: [{ id: 'one' }, { id: 'two' }], forbidden: [] });
+  console.log('PASS actual Workers D1: guarded batches retain their receiver, writes and atomic rollback work, runtime schema changes stay blocked');
+} finally { await runtime.dispose(); }
