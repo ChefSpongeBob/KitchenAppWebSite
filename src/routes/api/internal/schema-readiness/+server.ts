@@ -11,6 +11,8 @@ const REQUIRED_CORE_TABLES = [
 	'platform_staff_audit',
 	'platform_diagnostic_issues',
 	'platform_request_metrics',
+	'platform_support_requests',
+	'platform_support_messages',
 	'iot_device_reservations',
 	'users',
 	'devices',
@@ -66,6 +68,14 @@ const REQUIRED_CORE_TABLES = [
 ];
 
 const REQUIRED_CORE_INDEXES = [
+  'idx_events_platform_staff_recent',
+  'idx_support_recent',
+  'idx_support_active_recent',
+  'idx_support_status_recent',
+  'idx_support_business_recent',
+  'idx_support_requester_recent',
+  'idx_support_messages_recent',
+  'idx_support_messages_customer',
   'idx_checklist_sections_business_slug',
   'idx_list_sections_business_domain_slug',
   'idx_documents_business_slug_active',
@@ -155,6 +165,8 @@ const REQUIRED_CORE_INDEXES = [
 ];
 
 const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
+  platform_support_requests: ['id', 'business_id', 'requester_user_id', 'created_by', 'submission_id', 'source', 'subject', 'category', 'priority', 'status', 'revision', 'created_at', 'updated_at'],
+  platform_support_messages: ['id', 'business_id', 'request_id', 'author_user_id', 'author_type', 'visibility', 'body', 'created_at'],
 	platform_diagnostic_issues: ['id', 'business_id', 'area', 'route_id', 'operation', 'kind', 'status', 'occurrences',
 		'first_seen_at', 'last_seen_at', 'max_duration_ms', 'last_request_id'],
 	platform_request_metrics: ['scope_key', 'business_id', 'bucket', 'success_samples', 'sample_duration_ms',

@@ -4,19 +4,25 @@
   const page = toStore(() => ({ ...pageState }));
   import RequestDiagnostics from '#lib/components/staff/RequestDiagnostics.svelte';
   import GatewayStatus from '#lib/components/staff/GatewayStatus.svelte';
+  import SupportQueue from '#lib/components/staff/SupportQueue.svelte';
   import type { PageData } from './$types';
   export let data: PageData;
   const date = (value: number | null) => value ? new Date(value * 1000).toLocaleDateString() : 'Not set';
   const time = (value: number) => new Date(value * 1000).toLocaleString();
-  const tabs = [['overview', 'Overview'], ['application', 'Application'], ['equipment', 'Equipment'], ['security', 'Security'], ['activity', 'Staff Activity']];
+  const tabs = [['overview', 'Overview'], ['application', 'Application'], ['equipment', 'Equipment'], ['support', 'Support'], ['security', 'Security'], ['activity', 'Staff Activity']];
   function securityNext() {
     const params = new URLSearchParams($page.url.searchParams.toString());
     if (data.security?.next) params.set('securityAfter', data.security.next);
     return `${$page.url.pathname}?${params}`;
   }
 </script>
-<h2>{data.business.name}</h2>
+<header class="staff-business-context"><div><a href="/staff/businesses">Businesses</a><h2>{data.business.name}</h2></div><span>{data.business.status}</span></header>
+{#if data.activeView === 'overview'}
 <dl class="staff-summary">
+  <div><dt>Plan</dt><dd>{{ starter: 'Small', growth: 'Medium', enterprise: 'Large' }[data.business.plan_tier] ?? data.business.plan_tier}</dd></div>
+  <div><dt>Members</dt><dd>{data.business.members}</dd></div><div><dt>Gateways</dt><dd>{data.business.gateways}</dd></div>
+</dl>
+<details class="staff-panel"><summary>Business Details</summary><dl class="staff-summary">
   <div><dt>Business ID</dt><dd>{data.business.id}</dd></div>
   <div><dt>Status</dt><dd>{data.business.status}</dd></div>
   <div><dt>Plan</dt><dd>{{ starter: 'Small', growth: 'Medium', enterprise: 'Large' }[data.business.plan_tier] ?? data.business.plan_tier}</dd></div>
@@ -26,9 +32,11 @@
   <div><dt>Business Email</dt><dd>{data.business.contact_email || 'Not set'}</dd></div>
   <div><dt>Business Phone</dt><dd>{data.business.contact_phone || 'Not set'}</dd></div>
 </dl>
+</details>
+{/if}
 <nav class="staff-business-tabs" aria-label="Business investigation">
   {#each tabs as [view, label]}
-    {#if !(view === 'application' && !data.canViewApplication) && !(['security', 'activity'].includes(view) && !data.canViewSecurity)}
+    {#if !(['application', 'support'].includes(view) && !data.canViewApplication) && !(['security', 'activity'].includes(view) && !data.canViewSecurity)}
       <a href={`?view=${view}`} aria-current={data.activeView === view ? 'page' : undefined}>{label}</a>
     {/if}
   {/each}
@@ -48,6 +56,10 @@
   <RequestDiagnostics data={data.diagnostics} businessId={data.business.id} />
 {:else if data.equipment}
   <GatewayStatus data={data.equipment} businessId={data.business.id} />
+{:else if data.support}
+  <nav class="staff-toolbar"><a href={`/staff/support?business=${encodeURIComponent(data.business.id)}&new=1`}>Record Request</a><a href={`/staff/support?business=${encodeURIComponent(data.business.id)}`}>Filter Requests</a></nav>
+  <SupportQueue data={data.support} staff />
+  {#if data.support.next}<nav class="staff-pagination" aria-label="Business support pages"><a href={`?${new URLSearchParams({ view: 'support', after: data.support.next })}`}>More Requests</a></nav>{/if}
 {:else if data.security}
   <section class="staff-panel">
     <header class="staff-panel-heading"><h2>Account Activity</h2><span>Read Only</span></header>

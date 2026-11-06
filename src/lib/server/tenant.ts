@@ -4,6 +4,8 @@ type D1 = App.RuntimeEnv['DB'];
 
 const TENANT_TABLES = [
   'account_audit_logs',
+  'platform_support_requests',
+  'platform_support_messages',
   'todos',
   'todo_assignments',
   'todo_completion_log',

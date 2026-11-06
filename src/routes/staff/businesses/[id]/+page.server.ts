@@ -2,13 +2,14 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { requirePlatformStaff } from '#lib/server/platformStaff.ts';
 import { loadBusinessSecurity, loadGatewayAttention, loadRecentStaffActivity, loadRequestDiagnostics } from '#lib/server/platformStaffDashboard.ts';
+import { listSupportRequests } from '#lib/server/platformSupport.ts';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   const staff = await requirePlatformStaff(locals);
   const requestedView = url?.searchParams.get('view') ?? 'overview';
-  const activeView = ['overview', 'application', 'equipment', 'security', 'activity'].includes(requestedView) ? requestedView : 'overview';
+  const activeView = ['overview', 'application', 'equipment', 'support', 'security', 'activity'].includes(requestedView) ? requestedView : 'overview';
   if (['security', 'activity'].includes(activeView) && staff.role !== 'owner') error(403, 'Platform owner access required.');
-  if (activeView === 'application' && staff.role === 'equipment') error(403, 'Application support access required.');
+  if (['application', 'support'].includes(activeView) && staff.role === 'equipment') error(403, 'Application support access required.');
   if (!params.id || params.id.length > 80) error(404, 'Business not found.');
   const business = await locals.DB.prepare(`
     SELECT id, name, slug, status, plan_tier, contact_email, contact_phone, created_at,
@@ -25,6 +26,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   const now = Math.floor(Date.now() / 1000);
   return { business, subscriptions: activeView === 'overview' ? subscriptions.results : [], activeView,
     canViewApplication: staff.role !== 'equipment', canViewSecurity: staff.role === 'owner',
+    support: activeView === 'support' ? await listSupportRequests(locals.DB, url, { staff }, business.id) : null,
     diagnostics: activeView === 'application' ? await loadRequestDiagnostics(locals.DB, staff.role, url, business.id, now) : null,
     equipment: activeView === 'equipment' ? await loadGatewayAttention(locals.DB, url, business.id, now) : null,
     security: activeView === 'security' ? await loadBusinessSecurity(locals.DB, staff.role, business.id, url, now) : null,

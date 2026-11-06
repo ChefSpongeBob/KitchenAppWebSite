@@ -230,6 +230,7 @@ for (const [table, index, ordering, filter] of [
   assert.ok(plan.every(row => !row.detail.includes('TEMP B-TREE')));
 }
 const healthPage = load('src/routes/staff/health/+page.server.ts', {
+  '@sveltejs/kit': kit, '#lib/server/platformStaffDashboard.ts': {}, '#lib/server/platformStaffOverview.ts': {},
   '#lib/server/platformStaff.ts': staff, '#lib/server/platformHealth.ts': health,
   '#lib/server/email.ts': { isEmailConfigured: env => Boolean(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL) }
 });
@@ -292,6 +293,9 @@ const crossSite = await hooks.handle({ event: hookEvent('/staff/equipment', 'own
 assert.equal(crossSite.status, 403);
 await assert.rejects(hooks.handle({ event: hookEvent('/app'), resolve: async () => new Response() }), { location: '/billing?access=required' });
 assert.equal(tenantCalls, 1);
+const supportCustomerEvent = hookEvent('/support', 'manager-token');
+assert.equal((await hooks.handle({ event: supportCustomerEvent, resolve: async () => new Response('Support') })).status, 200);
+assert.equal(supportCustomerEvent.locals.sessionId, 'manager-session', 'Support receives the already verified ordinary session ID, not a browser-supplied ID');
 console.log('PASS real request hook separates staff access, preserves restaurant billing gates, and rejects CSRF');
 const normalLookup = staff.findPlatformStaff;
 staff.findPlatformStaff = async () => { throw Error('Simulated database outage'); };
@@ -425,12 +429,15 @@ sqlite.exec(`INSERT INTO business_store_entitlements
 const dashboard = load('src/lib/server/platformStaffDashboard.ts', { '@sveltejs/kit': kit,
   '#lib/server/platformStaff.ts': staff, '#lib/server/platformHealth.ts': health,
   '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 } });
-const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffDashboard.ts': dashboard });
+sqlite.exec(readFileSync('migrations/0114_staff_operations_support.sql','utf8'));
+const overview = load('src/lib/server/platformStaffOverview.ts', { '@sveltejs/kit': kit,
+  '#lib/server/platformStaffDashboard.ts': dashboard, '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 } });
+const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffDashboard.ts': dashboard, '#lib/server/platformSupport.ts': {} });
 const activityPage = load('src/routes/staff/activity/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
-const staffEntry = load('src/routes/staff/+page.server.ts', { '#lib/server/platformStaff.ts':staff, '#lib/server/platformStaffDashboard.ts':dashboard });
+const staffEntry = load('src/routes/staff/+page.server.ts', { '#lib/server/platformStaff.ts':staff, '#lib/server/platformStaffOverview.ts':overview });
 const staffLayout = load('src/routes/staff/+layout.server.ts', { '#lib/server/platformStaff.ts': staff });
 const staffPaths = ['/staff','/staff/businesses','/staff/businesses/a','/staff/equipment','/staff/health',
-  '/staff/team','/staff/activity','/staff/security'];
+  '/staff/team','/staff/activity','/staff/security','/staff/support','/staff/support/request'];
 const tenantCallsBeforeMatrix = tenantCalls;
 for (const path of staffPaths) {
   const event = hookEvent(path, 'manager-token');
@@ -444,7 +451,7 @@ assert.equal(tenantCalls, tenantCallsBeforeMatrix, 'Staff requests never bootstr
 for (const role of ['owner','support','equipment']) {
   const locals = { DB: db, userId: role, sessionId: `${role}-session` };
   const event = { locals, params: { id: 'a' }, url: new URL('https://criminiops.com/staff/health?business=a'), setHeaders(headers) { assert.equal(headers['cache-control'],'no-store'); } };
-  assert.equal((await staffEntry.load(event)).diagnostics.canViewApplication, role !== 'equipment');
+  assert.equal((await staffEntry.load(event)).overview.canViewApplication, role !== 'equipment');
   assert.equal((await staffLayout.load(event)).staff.role, role);
   assert.equal((await directory.load(event)).businesses.length, 2);
   assert.equal((await inventory.load(event)).canAssign, role !== 'support');
@@ -479,7 +486,7 @@ for (const [loader, path, field] of [[directory,'businesses','businesses'],[inve
   const literalWildcard = await loader.load({ locals: ownerLocals, url: new URL(`https://criminiops.com/staff/${path}?q=%25`) });
   assert.equal(literalWildcard[field].length,0);
 }
-console.log('PASS all eight staff paths deny anonymous/nonstaff/forged-role/CSRF access; actual owner/support/equipment loads respect roles, tenant selection, secret exclusion, and pagination');
+console.log('PASS all ten staff paths deny anonymous/nonstaff/forged-role/CSRF access; actual owner/support/equipment loads respect roles, tenant selection, secret exclusion, and pagination');
 
 const auth = load('src/lib/server/auth.ts', {});
 const passwordEnv = { PASSWORD_PEPPER: 'test-only-platform-confirmation-pepper' };

@@ -1,5 +1,11 @@
 <script lang="ts">
 	import Layout from '#lib/components/ui/Layout.svelte';
+  import SupportRequestForm from '#lib/components/staff/SupportRequestForm.svelte';
+  import SupportQueue from '#lib/components/staff/SupportQueue.svelte';
+  import SupportConversation from '#lib/components/staff/SupportConversation.svelte';
+  import type { PageData, ActionData } from './$types';
+  export let data: PageData;
+  export let form: ActionData;
 </script>
 
 <svelte:head>
@@ -14,7 +20,24 @@
 	<section class="support-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Support</h1>
-		<p class="updated">Updated October 5, 2026</p>
+		<p class="updated">Updated November 3, 2026</p>
+
+    {#if data.canRequest}
+      <section class="support-section" aria-labelledby="request-help">
+        <h2 id="request-help">{data.detail ? 'Your Request' : 'Request Help'}</h2>
+        <p class="support-workspace">{data.businessName}</p>
+        {#if form?.error}<p class="support-error" role="alert">{form.error}</p>{/if}
+        {#if data.detail}
+          <a href="/support">All My Requests</a>
+          <SupportConversation data={data.detail} action={`?/reply&request=${encodeURIComponent(data.detail.request.id)}`} />
+        {:else if data.submissionId}<SupportRequestForm submissionId={data.submissionId} />{/if}
+      </section>
+      {#if data.queue && !data.detail}
+        <section class="support-section" aria-labelledby="my-support-requests"><h2 id="my-support-requests">My Requests</h2><SupportQueue data={data.queue} />
+          {#if data.queue.next}<a href={`?after=${encodeURIComponent(data.queue.next)}`}>More Requests</a>{/if}
+        </section>
+      {/if}
+    {/if}
 
 		<div class="support-section">
 			<h2>Contact</h2>
@@ -109,6 +132,8 @@
 		padding: 1.15rem 0;
 		border-bottom: 1px solid rgba(17, 18, 20, 0.12);
 	}
+  .support-workspace { margin-bottom: 1rem; font-size: 0.8rem; }
+  .support-error { color: #8e2828; margin-block: 0.8rem; }
 
 	h2 {
 		margin: 0 0 0.45rem;

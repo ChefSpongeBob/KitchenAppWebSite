@@ -23,12 +23,12 @@ This file is the working map for DB table names, column names, and the code path
 - The creator and document routes already check names within the active business. The old global constraints contradicted those queries and blocked different restaurants from using the same titles; this is not a routing or authorization change.
 - Rebuild preserves every existing column, ID, timestamp, child item, and file reference. Only `checklist_items` and `list_items` have cascade dependencies on these parent tables; migration staging restores those rows within the transaction. No final new table, tenant, redirect, or seeded content.
 - `test:schema-namespaces` executes rollback, preservation, cross-tenant/same-tenant uniqueness, every tenant table's unique-index review, and actual schema-readiness checks. Globally unique invite codes, factory device/node serials, and global shift-reference keys remain intentional; tenant names and content are not shared.
-- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies 0111-0113. It contains no exported account/business/HR rows. Live execution status is recorded only in `PROJECT_HANDOFF.md`.
+- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies 0111-0114. It contains no exported account/business/HR rows. Live execution status is recorded only in `PROJECT_HANDOFF.md`.
 
 ## Summary
 
-- Tables inventoried: 115, including D1 migration bookkeeping (0113 adds two platform diagnostics tables)
-- Tables with `business_id`: 96
+- Tables inventoried: 117, including D1 migration bookkeeping (0113 adds two diagnostics tables; 0114 adds two support tables)
+- Tables with `business_id`: 98
 - Tables with approved alternate tenant columns: 2
 - Approved global/system/root classifications: 22 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
 - Tables with `user_id`: 45
@@ -2763,3 +2763,45 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `/staff/equipment` `src/routes/staff/equipment/+page.server.ts` [bounded select]
   - `src/lib/server/temperatureDeviceProvisioning.ts` [tenant gateway claim restriction]
   - Migration 0107 [reservation/claim concurrency triggers]
+
+### platform_support_requests
+
+**Columns**
+  - `id` TEXT PRIMARY KEY (server-generated request UUID)
+  - `business_id` TEXT NOT NULL (businesses.id, ON DELETE CASCADE)
+  - `requester_user_id` TEXT (users.id, ON DELETE SET NULL; NULL for staff-recorded phone/email requests)
+  - `created_by` TEXT (users.id, ON DELETE SET NULL)
+  - `submission_id` TEXT NOT NULL (form idempotency identifier, not an access credential)
+  - `source` TEXT NOT NULL (customer or staff)
+  - `subject` TEXT NOT NULL (1-160 characters, plain text)
+  - `category` TEXT NOT NULL (application, accounts, billing, equipment, installation, feedback)
+  - `priority` TEXT NOT NULL (normal or urgent)
+  - `status` TEXT NOT NULL (open, waiting, closed)
+  - `revision` INTEGER NOT NULL (optimistic update concurrency)
+  - `created_at`, `updated_at` INTEGER NOT NULL (Unix seconds)
+
+**Code Usage**
+  - `platformSupport.ts` [verified-customer or explicitly authorized platform-support reads and atomic writes]
+  - `/support` [authenticated active membership; each requester sees only their own requests in the selected business]
+  - `/staff/support`, `/staff/support/[id]`, business Support tab [owner/support only; equipment and restaurant manager roles confer no staff access]
+  - `platformStaffOverview.ts` [aggregate active request counts; no subjects or messages on dashboard]
+  - Migration 0114 [status/recent/business/requester indexes, tenant-scoped idempotency and composite parent key]
+  - Tenant purge and business deletion [scoped removal; no cross-tenant requests retained]
+
+### platform_support_messages
+
+**Columns**
+  - `id` TEXT PRIMARY KEY
+  - `business_id`, `request_id` TEXT NOT NULL (composite FK to matching request/business, ON DELETE CASCADE)
+  - `author_user_id` TEXT (users.id, ON DELETE SET NULL)
+  - `author_type` TEXT NOT NULL (customer or staff)
+  - `visibility` TEXT NOT NULL (customer or internal; customer authors cannot create internal notes)
+  - `body` TEXT NOT NULL (1-4,000 characters, plain text; never rendered with raw HTML)
+  - `created_at` INTEGER NOT NULL (Unix seconds)
+
+**Code Usage**
+  - `platformSupport.ts` [customer queries exclude internal notes before serialization; 20-message cursor pages]
+  - Support conversation component [escaped plain text; no attachments, HR records or automatic emails]
+  - Staff updates [recent email proof and authority rechecked inside transaction; metadata-only platform audit]
+  - Migration 0114 [business/request/time and business/request/visibility/time indexes]
+  - Customer account removal [author reference removed by FK; business deletion removes request and messages]

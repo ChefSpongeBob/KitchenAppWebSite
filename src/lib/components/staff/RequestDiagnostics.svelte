@@ -20,7 +20,7 @@
   <section class="staff-panel" aria-labelledby="request-issues">
     <header class="staff-panel-heading"><h2 id="request-issues">Needs Attention</h2><span>{data.issues.length}{data.next ? '+' : ''} {data.issues.length === 1 && !data.next ? 'group' : 'groups'}</span></header>
     <form method="GET" class="staff-toolbar staff-filters">
-      {#if businessId}<input type="hidden" name="view" value="application" />{/if}
+      <input type="hidden" name="view" value="application" />
       <label>Period<select name="hours" value={String(data.hours)}><option value="1">This Hour</option><option value="24">24 Hours</option><option value="168">7 Days</option></select></label>
       <label>Area<select name="area" value={data.area}><option value="">All Areas</option>{#each areas as [value, label]}<option {value}>{label}</option>{/each}</select></label>
       <label>Type<select name="kind" value={data.kind}><option value="">All Issues</option><option value="server_error">Request Failed</option><option value="access_denied">Access Denied</option><option value="slow_request">Slow Response</option></select></label>

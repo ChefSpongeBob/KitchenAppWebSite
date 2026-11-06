@@ -120,8 +120,8 @@ try {
   for (const role of ['owner', 'support', 'equipment']) {
     const locals = { DB: db, userId: role, sessionId: role + '-session' };
     const home = await staffRoot.load({ locals, url: view });
-    assert.equal(home.canViewActivity, role === 'owner');
-    assert.equal(home.diagnostics.canViewApplication, role !== 'equipment');
+    assert.equal(home.overview.canViewApplication, role !== 'equipment');
+    assert.equal(home.overview.gateways.total, 4);
     const detail = load('src/routes/staff/businesses/[id]/+page.server.ts');
     const privateTab = new URL('https://criminiops.com/staff/businesses/a?view=security');
     if (role !== 'owner') await assert.rejects(detail.load({ locals, params: { id: 'a' }, url: privateTab }), { status: 403 });

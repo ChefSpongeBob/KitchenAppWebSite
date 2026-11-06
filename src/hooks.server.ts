@@ -467,6 +467,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		}
 
 		event.locals.userId = session.found_user_id;
+		event.locals.sessionId = session.id;
 		event.locals.userRole = effectiveAppRoleFromBusinessRole(
 			businessContext.businessRole,
 			businessContext.businessPermissionTemplate,

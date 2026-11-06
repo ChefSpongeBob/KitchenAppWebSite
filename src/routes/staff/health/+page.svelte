@@ -3,6 +3,8 @@
   import { toStore } from 'svelte/store';
   const page = toStore(() => ({ ...pageState }));
   import type { PageData } from './$types';
+  import RequestDiagnostics from '#lib/components/staff/RequestDiagnostics.svelte';
+  import GatewayStatus from '#lib/components/staff/GatewayStatus.svelte';
   export let data: PageData;
   const date = (value: number | null) => value ? new Date(value * 1000).toLocaleString() : 'None recorded';
   const statuses = ['failed', 'pending', 'processing'] as const;
@@ -80,7 +82,22 @@
     </section>
   {/if}
 {:else}
-  <p><a href="/staff/businesses">Choose Business</a></p>
+  <nav class="staff-business-tabs" aria-label="System health views">
+    {#if data.canViewApplication}<a href="?view=application" aria-current={data.view === 'application' ? 'page' : undefined}>Application</a>{/if}
+    <a href="?view=equipment" aria-current={data.view === 'equipment' ? 'page' : undefined}>Equipment</a>
+    {#if data.canViewApplication}<a href="?view=delivery" aria-current={data.view === 'delivery' ? 'page' : undefined}>Notifications</a>{/if}
+  </nav>
+  {#if data.diagnostics}<RequestDiagnostics data={data.diagnostics} />{/if}
+  {#if data.equipment}<GatewayStatus data={data.equipment} />{/if}
+  {#if data.failures}
+    <form method="GET" class="staff-toolbar"><input type="hidden" name="view" value="delivery" /><label>Period<select name="hours" value={String(data.failures.hours)}><option value="1">This Hour</option><option value="24">24 Hours</option><option value="168">7 Days</option></select></label><button type="submit">Apply</button></form>
+    <h2>Recorded Notification Failures</h2>
+    <div class="staff-table-wrap"><table><thead><tr><th>Business</th><th>Area</th><th>Created</th><th>Attempts</th></tr></thead><tbody>
+      {#each data.failures.rows as row (row.id)}<tr><td><a href={`/staff/health?business=${encodeURIComponent(row.business_id)}`}>{row.business_name}</a></td><td>{row.category}</td><td>{date(row.created_at)}</td><td>{row.delivery_attempts}</td></tr>{:else}<tr><td colspan="4">No recorded failures in this period.</td></tr>{/each}
+    </tbody></table></div>
+    {#if data.failures.next}<nav class="staff-pagination" aria-label="Failure pages"><a href={viewUrl({ deliveryAfter: data.failures.next })}>Older Failures</a></nav>{/if}
+    <p class="staff-note">Queued notifications only. Direct account emails and inbox delivery are not monitored here.</p>
+  {/if}
 {/if}
 
 <style>
