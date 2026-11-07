@@ -1769,6 +1769,7 @@
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).duplicate-day-btn-active),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).department-chip-active),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).autofill-preferred),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).active-action),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle)[aria-pressed='true']) {
     border-bottom-color: var(--color-text) !important;
     background: transparent !important;
@@ -1780,6 +1781,7 @@
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger-btn),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger-action),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).remove-btn),
+  .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).danger-text),
   .app-shell:not(.marketing-app) :global(button:not(.card-hit):not(.shift-toggle).text-action.danger) {
     border-bottom-color: color-mix(in srgb, var(--color-error) 46%, var(--color-border)) !important;
     background: transparent !important;

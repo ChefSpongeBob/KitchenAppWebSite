@@ -360,7 +360,7 @@
           {#if data.featureAccess.scheduling}
             <nav class="window-switch" aria-label="Schedule chart window">
               {#each windowOptions as option}
-                <a href={`/admin?window=${option.value}`} class:active={data.analytics.windowDays === option.value}>{option.label}</a>
+                <a href={`/admin?window=${option.value}`} class:active={data.analytics.windowDays === option.value} aria-current={data.analytics.windowDays === option.value ? 'true' : undefined}>{option.label}</a>
               {/each}
             </nav>
           {/if}
@@ -486,11 +486,11 @@
                 <div class="inline-actions">
                   <form method="POST" action="?/approve_whiteboard" use:enhance={withAdminFeedback}>
                     <input type="hidden" name="id" value={idea.id} />
-                    <button type="submit" class="compact-action" class:active-action={idea.status === 'approved'}>Approve</button>
+                    <button type="submit" class="compact-action" class:active-action={idea.status === 'approved'} aria-pressed={idea.status === 'approved'}>Approve</button>
                   </form>
                   <form method="POST" action="?/reject_whiteboard" use:enhance={withAdminFeedback}>
                     <input type="hidden" name="id" value={idea.id} />
-                    <button type="submit" class="compact-action" class:active-action={idea.status === 'rejected'}>Reject</button>
+                    <button type="submit" class="compact-action" class:active-action={idea.status === 'rejected'} aria-pressed={idea.status === 'rejected'}>Reject</button>
                   </form>
                   <form method="POST" action="?/delete_whiteboard" use:enhance={withAdminFeedback}>
                     <input type="hidden" name="id" value={idea.id} />
@@ -971,7 +971,7 @@
     border-bottom: 1px solid transparent;
     color: var(--color-text-muted);
     font-size: 0.66rem;
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     text-decoration: none;
   }
 
