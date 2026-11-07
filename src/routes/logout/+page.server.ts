@@ -7,7 +7,7 @@ import {
 import { getSessionCookieDeleteOptions, getSessionCookieName } from '#lib/server/authCookies.ts';
 
 export const actions: Actions = {
-	default: async ({ cookies, locals, request }) => {
+	default: async ({ cookies, locals, request, url }) => {
 		const db = locals.DB;
 		const primaryCookie = getSessionCookieName();
 		const sessionToken =
@@ -35,6 +35,6 @@ export const actions: Actions = {
 		cookies.delete('session_id_pwa', { path: '/' });
 		cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 
-		throw redirect(303, '/login');
+		throw redirect(303, url.searchParams.get('staff') === '1' ? '/login?staff=1' : '/login');
 	}
 };

@@ -7,6 +7,7 @@
 	import TurnstileWidget from '#lib/components/security/TurnstileWidget.svelte';
 	import AppInstallCard from '#lib/components/ui/AppInstallCard.svelte';
 	import AuthShell from '#lib/components/ui/AuthShell.svelte';
+	import StaffAuthShell from '#lib/components/staff/StaffAuthShell.svelte';
 
 	export let form:
 		| {
@@ -49,8 +50,9 @@
 	};
 
 	$: activeSession = data?.activeSession ?? null;
+	$: staffLogin = $page.url.searchParams.get('staff') === '1';
 	$: turnstileSiteKey = data?.turnstileSiteKey ?? '';
-	$: registrationComplete = $page.url.searchParams.get('registered') === 'success';
+	$: registrationComplete = !staffLogin && $page.url.searchParams.get('registered') === 'success';
 	$: seededEmail = form?.email ?? '';
 	$: if (seededEmail !== lastSeededEmail) {
 		emailValue = seededEmail;
@@ -77,12 +79,9 @@
 	})();
 </script>
 
-<AuthShell
-	eyebrow=""
-	title={registrationComplete ? 'Welcome' : 'Welcome back'}
-	subtitle=""
-	supportText=""
->
+<svelte:head>{#if staffLogin}<title>Staff Sign In | Crimini</title>{/if}</svelte:head>
+
+{#snippet loginContent()}
 	<div class="auth-stack">
 		{#if registrationComplete}
 			<div class="registration-brand">
@@ -166,18 +165,26 @@
 			</div>
 		{/if}
 
-		{#if !registrationComplete}
+		{#if !registrationComplete && !staffLogin}
 			<div class="auth-footer-row">
 				<p class="auth-footer">No account yet?</p>
 				<a href="/register#onboarding-slideshow" class="auth-link-button">Create workspace</a>
 			</div>
 		{/if}
 
-		<div class="install-wrap">
+		{#if !staffLogin}<div class="install-wrap">
 			<AppInstallCard compact />
-		</div>
+		</div>{/if}
 	</div>
-</AuthShell>
+{/snippet}
+
+{#if staffLogin}
+	<StaffAuthShell>{@render loginContent()}</StaffAuthShell>
+{:else}
+	<AuthShell eyebrow="" title={registrationComplete ? 'Welcome' : 'Welcome back'} subtitle="" supportText="">
+		{@render loginContent()}
+	</AuthShell>
+{/if}
 
 <style>
 	.auth-stack {

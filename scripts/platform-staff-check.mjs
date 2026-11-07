@@ -2,6 +2,22 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { compile } from 'svelte/compiler';
+import { render } from 'svelte/server';
+import * as serverRuntime from 'svelte/internal/server';
+import * as stores from 'svelte/store';
+
+function component(path, deps = {}) {
+  const exports = {};
+  const source = ts.transpileModule(compile(readFileSync(path, 'utf8'), { filename: path, generate: 'server' }).js.code,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const modules = { 'svelte/internal/server': serverRuntime, 'svelte/store': stores, ...deps };
+  new Function('require', 'exports', source)(name => {
+    assert.ok(name in modules, 'Unexpected component dependency: ' + name);
+    return modules[name];
+  }, exports);
+  return exports;
+}
 
 function load(path, deps, extraSource = '') {
   const exports = {};
@@ -312,7 +328,7 @@ const login = load('src/routes/login/+page.server.ts', {
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location), fail: (status, data) => ({ status, data }) },
   '$app/env': { dev: false }, '#lib/server/auth.ts': {}, '#lib/server/authCookies.ts': {},
   '#lib/server/activeBusiness.ts': {}, '#lib/server/dbSchema.ts': {}, '#lib/server/business.ts': {},
-  '#lib/server/permissions.ts': {}, '#lib/server/security.ts': {}, '#lib/server/turnstile.ts': {},
+  '#lib/server/permissions.ts': {}, '#lib/server/security.ts': {}, '#lib/server/turnstile.ts': { getTurnstileSiteKey: () => 'test-site-key' },
   '#lib/server/platformStaff.ts': staff
 });
 const loginForm = new FormData();
@@ -324,6 +340,40 @@ await assert.rejects(login.actions.login({
   request: new Request(staffLoginUrl, { method: 'POST', body: loginForm })
 }), { location: '/staff' });
 console.log('PASS named login action preserves the staff destination for authenticated platform accounts');
+await assert.rejects(login.load({ locals: ownerLocals, url: staffLoginUrl }), { location: '/staff' });
+for (const locals of [{}, { DB: db, userId: 'manager' }]) {
+  assert.deepEqual(await login.load({ locals, url: staffLoginUrl }), { activeSession: null, turnstileSiteKey: 'test-site-key' });
+}
+assert.equal((await login.actions.login({ locals: { DB: db, userId: 'manager' }, url: staffLoginUrl,
+  request: new Request(staffLoginUrl, { method: 'POST', body: new URLSearchParams({ email: 'manager@example.invalid', password: 'unused' }) }) })).status, 403);
+for (const token of ['unknown-session', 'manager-token']) {
+  if (token === 'manager-token') sqlite.prepare("UPDATE sessions SET revoked_at=? WHERE id='manager-session'").run(now);
+  await assert.rejects(hooks.handle({ event: hookEvent('/staff/equipment', token), resolve: async () => { throw Error('Invalid session resolved'); } }),
+    { location: '/login?staff=1&error=session' });
+}
+sqlite.exec("UPDATE sessions SET revoked_at=NULL WHERE id='manager-session'");
+console.log('PASS dedicated staff login excludes restaurant metadata, rejects nonstaff continuation, and handles invalid sessions');
+const staffLogoutEvent = hookEvent('/logout?staff=1', 'owner-token', { method: 'POST', headers: { origin: 'https://criminiops.com' } });
+const beforeLogoutTenantCalls = tenantCalls;
+assert.equal((await hooks.handle({ event: staffLogoutEvent, resolve: async () => new Response('Logout') })).status, 200);
+assert.equal(staffLogoutEvent.locals.platformStaff.role, 'owner');
+assert.equal(tenantCalls, beforeLogoutTenantCalls, 'Staff logout does not depend on having a restaurant membership or subscription');
+const logout = load('src/routes/logout/+page.server.ts', {
+  '@sveltejs/kit': { redirect }, '#lib/server/auth.ts': { hashSessionToken: async token => 'hashed-' + token },
+  '#lib/server/activeBusiness.ts': { ACTIVE_BUSINESS_COOKIE: 'active-business', getActiveBusinessCookieDeleteOptions: () => ({ path: '/' }) },
+  '#lib/server/authCookies.ts': { getSessionCookieName: () => 'session', getSessionCookieDeleteOptions: () => ({ path: '/' }) }
+});
+for (const staffMode of [false, true]) {
+  const deleted = [];
+  await assert.rejects(logout.actions.default({ locals: ownerLocals, request: staffLogoutEvent.request,
+    url: new URL('https://criminiops.com/logout' + (staffMode ? '?staff=1' : '')),
+    cookies: { get: name => name === 'session' ? 'owner-token' : null, delete: name => deleted.push(name) } }),
+    { location: staffMode ? '/login?staff=1' : '/login' });
+  assert.ok(sqlite.prepare("SELECT revoked_at FROM sessions WHERE id='owner-session'").get().revoked_at);
+  assert.ok(deleted.includes('session') && deleted.includes('active-business'));
+  sqlite.exec("UPDATE sessions SET revoked_at=NULL WHERE id='owner-session'");
+}
+console.log('PASS staff logout revokes the primary session, clears cookies, returns to Staff login, and leaves restaurant logout unchanged');
 
 // Exercise the actual session proof, administration SQL, password verifier, and cleanup code.
 assert.equal(staff.staffReturnPath('https://attacker.invalid/staff'), '/staff');
@@ -438,6 +488,55 @@ const staffEntry = load('src/routes/staff/+page.server.ts', { '#lib/server/platf
 const staffLayout = load('src/routes/staff/+layout.server.ts', { '#lib/server/platformStaff.ts': staff });
 const staffPaths = ['/staff','/staff/businesses','/staff/businesses/a','/staff/equipment','/staff/health',
   '/staff/team','/staff/activity','/staff/security','/staff/support','/staff/support/request'];
+const gateEvent = { locals: ownerLocals, url: new URL('https://criminiops.com/staff/security'), setHeaders(headers) { assert.equal(headers['cache-control'], 'no-store'); } };
+const proof = sqlite.prepare("SELECT * FROM platform_staff_step_up WHERE session_id='owner-session'").get();
+assert.ok(proof);
+for (const age of [901, 8 * 3600, -100]) {
+  sqlite.prepare("UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=? WHERE session_id='owner-session'").run(now-age, now-age);
+  const response = await staffLayout.load(gateEvent);
+  if (age === 901) {
+    assert.equal(response.staff.role, 'owner', 'Fifteen-minute write refresh does not end the eight-hour console session');
+  } else {
+    assert.deepEqual(response, { staff: null, hasWorkspace: false });
+    await assert.rejects(staffLayout.load({ ...gateEvent, url: new URL('https://criminiops.com/staff') }), { status: 403 });
+  }
+}
+sqlite.prepare("DELETE FROM platform_staff_step_up WHERE session_id='owner-session'").run();
+const gateDb = { ...db, prepare(sql) {
+  assert.equal(sql.includes('FROM business_users'), false, 'No restaurant metadata is queried before staff verification');
+  return db.prepare(sql);
+} };
+assert.deepEqual(await staffLayout.load({ ...gateEvent, locals: { ...ownerLocals, DB: gateDb } }), { staff: null, hasWorkspace: false });
+for (const path of staffPaths.filter(path => path !== '/staff/security')) {
+  for (const method of ['GET', 'POST']) {
+    await assert.rejects(hooks.handle({ event: hookEvent(path, 'owner-token', { method, headers: { origin: 'https://criminiops.com' } }),
+      resolve: async () => { throw Error('Unverified staff route/action resolved: ' + path); } }),
+      { location: '/staff/security?next=' + encodeURIComponent(path) });
+  }
+}
+sqlite.prepare('INSERT INTO platform_staff_step_up(session_id,user_id,membership_revision,verified_at,email_verified_at) VALUES(?,?,?,?,?)')
+  .run(proof.session_id, proof.user_id, proof.membership_revision, proof.verified_at, proof.email_verified_at);
+console.log('PASS staff authentication excludes console/tenant data until verification and guards every direct route/action; write refresh preserves verified navigation');
+const renderedLayout = component('src/routes/staff/+layout.svelte', { '$app/state': { page: { url: gateEvent.url } } });
+const authShell = component('src/lib/components/staff/StaffAuthShell.svelte');
+const renderedSecurity = component('src/routes/staff/security/+page.svelte', { '#lib/components/staff/StaffAuthShell.svelte': authShell });
+for (const pending of [null, { id: 'opaque-test-challenge', email: 'o***@example.invalid' }]) {
+  const data = { staff: null, hasWorkspace: false, verified: false, pending, email: 'o***@example.invalid', next: '/staff/team' };
+  const screen = render(renderedSecurity.default, { props: { data, form: null } }).body;
+  const html = render(renderedLayout.default, { props: { data, children: renderer => renderer.push(screen) } }).body;
+  assert.match(html, /Verify your email/);
+  assert.match(html, /method="POST"/);
+  assert.equal(/<nav\b|<aside\b|href="\/staff|staff-console|staff-workspace/.test(html), false, 'Initial sign-in HTML must not render the console or its page catalogue');
+  assert.equal(html.includes('name="code"'), Boolean(pending));
+}
+for (const role of ['owner', 'support', 'equipment']) {
+  const html = render(renderedLayout.default, { props: { data: { staff: { role }, hasWorkspace: true }, children: renderer => renderer.push('Authenticated workspace') } }).body;
+  assert.match(html, /class="staff-sidebar/);
+  assert.match(html, /class="staff-mobile-menu/);
+  assert.equal(html.includes('href="/staff/team"'), role === 'owner');
+  assert.equal(html.includes('href="/staff/support"'), role !== 'equipment');
+}
+console.log('PASS actual Svelte-rendered sign-in and code screens contain no console navigation; verified sidebar/mobile links respect staff roles');
 const tenantCallsBeforeMatrix = tenantCalls;
 for (const path of staffPaths) {
   const event = hookEvent(path, 'manager-token');

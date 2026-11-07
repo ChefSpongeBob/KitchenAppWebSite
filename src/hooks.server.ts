@@ -141,6 +141,8 @@ function applySecurityHeaders(response: Response) {
 
 const handleRequest: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
+	const loginPath = isPlatformStaffPath(pathname) ? '/login?staff=1' : '/login';
+	const expiredLoginPath = `${loginPath}${loginPath.includes('?') ? '&' : '?'}error=session`;
 	if (building && pathname === '/[fallback]') {
 		return applySecurityHeaders(await resolve(event));
 	}
@@ -247,7 +249,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				status: 503
 			});
 			clearSessionCookies(event);
-			throw redirect(303, '/login');
+			throw redirect(303, loginPath);
 		}
 		return resolvePublicOrAuthRoute();
 	}
@@ -255,7 +257,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 	if (!sessionToken) {
 		if (isPrivateRoute) {
 			clearSessionCookies(event);
-			throw redirect(303, isPlatformStaffPath(pathname) ? '/login?staff=1' : '/login');
+			throw redirect(303, loginPath);
 		}
 		return resolvePublicOrAuthRoute();
 	}
@@ -313,7 +315,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				metadata: { reason: !session ? 'missing' : session.revoked_at !== null ? 'revoked' : 'expired' }
 			});
 			clearSessionCookies(event);
-			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, expiredLoginPath);
 			return resolvePublicOrAuthRoute();
 		}
 
@@ -329,7 +331,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				metadata: { reason: !session.found_device_id ? 'missing_device' : 'revoked_device' }
 			});
 			clearSessionCookies(event);
-			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, expiredLoginPath);
 			return resolvePublicOrAuthRoute();
 		}
 		if (!session.found_user_id) {
@@ -342,7 +344,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				status: 401
 			});
 			clearSessionCookies(event);
-			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, expiredLoginPath);
 			return resolvePublicOrAuthRoute();
 		}
 		if (session.user_is_active !== 1) {
@@ -356,7 +358,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				status: 401
 			});
 			clearSessionCookies(event);
-			if (isPrivateRoute) throw redirect(303, '/login?error=session');
+			if (isPrivateRoute) throw redirect(303, expiredLoginPath);
 			return resolvePublicOrAuthRoute();
 		}
 
@@ -397,7 +399,8 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		}
 
 		// Platform staff never inherit authority from a restaurant role or billing state.
-		if (isPlatformStaffPath(pathname) || (pathname === '/login' && event.url.searchParams.get('staff') === '1')) {
+		if (isPlatformStaffPath(pathname) ||
+			((pathname === '/login' || pathname === '/logout') && event.url.searchParams.get('staff') === '1')) {
 			let staff;
 			try {
 				staff = await findPlatformStaff(db, session.found_user_id);
@@ -636,7 +639,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		});
 		clearSessionCookies(event);
 		if (isPrivateRoute) {
-			throw redirect(303, '/login?error=session');
+			throw redirect(303, expiredLoginPath);
 		}
 		return resolvePublicOrAuthRoute();
 	}

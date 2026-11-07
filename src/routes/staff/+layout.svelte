@@ -2,42 +2,79 @@
   import { page as pageState } from '$app/state';
   import { toStore } from 'svelte/store';
   const page = toStore(() => ({ ...pageState }));
-  import Layout from '#lib/components/ui/Layout.svelte';
-  import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import type { LayoutData } from './$types';
+  import type { Snippet } from 'svelte';
   export let data: LayoutData;
+  export let children: Snippet;
 </script>
 
-<Layout>
-  {#if $page.url.pathname === '/staff'}
-    <header class="staff-brand-header"><a href="/staff"><img src="/crimini-mushrooms.svg" alt="" aria-hidden="true" /><strong>Crimini <span>Staff</span></strong></a><span>Operations Console</span></header>
-  {:else}<PageHeader title="Crimini Staff" />{/if}
+{#snippet navigation()}
   <nav class="staff-nav" aria-label="Staff console">
     <a href="/staff" aria-current={$page.url.pathname === '/staff' ? 'page' : undefined}>Dashboard</a>
     <a href="/staff/businesses" aria-current={$page.url.pathname.startsWith('/staff/businesses') ? 'page' : undefined}>Businesses</a>
-    {#if data.staff.role !== 'equipment'}<a href="/staff/support" aria-current={$page.url.pathname.startsWith('/staff/support') ? 'page' : undefined}>Support</a>{/if}
+    {#if data.staff?.role !== 'equipment'}<a href="/staff/support" aria-current={$page.url.pathname.startsWith('/staff/support') ? 'page' : undefined}>Support</a>{/if}
     <a href="/staff/equipment" aria-current={$page.url.pathname === '/staff/equipment' ? 'page' : undefined}>Equipment</a>
     <a href="/staff/health" aria-current={$page.url.pathname === '/staff/health' ? 'page' : undefined}>System Health</a>
-    {#if data.staff.role === 'owner'}<a href="/staff/team" aria-current={$page.url.pathname === '/staff/team' ? 'page' : undefined}>Staff</a>{/if}
-    {#if data.staff.role === 'owner'}<a href="/staff/activity" aria-current={$page.url.pathname === '/staff/activity' ? 'page' : undefined}>Activity</a>{/if}
+    {#if data.staff?.role === 'owner'}<a href="/staff/team" aria-current={$page.url.pathname === '/staff/team' ? 'page' : undefined}>Staff</a>{/if}
+    {#if data.staff?.role === 'owner'}<a href="/staff/activity" aria-current={$page.url.pathname === '/staff/activity' ? 'page' : undefined}>Activity</a>{/if}
     <a href="/staff/security" aria-current={$page.url.pathname === '/staff/security' ? 'page' : undefined}>Security</a>
     {#if data.hasWorkspace}<a href="/app">Open Crimini</a>{/if}
-    <form method="POST" action="/logout"><button type="submit">Sign Out</button></form>
+    <form method="POST" action="/logout?staff=1"><button type="submit">Sign Out</button></form>
   </nav>
-  <div class="staff-workspace"><slot /></div>
-</Layout>
+{/snippet}
+
+{#if data.staff}
+  <div class="staff-console">
+    <a class="staff-skip" href="#staff-content">Skip to content</a>
+    <aside class="staff-sidebar" aria-label="Staff workspace">
+      <a class="staff-brand" href="/staff"><img src="/crimini-mushrooms.svg" alt="" aria-hidden="true" /><strong>Crimini <span>Staff</span></strong></a>
+      {@render navigation()}
+    </aside>
+    <div class="staff-main">
+      <header class="staff-topline">
+        <span>Crimini Staff</span>
+        {#key $page.url.pathname}
+          <details class="staff-mobile-menu">
+            <summary>Menu</summary>
+            {@render navigation()}
+          </details>
+        {/key}
+      </header>
+      <div class="staff-workspace" id="staff-content" tabindex="-1">{@render children()}</div>
+    </div>
+  </div>
+{:else}
+  {@render children()}
+{/if}
 
 <style>
-  :global(.page:has(.staff-workspace)) { max-width: 1320px; }
-  .staff-brand-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-block: 0.3rem 1rem; }
-  .staff-brand-header a { display: flex; align-items: center; gap: 0.7rem; color: var(--color-text); text-decoration: none; }
-  .staff-brand-header img { width: 38px; height: 30px; object-fit: contain; filter: invert(1); }
-  .staff-brand-header strong { font-size: 1.05rem; letter-spacing: -0.04em; }
-  .staff-brand-header strong span { font-weight: 400; color: var(--color-text-muted); margin-left: 0.2rem; }
-  .staff-brand-header > span { font-size: 0.6rem; letter-spacing: 0.11em; text-transform: uppercase; color: var(--color-text-muted); }
-  .staff-nav { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0.8rem 0; margin-bottom: 1rem; border-bottom: 1px solid var(--color-divider); }
-  .staff-nav a { color: var(--color-text); text-decoration: none; border-bottom: 1px solid var(--color-divider); padding: 0.3rem 0; font-size: 0.8rem; }
-  .staff-nav a[aria-current] { font-weight: 700; border-bottom-color: currentColor; }
+  .staff-console { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 3rem); width: 100%; max-width: 1600px; margin: 0 auto; padding: 1rem clamp(0.5rem, 2vw, 1.5rem) 2rem; }
+  .staff-sidebar { position: sticky; top: 1rem; align-self: start; max-height: calc(100dvh - 2rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; padding-right: 1rem; border-right: 1px solid var(--color-divider); }
+  .staff-brand { display: flex; align-items: center; gap: 0.6rem; color: var(--color-text); text-decoration: none; padding-block: 0.5rem 1.75rem; }
+  .staff-brand img { width: 34px; height: 28px; object-fit: contain; filter: invert(1); }
+  .staff-brand strong { font-size: 0.95rem; letter-spacing: -0.04em; }
+  .staff-brand span { color: var(--color-text-muted); font-weight: 400; }
+  .staff-nav { display: flex; flex-direction: column; gap: 0.2rem; }
+  .staff-nav a, .staff-nav button { display: block; text-align: left; color: var(--color-text-muted); text-decoration: none; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent; padding: 0.75rem 0.4rem; font-size: 0.8rem; }
+  .staff-nav a:hover, .staff-nav button:hover { color: var(--color-text); }
+  .staff-nav a[aria-current] { color: var(--color-text); font-weight: 700; border-image: linear-gradient(90deg, var(--color-primary), transparent) 1; }
+  .staff-nav form { margin-top: 1.25rem; border-top: 1px solid var(--color-divider); padding-top: 0.5rem; }
+  .staff-main { min-width: 0; }
+  .staff-topline { min-height: 3rem; display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; padding-block: 0.5rem; border-bottom: 1px solid var(--color-divider); }
+  .staff-topline > span { color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.65rem; }
+  .staff-mobile-menu { display: none; }
+  .staff-workspace { min-width: 0; }
+  .staff-skip { position: fixed; left: 1rem; top: -5rem; z-index: 100; background: var(--color-surface); padding: 0.75rem; }
+  .staff-skip:focus { top: 1rem; }
+  @media (max-width: 900px) {
+    .staff-console { display: block; padding: 0.5rem 0 1.5rem; }
+    .staff-sidebar { display: none; }
+    .staff-topline { align-items: start; }
+    .staff-mobile-menu { display: block; min-width: 10rem; }
+    .staff-mobile-menu summary { cursor: pointer; text-align: right; font-size: 0.85rem; min-height: 2rem; }
+    .staff-mobile-menu[open] { width: 100%; }
+    .staff-mobile-menu .staff-nav { padding-top: 0.75rem; }
+  }
   .staff-workspace :global(h2) { margin: 0 0 1rem; font-size: 1.15rem; }
   .staff-workspace :global(.staff-toolbar) { display: flex; gap: 0.7rem; align-items: end; flex-wrap: wrap; margin: 0 0 1rem; }
   .staff-workspace :global(label) { display: grid; gap: 0.25rem; font-size: 0.8rem; }

@@ -147,6 +147,10 @@ async function revokeActiveSession(
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const turnstileSiteKey = getTurnstileSiteKey(locals.env);
 	const db = locals.DB;
+	if (url.searchParams.get('staff') === '1') {
+		if (db && locals.userId && await findPlatformStaff(db, locals.userId)) redirect(303, '/staff');
+		return { activeSession: null, turnstileSiteKey };
+	}
 	if (!db || !locals.userId) {
 		return { activeSession: null, turnstileSiteKey };
 	}
@@ -223,6 +227,9 @@ export const actions: Actions = {
 					.first<{ email: string | null }>();
 
 				if (String(activeUser?.email ?? '').trim().toLowerCase() === email) {
+					if (url.searchParams.get('staff') === '1' && !await findPlatformStaff(db, locals.userId)) {
+						return fail(403, { error: 'Staff access required.', email });
+					}
 					throw redirect(303, await resolvePostLoginPath(db, locals.userId, locals.businessId, url));
 				}
 			}

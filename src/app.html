@@ -79,7 +79,9 @@
 				]);
 				const isMarketingRoute =
 					marketingRoutes.has(pathname) || pathname.startsWith('/reset-password/');
-				document.documentElement.dataset.bootSplash = isMarketingRoute ? 'marketing' : 'app';
+				const isStaffRoute = pathname === '/staff' || pathname.startsWith('/staff/') ||
+					(pathname === '/login' && new URLSearchParams(window.location.search).get('staff') === '1');
+				document.documentElement.dataset.bootSplash = isStaffRoute ? 'staff' : isMarketingRoute ? 'marketing' : 'app';
 			})();
 		</script>
 		<style>
@@ -145,9 +147,14 @@
 			}
 
 			html[data-boot-splash='marketing'] .boot-marketing,
-			html[data-boot-splash='app'] .boot-app {
+			html[data-boot-splash='app'] .boot-app,
+			html[data-boot-splash='staff'] .boot-app {
 				display: grid;
 			}
+
+			html[data-boot-splash='staff'] .boot-splash { background: #101618; color: #efece5; }
+			html[data-boot-splash='staff'] .boot-logo-app { filter: invert(1); }
+			html[data-boot-splash='staff'] .boot-prepping { color: #efece5; }
 
 			.boot-copy {
 				display: grid;

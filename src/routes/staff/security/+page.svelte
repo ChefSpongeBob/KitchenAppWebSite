@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { PageData, ActionData } from './$types';
+  import StaffAuthShell from '#lib/components/staff/StaffAuthShell.svelte';
   export let data: PageData;
   export let form: ActionData;
 </script>
 
-<h2>Security</h2>
+<svelte:head><title>{data.staff ? 'Security' : 'Staff Sign In'} | Crimini</title></svelte:head>
+
+{#snippet verification()}
 {#if form && 'error' in form}<p class="staff-feedback error" role="alert">{form.error}</p>{/if}
 {#if form && 'sent' in form}<p class="staff-feedback" role="status">Code sent. Check your email.</p>{/if}
 {#if data.pending}
   <p>Enter the code sent to {data.pending.email}.</p>
-  <form method="POST" class="staff-toolbar">
+  <form method="POST" class="staff-toolbar staff-code-form">
     <input type="hidden" name="intent" value="verify" />
     <input type="hidden" name="challenge" value={data.pending.id} />
     <label>Verification Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern={'[0-9]{6}'} minlength="6" maxlength="6" required /></label>
@@ -29,15 +32,32 @@
     </form>
   </details>
 {:else}
-<p>Verify your email to open staff tools.</p>
-<form method="POST" class="staff-toolbar">
-  <input type="hidden" name="intent" value="send" />
-  <label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="1024" /></label>
-  <button type="submit">{data.pending ? 'Send New Code' : 'Send Verification Code'}</button>
-</form>
+  <p>{data.pending ? 'Need a new code?' : 'Confirm your password to send a sign-in code.'}</p>
+  {#if data.pending}<details class="staff-resend"><summary>Send New Code</summary>{@render sendCode()}</details>
+  {:else}{@render sendCode()}{/if}
+{/if}
+{/snippet}
+
+{#snippet sendCode()}
+  <form method="POST" class="staff-toolbar">
+    <input type="hidden" name="intent" value="send" />
+    <label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="1024" /></label>
+    <button type="submit">{data.pending ? 'Send New Code' : 'Send Verification Code'}</button>
+  </form>
+{/snippet}
+
+{#if data.staff}
+  <h2>Security</h2>
+  {@render verification()}
+{:else}
+  <StaffAuthShell title="Verify your email">
+    <div class="staff-verification">{@render verification()}</div>
+    <form method="POST" action="/logout?staff=1" class="staff-auth-exit"><button type="submit">Sign Out</button></form>
+  </StaffAuthShell>
 {/if}
 
 <style>
-  label { max-width: 22rem; margin-block: 1rem; }
+  .staff-verification { display: grid; gap: 1rem; }
+  label { max-width: 22rem; }
   summary { cursor: pointer; padding-block: 0.8rem; }
 </style>

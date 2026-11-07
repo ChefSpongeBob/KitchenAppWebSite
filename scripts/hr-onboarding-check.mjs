@@ -169,7 +169,7 @@ expect('src/routes/register/welcome/+page.svelte', 'employee welcome step provid
 );
 
 expect('src/routes/login/+page.svelte', 'registration confirmation uses Crimini branding and the real login flow', (source) =>
-  source.includes("registrationComplete = $page.url.searchParams.get('registered') === 'success'") &&
+  source.includes("registrationComplete = !staffLogin && $page.url.searchParams.get('registered') === 'success'") &&
   source.includes('src="/crimini-full-logo.jpg"') &&
   source.includes("registrationComplete ? 'Welcome' : 'Welcome back'") &&
   source.includes("registrationComplete ? 'Login' : 'Sign in'")

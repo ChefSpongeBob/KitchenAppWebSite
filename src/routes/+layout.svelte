@@ -275,10 +275,11 @@
     "/billing"
   ];
   $: isOnboardingRoute = currentPath === "/register" || currentPath.startsWith("/register/");
-  $: isStaffRoute = currentPath === "/staff" || currentPath.startsWith("/staff/");
+  $: isStaffRoute = currentPath === "/staff" || currentPath.startsWith("/staff/") ||
+    (currentPath === "/login" && $page.url.searchParams.get("staff") === "1");
   $: isMarketingRoute =
-    marketingExactRoutes.has(currentPath) ||
-    marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix));
+    !isStaffRoute && (marketingExactRoutes.has(currentPath) ||
+    marketingPrefixRoutes.some((prefix) => currentPath.startsWith(prefix)));
   $: isAppChromeRoute = appChromePrefixes.some(
     (prefix) =>
       currentPath === prefix ||
@@ -666,7 +667,7 @@
   <main class="app-content" class:marketing-content={isMarketingRoute} class:onboarding-content={isOnboardingRoute}>
     <slot />
   </main>
-  {#if !isOnboardingRoute}
+  {#if !isOnboardingRoute && !isStaffRoute}
   <footer class="app-footer" class:marketing-footer={isMarketingRoute}>
     <div class="footer-shell">
       <div class="footer-top">

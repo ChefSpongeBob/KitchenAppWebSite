@@ -16,7 +16,7 @@
     ...(overview.canViewApplication ? [{ label: 'Support', href: '/staff/support', icon: 'support_agent' }] : []),
     { label: 'Equipment', href: '/staff/equipment', icon: 'router' },
     { label: 'System Health', href: '/staff/health', icon: 'monitor_heart' },
-    ...(data.staff.role === 'owner' ? [
+    ...(data.staff?.role === 'owner' ? [
       { label: 'Staff', href: '/staff/team', icon: 'manage_accounts' },
       { label: 'Activity', href: '/staff/activity', icon: 'history' }
     ] : []),
