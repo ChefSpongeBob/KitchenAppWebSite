@@ -285,7 +285,7 @@
       currentPath.startsWith(`${prefix}/`) ||
       currentPath.startsWith("/app")
   );
-  $: effectiveThemeMode = isAppChromeRoute ? themeMode : "light";
+  $: effectiveThemeMode = isStaffRoute ? "dark" : isAppChromeRoute ? themeMode : "light";
   $: if (browser && isAppChromeRoute && data.user?.pushNotificationsEnabled) {
     startNativePushRegistration().catch((error) => {
       console.error("Push registration failed:", error);
@@ -645,6 +645,7 @@
 <div
   class="app-shell"
   class:marketing-app={isMarketingRoute}
+  class:staff-app={isStaffRoute}
   class:onboarding-shell={isOnboardingRoute}
   class:mobile-compact={mobileView === "compact"}
 >
@@ -721,6 +722,41 @@
 </div>
 
 <style>
+  :global(html:has(.app-shell.staff-app)),
+  :global(body:has(.app-shell.staff-app)) {
+    --color-bg: #101618;
+    --color-bg-elevated: #151d20;
+    --color-surface: #172124;
+    --color-surface-alt: #1d292d;
+    --color-surface-soft: #182226;
+    --color-primary: #8ebec6;
+    --color-primary-contrast: #101618;
+    --color-primary-soft: rgb(142 190 198 / 10%);
+    --color-accent: #d7b48a;
+    --color-text: #efece5;
+    --color-text-muted: #a1b0b5;
+    --color-text-soft: #c3cdd0;
+    --color-border: #314044;
+    --color-divider: #2a373b;
+    --color-success: #93c9b0;
+    --color-warning: #deb78b;
+    --color-error: #e6a18f;
+    background: radial-gradient(ellipse at 85% 0%, rgb(104 157 166 / 6%), transparent 45%), #101618;
+    color-scheme: dark;
+  }
+  :global(body:has(.app-shell.staff-app)::before) {
+    opacity: 0.025;
+    filter: invert(1) grayscale(1);
+  }
+  .app-shell.staff-app .app-content {
+    max-width: 1440px;
+    padding-top: calc(1rem + var(--safe-top));
+    padding-bottom: 1.5rem;
+  }
+  .app-shell.staff-app .route-splash { background: #101618; color: #efece5; }
+  .app-shell.staff-app .route-splash-logo-app { filter: invert(1); }
+  .app-shell.staff-app .route-splash-copy { color: #efece5; }
+
   /* ===== Layout ===== */
   .app-shell {
     min-height: 100dvh;

@@ -13,11 +13,15 @@ export async function loadStaffOverview(db: DB, role: PlatformStaffRole, url: UR
   const equipment = await db.prepare(`SELECT COUNT(*) AS total,
       COALESCE(SUM(CASE WHEN last_seen_at > ? AND last_seen_at <= ? THEN 1 ELSE 0 END), 0) AS online,
       COALESCE(SUM(CASE WHEN COALESCE(last_seen_at, 0) <= 0 THEN 1 ELSE 0 END), 0) AS unconnected,
+      COALESCE(SUM(CASE WHEN last_seen_at > 0 AND last_seen_at <= ? THEN 1 ELSE 0 END), 0) AS offline,
+      COALESCE(SUM(CASE WHEN last_seen_at > ? THEN 1 ELSE 0 END), 0) AS timestamp_issues,
       COUNT(DISTINCT CASE WHEN COALESCE(last_seen_at, 0) <= ? OR last_seen_at > ? THEN business_id END) AS businesses
     FROM iot_devices WHERE device_type = 'sensor_gateway' AND is_active = 1 AND revoked_at IS NULL`)
-    .bind(now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60, now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60)
-    .first<{ total: number; online: number; unconnected: number; businesses: number }>();
+    .bind(now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60, now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60,
+      now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60)
+    .first<{ total: number; online: number; unconnected: number; offline: number; timestamp_issues: number; businesses: number }>();
   const gateways = { total: equipment?.total ?? 0, online: equipment?.online ?? 0, unconnected: equipment?.unconnected ?? 0,
+    offline: equipment?.offline ?? 0, timestampIssues: equipment?.timestamp_issues ?? 0,
     attention: (equipment?.total ?? 0) - (equipment?.online ?? 0), businesses: equipment?.businesses ?? 0 };
   if (!canViewApplication) return { ...window, canViewApplication, activeBusinesses: businesses?.total ?? 0, gateways,
     affectedBusinesses: gateways.businesses, groups: [], metrics: null, trend: [], support: null, delivery: null };
@@ -46,12 +50,18 @@ export async function loadStaffOverview(db: DB, role: PlatformStaffRole, url: UR
   const totals = metrics.results.reduce((sum, row) => ({ samples: sum.samples + row.success_samples,
     duration: sum.duration + row.sample_duration_ms, errors: sum.errors + row.server_errors,
     denials: sum.denials + row.access_denials, slow: sum.slow + row.slow_requests }), { samples: 0, duration: 0, errors: 0, denials: 0, slow: 0 });
-  // Empty buckets remain unknown; sampled server timing is not an availability measurement.
   const width = window.hours === 168 ? 86400 : 3600;
-  const buckets = new Map<number, { at: number; errors: number; slow: number; samples: number; duration: number }>();
+  // Count a business once per displayed period, not once per error or hour in a daily bucket.
+  const impacts = await db.prepare(`SELECT CAST(bucket / ? AS INTEGER) * ? AS at,
+      COUNT(DISTINCT business_id) AS businesses FROM platform_request_metrics
+    WHERE bucket >= ? AND bucket <= ? AND business_id IS NOT NULL AND server_errors > 0
+    GROUP BY at ORDER BY at`).bind(width, width, window.since, now).all<{ at: number; businesses: number }>();
+  const impactByTime = new Map(impacts.results.map(row => [row.at, row.businesses]));
+  // Empty buckets remain unknown; sampled server timing is not an availability measurement.
+  const buckets = new Map<number, { at: number; errors: number; slow: number; samples: number; duration: number; businesses: number }>();
   for (const row of metrics.results) {
     const at = Math.floor(row.bucket / width) * width;
-    const bucket = buckets.get(at) ?? { at, errors: 0, slow: 0, samples: 0, duration: 0 };
+    const bucket = buckets.get(at) ?? { at, errors: 0, slow: 0, samples: 0, duration: 0, businesses: impactByTime.get(at) ?? 0 };
     bucket.errors += row.server_errors; bucket.slow += row.slow_requests;
     bucket.samples += row.success_samples; bucket.duration += row.sample_duration_ms; buckets.set(at, bucket);
   }

@@ -113,7 +113,7 @@ try {
   insert('operational_events', { id: 'failed-a', business_id: 'a', event_type: 'test', category: 'onboarding', body: 'PRIVATE EMAIL BODY', title: 'PRIVATE TITLE', delivery_status: 'failed', created_at: now, updated_at: now });
   const before = test.queryCount;
   const fleet = await overview.loadStaffOverview(db, 'owner', staffUrl, now + 40);
-  assert.equal(test.queryCount - before, 7, 'Fleet query count stays constant regardless of businesses');
+  assert.equal(test.queryCount - before, 8, 'Fleet query count stays constant regardless of businesses');
   assert.equal(fleet.activeBusinesses, 37); assert.equal(fleet.affectedBusinesses, 36);
   assert.equal(fleet.groups[0].businesses, 35); assert.equal(fleet.metrics.errors, 7); assert.equal(fleet.metrics.averageMs, 200);
   assert.equal(fleet.gateways.total, 2); assert.equal(fleet.gateways.attention, 1); assert.equal(fleet.delivery.failed, 1);
@@ -123,10 +123,27 @@ try {
   const equipment = await overview.loadStaffOverview(db, 'equipment', staffUrl, now);
   assert.equal(test.queryCount - equipmentBefore, 2); assert.equal(equipment.support, null); assert.equal(equipment.metrics, null);
   assert.equal(equipment.affectedBusinesses, 1);
+  const yesterday = Math.floor(now / 86400) * 86400 - 86400;
+  for (const [bucket, errors] of [[yesterday + 36000, 5], [yesterday + 39600, 8], [now + 10800, 99]]) {
+    insert('platform_request_metrics', { scope_key: 'platform', bucket, server_errors: errors });
+  }
+  for (const [business, bucket, errors] of [['a', yesterday + 36000, 3], ['a', yesterday + 39600, 6], ['b', yesterday + 39600, 2], ['b', now + 10800, 99]]) {
+    insert('platform_request_metrics', { scope_key: 'business:' + business, business_id: business, bucket, server_errors: errors });
+  }
+  const hourly = await overview.loadStaffOverview(db, 'owner', staffUrl, yesterday + 43199);
+  assert.deepEqual(hourly.trend.map(({ errors, businesses }) => ({ errors, businesses })), [{ errors: 5, businesses: 1 }, { errors: 8, businesses: 2 }]);
+  const daily = await overview.loadStaffOverview(db, 'owner', url('/staff?hours=168'), now + 40);
+  assert.equal(daily.trend.find(row => row.at === yesterday).businesses, 2, 'Repeated errors/hours do not count a business twice in a daily period');
+  assert.equal(daily.metrics.errors, 20, 'Future observations are excluded');
+  assert.equal(daily.trend.find(row => row.at === Math.floor(now / 86400) * 86400).businesses, 0, 'Global-only activity does not invent a tenant');
+  for (const [id, seen] of [['never', null], ['future', now + 900]]) insert('iot_devices', { id, business_id: 'b', device_type: 'sensor_gateway', external_device_id: id, display_name: id, key_hash: 'PRIVATE', key_prefix: 'PRIVATE', last_seen_at: seen, created_at: now, updated_at: now });
+  const connections = (await overview.loadStaffOverview(db, 'equipment', staffUrl, now)).gateways;
+  assert.deepEqual([connections.online, connections.offline, connections.unconnected, connections.timestampIssues], [1, 1, 1, 1]);
+  assert.equal(connections.online + connections.offline + connections.unconnected + connections.timestampIssues, connections.total);
   const failures = await overview.loadStaffDeliveryIssues(db, 'owner', staffUrl, now);
   assert.equal(failures.rows.length, 1); assert.equal(JSON.stringify(failures).includes('PRIVATE'), false);
   await assert.rejects(overview.loadStaffDeliveryIssues(db, 'equipment', staffUrl), { status: 403 });
-  console.log('PASS true fleet counts beyond 20 records, grouped signals, sampled trends, no content exposure and constant bounded query count');
+  console.log('PASS true fleet counts, hourly/daily distinct tenant impact without future/fabricated observations, exact gateway states and constant bounded query count');
 
   const customerPage = load('src/routes/support/+page.server.ts');
   const staffLayout = load('src/routes/staff/+layout.server.ts');
@@ -161,6 +178,7 @@ try {
   console.log('PASS actual customer/staff loaders and actions, anonymous read-only Support, nonstaff/equipment denial, hidden-business tampering denial, save redirect and rate limit');
 
   for (const [sql, values, index] of [
+    ["SELECT bucket FROM platform_request_metrics WHERE bucket>=? AND bucket<=? AND business_id IS NOT NULL AND server_errors>0 ORDER BY bucket", [now - 86400, now], 'idx_platform_metrics_expiry'],
     ["SELECT id FROM platform_support_requests WHERE business_id=? AND requester_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 21", ['a', 'alice'], 'idx_support_requester_recent'],
     ["SELECT id FROM platform_support_requests INDEXED BY idx_support_active_recent WHERE status IN ('open','waiting') ORDER BY updated_at DESC,id DESC LIMIT 21", [], 'idx_support_active_recent'],
     ["SELECT id FROM platform_support_messages WHERE business_id=? AND request_id=? AND visibility='customer' ORDER BY created_at DESC,id DESC LIMIT 21", ['a', id], 'idx_support_messages_customer'],
