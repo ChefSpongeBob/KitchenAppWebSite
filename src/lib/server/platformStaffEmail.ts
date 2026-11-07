@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { hashSessionToken, verifyPassword } from '#lib/server/auth.ts';
 import { isEmailConfigured, renderCriminiEmail, sendTransactionalEmail } from '#lib/server/email.ts';
 import { STAFF_STEP_UP_SECONDS } from '#lib/server/platformStaff.ts';
+import { checkRateLimit } from '#lib/server/security.ts';
 
 type DB = App.RuntimeEnv['DB'];
 type Purpose = 'sign_in' | 'change_email';
@@ -59,14 +60,20 @@ const LIVE_CHALLENGE_SQL = `EXISTS (SELECT 1 FROM platform_staff_members m JOIN 
 export async function beginStaffEmailChallenge(locals: App.Locals, password: string, purpose: Purpose, newEmail?: string) {
   if (!locals.userId || !locals.sessionId) error(401, 'Sign in again.');
   if (!isEmailConfigured(locals.env)) error(503, 'Verification email is unavailable. Try again shortly.');
-  if (!password || password.length > 1024) error(400, 'Enter your password.');
   const now = Math.floor(Date.now() / 1000);
   const row = await staffEmailIdentity(locals.DB, locals.userId, locals.sessionId, now);
   if (!row?.password_hash) error(401, 'Sign in again.');
-  let valid = false;
-  try { valid = (await verifyPassword(password, row.password_hash, locals.env)).valid; }
-  catch { error(503, 'Staff verification is unavailable. Try again shortly.'); }
-  if (!valid) error(400, 'Password could not be confirmed.');
+  const limit = await checkRateLimit(locals.DB, { action: 'staff-email-code-send', identifier: locals.userId,
+    limit: 5, windowSeconds: 900, blockSeconds: 900 });
+  if (!limit.allowed) error(429, 'Please wait before trying staff verification again.');
+  // Sign-in already authenticated the primary session; only changing the factor needs another password check.
+  if (purpose === 'change_email') {
+    if (!password || password.length > 1024) error(400, 'Enter your password.');
+    let valid = false;
+    try { valid = (await verifyPassword(password, row.password_hash, locals.env)).valid; }
+    catch { error(503, 'Staff verification is unavailable. Try again shortly.'); }
+    if (!valid) error(400, 'Password could not be confirmed.');
+  }
   const sourceEmail = staffEmail(row.email);
   const recipient = purpose === 'change_email' ? staffEmail(newEmail ?? '') : sourceEmail;
   if (purpose === 'change_email' && recipient === sourceEmail) error(400, 'Enter a different email address.');

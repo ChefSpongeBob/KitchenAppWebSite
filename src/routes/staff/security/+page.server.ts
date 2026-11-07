@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requirePlatformStaff(locals, undefined, true);
   const identity = locals.sessionId && await staffEmailIdentity(locals.DB, staff.userId, locals.sessionId);
   if (!identity) redirect(303, '/login?staff=1');
-  return { next: staffReturnPath(url.searchParams.get('next')),
+  return { next: staffReturnPath(url.searchParams.get('next')), deliveryFailed: url.searchParams.get('delivery') === 'retry',
     verified: Boolean(await loadStaffStepUp(locals.DB, staff.userId, locals.sessionId!)),
     email: maskStaffEmail(identity.email),
     pending: await pendingStaffEmailChallenge(locals.DB, staff.userId, locals.sessionId!) };
@@ -23,9 +23,11 @@ export const actions: Actions = {
     const intent = String(form.get('intent') ?? '');
     if (!['send', 'change_email', 'verify'].includes(intent)) return fail(400, { error: 'Choose a verification option.' });
     const verifying = intent === 'verify';
-    const limit = await checkRateLimit(locals.DB, { action: verifying ? 'staff-email-code-check' : 'staff-email-code-send',
-      identifier: staff.userId, limit: verifying ? 10 : 5, windowSeconds: 900, blockSeconds: 900 });
-    if (!limit.allowed) return rateLimitFailure('Please wait before trying staff verification again.');
+    if (verifying) {
+      const limit = await checkRateLimit(locals.DB, { action: 'staff-email-code-check',
+        identifier: staff.userId, limit: 10, windowSeconds: 900, blockSeconds: 900 });
+      if (!limit.allowed) return rateLimitFailure('Please wait before trying staff verification again.');
+    }
     try {
       if (!verifying) {
         if (intent === 'change_email') await requireStaffStepUp(locals);

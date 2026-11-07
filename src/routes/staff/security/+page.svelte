@@ -10,6 +10,7 @@
 {#snippet verification()}
 {#if form && 'error' in form}<p class="staff-feedback error" role="alert">{form.error}</p>{/if}
 {#if form && 'sent' in form}<p class="staff-feedback" role="status">Code sent. Check your email.</p>{/if}
+{#if data.deliveryFailed && !data.pending && !form}<p class="staff-feedback error" role="alert">Code could not be sent. Try again shortly.</p>{/if}
 {#if data.pending}
   <p>Enter the code sent to {data.pending.email}.</p>
   <form method="POST" class="staff-toolbar staff-code-form">
@@ -32,16 +33,13 @@
     </form>
   </details>
 {:else}
-  <p>{data.pending ? 'Need a new code?' : 'Confirm your password to send a sign-in code.'}</p>
-  {#if data.pending}<details class="staff-resend"><summary>Send New Code</summary>{@render sendCode()}</details>
-  {:else}{@render sendCode()}{/if}
+  {@render sendCode()}
 {/if}
 {/snippet}
 
 {#snippet sendCode()}
   <form method="POST" class="staff-toolbar">
     <input type="hidden" name="intent" value="send" />
-    <label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="1024" /></label>
     <button type="submit">{data.pending ? 'Send New Code' : 'Send Verification Code'}</button>
   </form>
 {/snippet}

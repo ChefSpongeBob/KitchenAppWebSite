@@ -6,6 +6,7 @@ import { compile } from 'svelte/compiler';
 import { render } from 'svelte/server';
 import * as serverRuntime from 'svelte/internal/server';
 import * as stores from 'svelte/store';
+import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
 
 function component(path, deps = {}) {
   const exports = {};
@@ -329,23 +330,13 @@ const login = load('src/routes/login/+page.server.ts', {
   '$app/env': { dev: false }, '#lib/server/auth.ts': {}, '#lib/server/authCookies.ts': {},
   '#lib/server/activeBusiness.ts': {}, '#lib/server/dbSchema.ts': {}, '#lib/server/business.ts': {},
   '#lib/server/permissions.ts': {}, '#lib/server/security.ts': {}, '#lib/server/turnstile.ts': { getTurnstileSiteKey: () => 'test-site-key' },
-  '#lib/server/platformStaff.ts': staff
+  '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffEmail.ts': {}
 });
-const loginForm = new FormData();
-loginForm.set('email', 'owner@example.invalid');
-loginForm.set('password', 'not-used-for-existing-session');
 const staffLoginUrl = new URL('https://criminiops.com/login?/login&staff=1');
-await assert.rejects(login.actions.login({
-  locals: { DB: db, userId: 'owner' }, url: staffLoginUrl,
-  request: new Request(staffLoginUrl, { method: 'POST', body: loginForm })
-}), { location: '/staff' });
-console.log('PASS named login action preserves the staff destination for authenticated platform accounts');
 await assert.rejects(login.load({ locals: ownerLocals, url: staffLoginUrl }), { location: '/staff' });
 for (const locals of [{}, { DB: db, userId: 'manager' }]) {
   assert.deepEqual(await login.load({ locals, url: staffLoginUrl }), { activeSession: null, turnstileSiteKey: 'test-site-key' });
 }
-assert.equal((await login.actions.login({ locals: { DB: db, userId: 'manager' }, url: staffLoginUrl,
-  request: new Request(staffLoginUrl, { method: 'POST', body: new URLSearchParams({ email: 'manager@example.invalid', password: 'unused' }) }) })).status, 403);
 for (const token of ['unknown-session', 'manager-token']) {
   if (token === 'manager-token') sqlite.prepare("UPDATE sessions SET revoked_at=? WHERE id='manager-session'").run(now);
   await assert.rejects(hooks.handle({ event: hookEvent('/staff/equipment', token), resolve: async () => { throw Error('Invalid session resolved'); } }),
@@ -528,6 +519,8 @@ for (const pending of [null, { id: 'opaque-test-challenge', email: 'o***@example
   assert.match(html, /method="POST"/);
   assert.equal(/<nav\b|<aside\b|href="\/staff|staff-console|staff-workspace/.test(html), false, 'Initial sign-in HTML must not render the console or its page catalogue');
   assert.equal(html.includes('name="code"'), Boolean(pending));
+  assert.equal(html.includes('name="password"'), false, 'The email-code step never asks for the sign-in password again');
+  assert.equal(/<summary[^>]*>Send New Code/.test(html), false, 'Resend is a plain button, not a disclosure arrow');
 }
 for (const role of ['owner', 'support', 'equipment']) {
   const html = render(renderedLayout.default, { props: { data: { staff: { role }, hasWorkspace: true }, children: renderer => renderer.push('Authenticated workspace') } }).body;
@@ -602,7 +595,7 @@ const emailModule = {
 };
 const staffEmailModule = load('src/lib/server/platformStaffEmail.ts', {
   '@sveltejs/kit': kit, '#lib/server/auth.ts': auth, '#lib/server/platformStaff.ts': staff,
-  '#lib/server/email.ts': emailModule
+  '#lib/server/email.ts': emailModule, '#lib/server/security.ts': { checkRateLimit: async () => ({ allowed: rateAllowed }) }
 });
 const securityPage = load('src/routes/staff/security/+page.server.ts', {
   '@sveltejs/kit': { ...actionKit, redirect, isRedirect: error => Boolean(error.location) },
@@ -622,7 +615,7 @@ function securityEvent(fields, locals = ownerLocals) {
     } } };
 }
 const action = fields => securityPage.actions.default(securityEvent(fields));
-const sendFields = { intent: 'send', password: 'Staff-test-password!' };
+const sendFields = { intent: 'send' };
 const challengeRow = () => sqlite.prepare("SELECT * FROM platform_staff_email_challenges WHERE session_id='owner-session'").get();
 function mailedCode() {
   const value = messages.at(-1).text.match(/code is ([0-9]{6})/)[1];
@@ -636,7 +629,8 @@ async function issue(fields = sendFields) {
   return { intent: 'verify', challenge: challengeRow().challenge_id, code: mailedCode() };
 }
 const beforePasswordOnly = sqlite.prepare("SELECT session_token_hash FROM sessions WHERE id='owner-session'").get().session_token_hash;
-assert.equal((await action({ ...sendFields, password: 'wrong' })).status, 400);
+await assert.rejects(staffEmailModule.beginStaffEmailChallenge({ ...ownerLocals, userId: null, env: passwordEnv }, '', 'sign_in'), { status: 401 });
+await assert.rejects(securityPage.actions.default(securityEvent(sendFields, { DB: db, userId: 'manager', sessionId: 'manager-session' })), { status: 403 });
 assert.equal(messages.length,0);
 rateAllowed = false;
 assert.equal((await action(sendFields)).status, 429);
@@ -706,7 +700,9 @@ console.log('PASS expiry, five-attempt exhaustion, resend, cross-session replay,
 sqlite.exec(`INSERT INTO sessions VALUES('owner-other-session','owner',NULL,${now+3600},NULL,'other-session-token',${now});
   INSERT INTO platform_staff_step_up SELECT 'owner-other-session',user_id,revision,${now},${now} FROM platform_staff_members WHERE user_id='owner';`);
 const originalEmail = sqlite.prepare("SELECT email FROM users WHERE id='owner'").get().email;
-const changeCode = await issue({ ...sendFields,intent:'change_email',email:'new-owner@example.invalid' });
+assert.equal((await action({ intent: 'change_email', email: 'new-owner@example.invalid', password: 'wrong' })).status,400);
+assert.equal((await action({ intent: 'change_email', email: 'new-owner@example.invalid' })).status,400);
+const changeCode = await issue({ intent:'change_email',email:'new-owner@example.invalid',password:'Staff-test-password!' });
 assert.equal(messages.at(-1).to,'new-owner@example.invalid');
 assert.equal(sqlite.prepare("SELECT otp_email FROM platform_staff_members WHERE user_id='owner'").get().otp_email,null,'No address change until the new mailbox is verified');
 sqlite.exec("CREATE TRIGGER test_audit_failure BEFORE INSERT ON platform_staff_audit BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;");
@@ -776,4 +772,68 @@ assert.throws(() => sqlite.exec("UPDATE iot_device_reservations SET business_id=
 assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
 console.log('PASS multiple-owner transitions, inactive-owner exclusion, stale actor rejection, and FK cleanup without gateway reassignment');
 sqlite.close();
+
+// Exercise the complete password action, automatic delivery and retry against the current schema.
+const loginTest = createTestD1();
+let passwordChecks = 0;
+let automaticMailAccepted = true;
+const automaticMessages = [];
+const integrationLoad = loadServerModules({
+  '#lib/server/auth.ts': { ...auth, verifyPassword: (...args) => { passwordChecks++; return auth.verifyPassword(...args); } },
+  '#lib/server/email.ts': { isEmailConfigured: () => true, renderCriminiEmail: ({ body }) => body,
+    sendTransactionalEmail: async message => { automaticMessages.push(message); return { sent: automaticMailAccepted }; } }
+});
+const passwordLogin = integrationLoad('src/routes/login/+page.server.ts');
+const codePage = integrationLoad('src/routes/staff/security/+page.server.ts');
+const primaryCookies = new Map();
+const loginPassword = 'Staff-test-password!';
+for (const id of ['staff-owner', 'ordinary-user']) {
+  loginTest.sqlite.prepare(`INSERT INTO users(id,email,email_normalized,display_name,password_hash,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?)`).run(id, id+'@example.invalid', id+'@example.invalid', id,
+      await auth.hashPassword(loginPassword,passwordEnv), now, now);
+}
+loginTest.sqlite.prepare(`INSERT INTO platform_staff_members(user_id,staff_role,created_at,updated_at) VALUES('staff-owner','owner',?,?)`).run(now,now);
+function passwordEvent(password = loginPassword, userId, email = 'staff-owner@example.invalid') {
+  return { locals: { DB: loginTest.db, env: passwordEnv, userId }, url: staffLoginUrl,
+    request: new Request(staffLoginUrl,{ method: 'POST', headers: { origin: 'https://criminiops.com' },
+      body: new URLSearchParams({ email,password }) }), getClientAddress: () => '127.0.0.1',
+    cookies: { get: name => primaryCookies.get(name), set: (name,value) => primaryCookies.set(name,value), delete: name => primaryCookies.delete(name) } };
+}
+assert.equal((await passwordLogin.actions.login(passwordEvent('wrong','staff-owner'))).status,400,'Staff sign-in cannot bypass the password using an existing session');
+assert.equal(automaticMessages.length,0);
+assert.equal((await passwordLogin.actions.login(passwordEvent(loginPassword,'ordinary-user','ordinary-user@example.invalid'))).status,403);
+assert.equal(automaticMessages.length,0,'An ordinary restaurant account cannot request a Staff code');
+const checksBefore = passwordChecks;
+await assert.rejects(passwordLogin.actions.login(passwordEvent()),{ location:'/staff' });
+assert.equal(passwordChecks-checksBefore,1,'A Staff login verifies the password exactly once');
+assert.equal(automaticMessages.length,1,'A valid Staff login automatically sends one code');
+assert.equal(automaticMessages[0].to,'staff-owner@example.invalid');
+const sessionRow = loginTest.sqlite.prepare('SELECT * FROM sessions WHERE session_token_hash=?')
+  .get(await auth.hashSessionToken(primaryCookies.get('__Host-kitchen_session')));
+assert.ok(sessionRow);
+const staffPrimary = { DB:loginTest.db,env:passwordEnv,userId:'staff-owner',sessionId:sessionRow.id };
+const automaticPage = await codePage.load({ locals:staffPrimary,url:new URL('https://criminiops.com/staff/security') });
+assert.ok(automaticPage.pending);
+assert.equal(automaticPage.verified,false);
+assert.equal(loginTest.sqlite.prepare('SELECT COUNT(*) AS n FROM platform_staff_step_up').get().n,0,'Automatic code delivery is not staff authentication');
+assert.equal(loginTest.sqlite.prepare('SELECT session_token_hash FROM platform_staff_email_challenges WHERE session_id=?').get(sessionRow.id).session_token_hash,sessionRow.session_token_hash);
+automaticMailAccepted = false;
+loginTest.sqlite.exec('UPDATE platform_staff_email_challenges SET created_at=created_at-61');
+await assert.rejects(passwordLogin.actions.login(passwordEvent(loginPassword,'staff-owner')),{ location:'/staff/security?delivery=retry' });
+assert.ok(loginTest.sqlite.prepare('SELECT revoked_at FROM sessions WHERE id=?').get(sessionRow.id).revoked_at,'A fresh sign-in revokes the browser\'s previous primary session');
+const retrySession = loginTest.sqlite.prepare('SELECT * FROM sessions WHERE session_token_hash=?')
+  .get(await auth.hashSessionToken(primaryCookies.get('__Host-kitchen_session')));
+const retryLocals = { ...staffPrimary,sessionId:retrySession.id };
+const retryLoad = await codePage.load({locals:retryLocals,url:new URL('https://criminiops.com/staff/security?delivery=retry')});
+assert.equal(retryLoad.pending,null);
+assert.equal(retryLoad.deliveryFailed,true);
+assert.equal(retryLoad.verified,false);
+automaticMailAccepted = true;
+const retryForm = new URLSearchParams({ intent:'send',email:'attacker@example.invalid' });
+assert.equal((await codePage.actions.default({locals:retryLocals,url:new URL('https://criminiops.com/staff/security'),
+  request:new Request('https://criminiops.com/staff/security',{method:'POST',body:retryForm})})).sent,true,'Code delivery can be retried without a second password');
+assert.equal(automaticMessages.at(-1).to,'staff-owner@example.invalid','Resend cannot redirect a code to a submitted address');
+assert.deepEqual(loginTest.sqlite.prepare('PRAGMA foreign_key_check').all(),[]);
+loginTest.sqlite.close();
+console.log('PASS full-schema Staff login verifies one password, automatically emails a session-bound code, retains the MFA gate, and supports password-free resend/provider-failure recovery');
 console.log('Platform staff integration checks passed.');

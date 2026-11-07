@@ -23,6 +23,7 @@ import {
 import { getTurnstileSiteKey, validateTurnstileSubmission } from '#lib/server/turnstile.ts';
 import type { PageServerLoad } from './$types';
 import { findPlatformStaff } from '#lib/server/platformStaff.ts';
+import { beginStaffEmailChallenge } from '#lib/server/platformStaffEmail.ts';
 
 const GENERIC_LOGIN_ERROR = 'We could not sign you in with those details. Check your email and password and try again.';
 
@@ -198,6 +199,7 @@ export const actions: Actions = {
 	},
 	login: async ({ request, cookies, locals, getClientAddress, url }) => {
 		let email = '';
+		const staffLogin = url.searchParams.get('staff') === '1';
 		try {
 			const formData = await request.formData();
 
@@ -213,7 +215,7 @@ export const actions: Actions = {
 				return fail(503, { error: 'Sign in is temporarily unavailable. Please try again in a moment.', email });
 			}
 
-			if (locals.userId) {
+			if (locals.userId && !staffLogin) {
 				const activeUser = await db
 					.prepare(
 						`
@@ -227,9 +229,6 @@ export const actions: Actions = {
 					.first<{ email: string | null }>();
 
 				if (String(activeUser?.email ?? '').trim().toLowerCase() === email) {
-					if (url.searchParams.get('staff') === '1' && !await findPlatformStaff(db, locals.userId)) {
-						return fail(403, { error: 'Staff access required.', email });
-					}
 					throw redirect(303, await resolvePostLoginPath(db, locals.userId, locals.businessId, url));
 				}
 			}
@@ -361,7 +360,6 @@ export const actions: Actions = {
 
 			const now = Math.floor(Date.now() / 1000);
 			const expires = now + 60 * 60 * 24 * 30;
-			const staffLogin = url.searchParams.get('staff') === '1';
 			if (staffLogin && !await findPlatformStaff(db, user.id)) {
 				return fail(403, { error: 'Staff access required.', email });
 			}
@@ -492,6 +490,14 @@ export const actions: Actions = {
 			]);
 
 			setSessionCookies(cookies, request, sessionToken);
+			if (staffLogin) {
+				try {
+					await beginStaffEmailChallenge({ ...locals, userId: user.id, sessionId }, '', 'sign_in');
+				} catch {
+					// Keep the primary session, but never open the console when code delivery fails.
+					throw redirect(303, '/staff/security?delivery=retry');
+				}
+			}
 			throw redirect(
 				303,
 				await resolvePostLoginPath(db, user.id, businessContext?.businessId, url)
