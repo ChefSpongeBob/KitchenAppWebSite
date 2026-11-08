@@ -1,6 +1,8 @@
 import type { Actions, PageServerLoad } from './$types';
+import { error } from '@sveltejs/kit';
 import { requireAdmin } from '#lib/server/admin.ts';
 import { requireBusinessId } from '#lib/server/tenant.ts';
+import { getBusinessWeekStart, isCalendarDate } from '#lib/timeZones.ts';
 import {
   addDays,
   applyScheduleTemplateToWeek,
@@ -20,7 +22,6 @@ import {
   declineScheduleTimeOffRequest,
   declineScheduleShiftOffer,
   declineScheduleOpenShiftRequest,
-  getWeekStart,
   loadScheduleAvailabilityByUser,
   loadScheduleAssignableUsers,
   loadScheduleLaborTargets,
@@ -46,7 +47,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   requireAdmin(locals.userRole);
   depends('app:admin-schedule');
   const db = locals.DB;
-  const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
+  const weekStart = (url.searchParams.get('week') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) error(400, 'Select a valid schedule week.');
   const requestedTool = (url.searchParams.get('tool') ?? '').trim();
   const initialTool = ['approvals', 'open-shifts', 'labor', 'templates', 'setup'].includes(requestedTool)
     ? requestedTool

@@ -165,6 +165,7 @@ const REQUIRED_CORE_INDEXES = [
 ];
 
 const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
+  businesses: ['time_zone'],
   platform_support_requests: ['id', 'business_id', 'requester_user_id', 'created_by', 'submission_id', 'source', 'subject', 'category', 'priority', 'status', 'revision', 'created_at', 'updated_at'],
   platform_support_messages: ['id', 'business_id', 'request_id', 'author_user_id', 'author_type', 'visibility', 'body', 'created_at'],
 	platform_diagnostic_issues: ['id', 'business_id', 'area', 'route_id', 'operation', 'kind', 'status', 'occurrences',

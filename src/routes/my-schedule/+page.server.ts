@@ -1,12 +1,11 @@
 import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { isValidScheduleDepartment } from '#lib/assets/schedule.ts';
 import {
   addDays,
   cancelUserScheduleTimeOffRequest,
   cancelScheduleShiftOffer,
   createUserScheduleTimeOffRequest,
-  getWeekStart,
   loadMyWeekSchedule,
   loadScheduleAssignableUsers,
   loadScheduleOpenShiftRequestsForWeek,
@@ -26,6 +25,7 @@ import {
 } from '#lib/server/schedules.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { requireBusinessId } from '#lib/server/tenant.ts';
+import { getBusinessWeekStart, isCalendarDate } from '#lib/timeZones.ts';
 import type { Actions } from './$types';
 
 function canManageSchedule(locals: App.Locals) {
@@ -45,7 +45,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   const userId = locals.userId;
 
   const db = locals.DB;
-  const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
+  const weekStart = (url.searchParams.get('week') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) error(400, 'Select a valid schedule week.');
   const requestedView = (url.searchParams.get('view') ?? '').trim();
   const initialView = ['week', 'pool', 'availability', 'time-off'].includes(requestedView)
     ? requestedView

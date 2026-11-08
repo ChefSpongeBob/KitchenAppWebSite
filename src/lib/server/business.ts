@@ -25,6 +25,7 @@ export type BusinessContext = {
   businessCapabilityOverrides: BusinessCapabilityOverrides;
   businessCapabilities: BusinessCapability[];
   businessLogoUrl: string | null;
+  businessTimeZone: string;
 };
 
 export type BusinessPosition = {
@@ -135,6 +136,7 @@ export async function ensureBusinessSchema(db: D1) {
   await ensureOptionalColumn(db, 'businesses', 'address_state', 'TEXT');
   await ensureOptionalColumn(db, 'businesses', 'address_postal_code', 'TEXT');
   await ensureOptionalColumn(db, 'businesses', 'address_country', 'TEXT');
+  await ensureOptionalColumn(db, 'businesses', 'time_zone', "TEXT NOT NULL DEFAULT 'UTC'");
   await ensureOptionalColumn(db, 'businesses', 'addon_temp_monitoring', 'INTEGER NOT NULL DEFAULT 0');
 
   await db
@@ -338,6 +340,7 @@ function mapBusinessContextRow(row: {
   business_slug: string;
   business_plan: string;
   business_logo_url: string | null;
+  business_time_zone?: string | null;
   business_role: string;
   permission_template?: string | null;
   position_id?: string | null;
@@ -352,7 +355,8 @@ function mapBusinessContextRow(row: {
     businessPermissionTemplate: row.permission_template ?? row.business_role,
     businessPositionId: row.position_id ?? null,
     businessPositionName: row.position_name ?? null,
-    businessLogoUrl: row.business_logo_url
+    businessLogoUrl: row.business_logo_url,
+    businessTimeZone: row.business_time_zone ?? 'UTC'
   } satisfies BusinessMembershipSummary;
 }
 
@@ -534,6 +538,7 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
           b.slug AS business_slug,
           b.plan_tier AS business_plan,
           b.sidebar_logo_url AS business_logo_url,
+          b.time_zone AS business_time_zone,
           bu.role AS business_role,
           COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
           bp.id AS position_id,
@@ -555,6 +560,7 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         business_slug: string;
         business_plan: string;
         business_logo_url: string | null;
+        business_time_zone: string;
         business_role: string;
         permission_template: string;
         position_id: string | null;
@@ -575,6 +581,7 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
         b.slug AS business_slug,
         b.plan_tier AS business_plan,
         b.sidebar_logo_url AS business_logo_url,
+        b.time_zone AS business_time_zone,
         bu.role AS business_role,
         COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
         bp.id AS position_id,
@@ -607,6 +614,7 @@ export async function getUserBusinessContext(db: D1, userId: string, preferredBu
       business_slug: string;
       business_plan: string;
       business_logo_url: string | null;
+      business_time_zone: string;
       business_role: string;
       permission_template: string;
       position_id: string | null;
@@ -630,6 +638,7 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
         b.slug AS business_slug,
         b.plan_tier AS business_plan,
         b.sidebar_logo_url AS business_logo_url,
+        b.time_zone AS business_time_zone,
         bu.role AS business_role,
         COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
         bp.id AS position_id,
@@ -661,6 +670,7 @@ export async function loadUserBusinessMemberships(db: D1, userId: string) {
       business_slug: string;
       business_plan: string;
       business_logo_url: string | null;
+      business_time_zone: string;
       business_role: string;
       permission_template: string;
       position_id: string | null;
@@ -765,6 +775,7 @@ export async function bootstrapBusinessForUser(
     businessPositionName: null,
     businessCapabilityOverrides: {},
     businessCapabilities: resolveBusinessCapabilities(businessRole, businessRole),
-    businessLogoUrl: null
+    businessLogoUrl: null,
+    businessTimeZone: 'UTC'
   } satisfies BusinessContext;
 }

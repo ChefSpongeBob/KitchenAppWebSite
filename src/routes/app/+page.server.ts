@@ -173,7 +173,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const todaySchedulePromise =
     featureAccess.scheduling && locals.userId && db
       ? safeHomeData(
-          loadTodayShifts(db, locals.userId, undefined, businessId, { publishedOnly: !isAdmin }),
+          loadTodayShifts(db, locals.userId, undefined, businessId, { publishedOnly: !isAdmin, timeZone: locals.businessTimeZone }),
           [] as TodayShift[],
           'today schedule'
         )

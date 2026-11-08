@@ -9,6 +9,7 @@ import {
 } from '#lib/assets/schedule.ts';
 import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
 import { recordSchedulePublishSnapshot } from '#lib/server/history.ts';
+import { getBusinessDate, getBusinessWeekStart, isCalendarDate } from '#lib/timeZones.ts';
 import { ensureBusinessSchema } from '#lib/server/business.ts';
 import { hasBusinessCapability, normalizeBusinessRole } from '#lib/server/permissions.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
@@ -1397,7 +1398,7 @@ export async function getOrCreateScheduleWeek(
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
 
-  let week = await db
+  const readWeek = () => db
     .prepare(
       `
       SELECT id, week_start, status, published_at, updated_at,
@@ -1420,6 +1421,8 @@ export async function getOrCreateScheduleWeek(
       draft_updated_at: number | null;
     }>();
 
+  let week = await readWeek();
+
   if (!week) {
     const now = Math.floor(Date.now() / 1000);
     const id = crypto.randomUUID();
@@ -1428,22 +1431,14 @@ export async function getOrCreateScheduleWeek(
         `
         INSERT INTO schedule_weeks (id, week_start, status, published_at, updated_at, updated_by, business_id)
         VALUES (?, ?, 'draft', NULL, ?, ?, ?)
+        ON CONFLICT(business_id, week_start) DO NOTHING
         `
       )
       .bind(id, weekStart, now, userId ?? null, businessId)
       .run();
 
-    week = {
-      id,
-      week_start: weekStart,
-      status: 'draft',
-      published_at: null,
-      updated_at: now,
-      draft_version: 0,
-      published_version: 0,
-      has_unpublished_changes: 0,
-      draft_updated_at: null
-    };
+    week = await readWeek();
+    if (!week) throw new Error('Schedule week could not be created.');
   }
 
   return {
@@ -1889,11 +1884,12 @@ export async function loadMyWeekSchedule(
 export async function loadTodayShifts(
   db: DB,
   userId: string,
-  date = isoDate(new Date()),
+  date: string | undefined = undefined,
   businessId?: string | null,
-  options: { publishedOnly?: boolean } = {}
+  options: { publishedOnly?: boolean; timeZone?: string } = {}
 ) {
   await ensureScheduleSchema(db);
+  date ??= getBusinessDate(options.timeZone);
   const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
   const schedule = await loadMyWeekSchedule(db, weekStart, userId, businessId, {
     publishedOnly: options.publishedOnly ?? true,
@@ -2865,7 +2861,7 @@ function isTimeLabel(value: string) {
 }
 
 function isDateInWeek(date: string, weekStart: string) {
-  return date >= weekStart && date <= addDays(weekStart, 6);
+  return isCalendarDate(date) && isCalendarDate(weekStart) && date >= weekStart && date <= addDays(weekStart, 6);
 }
 
 function normalizeScheduleShiftId(value: unknown) {
@@ -2893,7 +2889,8 @@ async function loadPublishShifts(
   db: DB,
   weekId: string,
   businessId?: string | null,
-  source: ScheduleShiftSource = 'schedule_shifts'
+  source: ScheduleShiftSource = 'schedule_shifts',
+  departmentScope: string | null = null
 ) {
   return db
     .prepare(
@@ -2915,10 +2912,11 @@ async function loadPublishShifts(
        AND member.user_id = s.user_id
       JOIN users u ON u.id = member.user_id
       WHERE s.week_id = ? AND s.business_id = ?
+        AND (? IS NULL OR s.department IN (SELECT value FROM json_each(?)))
       ORDER BY s.shift_date ASC, s.user_id ASC, s.start_time ASC, s.sort_order ASC
       `
     )
-    .bind(weekId, businessId ?? '')
+    .bind(weekId, businessId ?? '', departmentScope, departmentScope)
     .all<PublishShiftRow>();
 }
 
@@ -2928,10 +2926,11 @@ async function validatePublishWeek(
   weekStart: string,
   businessId?: string | null,
   shiftSource: ScheduleShiftSource = 'schedule_shifts',
-  openShiftSource: ScheduleOpenShiftSource = 'schedule_open_shifts'
+  openShiftSource: ScheduleOpenShiftSource = 'schedule_open_shifts',
+  departmentScope: string | null = null
 ) {
   const [rowsResult, departments, roleOptionsByDepartment] = await Promise.all([
-    loadPublishShifts(db, weekId, businessId, shiftSource),
+    loadPublishShifts(db, weekId, businessId, shiftSource, departmentScope),
     loadScheduleDepartments(db, businessId),
     loadScheduleRoleOptionsByDepartment(db, businessId)
   ]);
@@ -2940,7 +2939,21 @@ async function validatePublishWeek(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (shifts.length === 0) {
+  const publishedContext = await db.prepare(`
+    SELECT s.id, s.shift_date, s.user_id, s.department, s.role, s.start_time, s.end_label,
+      COALESCE(s.break_minutes, 0) AS break_minutes, u.display_name AS user_name, u.email AS user_email
+    FROM schedule_shifts s
+    JOIN schedule_weeks w ON w.id = s.week_id AND w.business_id = s.business_id AND w.status = 'published'
+    JOIN users u ON u.id = s.user_id
+    WHERE s.business_id = ? AND s.shift_date BETWEEN ? AND ?
+      AND (? = '[]' OR s.user_id IN (SELECT value FROM json_each(?)))
+      AND (s.week_id <> ? OR (? IS NOT NULL AND s.department NOT IN (SELECT value FROM json_each(?))))
+  `).bind(businessId ?? '', addDays(weekStart, -1), addDays(weekStart, 7),
+    JSON.stringify(Array.from(new Set(shifts.map(shift => shift.user_id)))),
+    JSON.stringify(Array.from(new Set(shifts.map(shift => shift.user_id)))),
+    weekId, departmentScope, departmentScope).all<PublishShiftRow>();
+  const retainedThisWeek = publishedContext.results.filter(shift => isDateInWeek(shift.shift_date, weekStart));
+  if (shifts.length === 0 && retainedThisWeek.length === 0) {
     errors.push('Cannot publish an empty schedule.');
     return { errors, warnings };
   }
@@ -3001,13 +3014,13 @@ async function validatePublishWeek(
     );
   }
 
-  const byEmployeeDate = new Map<string, PublishShiftRow[]>();
-  for (const shift of shifts) {
-    const key = `${shift.user_id}|${shift.shift_date}`;
-    byEmployeeDate.set(key, [...(byEmployeeDate.get(key) ?? []), shift]);
+  const selectedShiftIds = new Set(shifts.map(shift => shift.id));
+  const byEmployee = new Map<string, PublishShiftRow[]>();
+  for (const shift of [...shifts, ...publishedContext.results]) {
+    byEmployee.set(shift.user_id, [...(byEmployee.get(shift.user_id) ?? []), shift]);
   }
 
-  for (const dayShifts of byEmployeeDate.values()) {
+  for (const dayShifts of byEmployee.values()) {
     if (dayShifts.length < 2) continue;
 
     const withRanges = dayShifts
@@ -3015,8 +3028,9 @@ async function validatePublishWeek(
         const start = parseTimeToMinutes(shift.start_time);
         const end = parseTimeToMinutes(shift.end_label);
         if (start === null || end === null) return null;
+        const day = Date.parse(`${shift.shift_date}T00:00:00Z`) / 60000;
         const normalizedEnd = end <= start ? end + 24 * 60 : end;
-        return { shift, start, end: normalizedEnd };
+        return { shift, start: day + start, end: day + normalizedEnd };
       })
       .filter((value): value is { shift: PublishShiftRow; start: number; end: number } => Boolean(value))
       .sort((a, b) => a.start - b.start);
@@ -3024,7 +3038,8 @@ async function validatePublishWeek(
     for (let index = 1; index < withRanges.length; index += 1) {
       const previous = withRanges[index - 1];
       const current = withRanges[index];
-      if (current.start < previous.end) {
+      if (current.start < previous.end &&
+          (selectedShiftIds.has(current.shift.id) || selectedShiftIds.has(previous.shift.id))) {
         const employee = current.shift.user_name ?? current.shift.user_email;
         errors.push(`${employee} has overlapping shifts on ${current.shift.shift_date}.`);
         break;
@@ -3048,9 +3063,10 @@ async function validatePublishWeek(
         AND s.shift_date BETWEEN ? AND ?
         AND s.business_id = ?
         AND r.business_id = ?
+        AND (? IS NULL OR s.department IN (SELECT value FROM json_each(?)))
       `
     )
-    .bind(weekId, weekStart, weekEnd, businessId ?? '', businessId ?? '')
+    .bind(weekId, weekStart, weekEnd, businessId ?? '', businessId ?? '', departmentScope, departmentScope)
     .first<{ count: number }>();
 
   if ((approvedTimeOffConflicts?.count ?? 0) > 0) {
@@ -3073,9 +3089,10 @@ async function validatePublishWeek(
         AND s.shift_date BETWEEN ? AND ?
         AND s.business_id = ?
         AND r.business_id = ?
+        AND (? IS NULL OR s.department IN (SELECT value FROM json_each(?)))
       `
     )
-    .bind(weekId, weekStart, weekEnd, businessId ?? '', businessId ?? '')
+    .bind(weekId, weekStart, weekEnd, businessId ?? '', businessId ?? '', departmentScope, departmentScope)
     .first<{ count: number }>();
 
   if ((pendingTimeOffConflicts?.count ?? 0) > 0) {
@@ -3090,9 +3107,10 @@ async function validatePublishWeek(
       SELECT COUNT(*) AS count
       FROM ${openShiftSource}
       WHERE week_id = ? AND business_id = ?
+        AND (? IS NULL OR department IN (SELECT value FROM json_each(?)))
       `
     )
-    .bind(weekId, businessId ?? '')
+    .bind(weekId, businessId ?? '', departmentScope, departmentScope)
     .first<{ count: number }>();
 
   if ((openShiftCount?.count ?? 0) > 0) {
@@ -3130,7 +3148,7 @@ function parseScheduleAvailabilityPayload(parsed: unknown): {
     weekdays.add(weekday);
 
     if (isAvailable) {
-      if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+      if (!isTimeLabel(startTime) || !isTimeLabel(endTime)) {
         return { rows: [], error: 'Available days need a start and end time.' };
       }
       if (startTime >= endTime) {
@@ -3275,7 +3293,7 @@ export async function createUserScheduleTimeOffRequest(request: Request, locals:
   const endDate = String(form.get('end_date') ?? '').trim();
   const note = String(form.get('note') ?? '').trim();
 
-  if (!startDate || !endDate) {
+  if (!isCalendarDate(startDate) || !isCalendarDate(endDate)) {
     return fail(400, { error: 'Start and end dates are required.' });
   }
   if (endDate < startDate) {
@@ -3518,6 +3536,7 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
   if (offer.requested_by_user_id && offer.requested_by_user_id !== locals.userId) {
     return fail(400, { error: 'That shift already has a pending request.' });
   }
+  if (offer.requested_by_user_id === locals.userId) return { success: true };
   const departments = await loadScheduleDepartments(db, businessId);
   if (!isValidScheduleDepartment(offer.department, departments)) {
     return fail(400, { error: 'That shift has an invalid department.' });
@@ -3530,10 +3549,12 @@ export async function requestScheduleShiftOffer(request: Request, locals: App.Lo
   );
   if (assignmentError) return fail(400, { error: assignmentError });
 
-  await db
-    .prepare(`UPDATE schedule_shift_offers SET requested_by_user_id = ?, updated_at = ? WHERE shift_id = ? AND business_id = ?`)
+  const claimed = await db
+    .prepare(`UPDATE schedule_shift_offers SET requested_by_user_id = ?, updated_at = ?
+      WHERE shift_id = ? AND business_id = ? AND requested_by_user_id IS NULL`)
     .bind(locals.userId, Math.floor(Date.now() / 1000), shiftId, businessId)
     .run();
+  if (!claimed.meta.changes) return fail(409, { error: 'That shift request changed. Refresh and try again.' });
   await recordOperationalEventBestEffort(
     db,
     {
@@ -3677,6 +3698,40 @@ export async function withdrawScheduleOpenShiftRequest(request: Request, locals:
   return { success: true, message: 'Open shift request withdrawn.' };
 }
 
+async function commitScheduleApproval(
+  db: DB,
+  input: { businessId: string; weekId: string; weekStart: string; userId: string | undefined;
+    now: number; writeToken: string; note: string },
+  statements: ReturnType<DB['prepare']>[]
+) {
+  const completion = statements.pop();
+  if (!completion) throw new Error('Schedule approval statements are missing.');
+  return recordSchedulePublishSnapshot(db, input.businessId, input.weekId, input.weekStart,
+    input.userId, input.now, input.writeToken, input.note, [completion], statements);
+}
+
+function scheduleAssignmentGuard(businessId: string, userId: string, date: string, startTime: string, endLabel: string) {
+  const start = parseTimeToMinutes(startTime);
+  const end = parseTimeToMinutes(endLabel);
+  const day = Date.parse(`${date}T00:00:00Z`) / 1000;
+  const startsAt = start === null ? null : day + start * 60;
+  const endsAt = start === null || end === null ? null : day + (end <= start ? end + 1440 : end) * 60;
+  return {
+    sql: `NOT EXISTS (
+      SELECT 1 FROM user_schedule_time_off_requests
+      WHERE business_id = ? AND user_id = ? AND status = 'approved' AND start_date <= ? AND end_date >= ?
+    ) AND (? IS NULL OR NOT EXISTS (
+      SELECT 1 FROM schedule_shifts s
+      JOIN schedule_weeks w ON w.id = s.week_id AND w.business_id = s.business_id AND w.status = 'published'
+      WHERE s.business_id = ? AND s.user_id = ? AND s.shift_date BETWEEN ? AND ?
+        AND unixepoch(s.shift_date || 'T' || s.start_time || ':00') < ?
+        AND unixepoch(s.shift_date || 'T' || s.end_label || ':00') +
+          CASE WHEN s.end_label <= s.start_time THEN 86400 ELSE 0 END > ?
+    ))`,
+    bindings: [businessId, userId, date, date, endsAt, businessId, userId, addDays(date, -1), addDays(date, 1), endsAt, startsAt]
+  };
+}
+
 export async function approveScheduleShiftOffer(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -3692,7 +3747,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
   const offer = await db
     .prepare(
       `
-      SELECT o.requested_by_user_id, s.week_id, s.department, s.role
+      SELECT o.requested_by_user_id, s.week_id, s.department, s.role, s.shift_date, s.start_time, s.end_label
       FROM schedule_shift_offers o
       JOIN schedule_shifts s ON s.id = o.shift_id AND s.business_id = o.business_id
       WHERE o.shift_id = ? AND o.business_id = ? AND s.business_id = ?
@@ -3700,7 +3755,8 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
       `
     )
     .bind(shiftId, businessId, businessId)
-    .first<{ requested_by_user_id: string | null; week_id: string; department: string; role: string }>();
+    .first<{ requested_by_user_id: string | null; week_id: string; department: string; role: string;
+      shift_date: string; start_time: string; end_label: string }>();
 
   if (!offer?.requested_by_user_id) {
     return fail(400, { error: 'That shift does not have a pending taker yet.' });
@@ -3724,12 +3780,18 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
   );
   if (assignmentError) return fail(400, { error: assignmentError });
 
+  const assignmentGuard = scheduleAssignmentGuard(businessId, offer.requested_by_user_id, offer.shift_date, offer.start_time, offer.end_label);
+  const eligible = await db.prepare(`SELECT (${assignmentGuard.sql}) AS allowed`)
+    .bind(...assignmentGuard.bindings).first<{ allowed: number }>();
+  if (!eligible?.allowed) return fail(400, { error: 'That employee has a conflicting shift or approved time off.' });
+
   await ensureScheduleDraftInitialized(db, offer.week_id, businessId);
   const draftState = await db
     .prepare(
       `
       SELECT
         w.draft_version,
+        w.week_start,
         live.user_id AS live_user_id,
         draft.user_id AS draft_user_id,
         draft.shift_date AS draft_shift_date,
@@ -3747,6 +3809,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
     .bind(shiftId, offer.week_id, businessId)
     .first<{
       draft_version: number;
+      week_start: string;
       live_user_id: string;
       draft_user_id: string | null;
       draft_shift_date: string | null;
@@ -3772,7 +3835,10 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
 
   const now = Math.floor(Date.now() / 1000);
   const writeToken = crypto.randomUUID();
-  const results = await db.batch([
+  const results = await commitScheduleApproval(db, {
+    businessId, weekId: offer.week_id, weekStart: draftState.week_start,
+    userId: locals.userId, now, writeToken, note: 'Shift transfer approved'
+  }, [
     db
       .prepare(
         `
@@ -3795,6 +3861,7 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
             SELECT 1 FROM schedule_shift_offers
             WHERE shift_id = ? AND business_id = ? AND requested_by_user_id = ?
           )
+          AND (${assignmentGuard.sql})
         `
       )
       .bind(
@@ -3807,7 +3874,8 @@ export async function approveScheduleShiftOffer(request: Request, locals: App.Lo
         businessId,
         shiftId,
         businessId,
-        offer.requested_by_user_id
+        offer.requested_by_user_id,
+        ...assignmentGuard.bindings
       ),
     db
       .prepare(
@@ -4076,11 +4144,16 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
   );
   if (assignmentError) return fail(400, { error: assignmentError });
 
+  const assignmentGuard = scheduleAssignmentGuard(businessId, row.requested_by_user_id, row.shift_date, row.start_time, row.end_label ?? '');
+  const eligible = await db.prepare(`SELECT (${assignmentGuard.sql}) AS allowed`)
+    .bind(...assignmentGuard.bindings).first<{ allowed: number }>();
+  if (!eligible?.allowed) return fail(400, { error: 'That employee has a conflicting shift or approved time off.' });
+
   await ensureScheduleDraftInitialized(db, row.week_id, businessId);
   const draftState = await db
     .prepare(
       `
-      SELECT w.draft_version
+      SELECT w.draft_version, w.week_start
       FROM schedule_weeks w
       JOIN schedule_open_shifts live
         ON live.week_id = w.id AND live.id = ? AND live.business_id = w.business_id
@@ -4096,7 +4169,7 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
       `
     )
     .bind(row.open_shift_id, row.week_id, businessId)
-    .first<{ draft_version: number }>();
+    .first<{ draft_version: number; week_start: string }>();
   if (!draftState) {
     return fail(409, { error: 'This open shift changed in the schedule draft. Review it before approving the request.' });
   }
@@ -4104,7 +4177,10 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
   const now = Math.floor(Date.now() / 1000);
   const assignedShiftId = crypto.randomUUID();
   const writeToken = crypto.randomUUID();
-  const results = await db.batch([
+  const results = await commitScheduleApproval(db, {
+    businessId, weekId: row.week_id, weekStart: draftState.week_start,
+    userId: locals.userId, now, writeToken, note: 'Open shift assigned'
+  }, [
     db
       .prepare(
         `
@@ -4132,6 +4208,7 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
             WHERE id = ? AND open_shift_id = ? AND requested_by_user_id = ?
               AND business_id = ? AND status = 'pending'
           )
+          AND (${assignmentGuard.sql})
         `
       )
       .bind(
@@ -4145,7 +4222,8 @@ export async function approveScheduleOpenShiftRequest(request: Request, locals: 
         requestId,
         row.open_shift_id,
         row.requested_by_user_id,
-        businessId
+        businessId,
+        ...assignmentGuard.bindings
       ),
     db
       .prepare(
@@ -4394,7 +4472,7 @@ export async function approveScheduleTimeOffRequest(request: Request, locals: Ap
   if (!requestId) return fail(400, { error: 'Missing request id.' });
 
   const existing = await db
-    .prepare(`SELECT id, user_id FROM user_schedule_time_off_requests WHERE id = ? AND business_id = ? LIMIT 1`)
+    .prepare(`SELECT id, user_id FROM user_schedule_time_off_requests WHERE id = ? AND business_id = ? AND status = 'pending' LIMIT 1`)
     .bind(requestId, businessId)
     .first<{ id: string; user_id: string }>();
   if (!existing) return fail(404, { error: 'That time off request could not be found.' });
@@ -4402,7 +4480,7 @@ export async function approveScheduleTimeOffRequest(request: Request, locals: Ap
   if (userAccessFailure) return userAccessFailure;
 
   const now = Math.floor(Date.now() / 1000);
-  await db
+  const resolved = await db
     .prepare(
       `
       UPDATE user_schedule_time_off_requests
@@ -4411,11 +4489,12 @@ export async function approveScheduleTimeOffRequest(request: Request, locals: Ap
           updated_at = ?,
           resolved_at = ?,
           resolved_by_user_id = ?
-      WHERE id = ? AND business_id = ?
+      WHERE id = ? AND business_id = ? AND status = 'pending'
       `
     )
     .bind(managerNote, now, now, locals.userId, requestId, businessId)
     .run();
+  if (!resolved.meta.changes) return fail(409, { error: 'That request changed. Refresh and try again.' });
   await recordOperationalEventBestEffort(
     db,
     {
@@ -4448,7 +4527,7 @@ export async function declineScheduleTimeOffRequest(request: Request, locals: Ap
   if (!requestId) return fail(400, { error: 'Missing request id.' });
 
   const existing = await db
-    .prepare(`SELECT id, user_id FROM user_schedule_time_off_requests WHERE id = ? AND business_id = ? LIMIT 1`)
+    .prepare(`SELECT id, user_id FROM user_schedule_time_off_requests WHERE id = ? AND business_id = ? AND status = 'pending' LIMIT 1`)
     .bind(requestId, businessId)
     .first<{ id: string; user_id: string }>();
   if (!existing) return fail(404, { error: 'That time off request could not be found.' });
@@ -4456,7 +4535,7 @@ export async function declineScheduleTimeOffRequest(request: Request, locals: Ap
   if (userAccessFailure) return userAccessFailure;
 
   const now = Math.floor(Date.now() / 1000);
-  await db
+  const resolved = await db
     .prepare(
       `
       UPDATE user_schedule_time_off_requests
@@ -4465,11 +4544,12 @@ export async function declineScheduleTimeOffRequest(request: Request, locals: Ap
           updated_at = ?,
           resolved_at = ?,
           resolved_by_user_id = ?
-      WHERE id = ? AND business_id = ?
+      WHERE id = ? AND business_id = ? AND status = 'pending'
       `
     )
     .bind(managerNote, now, now, locals.userId, requestId, businessId)
     .run();
+  if (!resolved.meta.changes) return fail(409, { error: 'That request changed. Refresh and try again.' });
   await recordOperationalEventBestEffort(
     db,
     {
@@ -4524,16 +4604,27 @@ export async function approveScheduleAvailabilityRequest(request: Request, local
   if (normalized.error) return fail(400, { error: normalized.error });
 
   const now = Math.floor(Date.now() / 1000);
-  await db.batch([
-    ...availabilityReplacementStatements(db, businessId, existing.user_id, normalized.rows, now),
+  const results = await db.batch([
     db
       .prepare(
         `UPDATE user_schedule_availability_requests
          SET status = 'approved', manager_note = ?, updated_at = ?, resolved_at = ?, resolved_by_user_id = ?
-         WHERE id = ? AND business_id = ? AND status = 'pending'`
+         WHERE id = ? AND business_id = ? AND status = 'pending' AND availability_json = ?`
       )
-      .bind(managerNote, now, now, locals.userId, requestId, businessId)
+      .bind(managerNote, now, now, locals.userId, requestId, businessId, existing.availability_json),
+    // All seven days are supplied; one guarded upsert keeps the review and applied rows atomic.
+    db.prepare(`
+      INSERT INTO user_schedule_availability (business_id, user_id, weekday, is_available, start_time, end_time, updated_at)
+      SELECT ?, ?, CAST(json_extract(day.value, '$.weekday') AS INTEGER),
+        CAST(json_extract(day.value, '$.isAvailable') AS INTEGER),
+        json_extract(day.value, '$.startTime'), json_extract(day.value, '$.endTime'), ?
+      FROM json_each(?) day WHERE changes() = 1
+      ON CONFLICT(business_id, user_id, weekday) DO UPDATE SET
+        is_available = excluded.is_available, start_time = excluded.start_time,
+        end_time = excluded.end_time, updated_at = excluded.updated_at
+    `).bind(businessId, existing.user_id, now, JSON.stringify(normalized.rows))
   ]);
+  if (!results[0]?.meta?.changes) return fail(409, { error: 'That request changed. Refresh and review it again.' });
 
   await recordOperationalEventBestEffort(
     db,
@@ -4615,7 +4706,8 @@ export async function saveScheduleWeekDraft(request: Request, locals: App.Locals
   const businessId = requireBusinessId(locals);
 
   const form = await request.formData();
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const weekStart = String(form.get('week_start') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
   const submittedDraftVersion = parseScheduleDraftVersion(form);
   const payload = String(form.get('payload') ?? '').trim();
   if (!payload) return fail(400, { error: 'No schedule data was submitted.' });
@@ -4769,7 +4861,8 @@ async function saveScheduleWeekDraftFromForm(
   locals: App.Locals,
   businessId: string
 ) {
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const weekStart = String(form.get('week_start') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) return { ok: false as const, failure: fail(400, { error: 'Select a valid schedule week.' }) };
   const submittedDraftVersion = parseScheduleDraftVersion(form);
   const payload = String(form.get('payload') ?? '').trim();
   if (!payload) return { ok: false as const, failure: fail(400, { error: 'No schedule data was submitted.' }) };
@@ -4946,7 +5039,8 @@ export async function createScheduleOpenShift(request: Request, locals: App.Loca
   await ensureTenantSchema(db, true);
   const businessId = requireBusinessId(locals);
   const form = await request.formData();
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const weekStart = String(form.get('week_start') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
   const submittedDraftVersion = parseScheduleDraftVersion(form);
   const shiftDate = String(form.get('shift_date') ?? '').trim();
   const department = String(form.get('department') ?? '').trim() as ScheduleDepartment;
@@ -5131,6 +5225,47 @@ export async function deleteScheduleOpenShift(request: Request, locals: App.Loca
   return { success: true, message: 'Open shift removed.' };
 }
 
+function publicationTeamScope(departments: string | null, alias: string) {
+  if (departments === null) return { sql: '', bindings: [] as string[] };
+  return {
+    sql: ` AND ${alias}.user_id IN (
+      SELECT user_id FROM user_schedule_departments
+      WHERE business_id = schedule_weeks.business_id AND department IN (SELECT value FROM json_each(?))
+      UNION SELECT user_id FROM schedule_draft_shifts
+      WHERE week_id = schedule_weeks.id AND business_id = schedule_weeks.business_id
+        AND department IN (SELECT value FROM json_each(?))
+    )`,
+    bindings: [departments, departments]
+  };
+}
+
+function schedulePublicationDifference(departments: string | null = null) {
+  const bindings: string[] = [];
+  const pairs = [
+    ['schedule_draft_shifts', 'schedule_shifts', 'id, shift_date, user_id, department, role, detail, start_time, end_label, break_minutes, notes, sort_order'],
+    ['schedule_draft_open_shifts', 'schedule_open_shifts', 'id, shift_date, department, role, detail, start_time, end_label, break_minutes, notes, sort_order'],
+    ['schedule_draft_week_team', 'schedule_week_team', 'user_id, sort_order']
+  ];
+  const select = (table: string, columns: string) => {
+    let filter = '';
+    if (departments !== null) {
+      if (table.endsWith('week_team')) {
+        const scope = publicationTeamScope(departments, 'entry');
+        filter = scope.sql; bindings.push(...scope.bindings);
+      } else {
+        filter = ' AND department IN (SELECT value FROM json_each(?))'; bindings.push(departments);
+      }
+    }
+    return `SELECT ${columns} FROM ${table} entry
+      WHERE week_id = schedule_weeks.id AND business_id = schedule_weeks.business_id${filter}`;
+  };
+  const differences = pairs.flatMap(([draft, live, columns]) => [
+    `EXISTS (${select(draft, columns)} EXCEPT ${select(live, columns)})`,
+    `EXISTS (${select(live, columns)} EXCEPT ${select(draft, columns)})`
+  ]);
+  return { sql: differences.join(' OR '), bindings };
+}
+
 export async function publishScheduleWeek(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5139,11 +5274,12 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
   const businessId = requireBusinessId(locals);
-  const allDepartmentAccessFailure = await scheduleAllDepartmentAccessFailure(db, locals, businessId);
-  if (allDepartmentAccessFailure) return allDepartmentAccessFailure;
+  const departmentAccess = await loadScheduleManagerDepartmentScope(db, locals, businessId);
+  if (departmentAccess.allowedDepartments.length === 0) return fail(403, { error: 'Scheduling department access required.' });
+  const departments = departmentAccess.hasAllAccess ? null : JSON.stringify(departmentAccess.allowedDepartments);
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim();
-  if (!weekStart) return fail(400, { error: 'Missing week start.' });
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
   const payload = String(form.get('payload') ?? '').trim();
   const submittedDraftVersion = parseScheduleDraftVersion(form);
   const week = payload
@@ -5164,13 +5300,23 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
       })();
   if (!week.ok) return week.failure;
 
+  // Compare business fields, not write timestamps, so retrying Publish cannot create a new version.
+  const difference = schedulePublicationDifference(departments);
+  const pending = await db.prepare(`SELECT (${difference.sql}) AS changed FROM schedule_weeks WHERE id = ? AND business_id = ?`)
+    .bind(...difference.bindings, week.week.id, businessId).first<{ changed: number }>();
+  if (week.week.status === 'published' && pending?.changed === 0) {
+    return { success: true, draftVersion: week.week.draftVersion, publishedVersion: week.week.publishedVersion,
+      hasUnpublishedChanges: week.week.hasUnpublishedChanges, message: 'Already published.' };
+  }
+
   const publishValidation = await validatePublishWeek(
     db,
     week.week.id,
     weekStart,
     businessId,
     'schedule_draft_shifts',
-    'schedule_draft_open_shifts'
+    'schedule_draft_open_shifts',
+    departments
   );
   if (publishValidation.errors.length > 0) {
     return fail(400, {
@@ -5189,9 +5335,10 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
         WHERE id = ? AND business_id = ?
           AND draft_version = ?
           AND draft_write_token IS NULL
+          AND (status <> 'published' OR (${difference.sql}))
         `
       )
-      .bind(publishWriteToken, week.week.id, businessId, week.week.draftVersion),
+      .bind(publishWriteToken, week.week.id, businessId, week.week.draftVersion, ...difference.bindings),
     db
       .prepare(
         `
@@ -5205,6 +5352,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
              AND draft.week_id = live.week_id
              AND draft.business_id = live.business_id
             WHERE live.week_id = ? AND live.business_id = ?
+              AND (? IS NULL OR live.department IN (SELECT value FROM json_each(?)))
               AND (
                 live.shift_date <> draft.shift_date OR
                 live.user_id <> draft.user_id OR
@@ -5220,12 +5368,13 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           )
         `
       )
-      .bind(businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(businessId, week.week.id, businessId, departments, departments, week.week.id, businessId, publishWriteToken),
     db
       .prepare(
         `
         DELETE FROM schedule_shifts
         WHERE week_id = ? AND business_id = ?
+          AND (? IS NULL OR department IN (SELECT value FROM json_each(?)))
           AND id NOT IN (
             SELECT id FROM schedule_draft_shifts
             WHERE week_id = ? AND business_id = ?
@@ -5236,7 +5385,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           )
         `
       )
-      .bind(week.week.id, businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(week.week.id, businessId, departments, departments, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
     db
       .prepare(
         `
@@ -5251,6 +5400,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           created_at, ?, business_id
         FROM schedule_draft_shifts
         WHERE week_id = ? AND business_id = ?
+          AND (? IS NULL OR department IN (SELECT value FROM json_each(?)))
           AND EXISTS (
             SELECT 1 FROM schedule_weeks
             WHERE id = ? AND business_id = ? AND draft_write_token = ?
@@ -5271,7 +5421,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           AND schedule_shifts.business_id = excluded.business_id
         `
       )
-      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(now, week.week.id, businessId, departments, departments, week.week.id, businessId, publishWriteToken),
     db
       .prepare(
         `
@@ -5285,6 +5435,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
              AND draft.week_id = live.week_id
              AND draft.business_id = live.business_id
             WHERE live.week_id = ? AND live.business_id = ?
+              AND (? IS NULL OR live.department IN (SELECT value FROM json_each(?)))
               AND (
                 live.shift_date <> draft.shift_date OR
                 live.department <> draft.department OR
@@ -5299,12 +5450,13 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           )
         `
       )
-      .bind(businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(businessId, week.week.id, businessId, departments, departments, week.week.id, businessId, publishWriteToken),
     db
       .prepare(
         `
         DELETE FROM schedule_open_shifts
         WHERE week_id = ? AND business_id = ?
+          AND (? IS NULL OR department IN (SELECT value FROM json_each(?)))
           AND id NOT IN (
             SELECT id FROM schedule_draft_open_shifts
             WHERE week_id = ? AND business_id = ?
@@ -5315,7 +5467,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           )
         `
       )
-      .bind(week.week.id, businessId, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(week.week.id, businessId, departments, departments, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
     db
       .prepare(
         `
@@ -5328,6 +5480,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           end_label, break_minutes, notes, sort_order, created_at, ?, business_id
         FROM schedule_draft_open_shifts
         WHERE week_id = ? AND business_id = ?
+          AND (? IS NULL OR department IN (SELECT value FROM json_each(?)))
           AND EXISTS (
             SELECT 1 FROM schedule_weeks
             WHERE id = ? AND business_id = ? AND draft_write_token = ?
@@ -5347,7 +5500,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           AND schedule_open_shifts.business_id = excluded.business_id
         `
       )
-      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(now, week.week.id, businessId, departments, departments, week.week.id, businessId, publishWriteToken),
     db
       .prepare(
         `
@@ -5356,10 +5509,12 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           AND EXISTS (
             SELECT 1 FROM schedule_weeks
             WHERE id = ? AND business_id = ? AND draft_write_token = ?
+              ${publicationTeamScope(departments, 'schedule_week_team').sql}
           )
         `
       )
-      .bind(week.week.id, businessId, week.week.id, businessId, publishWriteToken),
+      .bind(week.week.id, businessId, week.week.id, businessId, publishWriteToken,
+        ...publicationTeamScope(departments, 'schedule_week_team').bindings),
     db
       .prepare(
         `
@@ -5370,10 +5525,12 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
           AND EXISTS (
             SELECT 1 FROM schedule_weeks
             WHERE id = ? AND business_id = ? AND draft_write_token = ?
+              ${publicationTeamScope(departments, 'schedule_draft_week_team').sql}
           )
         `
       )
-      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken)
+      .bind(now, week.week.id, businessId, week.week.id, businessId, publishWriteToken,
+        ...publicationTeamScope(departments, 'schedule_draft_week_team').bindings)
   ];
   const publishStatement = db
     .prepare(
@@ -5382,7 +5539,7 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
       SET status = 'published',
         published_at = ?,
         published_version = published_version + 1,
-        has_unpublished_changes = 0,
+        has_unpublished_changes = CASE WHEN ${schedulePublicationDifference().sql} THEN 1 ELSE 0 END,
         updated_at = ?,
         updated_by = ?,
         draft_write_token = NULL
@@ -5406,6 +5563,8 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   if (Number(publishResults[0]?.meta?.changes ?? 0) !== 1) {
     return fail(409, { error: 'This schedule changed while it was being published. Reload and try again.' });
   }
+  const publishedState = await db.prepare(`SELECT published_version, has_unpublished_changes FROM schedule_weeks WHERE id = ? AND business_id = ?`)
+    .bind(week.week.id, businessId).first<{ published_version: number; has_unpublished_changes: number }>();
   await recordOperationalEventBestEffort(
     db,
     {
@@ -5416,9 +5575,10 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
       subjectType: 'schedule_week',
       subjectId: week.week.id,
       title: 'Schedule published',
-      dedupeKey: `schedule.published:${week.week.id}:${now}`,
+      dedupeKey: `schedule.published:${week.week.id}:${publishWriteToken}`,
       payload: {
         weekStart,
+        ...(departments === null ? {} : { departments: departmentAccess.allowedDepartments }),
         warningCount: publishValidation.warnings.length
       }
     },
@@ -5429,7 +5589,8 @@ export async function publishScheduleWeek(request: Request, locals: App.Locals) 
   return {
     success: true,
     draftVersion: week.week.draftVersion,
-    publishedVersion: week.week.publishedVersion + 1,
+    publishedVersion: publishedState?.published_version ?? week.week.publishedVersion + 1,
+    hasUnpublishedChanges: publishedState?.has_unpublished_changes === 1,
     message: warningSummary || 'Schedule published.'
   };
 }
@@ -5445,7 +5606,7 @@ export async function copyPreviousScheduleWeek(request: Request, locals: App.Loc
   const form = await request.formData();
   const weekStart = String(form.get('week_start') ?? '').trim();
   const submittedDraftVersion = parseScheduleDraftVersion(form);
-  if (!weekStart) return fail(400, { error: 'Missing week start.' });
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
 
   const previousWeekStart = addDays(weekStart, -7);
   const source = await loadScheduleWeek(db, previousWeekStart, { publishedOnly: true, businessId });
@@ -5566,7 +5727,8 @@ export async function saveScheduleLaborTargets(request: Request, locals: App.Loc
   const allDepartmentAccessFailure = await scheduleAllDepartmentAccessFailure(db, locals, businessId);
   if (allDepartmentAccessFailure) return allDepartmentAccessFailure;
   const form = await request.formData();
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const weekStart = String(form.get('week_start') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
   const payload = String(form.get('labor_targets') ?? '').trim();
   if (!payload) return fail(400, { error: 'No labor target data was submitted.' });
 
@@ -5576,21 +5738,25 @@ export async function saveScheduleLaborTargets(request: Request, locals: App.Loc
   } catch {
     return fail(400, { error: 'Labor target data could not be read.' });
   }
-  if (!Array.isArray(parsed)) {
+  if (!Array.isArray(parsed) || parsed.length > 7) {
     return fail(400, { error: 'Labor target data must be a list.' });
   }
 
   const now = Math.floor(Date.now() / 1000);
+  const statements: ReturnType<DB['prepare']>[] = [];
+  const days = new Set<string>();
   for (const entry of parsed) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== 'object') return fail(400, { error: 'Invalid labor target.' });
     const row = entry as Record<string, unknown>;
     const dayDate = String(row.dayDate ?? '').trim();
-    if (!dayDate) continue;
-    const projectedSales = Math.max(0, Number(row.projectedSales ?? 0) || 0);
-    const targetLaborPercent = Math.max(0, Number(row.targetLaborPercent ?? 0) || 0);
-    const averageHourlyRate = Math.max(0, Number(row.averageHourlyRate ?? 0) || 0);
+    if (!isDateInWeek(dayDate, weekStart) || days.has(dayDate)) return fail(400, { error: 'Labor dates must be unique and within the selected week.' });
+    days.add(dayDate);
+    const values = [row.projectedSales ?? 0, row.targetLaborPercent ?? 0, row.averageHourlyRate ?? 0]
+      .map(value => typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : NaN);
+    if (!values.every(Number.isFinite)) return fail(400, { error: 'Enter valid labor amounts.' });
+    const [projectedSales, targetLaborPercent, averageHourlyRate] = values.map(value => Math.max(0, value));
 
-    await db
+    statements.push(db
       .prepare(
         `
         INSERT INTO schedule_labor_targets (
@@ -5617,8 +5783,9 @@ export async function saveScheduleLaborTargets(request: Request, locals: App.Loc
         now,
         locals.userId
       )
-      .run();
+    );
   }
+  if (statements.length > 0) await db.batch(statements);
 
   return { success: true, message: 'Labor targets saved.' };
 }
@@ -5637,7 +5804,8 @@ export async function saveScheduleTemplateFromWeek(request: Request, locals: App
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
   const form = await request.formData();
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const weekStart = String(form.get('week_start') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
   const name = String(form.get('template_name') ?? '').trim();
   if (!name) return fail(400, { error: 'Template name is required.' });
 
@@ -5790,7 +5958,8 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
   await ensureScheduleSchema(db);
   const businessId = requireBusinessId(locals);
   const form = await request.formData();
-  const weekStart = String(form.get('week_start') ?? '').trim() || getWeekStart();
+  const weekStart = String(form.get('week_start') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) return fail(400, { error: 'Select a valid schedule week.' });
   const submittedDraftVersion = parseScheduleDraftVersion(form);
   const templateId = String(form.get('template_id') ?? '').trim();
   const mode = String(form.get('template_mode') ?? 'merge').trim() === 'replace' ? 'replace' : 'merge';

@@ -58,6 +58,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			businessId: locals.businessId ?? null,
 			businessName: locals.businessName ?? null,
 			businessLogoUrl: locals.businessLogoUrl ?? null,
+			businessTimeZone: locals.businessTimeZone ?? 'UTC',
 			businessRole: locals.businessRole ?? null,
 			businessPermissionTemplate: locals.businessPermissionTemplate ?? null,
 			businessPositionId: locals.businessPositionId ?? null,

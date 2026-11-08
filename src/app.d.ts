@@ -47,6 +47,7 @@ declare global {
 			businessId?: string;
 			businessName?: string;
 			businessLogoUrl?: string | null;
+			businessTimeZone?: string;
 			businessSlug?: string;
 			businessPlan?: string;
 			businessRole?: string;

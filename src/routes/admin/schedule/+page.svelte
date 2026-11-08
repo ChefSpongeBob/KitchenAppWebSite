@@ -4,7 +4,8 @@
   import ScheduleTimeSelect from '#lib/components/ui/ScheduleTimeSelect.svelte';
   import ScheduleBuilderCell from '#lib/components/ui/ScheduleBuilderCell.svelte';
   import { applyAction, deserialize, enhance } from '$app/forms';
-  import { invalidate } from '$app/navigation';
+  import { beforeNavigate, goto, invalidate } from '$app/navigation';
+  import { createScheduleNavigationGuard } from '#lib/client/scheduleNavigation.ts';
   import { pushToast } from '#lib/client/toasts.ts';
   import {
     scheduleEndLabels,
@@ -610,7 +611,7 @@
           if (Number.isInteger(Number(result.data?.draftVersion))) {
             serverDraftVersion = Number(result.data?.draftVersion);
           }
-          draftHasUnpublishedChanges = !isPublishing;
+          draftHasUnpublishedChanges = !isPublishing || result.data?.hasUnpublishedChanges === true;
           await invalidate('app:admin-schedule');
           pushToast(
             result.data?.message ?? (isPublishing ? 'Schedule published.' : 'Schedule saved.'),
@@ -1354,6 +1355,14 @@
     editorDraft = null;
     isShiftEditorOpen = false;
   }
+
+  beforeNavigate(createScheduleNavigationGuard({
+    state: () => ({ dirty: hasUnsavedChanges, inFlight: autosaveInFlight, submitting: isScheduleSubmitting }),
+    save: async () => { clearAutosaveTimer(); return autosaveDraft(); },
+    navigate: (url) => goto(url, { invalidateAll: true }),
+    history: (delta) => window.history.go(delta),
+    notify: (message) => pushToast(message, 'error')
+  }));
 
   onDestroy(() => {
     if (autosaveTimer) clearTimeout(autosaveTimer);

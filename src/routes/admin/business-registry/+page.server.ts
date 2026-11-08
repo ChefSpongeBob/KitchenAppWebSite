@@ -6,6 +6,7 @@ import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { getBusinessTrialAccess } from '#lib/server/trial.ts';
 import { readBusinessEntitlements, readStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
+import { businessTimeZoneOptions, normalizeTimeZone } from '#lib/timeZones.ts';
 
 type RegistryPayload = {
   legalName: string;
@@ -19,6 +20,7 @@ type RegistryPayload = {
   addressState: string;
   addressPostalCode: string;
   addressCountry: string;
+  timeZone: string;
 };
 
 const emptyRegistry: RegistryPayload = {
@@ -32,7 +34,8 @@ const emptyRegistry: RegistryPayload = {
   addressCity: '',
   addressState: '',
   addressPostalCode: '',
-  addressCountry: ''
+  addressCountry: '',
+  timeZone: 'UTC'
 };
 
 function toOptionalString(formData: FormData, key: string, maxLength: number) {
@@ -72,6 +75,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         logoUrl: locals.businessLogoUrl ?? null
       },
       registry: emptyRegistry,
+      timeZones: businessTimeZoneOptions(),
       billing: null,
       canManageBilling
     };
@@ -97,7 +101,8 @@ export const load: PageServerLoad = async ({ locals }) => {
         address_city,
         address_state,
         address_postal_code,
-        address_country
+        address_country,
+        time_zone
       FROM businesses
       WHERE id = ?
       LIMIT 1
@@ -121,6 +126,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       address_state: string | null;
       address_postal_code: string | null;
       address_country: string | null;
+      time_zone: string;
     }>();
 
   let billing: {
@@ -183,6 +189,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       displayName: business?.name ?? locals.businessName ?? '',
       logoUrl: business?.sidebar_logo_url ?? locals.businessLogoUrl ?? null
     },
+    timeZones: businessTimeZoneOptions(),
     registry: {
       legalName: business?.legal_business_name ?? '',
       registryId: business?.registry_id ?? '',
@@ -194,7 +201,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       addressCity: business?.address_city ?? '',
       addressState: business?.address_state ?? '',
       addressPostalCode: business?.address_postal_code ?? '',
-      addressCountry: business?.address_country ?? ''
+      addressCountry: business?.address_country ?? '',
+      timeZone: business?.time_zone ?? 'UTC'
     } satisfies RegistryPayload,
     billing,
     canManageBilling
@@ -225,6 +233,8 @@ export const actions: Actions = {
     const addressState = toOptionalString(formData, 'address_state', 80);
     const addressPostalCode = toOptionalString(formData, 'address_postal_code', 24);
     const addressCountry = toOptionalString(formData, 'address_country', 80);
+    const timeZone = formData.has('time_zone') ? normalizeTimeZone(formData.get('time_zone')) : null;
+    if (formData.has('time_zone') && !timeZone) return fail(400, { error: 'Select a valid time zone.' });
 
     if (contactEmail && !looksLikeEmail(contactEmail)) {
       return fail(400, { error: 'Enter a valid business contact email.' });
@@ -251,6 +261,7 @@ export const actions: Actions = {
           address_state = ?,
           address_postal_code = ?,
           address_country = ?,
+          time_zone = COALESCE(?, time_zone),
           updated_at = ?
         WHERE id = ?
         `
@@ -267,6 +278,7 @@ export const actions: Actions = {
         addressState || null,
         addressPostalCode || null,
         addressCountry || null,
+        timeZone,
         Math.floor(Date.now() / 1000),
         locals.businessId
       )

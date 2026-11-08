@@ -715,7 +715,30 @@ async function loadRecipientsForScheduleDepartment(db: DB, event: OperationalEve
 
 async function loadAllBusinessRecipients(db: DB, event: OperationalEventRow) {
   const candidates = await loadRecipientCandidates(db, event.business_id);
-  return candidates.map(({ id, email, display_name }) => ({ id, email, display_name }));
+  const payload = safeParseJsonObject(event.payload_json);
+  if (!Object.hasOwn(payload, 'departments')) {
+    return candidates.map(({ id, email, display_name }) => ({ id, email, display_name }));
+  }
+  const departments = Array.isArray(payload.departments)
+    ? payload.departments.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+  if (departments.length === 0 || !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.weekStart ?? ''))) return [];
+  const scope = JSON.stringify(departments);
+  const rows = await db.prepare(`
+    SELECT user_id, 1 AS assigned, CASE WHEN department IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END AS affected
+    FROM user_schedule_departments WHERE business_id = ?
+    UNION ALL
+    SELECT s.user_id, 0 AS assigned, 1 AS affected FROM schedule_shifts s
+    JOIN schedule_weeks w ON w.id = s.week_id AND w.business_id = s.business_id
+    WHERE s.business_id = ? AND w.week_start = ? AND w.status = 'published'
+      AND s.department IN (SELECT value FROM json_each(?))
+  `).bind(scope, event.business_id, event.business_id, String(payload.weekStart), scope)
+    .all<{ user_id: string; assigned: number; affected: number }>();
+  const assigned = new Set(rows.results.filter(row => row.assigned === 1).map(row => row.user_id));
+  const affected = new Set(rows.results.filter(row => row.affected === 1).map(row => row.user_id));
+  return candidates.filter(row => row.business_role === 'owner' || affected.has(row.id) ||
+    (!assigned.has(row.id) && recipientHasCapability(row, 'manage_schedule')))
+    .map(({ id, email, display_name }) => ({ id, email, display_name }));
 }
 
 async function loadTargetRecipient(db: DB, event: OperationalEventRow): Promise<EmailRecipient[]> {

@@ -153,3 +153,7 @@ try {
   assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
   console.log('PASS real invite registration: retained fields on validation, profile hydration, one tenant/membership/packet, one-use invite and retry safety');
 } finally { test.close(); }
+
+await import('./schedule-workflow-behavior-check.mjs');
+await import('./schedule-navigation-check.mjs');
+await import('./schedule-runtime-check.mjs');

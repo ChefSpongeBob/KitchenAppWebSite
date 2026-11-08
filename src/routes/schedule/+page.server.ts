@@ -1,8 +1,7 @@
 import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import {
   addDays,
-  getWeekStart,
   loadScheduleDepartmentApprovalsByUser,
   loadScheduleDepartments,
   loadScheduleManagerDepartments,
@@ -10,6 +9,7 @@ import {
 } from '#lib/server/schedules.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { requireBusinessId } from '#lib/server/tenant.ts';
+import { getBusinessWeekStart, isCalendarDate } from '#lib/timeZones.ts';
 
 function canManageSchedule(locals: App.Locals) {
   return hasBusinessCapability(
@@ -26,7 +26,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }
 
   const db = locals.DB;
-  const weekStart = (url.searchParams.get('week') ?? '').trim() || getWeekStart();
+  const weekStart = (url.searchParams.get('week') ?? '').trim() || getBusinessWeekStart(locals.businessTimeZone);
+  if (!isCalendarDate(weekStart)) error(400, 'Select a valid schedule week.');
   const canManage = canManageSchedule(locals);
   if (!db) {
     return {
@@ -56,13 +57,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     canManage
       ? managerDepartments
       : approvedDepartments.filter((department) => departments.includes(department));
+  const visibleDepartmentSet = new Set(defaultDepartments);
 
   return {
     weekStart,
     prevWeekStart: addDays(weekStart, -7),
     nextWeekStart: addDays(weekStart, 7),
     week: schedule.week,
-    days: schedule.days,
+    days: schedule.days.map((day) => ({
+      ...day,
+      shifts: day.shifts.filter((shift) => visibleDepartmentSet.has(shift.department))
+    })),
     isAdmin: canManage,
     departments,
     visibleDepartments: defaultDepartments

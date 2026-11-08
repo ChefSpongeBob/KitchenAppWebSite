@@ -56,6 +56,8 @@ try {
   assert.equal((await process('schedule.published')).delivered, 1);
   assert.deepEqual(sent.map(row => row.body.to).sort(), ['employee-a@example.invalid','manager-kitchen@example.invalid','manager-service@example.invalid','owner-a@example.invalid']);
   assert.equal(sent.some(row => row.body.to.includes('other-tenant')), false);
+  assert.equal((await process('schedule.published', { payload: { weekStart: '2026-11-02', departments: ['Kitchen'] } })).delivered, 1);
+  assert.deepEqual(sent.map(row => row.body.to).sort(), ['employee-a@example.invalid','manager-kitchen@example.invalid','owner-a@example.invalid']);
   await load('src/lib/server/appFeatures.ts').saveAppFeatureModes(db, { scheduling: 'off' }, null, 'a');
   assert.equal((await process('schedule.published')).skipped, 1);
   assert.equal(sent.length, 0, 'Disabling a feature must also suppress its queued operational email');

@@ -488,6 +488,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		event.locals.businessId = businessContext.businessId;
 		event.locals.businessName = businessContext.businessName;
 		event.locals.businessLogoUrl = businessContext.businessLogoUrl;
+		event.locals.businessTimeZone = businessContext.businessTimeZone;
 		event.locals.businessSlug = businessContext.businessSlug;
 		event.locals.businessPlan = businessContext.businessPlan;
 		event.locals.businessRole = businessContext.businessRole;

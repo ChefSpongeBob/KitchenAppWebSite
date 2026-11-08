@@ -20,6 +20,7 @@
     addressState: string;
     addressPostalCode: string;
     addressCountry: string;
+    timeZone: string;
   };
 
   export let data: {
@@ -28,6 +29,7 @@
       logoUrl: string | null;
     };
     registry: RegistryData;
+    timeZones: { value: string; label: string }[];
     billing: {
       planTier: string;
       status: string;
@@ -158,6 +160,10 @@
           <strong>{shown(registry.addressCountry)}</strong>
         </div>
         <div>
+          <span>Time Zone</span>
+          <strong>{data.timeZones.find(option => option.value === registry.timeZone)?.label ?? registry.timeZone}</strong>
+        </div>
+        <div>
           <span>Website</span>
           {#if registry.websiteUrl}
             <a class="fact-link" href={registry.websiteUrl} target="_blank" rel="noreferrer">{registry.websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a>
@@ -229,6 +235,14 @@
         <label class="field">
           <span>Country</span>
           <input type="text" name="address_country" bind:value={registry.addressCountry} maxlength="80" placeholder="United States" />
+        </label>
+        <label class="field">
+          <span>Time Zone</span>
+          <select name="time_zone" bind:value={registry.timeZone} required>
+            {#each data.timeZones as zone}
+              <option value={zone.value}>{zone.label}</option>
+            {/each}
+          </select>
         </label>
         </div>
 
