@@ -2,7 +2,7 @@ import { dev } from '$app/env';
 import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
 import { loadItemAttachmentsForItems, type ItemAttachment } from '#lib/server/itemAttachments.ts';
-import { recordListItemActivity, recordListSubmission } from '#lib/server/history.ts';
+import { setListItemCompletion, recordListSubmission } from '#lib/server/history.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
 
@@ -71,9 +71,9 @@ function parseNonNegativeNumber(raw: FormDataEntryValue | null, fieldName: strin
 
 async function getSection(db: DB, domain: Domain, sectionSlug: string, businessId: string) {
   return db
-    .prepare(`SELECT id FROM list_sections WHERE domain = ? AND slug = ? AND business_id = ? LIMIT 1`)
+    .prepare(`SELECT id, title FROM list_sections WHERE domain = ? AND slug = ? AND business_id = ? LIMIT 1`)
     .bind(domain, sectionSlug, businessId)
-    .first<{ id: string }>();
+    .first<{ id: string; title: string }>();
 }
 
 async function seedDefaultsIfMissing(
@@ -180,7 +180,7 @@ export function createListPage(
     );
 
     return {
-      title: pageTitle,
+      title: section.title || pageTitle,
       subtitle: options.subtitle,
       items: rows.map((item) => ({
         ...item,
@@ -256,7 +256,7 @@ export function createListPage(
         title: 'List submitted',
         payload: {
           domain,
-          sectionTitle: pageTitle,
+          sectionTitle: section.title || pageTitle,
           updatedCount
         }
       });
@@ -308,28 +308,10 @@ export function createListPage(
         return fail(400, { error: 'Invalid completion state.' });
       }
 
-      await db
-        .prepare(
-          `
-          UPDATE list_items
-          SET is_checked = ?, updated_at = ?
-          WHERE id = ? AND section_id = ? AND business_id = ?
-        `
-        )
-        .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
-        .run();
+      const completionResult = await setListItemCompletion(db, businessId, domain, section.id, id, locals.userId, isChecked);
+      if (!completionResult) return fail(404, { error: 'List item not found.' });
 
-      if (isChecked === 1) {
-        await recordListItemActivity(
-          db,
-          businessId,
-          domain,
-          section.id,
-          id,
-          'completed',
-          locals.userId,
-          String(isChecked)
-        );
+      if (isChecked === 1 && completionResult.changed) {
         await recordOperationalEventBestEffort(db, {
           businessId,
           eventType: `list.${domain}.item_completed`,
@@ -369,7 +351,7 @@ export function createListPage(
             title: 'List completed',
             payload: {
               domain,
-              sectionTitle: pageTitle,
+              sectionTitle: section.title || pageTitle,
               itemCount: completion?.total ?? 0
             }
           });
@@ -395,17 +377,18 @@ export function createListPage(
         .all<{ id: string }>();
 
       const now = Math.floor(Date.now() / 1000);
+      const updates: ReturnType<DB['prepare']>[] = [];
       for (const item of items.results ?? []) {
         const raw = formData.get(`par_${item.id}`);
         if (raw === null) continue;
         const parsed = parseNonNegativeNumber(raw, 'Par count');
         if (!parsed.ok) return fail(400, { error: parsed.error });
 
-        await db
+        updates.push(db
           .prepare(`UPDATE list_items SET par_count = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
-          .bind(parsed.value, now, item.id, businessId)
-          .run();
+          .bind(parsed.value, now, item.id, businessId));
       }
+      if (updates.length) await db.batch(updates);
 
       return { success: true };
     }

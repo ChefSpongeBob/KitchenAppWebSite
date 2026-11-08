@@ -41,7 +41,7 @@
 		const price = Number(row.purchasePrice);
 		const amount = Number(row.purchaseAmount);
 		const used = Number(row.usedAmount);
-		if (!Number.isFinite(price) || !Number.isFinite(amount) || !Number.isFinite(used) || amount <= 0 || used < 0) {
+		if (!Number.isFinite(price) || !Number.isFinite(amount) || !Number.isFinite(used) || price < 0 || amount <= 0 || used < 0) {
 			return 0;
 		}
 		return (price / amount) * used;
@@ -60,7 +60,7 @@
 	}
 
 	$: totalFoodCost = ingredients.reduce((sum, row) => sum + rowCost(row), 0);
-	$: safeSalePrice = Number.isFinite(Number(salePrice)) ? Number(salePrice) : 0;
+	$: safeSalePrice = Number.isFinite(Number(salePrice)) ? Math.max(0, Number(salePrice)) : 0;
 	$: profit = safeSalePrice - totalFoodCost;
 	$: foodCostPercent = safeSalePrice > 0 ? (totalFoodCost / safeSalePrice) * 100 : 0;
 	$: marginPercent = safeSalePrice > 0 ? (profit / safeSalePrice) * 100 : 0;
@@ -88,7 +88,7 @@
 				<strong>{money(totalFoodCost)}</strong>
 			</div>
 			<div class="metric">
-				<span>Profit</span>
+				<span>Gross Profit</span>
 				<strong>{money(profit)}</strong>
 			</div>
 			<div class="metric">
@@ -96,7 +96,7 @@
 				<strong>{percent(foodCostPercent)}</strong>
 			</div>
 			<div class="metric">
-				<span>Margin</span>
+				<span>Gross Margin</span>
 				<strong>{percent(marginPercent)}</strong>
 			</div>
 		</div>

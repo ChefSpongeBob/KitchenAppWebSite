@@ -157,3 +157,6 @@ try {
 await import('./schedule-workflow-behavior-check.mjs');
 await import('./schedule-navigation-check.mjs');
 await import('./schedule-runtime-check.mjs');
+await import('./content-workflow-behavior-check.mjs');
+await import('./content-runtime-check.mjs');
+await import('./kitchen-tools-behavior-check.mjs');

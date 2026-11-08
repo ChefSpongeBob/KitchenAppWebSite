@@ -29,7 +29,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
           `
           SELECT p.id, p.content, p.votes
           FROM whiteboard_posts p
-          LEFT JOIN whiteboard_review r ON r.post_id = p.id
+          LEFT JOIN whiteboard_review r ON r.post_id = p.id AND r.business_id = p.business_id
           WHERE COALESCE(r.status, 'approved') = 'approved'
             AND p.business_id = ?
           ORDER BY p.votes DESC, p.created_at DESC
@@ -68,6 +68,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     const id = String(payload.id ?? '');
     if (!id) return json({ error: 'Missing id' }, { status: 400 });
+    const post = await db.prepare(`SELECT p.id FROM whiteboard_posts p
+      LEFT JOIN whiteboard_review r ON r.post_id = p.id AND r.business_id = p.business_id
+      WHERE p.id = ? AND p.business_id = ? AND COALESCE(r.status, 'approved') = 'approved'`)
+      .bind(id, businessId).first();
+    if (!post) return json({ error: 'Idea not found.' }, { status: 404 });
 
     const existingVote = await db
       .prepare(
@@ -97,26 +102,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    await db
+    const results = await db.batch([db
       .prepare(
         `
         INSERT INTO whiteboard_votes (post_id, user_id, created_at, business_id)
-        VALUES (?, ?, ?, ?)
+        SELECT p.id, ?, ?, p.business_id FROM whiteboard_posts p
+        LEFT JOIN whiteboard_review r ON r.post_id = p.id AND r.business_id = p.business_id
+        WHERE p.id = ? AND p.business_id = ? AND COALESCE(r.status, 'approved') = 'approved'
+        ON CONFLICT(post_id, user_id) DO NOTHING
         `
       )
-      .bind(id, locals.userId, now, businessId)
-      .run();
+      .bind(locals.userId, now, id, businessId),
 
-    await db
+    db
       .prepare(
         `
         UPDATE whiteboard_posts
         SET votes = votes + 1, updated_at = ?
-        WHERE id = ? AND business_id = ?
+        WHERE id = ? AND business_id = ? AND changes() = 1
       `
       )
       .bind(now, id, businessId)
-      .run();
+    ]);
 
     const updated = await db
       .prepare(
@@ -129,7 +136,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       .bind(id, businessId)
       .first<WhiteboardRow>();
 
-    return json(updated ?? null);
+    if (!updated) return json({ error: 'Idea not found.' }, { status: 404 });
+    if (!results[0].meta.changes) return json({ ...updated, alreadyVoted: true }, { status: 409 });
+    return json(updated);
   }
 
   if (action === 'add') {
@@ -142,26 +151,24 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     const now = Math.floor(Date.now() / 1000);
     const id = crypto.randomUUID();
 
-    await db
+    await db.batch([db
       .prepare(
         `
         INSERT INTO whiteboard_posts (id, content, votes, created_by, created_at, updated_at, business_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `
       )
-      .bind(id, content, locals.userRole === 'admin' ? 1 : 0, locals.userId ?? null, now, now, businessId)
-      .run();
+      .bind(id, content, locals.userRole === 'admin' ? 1 : 0, locals.userId ?? null, now, now, businessId),
 
-    const status = locals.userRole === 'admin' ? 'approved' : 'pending';
-    await db
+    db
       .prepare(
         `
         INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
         VALUES (?, ?, ?, ?, ?)
       `
       )
-      .bind(id, status, locals.userRole === 'admin' ? locals.userId ?? null : null, now, businessId)
-      .run();
+      .bind(id, locals.userRole === 'admin' ? 'approved' : 'pending', locals.userRole === 'admin' ? locals.userId ?? null : null, now, businessId)
+    ]);
 
     return json({
       id,

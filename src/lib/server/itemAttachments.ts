@@ -254,6 +254,26 @@ export async function loadItemAttachmentsForItems(
   return grouped;
 }
 
+async function saveItemAttachment(db: DB, businessId: string, sourceType: ItemAttachmentSourceType,
+  sourceItemId: string, targetType: ItemAttachmentTargetType, targetId: string, userId?: string | null) {
+  const sourceTable = sourceType === 'list_item' ? 'list_items' : 'checklist_items';
+  const targetTable = targetType === 'recipe' ? 'recipes' : 'documents';
+  const exists = `EXISTS (SELECT 1 FROM ${sourceTable} WHERE id = ? AND business_id = ?)
+    AND EXISTS (SELECT 1 FROM ${targetTable} WHERE CAST(id AS TEXT) = ? AND business_id = ?
+      ${targetType === 'document' ? 'AND COALESCE(is_active, 1) = 1' : ''})`;
+  const result = await db.prepare(`INSERT INTO item_attachments
+    (id, business_id, source_type, source_item_id, target_type, target_id, created_at, created_by)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${exists}
+    ON CONFLICT(business_id, source_type, source_item_id, target_type, target_id) DO NOTHING`)
+    .bind(crypto.randomUUID(), businessId, sourceType, sourceItemId, targetType, targetId, Math.floor(Date.now() / 1000),
+      userId ?? null, sourceItemId, businessId, targetId, businessId).run();
+  if (result.meta.changes) return { success: true };
+  const duplicate = await db.prepare(`SELECT id FROM item_attachments WHERE business_id = ? AND source_type = ?
+    AND source_item_id = ? AND target_type = ? AND target_id = ? AND ${exists}`)
+    .bind(businessId, sourceType, sourceItemId, targetType, targetId, sourceItemId, businessId, targetId, businessId).first();
+  return duplicate ? { success: true } : fail(404, { error: 'Item or attachment not found. Refresh and try again.' });
+}
+
 export async function createItemAttachment(request: Request, locals: App.Locals) {
   if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
   requireFeatureAccess(locals, 'lists');
@@ -285,28 +305,7 @@ export async function createItemAttachment(request: Request, locals: App.Locals)
     return fail(404, { error: 'Attachment target not found.' });
   }
 
-  await db
-    .prepare(
-      `
-      INSERT OR IGNORE INTO item_attachments (
-        id, business_id, source_type, source_item_id, target_type, target_id, created_at, created_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    )
-    .bind(
-      crypto.randomUUID(),
-      businessId,
-      sourceType,
-      sourceItemId,
-      targetType,
-      targetId,
-      Math.floor(Date.now() / 1000),
-      locals.userId ?? null
-    )
-    .run();
-
-  return { success: true };
+  return saveItemAttachment(db, businessId, sourceType, sourceItemId, targetType, targetId, locals.userId);
 }
 
 export async function attachTargetToItem(request: Request, locals: App.Locals) {
@@ -340,28 +339,7 @@ export async function attachTargetToItem(request: Request, locals: App.Locals) {
     return fail(404, { error: 'Attachment target not found.' });
   }
 
-  await db
-    .prepare(
-      `
-      INSERT OR IGNORE INTO item_attachments (
-        id, business_id, source_type, source_item_id, target_type, target_id, created_at, created_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    )
-    .bind(
-      crypto.randomUUID(),
-      businessId,
-      sourceType,
-      sourceItemId,
-      targetType,
-      targetId,
-      Math.floor(Date.now() / 1000),
-      locals.userId ?? null
-    )
-    .run();
-
-  return { success: true };
+  return saveItemAttachment(db, businessId, sourceType, sourceItemId, targetType, targetId, locals.userId);
 }
 
 export async function deleteItemAttachment(request: Request, locals: App.Locals) {
@@ -385,52 +363,4 @@ export async function deleteItemAttachment(request: Request, locals: App.Locals)
 
   await db.prepare(`DELETE FROM item_attachments WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
-}
-
-export async function deleteAttachmentsForSourceItem(
-  db: DB,
-  businessId: string,
-  sourceType: ItemAttachmentSourceType,
-  sourceItemId: string
-) {
-  await ensureItemAttachmentSchema(db);
-  await db
-    .prepare(`DELETE FROM item_attachments WHERE business_id = ? AND source_type = ? AND source_item_id = ?`)
-    .bind(businessId, sourceType, sourceItemId)
-    .run();
-}
-
-export async function deleteAttachmentsForSourceItems(
-  db: DB,
-  businessId: string,
-  sourceType: ItemAttachmentSourceType,
-  sourceItemIds: string[]
-) {
-  await ensureItemAttachmentSchema(db);
-  const ids = Array.from(new Set(sourceItemIds.filter(Boolean)));
-  if (ids.length === 0) return;
-  await db
-    .prepare(
-      `
-      DELETE FROM item_attachments
-      WHERE business_id = ?
-        AND source_type = ?
-        AND source_item_id IN (SELECT value FROM json_each(?))
-      `
-    )
-    .bind(businessId, sourceType, JSON.stringify(ids))
-    .run();
-}
-
-export async function deleteAttachmentsForTarget(
-  db: DB,
-  businessId: string,
-  targetType: ItemAttachmentTargetType,
-  targetId: string
-) {
-  await ensureItemAttachmentSchema(db);
-  await db
-    .prepare(`DELETE FROM item_attachments WHERE business_id = ? AND target_type = ? AND target_id = ?`)
-    .bind(businessId, targetType, targetId)
-    .run();
 }

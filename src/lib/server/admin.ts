@@ -63,9 +63,6 @@ import {
   type BusinessCapabilityOverrides
 } from '#lib/server/permissions.ts';
 import {
-  deleteAttachmentsForSourceItem,
-  deleteAttachmentsForSourceItems,
-  deleteAttachmentsForTarget,
   loadItemAttachmentsForItems,
   type ItemAttachment
 } from '#lib/server/itemAttachments.ts';
@@ -455,19 +452,30 @@ function documentMediaKeyFromUrl(fileUrl: string) {
     .join('/');
 }
 
-async function deleteUnreferencedDocumentMedia(db: D1, locals: App.Locals, businessId: string, fileUrl: string) {
-  const key = documentMediaKeyFromUrl(fileUrl);
-  if (!key?.startsWith(`businesses/${businessId}/documents/`) || !locals.MEDIA_BUCKET) return;
-  const referenced = await db.prepare(`
-    SELECT 1 AS found FROM documents WHERE business_id = ?1 AND file_url = ?2
-    UNION ALL SELECT 1 FROM businesses WHERE id = ?1 AND sidebar_logo_url = ?2
-    UNION ALL SELECT 1 FROM employee_onboarding_template_items WHERE business_id = ?1 AND source_file_url = ?2
-    UNION ALL SELECT 1 FROM employee_onboarding_items WHERE business_id = ?1 AND (file_url = ?2 OR source_file_url = ?2)
-    UNION ALL SELECT 1 FROM employee_i9_verifications WHERE business_id = ?1 AND completed_i9_file_url = ?2
-    UNION ALL SELECT 1 FROM employee_i9_document_copies WHERE business_id = ?1 AND file_url = ?2
-    LIMIT 1
-  `).bind(businessId, fileUrl).first();
-  if (!referenced) await locals.MEDIA_BUCKET.delete(key);
+async function deleteUnreferencedDocumentMedia(db: D1, locals: App.Locals, businessId: string, fileUrl: string | string[]) {
+  if (!locals.MEDIA_BUCKET) return;
+  const candidates = new Map<string, string>();
+  for (const url of typeof fileUrl === 'string' ? [fileUrl] : fileUrl) {
+    try {
+      const key = documentMediaKeyFromUrl(url);
+      if (key?.startsWith(`businesses/${businessId}/documents/`)) candidates.set(url, key);
+    } catch { /* Malformed legacy URLs do not authorize object deletion. */ }
+  }
+  const urls = Array.from(candidates.keys());
+  // R2 supports at most 1,000 keys per delete; reference checks use one JSON binding per chunk.
+  for (let offset = 0; offset < urls.length; offset += 1000) {
+    const unreferenced = await db.prepare(`
+      SELECT value AS url FROM json_each(?2) candidate
+      WHERE NOT EXISTS (SELECT 1 FROM documents WHERE business_id = ?1 AND file_url = candidate.value)
+        AND NOT EXISTS (SELECT 1 FROM businesses WHERE id = ?1 AND sidebar_logo_url = candidate.value)
+        AND NOT EXISTS (SELECT 1 FROM employee_onboarding_template_items WHERE business_id = ?1 AND source_file_url = candidate.value)
+        AND NOT EXISTS (SELECT 1 FROM employee_onboarding_items WHERE business_id = ?1 AND (file_url = candidate.value OR source_file_url = candidate.value))
+        AND NOT EXISTS (SELECT 1 FROM employee_i9_verifications WHERE business_id = ?1 AND completed_i9_file_url = candidate.value)
+        AND NOT EXISTS (SELECT 1 FROM employee_i9_document_copies WHERE business_id = ?1 AND file_url = candidate.value)
+    `).bind(businessId, JSON.stringify(urls.slice(offset, offset + 1000))).all<{ url: string }>();
+    const keys = (unreferenced.results ?? []).map(row => candidates.get(row.url)!);
+    if (keys.length) await locals.MEDIA_BUCKET.delete(keys.length === 1 ? keys[0] : keys);
+  }
 }
 
 type DocumentWriteSnapshot = {
@@ -508,7 +516,7 @@ function extensionFromContentType(contentType: string) {
 function isAllowedDocumentUpload(contentType: string, extension: string) {
   if (contentType === 'application/pdf') return true;
   if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(contentType)) return true;
-  return ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);
+  return (!contentType || contentType === 'application/octet-stream') && ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);
 }
 
 async function uploadDocumentMedia(
@@ -520,7 +528,7 @@ async function uploadDocumentMedia(
   const contentType = file.type || 'application/octet-stream';
   const filenameExtension = extensionFromFilename(file.name);
   const typeExtension = extensionFromContentType(contentType);
-  const extension = filenameExtension || typeExtension || 'bin';
+  const extension = typeExtension || filenameExtension || 'bin';
 
   if (!isAllowedDocumentUpload(contentType, extension)) {
     throw new Error('Unsupported document type.');
@@ -530,7 +538,8 @@ async function uploadDocumentMedia(
   const key = `businesses/${businessId}/documents/${normalizedSlug}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
   await bucket.put(key, file.stream() as unknown as WorkerReadableStream, {
     httpMetadata: {
-      contentType,
+      contentType: ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[extension] ?? 'application/octet-stream',
       cacheControl: 'private, max-age=0'
     }
   });
@@ -4468,24 +4477,15 @@ export async function updateCreatorCategory(request: Request, locals: App.Locals
   await requireCreatorCategoryFeatures(db, businessId, locals, editorType, previousCategory, nextCategory);
   if (previousCategory === nextCategory) return { success: true };
 
-  if (editorType === 'recipe') {
-    await db
-      .prepare(`UPDATE recipes SET category = ? WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
-      .bind(nextCategory, previousCategory, businessId)
-      .run();
-  } else {
-    await db
-      .prepare(`UPDATE documents SET category = ? WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
-      .bind(nextCategory, previousCategory, businessId)
-      .run();
-  }
-
   await ensureCreatorCategoryRegistry(db);
-  await db
+  const table = editorType === 'recipe' ? 'recipes' : 'documents';
+  await db.batch([
+    db.prepare(`UPDATE ${table} SET category = ? WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
+      .bind(nextCategory, previousCategory, businessId),
+    db
     .prepare(`DELETE FROM creator_category_registry WHERE business_id = ? AND editor_type = ? AND category = ?`)
-    .bind(businessId, editorType, previousCategory)
-    .run();
-  await db
+    .bind(businessId, editorType, previousCategory),
+    db
     .prepare(
       `
       INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
@@ -4493,7 +4493,7 @@ export async function updateCreatorCategory(request: Request, locals: App.Locals
       `
     )
     .bind(crypto.randomUUID(), businessId, editorType, nextCategory, Math.floor(Date.now() / 1000))
-    .run();
+  ]);
 
   return { success: true };
 }
@@ -4532,25 +4532,25 @@ export async function deleteCreatorCategory(request: Request, locals: App.Locals
     return fail(400, { error: 'Category still has content. Move or delete content first.' });
   }
 
-  if (deleteWithContent) {
-    if (editorType === 'recipe') {
-      await db
-        .prepare(`DELETE FROM recipes WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
-        .bind(category, businessId)
-        .run();
-    } else {
-      await db
-        .prepare(`DELETE FROM documents WHERE TRIM(COALESCE(category, '')) = ? AND business_id = ?`)
-        .bind(category, businessId)
-        .run();
-    }
-  }
-
   await ensureCreatorCategoryRegistry(db);
-  await db
+  const table = editorType === 'recipe' ? 'recipes' : 'documents';
+  const files = deleteWithContent && editorType === 'document'
+    ? (await db.prepare(`SELECT DISTINCT file_url FROM documents WHERE business_id = ? AND TRIM(COALESCE(category, '')) = ?`)
+      .bind(businessId, category).all<{ file_url: string | null }>()).results : [];
+  await db.batch([
+    ...(deleteWithContent ? [
+      db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND target_type = ?
+        AND target_id IN (SELECT CAST(id AS TEXT) FROM ${table} WHERE business_id = ? AND TRIM(COALESCE(category, '')) = ?)`)
+        .bind(businessId, editorType === 'recipe' ? 'recipe' : 'document', businessId, category),
+      db.prepare(`DELETE FROM ${table} WHERE business_id = ? AND TRIM(COALESCE(category, '')) = ?`)
+        .bind(businessId, category)
+    ] : []),
+    db
     .prepare(`DELETE FROM creator_category_registry WHERE business_id = ? AND editor_type = ? AND category = ?`)
     .bind(businessId, editorType, category)
-    .run();
+  ]);
+  await deleteUnreferencedDocumentMedia(db, locals, businessId, (files ?? []).map(file => file.file_url ?? ''))
+    .catch(() => console.warn('Document media cleanup unavailable.'));
 
   return { success: true };
 }
@@ -4599,32 +4599,29 @@ export async function createListSection(request: Request, locals: App.Locals) {
 
   const now = Math.floor(Date.now() / 1000);
   const sectionId = crypto.randomUUID();
-  await db
+  const statements = [db
     .prepare(
       `
       INSERT INTO list_sections (id, domain, slug, title, description, created_at, updated_at, business_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, domain, slug) DO NOTHING
       `
     )
-    .bind(sectionId, domain, slug, title, description || null, now, now, businessId)
-    .run();
+    .bind(sectionId, domain, slug, title, description || null, now, now, businessId)];
 
   if (firstItem) {
-    const maxSort = await db
-      .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM list_items WHERE section_id = ? AND business_id = ?`)
-      .bind(sectionId, businessId)
-      .first<{ max_sort: number }>();
     const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
     const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
     if (detailsEnabled) {
-      await db
+      statements.push(db
         .prepare(
           `
           INSERT INTO list_items (
             id, section_id, content, details, sort_order, is_checked,
             amount, par_count, created_at, updated_at, business_id
           )
-          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+          SELECT ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM list_sections WHERE id = ? AND business_id = ?)
           `
         )
         .bind(
@@ -4632,38 +4629,41 @@ export async function createListSection(request: Request, locals: App.Locals) {
           sectionId,
           firstItem,
           firstDetails,
-          (maxSort?.max_sort ?? -1) + 1,
           firstParCountRaw || 0,
           now,
           now,
+          businessId,
+          sectionId,
           businessId
-        )
-        .run();
+        ));
     } else {
-      await db
+      statements.push(db
         .prepare(
           `
           INSERT INTO list_items (
             id, section_id, content, sort_order, is_checked,
             amount, par_count, created_at, updated_at, business_id
           )
-          VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+          SELECT ?, ?, ?, 0, 0, 0, ?, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM list_sections WHERE id = ? AND business_id = ?)
           `
         )
         .bind(
           crypto.randomUUID(),
           sectionId,
           firstItem,
-          (maxSort?.max_sort ?? -1) + 1,
           firstParCountRaw || 0,
           now,
           now,
+          businessId,
+          sectionId,
           businessId
-        )
-        .run();
+        ));
     }
   }
 
+  const results = await db.batch(statements);
+  if (!results[0].meta.changes) return fail(400, { error: 'A list with this name already exists.' });
   return { success: true };
 }
 
@@ -4683,7 +4683,7 @@ export async function updateListSection(request: Request, locals: App.Locals) {
   if (!sectionId) return fail(400, { error: 'Missing section id.' });
   if (!title) return fail(400, { error: 'Section title is required.' });
 
-  await db
+  const result = await db
     .prepare(
       `
       UPDATE list_sections
@@ -4693,6 +4693,7 @@ export async function updateListSection(request: Request, locals: App.Locals) {
     )
     .bind(title, description || null, Math.floor(Date.now() / 1000), sectionId, businessId)
     .run();
+  if (!result.meta.changes) return fail(404, { error: 'List section not found.' });
 
   return { success: true };
 }
@@ -4709,18 +4710,14 @@ export async function deleteListSection(request: Request, locals: App.Locals) {
   const sectionId = String(formData.get('section_id') ?? '').trim();
   if (!sectionId) return fail(400, { error: 'Missing section id.' });
 
-  const items = await db
-    .prepare(`SELECT id FROM list_items WHERE section_id = ? AND business_id = ?`)
-    .bind(sectionId, businessId)
-    .all<{ id: string }>();
-  await deleteAttachmentsForSourceItems(
-    db,
-    businessId,
-    'list_item',
-    (items.results ?? []).map((item) => item.id)
-  );
-  await db.prepare(`DELETE FROM list_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
-  await db.prepare(`DELETE FROM list_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND source_type = 'list_item'
+      AND source_item_id IN (SELECT id FROM list_items WHERE section_id = ? AND business_id = ?)`)
+      .bind(businessId, sectionId, businessId),
+    db.prepare(`DELETE FROM list_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId),
+    db.prepare(`DELETE FROM list_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId)
+  ]);
+  if (!results[2].meta.changes) return fail(404, { error: 'List section not found.' });
 
   return { success: true };
 }
@@ -4767,15 +4764,17 @@ export async function createChecklistCategory(request: Request, locals: App.Loca
 
   const now = Math.floor(Date.now() / 1000);
   for (const section of sections) {
-    await db
+    const result = await db
       .prepare(
         `
         INSERT INTO checklist_sections (id, slug, title, description, created_at, updated_at, business_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(business_id, slug) DO NOTHING
         `
       )
       .bind(crypto.randomUUID(), section.slug, section.title, description || null, now, now, businessId)
       .run();
+    if (!result.meta.changes) return fail(400, { error: 'A checklist with this name already exists.' });
   }
 
   return { success: true };
@@ -4885,20 +4884,14 @@ export async function deleteChecklistCategory(request: Request, locals: App.Loca
   const sectionIds = (sections.results ?? []).map((section) => section.id);
   if (sectionIds.length === 0) return fail(404, { error: 'Checklist category not found.' });
 
-  for (const sectionId of sectionIds) {
-    const items = await db
-      .prepare(`SELECT id FROM checklist_items WHERE section_id = ? AND business_id = ?`)
-      .bind(sectionId, businessId)
-      .all<{ id: string }>();
-    await deleteAttachmentsForSourceItems(
-      db,
-      businessId,
-      'checklist_item',
-      (items.results ?? []).map((item) => item.id)
-    );
-    await db.prepare(`DELETE FROM checklist_items WHERE section_id = ? AND business_id = ?`).bind(sectionId, businessId).run();
-    await db.prepare(`DELETE FROM checklist_sections WHERE id = ? AND business_id = ?`).bind(sectionId, businessId).run();
-  }
+  const ids = JSON.stringify(sectionIds);
+  await db.batch([
+    db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND source_type = 'checklist_item'
+      AND source_item_id IN (SELECT id FROM checklist_items WHERE business_id = ? AND section_id IN (SELECT value FROM json_each(?)))`)
+      .bind(businessId, businessId, ids),
+    db.prepare(`DELETE FROM checklist_items WHERE business_id = ? AND section_id IN (SELECT value FROM json_each(?))`).bind(businessId, ids),
+    db.prepare(`DELETE FROM checklist_sections WHERE business_id = ? AND id IN (SELECT value FROM json_each(?))`).bind(businessId, ids)
+  ]);
 
   return { success: true };
 }
@@ -4993,17 +4986,21 @@ export async function updateListItem(request: Request, locals: App.Locals) {
   const columns = await db.prepare(`PRAGMA table_info(list_items)`).all<{ name: string }>();
   const detailsEnabled = (columns.results ?? []).some((column) => column.name === 'details');
 
+  let changed = 0;
   if (detailsEnabled) {
-    await db
+    const result = await db
       .prepare(`UPDATE list_items SET content = ?, details = ?, par_count = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
       .bind(content, details, parCount, Math.floor(Date.now() / 1000), id, businessId)
       .run();
+    changed = result.meta.changes;
   } else {
-    await db
+    const result = await db
       .prepare(`UPDATE list_items SET content = ?, par_count = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
       .bind(content, parCount, Math.floor(Date.now() / 1000), id, businessId)
       .run();
+    changed = result.meta.changes;
   }
+  if (!changed) return fail(404, { error: 'List item not found.' });
 
   return { success: true };
 }
@@ -5020,8 +5017,11 @@ export async function deleteListItem(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing list item id.' });
 
-  await deleteAttachmentsForSourceItem(db, businessId, 'list_item', id);
-  await db.prepare(`DELETE FROM list_items WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND source_type = 'list_item' AND source_item_id = ?`).bind(businessId, id),
+    db.prepare(`DELETE FROM list_items WHERE id = ? AND business_id = ?`).bind(id, businessId)
+  ]);
+  if (!results[1].meta.changes) return fail(404, { error: 'List item not found.' });
   return { success: true };
 }
 
@@ -5089,10 +5089,11 @@ export async function updateChecklistItem(request: Request, locals: App.Locals) 
     return fail(400, { error: 'Invalid checklist update input.' });
   }
 
-  await db
+  const result = await db
     .prepare(`UPDATE checklist_items SET content = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
     .bind(content, Math.floor(Date.now() / 1000), id, businessId)
     .run();
+  if (!result.meta.changes) return fail(404, { error: 'Checklist item not found.' });
 
   return { success: true };
 }
@@ -5109,8 +5110,11 @@ export async function deleteChecklistItem(request: Request, locals: App.Locals) 
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing checklist item id.' });
 
-  await deleteAttachmentsForSourceItem(db, businessId, 'checklist_item', id);
-  await db.prepare(`DELETE FROM checklist_items WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND source_type = 'checklist_item' AND source_item_id = ?`).bind(businessId, id),
+    db.prepare(`DELETE FROM checklist_items WHERE id = ? AND business_id = ?`).bind(id, businessId)
+  ]);
+  if (!results[1].meta.changes) return fail(404, { error: 'Checklist item not found.' });
   return { success: true };
 }
 
@@ -5141,16 +5145,15 @@ export async function createRecipe(request: Request, locals: App.Locals) {
     return fail(400, { error: 'All recipe fields are required.' });
   }
   await ensureCreatorCategoryRegistry(db);
-  await db
+  await db.batch([db
     .prepare(
       `
       INSERT INTO recipes (title, category, ingredients, instructions, created_at, business_id)
       VALUES (?, ?, ?, ?, datetime('now'), ?)
       `
     )
-    .bind(title, category, ingredients, instructions, businessId)
-    .run();
-  await db
+    .bind(title, category, ingredients, instructions, businessId),
+    db
     .prepare(
       `
       INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
@@ -5158,7 +5161,7 @@ export async function createRecipe(request: Request, locals: App.Locals) {
       `
     )
     .bind(crypto.randomUUID(), businessId, category, Math.floor(Date.now() / 1000))
-    .run();
+  ]);
 
   return { success: true };
 }
@@ -5194,7 +5197,7 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
   }
   await ensureCreatorCategoryRegistry(db);
 
-  await db
+  const results = await db.batch([db
     .prepare(
       `
       UPDATE recipes
@@ -5202,17 +5205,17 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
       WHERE id = ? AND business_id = ?
       `
     )
-    .bind(title, category, ingredients, instructions, id, businessId)
-    .run();
-  await db
+    .bind(title, category, ingredients, instructions, id, businessId),
+    db
     .prepare(
       `
       INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
-      VALUES (?, ?, 'recipe', ?, ?)
+      SELECT ?, ?, 'recipe', ?, ? WHERE changes() = 1
       `
     )
     .bind(crypto.randomUUID(), businessId, category, Math.floor(Date.now() / 1000))
-    .run();
+  ]);
+  if (!results[0].meta.changes) return fail(404, { error: 'Recipe not found.' });
 
   return { success: true };
 }
@@ -5229,8 +5232,11 @@ export async function deleteRecipe(request: Request, locals: App.Locals) {
   const id = Number(f.get('id'));
   if (!Number.isFinite(id)) return fail(400, { error: 'Invalid recipe id.' });
 
-  await deleteAttachmentsForTarget(db, businessId, 'recipe', String(id));
-  await db.prepare(`DELETE FROM recipes WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND target_type = 'recipe' AND target_id = ?`).bind(businessId, String(id)),
+    db.prepare(`DELETE FROM recipes WHERE id = ? AND business_id = ?`).bind(id, businessId)
+  ]);
+  if (!results[1].meta.changes) return fail(404, { error: 'Recipe not found.' });
   return { success: true };
 }
 
@@ -5247,33 +5253,35 @@ export async function createTodo(request: Request, locals: App.Locals) {
   const description = formMultilineString(formData, 'description', 600);
   const assignedTo = String(formData.get('assigned_to') ?? '').trim();
   if (!title) return fail(400, { error: 'Todo title is required.' });
+  if (assignedTo && !(await db.prepare(`SELECT user_id FROM business_users WHERE business_id = ? AND user_id = ?`)
+    .bind(businessId, assignedTo).first())) return fail(400, { error: 'Choose an employee in this workspace.' });
 
   const now = Math.floor(Date.now() / 1000);
   const todoId = crypto.randomUUID();
-  await db
+  const statements = [db
     .prepare(
       `
       INSERT INTO todos (
         id, title, description, created_by, created_at, updated_at, business_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, ?
+      WHERE ? = '' OR EXISTS (SELECT 1 FROM business_users WHERE business_id = ? AND user_id = ?)
       `
     )
-    .bind(todoId, title, description, locals.userId, now, now, businessId)
-    .run();
+    .bind(todoId, title, description, locals.userId, now, now, businessId, assignedTo, businessId, assignedTo)];
 
   if (assignedTo) {
-    await db
+    statements.push(db
       .prepare(
         `
         INSERT OR REPLACE INTO todo_assignments (todo_id, user_id, assigned_at, business_id)
-        VALUES (?, ?, ?, ?)
+        SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM todos WHERE id = ? AND business_id = ?)
         `
       )
-      .bind(todoId, assignedTo, now, businessId)
-      .run();
+      .bind(todoId, assignedTo, now, businessId, todoId, businessId));
   }
-
+  const results = await db.batch(statements);
+  if (!results[0].meta.changes) return fail(409, { error: 'Employee access changed. Refresh and try again.' });
   return { success: true };
 }
 
@@ -5289,9 +5297,12 @@ export async function deleteTodo(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing todo id.' });
 
-  await db.prepare(`DELETE FROM todo_assignments WHERE todo_id = ? AND business_id = ?`).bind(id, businessId).run();
-  await db.prepare(`DELETE FROM todo_completion_log WHERE todo_id = ? AND business_id = ?`).bind(id, businessId).run();
-  await db.prepare(`DELETE FROM todos WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM todo_assignments WHERE todo_id = ? AND business_id = ?`).bind(id, businessId),
+    db.prepare(`DELETE FROM todo_completion_log WHERE todo_id = ? AND business_id = ?`).bind(id, businessId),
+    db.prepare(`DELETE FROM todos WHERE id = ? AND business_id = ?`).bind(id, businessId)
+  ]);
+  if (!results[2].meta.changes) return fail(404, { error: 'Task not found.' });
   return { success: true };
 }
 
@@ -5332,7 +5343,7 @@ export async function updateAdminReminder(request: Request, locals: App.Locals) 
   const content = formString(formData, 'content', 180);
   if (!id || !content) return fail(400, { error: 'Reminder is required.' });
 
-  await db
+  const result = await db
     .prepare(
       `
       UPDATE admin_reminders
@@ -5342,6 +5353,7 @@ export async function updateAdminReminder(request: Request, locals: App.Locals) 
     )
     .bind(content, locals.userId ?? null, Math.floor(Date.now() / 1000), id, businessId)
     .run();
+  if (!result.meta.changes) return fail(404, { error: 'Reminder not found.' });
 
   return { success: true };
 }
@@ -5357,7 +5369,8 @@ export async function deleteAdminReminder(request: Request, locals: App.Locals) 
   const id = String(formData.get('id') ?? '').trim();
   if (!id) return fail(400, { error: 'Missing reminder id.' });
 
-  await db.prepare(`DELETE FROM admin_reminders WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const result = await db.prepare(`DELETE FROM admin_reminders WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  if (!result.meta.changes) return fail(404, { error: 'Reminder not found.' });
   return { success: true };
 }
 
@@ -5377,15 +5390,18 @@ export async function approveWhiteboard(request: Request, locals: App.Locals) {
   if (!id) return fail(400, { error: 'Missing whiteboard id.' });
 
   const now = Math.floor(Date.now() / 1000);
-  await db
+  const result = await db
     .prepare(
       `
-      INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
-      VALUES (?, 'approved', ?, ?, ?)
+      INSERT INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
+      SELECT id, 'approved', ?, ?, business_id FROM whiteboard_posts WHERE id = ? AND business_id = ?
+      ON CONFLICT(post_id) DO UPDATE SET status = excluded.status, reviewed_by = excluded.reviewed_by,
+        reviewed_at = excluded.reviewed_at WHERE whiteboard_review.business_id = excluded.business_id
       `
     )
-    .bind(id, locals.userId ?? null, now, businessId)
+    .bind(locals.userId ?? null, now, id, businessId)
     .run();
+  if (!result.meta.changes) return fail(404, { error: 'Idea not found.' });
 
   return { success: true };
 }
@@ -5406,15 +5422,18 @@ export async function rejectWhiteboard(request: Request, locals: App.Locals) {
   if (!id) return fail(400, { error: 'Missing whiteboard id.' });
 
   const now = Math.floor(Date.now() / 1000);
-  await db
+  const result = await db
     .prepare(
       `
-      INSERT OR REPLACE INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
-      VALUES (?, 'rejected', ?, ?, ?)
+      INSERT INTO whiteboard_review (post_id, status, reviewed_by, reviewed_at, business_id)
+      SELECT id, 'rejected', ?, ?, business_id FROM whiteboard_posts WHERE id = ? AND business_id = ?
+      ON CONFLICT(post_id) DO UPDATE SET status = excluded.status, reviewed_by = excluded.reviewed_by,
+        reviewed_at = excluded.reviewed_at WHERE whiteboard_review.business_id = excluded.business_id
       `
     )
-    .bind(id, locals.userId ?? null, now, businessId)
+    .bind(locals.userId ?? null, now, id, businessId)
     .run();
+  if (!result.meta.changes) return fail(404, { error: 'Idea not found.' });
 
   return { success: true };
 }
@@ -5431,8 +5450,12 @@ export async function deleteWhiteboard(request: Request, locals: App.Locals) {
   const id = String(formData.get('id') ?? '');
   if (!id) return fail(400, { error: 'Missing whiteboard id.' });
 
-  await db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ? AND business_id = ?`).bind(id, businessId).run();
-  await db.prepare(`DELETE FROM whiteboard_posts WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM whiteboard_votes WHERE post_id = ? AND business_id = ?`).bind(id, businessId),
+    db.prepare(`DELETE FROM whiteboard_review WHERE post_id = ? AND business_id = ?`).bind(id, businessId),
+    db.prepare(`DELETE FROM whiteboard_posts WHERE id = ? AND business_id = ?`).bind(id, businessId)
+  ]);
+  if (!results[2].meta.changes) return fail(404, { error: 'Idea not found.' });
 
   return { success: true };
 }
@@ -5450,8 +5473,8 @@ export async function createDocument(request: Request, locals: App.Locals) {
   const title = formString(formData, 'title', 180);
   const section = formString(formData, 'section', 80) || 'Docs';
   const category = formString(formData, 'category', 120) || 'General';
-  const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
-  const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
+  const providedSlug = listSlugFromTitle(rawSlug === 'custom' ? customSlug : rawSlug);
+  const slug = providedSlug || listSlugFromTitle(title) || listSlugFromTitle(category) || 'document';
   requireFeatureAccess(locals, documentFeatureKey({ slug, section, category }));
   const content = formMultilineString(formData, 'content', 2000);
   let fileUrl = String(formData.get('file_url') ?? '').trim();
@@ -5492,18 +5515,28 @@ export async function createDocument(request: Request, locals: App.Locals) {
 
   const now = Math.floor(Date.now() / 1000);
 
+  await ensureCreatorCategoryRegistry(db);
   try {
-    await db
+    const results = await db.batch([db
     .prepare(
       `
       INSERT INTO documents (
         id, slug, title, section, category, content, file_url, is_active, created_at, updated_at, business_id
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, slug) DO NOTHING
       `
     )
-    .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, isActive, now, now, businessId)
-    .run();
+    .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, isActive, now, now, businessId),
+    db.prepare(`INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
+      SELECT ?, ?, 'document', ?, ? WHERE changes() = 1`)
+      .bind(crypto.randomUUID(), businessId, category, now)
+    ]);
+    if (!results[0].meta.changes) {
+      if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
+        .catch(() => console.warn('Document upload cleanup unavailable.'));
+      return fail(400, { error: 'A document or menu with this name already exists.' });
+    }
   } catch (error) {
     if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
       .catch(() => console.warn('Document upload cleanup unavailable.'));
@@ -5527,8 +5560,8 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   const title = formString(formData, 'title', 180);
   const section = formString(formData, 'section', 80) || 'Docs';
   const category = formString(formData, 'category', 120) || 'General';
-  const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
-  const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
+  const providedSlug = listSlugFromTitle(rawSlug === 'custom' ? customSlug : rawSlug);
+  const slug = providedSlug || listSlugFromTitle(title) || listSlugFromTitle(category) || 'document';
   const content = formMultilineString(formData, 'content', 2000);
   let fileUrl = String(formData.get('file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
@@ -5573,19 +5606,23 @@ export async function updateDocument(request: Request, locals: App.Locals) {
     }
   }
 
+  await ensureCreatorCategoryRegistry(db);
   try {
-    const result = await db
+    const results = await db.batch([db
     .prepare(
       `
-      UPDATE documents
+      UPDATE OR IGNORE documents
       SET slug = ?, title = ?, section = ?, category = ?, content = ?, file_url = ?, is_active = ?, updated_at = ?
       WHERE id = ? AND business_id = ? AND ${documentWriteCondition}
       `
     )
     .bind(slug, title, section, category, content || null, fileUrl || null, isActive, Math.floor(Date.now() / 1000), id, businessId,
-      ...documentWriteBindings(existing))
-    .run();
-    if (!result.meta.changes) {
+      ...documentWriteBindings(existing)),
+    db.prepare(`INSERT OR IGNORE INTO creator_category_registry (id, business_id, editor_type, category, created_at)
+      SELECT ?, ?, 'document', ?, ? WHERE changes() = 1`)
+      .bind(crypto.randomUUID(), businessId, category, Math.floor(Date.now() / 1000))
+    ]);
+    if (!results[0].meta.changes) {
       if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
         .catch(() => console.warn('Document upload cleanup unavailable.'));
       return fail(409, { error: 'This document changed. Refresh and try again.' });

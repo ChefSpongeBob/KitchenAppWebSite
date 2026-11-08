@@ -61,11 +61,11 @@ export const actions: Actions = {
 
     const formData = await request.formData();
     const now = Math.floor(Date.now() / 1000);
-
+    const statements: ReturnType<typeof db.prepare>[] = [];
     for (const category of dailySpecialCategories) {
       const content = normalizeFormText(formData, category, { maxLength: 1000, multiline: true });
       const storageCategory = getDailySpecialStorageCategory(category, locals.businessId);
-      await db
+      statements.push(db
         .prepare(
           `
           INSERT INTO daily_specials (category, content, updated_by, updated_at, business_id)
@@ -77,9 +77,9 @@ export const actions: Actions = {
             business_id = excluded.business_id
           `
         )
-        .bind(storageCategory, content, locals.userId, now, locals.businessId ?? null)
-        .run();
+        .bind(storageCategory, content, locals.userId, now, locals.businessId ?? null));
     }
+    await db.batch(statements);
 
     return { success: true };
   }

@@ -1,7 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
 import { loadItemAttachmentsForItems, type ItemAttachment } from '#lib/server/itemAttachments.ts';
-import { recordListItemActivity } from '#lib/server/history.ts';
+import { setListItemCompletion } from '#lib/server/history.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 
 type DB = App.RuntimeEnv['DB'];
@@ -43,9 +43,9 @@ function requireScopedBusinessId(locals: ChecklistLocals) {
 
 async function getSection(db: DB, slug: string, businessId: string) {
   return db
-    .prepare(`SELECT id FROM checklist_sections WHERE slug = ? AND business_id = ? LIMIT 1`)
+    .prepare(`SELECT id, title FROM checklist_sections WHERE slug = ? AND business_id = ? LIMIT 1`)
     .bind(slug, businessId)
-    .first<{ id: string }>();
+    .first<{ id: string; title: string }>();
 }
 
 async function seedDefaultsIfMissing(db: DB, sectionId: string, defaults: DefaultItem[], businessId: string) {
@@ -161,7 +161,7 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
     );
 
     return {
-      title: pageTitle,
+      title: section.title || pageTitle,
       subtitle: options.subtitle,
       resetLabel: options.resetLabel,
       infoCardTitle: options.infoCardTitle ?? '',
@@ -193,28 +193,10 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
         return fail(400, { error: 'Invalid completion state.' });
       }
 
-      await db
-        .prepare(
-          `
-          UPDATE checklist_items
-          SET is_checked = ?, updated_at = ?
-          WHERE id = ? AND section_id = ? AND business_id = ?
-          `
-        )
-        .bind(isChecked, Math.floor(Date.now() / 1000), id, section.id, businessId)
-        .run();
+      const completionResult = await setListItemCompletion(db, businessId, 'checklists', section.id, id, locals.userId, isChecked);
+      if (!completionResult) return fail(404, { error: 'Checklist item not found.' });
 
-      if (isChecked === 1) {
-        await recordListItemActivity(
-          db,
-          businessId,
-          'checklists',
-          section.id,
-          id,
-          'completed',
-          locals.userId,
-          String(isChecked)
-        );
+      if (isChecked === 1 && completionResult.changed) {
 
         await recordOperationalEventBestEffort(db, {
           businessId,
@@ -226,7 +208,7 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
           title: 'Checklist item completed',
           payload: {
             domain: 'checklists',
-            sectionTitle: pageTitle,
+            sectionTitle: section.title || pageTitle,
             sectionId: section.id,
             checked: true
           }
@@ -256,7 +238,7 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
             title: 'Checklist completed',
             payload: {
               domain: 'checklists',
-              sectionTitle: pageTitle,
+              sectionTitle: section.title || pageTitle,
               itemCount: completion?.total ?? 0
             }
           });

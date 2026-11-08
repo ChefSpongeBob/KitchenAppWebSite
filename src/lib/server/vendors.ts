@@ -187,7 +187,7 @@ export async function updateVendor(request: Request, locals: App.Locals) {
   const vendor = readVendorForm(formData);
   if ('error' in vendor) return fail(400, { error: vendor.error });
 
-  await db
+  const result = await db
     .prepare(
       `
       UPDATE vendor_resources
@@ -210,6 +210,7 @@ export async function updateVendor(request: Request, locals: App.Locals) {
     )
     .run();
 
+  if (!result.meta.changes) return fail(404, { error: 'Vendor not found.' });
   return { success: true, message: 'Vendor updated.' };
 }
 
@@ -226,6 +227,7 @@ export async function deleteVendor(request: Request, locals: App.Locals) {
   const id = optionalString(formData, 'id', 80);
   if (!id) return fail(400, { error: 'Missing vendor id.' });
 
-  await db.prepare(`DELETE FROM vendor_resources WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const result = await db.prepare(`DELETE FROM vendor_resources WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  if (!result.meta.changes) return fail(404, { error: 'Vendor not found.' });
   return { success: true, message: 'Vendor deleted.' };
 }

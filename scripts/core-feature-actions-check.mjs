@@ -78,7 +78,7 @@ expect('src/routes/lists/checklists/[section]/+page.server.ts', 'checklists supp
 expect('src/lib/server/preplist.ts', 'list submissions record history and operational events', (source) =>
   includesAll(source, [
     'recordListSubmission',
-    'recordListItemActivity',
+    'setListItemCompletion',
     'recordOperationalEventBestEffort',
     'business_id = ?',
     "'manage_content'",

@@ -198,34 +198,34 @@ export async function recordListSubmission(
   return true;
 }
 
-export async function recordListItemActivity(
+export async function setListItemCompletion(
   db: DB,
   businessId: string,
   domain: ActivityDomain,
   sectionId: string,
   itemId: string,
-  eventType: string,
   actorUserId: string | null | undefined,
-  valueSnapshot: string
+  isChecked: number
 ) {
   await ensureHistorySchema(db);
   await ensureTenantSchema(db, true);
 
   const table = domain === 'checklists' ? 'checklist_items' : 'list_items';
-  const item = await db
-    .prepare(`SELECT content FROM ${table} WHERE id = ? AND business_id = ? LIMIT 1`)
-    .bind(itemId, businessId)
-    .first<{ content: string }>();
-  if (!item) return;
-
-  await db
+  const now = Math.floor(Date.now() / 1000);
+  // changes() binds the history row to this transition inside the same D1 transaction.
+  const results = await db.batch([
+    db.prepare(`UPDATE ${table} SET is_checked = ?, updated_at = ?
+      WHERE id = ? AND section_id = ? AND business_id = ? AND COALESCE(is_checked, 0) <> ?`)
+      .bind(isChecked, now, itemId, sectionId, businessId, isChecked),
+    db
     .prepare(
       `
       INSERT INTO list_item_activity_events (
         id, business_id, domain, section_id, item_id, item_name_snapshot,
         event_type, actor_user_id, occurred_at, value_snapshot
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, id, content, 'completed', ?, ?, ?
+      FROM ${table} WHERE id = ? AND section_id = ? AND business_id = ? AND changes() = 1 AND ? = 1
       `
     )
     .bind(
@@ -233,14 +233,19 @@ export async function recordListItemActivity(
       businessId,
       domain,
       sectionId,
-      itemId,
-      item.content,
-      eventType,
       actorUserId ?? null,
-      Math.floor(Date.now() / 1000),
-      valueSnapshot
+      now,
+      String(isChecked),
+      itemId,
+      sectionId,
+      businessId,
+      isChecked
     )
-    .run();
+  ]);
+  if (results[0].meta.changes) return { changed: true };
+  const item = await db.prepare(`SELECT id FROM ${table} WHERE id = ? AND section_id = ? AND business_id = ?`)
+    .bind(itemId, sectionId, businessId).first();
+  return item ? { changed: false } : null;
 }
 
 export async function recordSchedulePublishSnapshot(

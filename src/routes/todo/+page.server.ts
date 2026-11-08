@@ -205,31 +205,27 @@ export const actions: Actions = {
 			return fail(403, { error: 'This task is assigned to another user.' });
 		}
 
-		const updateResult = await db
+		const statements = [db
 			.prepare(`
 			UPDATE todos
 			SET completed_by = ?, completed_at = ?, updated_at = ?
-			WHERE id = ? AND business_id = ?
+			WHERE id = ? AND business_id = ? AND completed_at IS NULL
+			  AND (? = 1 OR NOT EXISTS (SELECT 1 FROM todo_assignments WHERE todo_id = todos.id AND business_id = todos.business_id)
+			    OR EXISTS (SELECT 1 FROM todo_assignments WHERE todo_id = todos.id AND business_id = todos.business_id AND user_id = ?))
 		`)
-			.bind(locals.userId, now, now, id, businessId)
-			.run();
-
-		if (!updateResult.success || (updateResult.meta?.changes ?? 0) < 1) {
-			return fail(409, { error: 'Task could not be completed.' });
-		}
-
-		// Completion itself should not depend on audit log availability.
+			.bind(locals.userId, now, now, id, businessId, locals.userRole === 'admin' ? 1 : 0, locals.userId ?? '')];
 		if (await hasTable(db, 'todo_completion_log')) {
-			await db
+			statements.push(db
 				.prepare(`
 				INSERT INTO todo_completion_log (
 					id, todo_id, title, completed_by, completed_at, business_id
 				)
-				VALUES (?, ?, ?, ?, ?, ?)
+				SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1
 			`)
-				.bind(crypto.randomUUID(), id, todo.title, locals.userId, now, businessId)
-				.run();
+				.bind(crypto.randomUUID(), id, todo.title, locals.userId, now, businessId));
 		}
+		const results = await db.batch(statements);
+		if (!results[0].meta.changes) return fail(409, { error: 'Task changed. Refresh and try again.' });
 
 		return { success: true };
 	}

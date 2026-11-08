@@ -248,11 +248,14 @@ export const GET: RequestHandler = async ({ params, locals, request }) => {
   }
 
   const headers = new Headers();
-  if (object.httpMetadata?.contentType) {
-    headers.set('content-type', object.httpMetadata.contentType);
+  const contentType = object.httpMetadata?.contentType ?? '';
+  if (['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(contentType)) {
+    headers.set('content-type', contentType);
   } else {
     headers.set('content-type', 'application/octet-stream');
+    headers.set('content-disposition', 'attachment');
   }
+  headers.set('x-content-type-options', 'nosniff');
   headers.set('cache-control', 'private, no-store');
   headers.set('etag', object.httpEtag);
 

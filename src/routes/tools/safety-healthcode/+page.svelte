@@ -3,24 +3,24 @@
 	import PageHeader from '#lib/components/ui/PageHeader.svelte';
 
 	const cookTemps = [
-		{ food: 'Poultry, stuffing, reheated leftovers', temp: '165 F', note: 'Chicken, turkey, stuffed items, casseroles, reheats.' },
-		{ food: 'Ground meats', temp: '160 F', note: 'Ground beef, pork, veal, lamb.' },
-		{ food: 'Whole cuts: beef, pork, veal, lamb', temp: '145 F + rest', note: 'Use a thermometer and rest before service.' },
-		{ food: 'Fish and shellfish', temp: '145 F', note: 'Or opaque and separating easily where allowed.' },
-		{ food: 'Egg dishes', temp: '160 F', note: 'Cook until set and verified.' }
+		{ food: 'Poultry and stuffed foods', temp: '165 F', note: 'Instantaneous; includes stuffing containing animal food.' },
+		{ food: 'Ground and non-intact meat', temp: '155 F / 17 sec', note: 'Includes injected or mechanically tenderized meat; approved equivalents may apply.' },
+		{ food: 'Intact meat and fish', temp: '145 F / 15 sec', note: 'Roasts, raw service and special processes have separate rules.' },
+		{ food: 'Eggs for immediate service', temp: '145 F / 15 sec', note: 'Prepared to order and served immediately.' },
+		{ food: 'Eggs not for immediate service', temp: '155 F / 17 sec', note: 'Including pooled eggs; follow the approved process.' }
 	];
 
 	const sanitizerBasics = [
 		'Use test strips at setup and throughout service.',
-		'Quat concentration commonly lives around 150-400 ppm depending on product and local rule.',
+		'Quat ppm, water hardness and temperature must match the product label and applicable code.',
 		'Follow the chemical label for exact ppm, contact time, and water temperature.',
 		'Replace sanitizer when it is dirty, below range, or after the required interval.'
 	];
 
 	const quickRules = [
 		{ title: 'Handwashing', detail: 'Wash hands and exposed arms for at least 20 seconds. Dry with a single-use towel or approved dryer.' },
-		{ title: 'Cooling', detail: 'Cool hot food quickly in shallow pans, uncovered while cooling, and label before storage.' },
-		{ title: 'Reheating', detail: 'Reheat previously cooked TCS food rapidly to 165 F before hot holding.' },
+		{ title: 'Cooling cooked TCS food', detail: '135 F to 70 F within 2 hours; reach 41 F within 6 hours total.' },
+		{ title: 'Reheating for hot holding', detail: 'Previously cooked/cooled TCS food: 165 F for 15 seconds within 2 hours. Commercially processed ready-to-eat food: 135 F. Microwave reheating has additional requirements.' },
 		{ title: 'Cold holding', detail: 'Keep cold TCS food at 41 F or below unless local code says otherwise.' },
 		{ title: 'Hot holding', detail: 'Keep hot TCS food at 135 F or above unless local code says otherwise.' },
 		{ title: 'Cross-contact', detail: 'Keep raw proteins, ready-to-eat food, allergens, and chemicals separated.' }
@@ -46,7 +46,7 @@
 	<section class="section-block">
 		<header>
 			<h2>Cooking Temperatures</h2>
-			<small>Verify with a food thermometer.</small>
+			<small>FDA model code; local rules apply. Use a thermometer.</small>
 		</header>
 		<div class="temp-list">
 			{#each cookTemps as row}
@@ -91,7 +91,7 @@
 	<section class="section-block">
 		<header>
 			<h2>Cutting Board Colors</h2>
-			<small>Use the house system if your kitchen labels boards differently.</small>
+			<small>Common house convention, not a universal code requirement.</small>
 		</header>
 		<div class="board-grid">
 			{#each boardColors as board}

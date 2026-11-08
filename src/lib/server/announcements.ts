@@ -260,5 +260,6 @@ export async function saveHomepageAnnouncement(
   }
 
   await db.batch(statements);
-  await cleanupAnnouncementHistory(db, businessId, true);
+  await cleanupAnnouncementHistory(db, businessId, true)
+    .catch(() => console.warn('Announcement history cleanup unavailable.'));
 }

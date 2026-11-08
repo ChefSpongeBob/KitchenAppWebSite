@@ -123,9 +123,14 @@ try {
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM list_items WHERE business_id='a' AND amount_text='2 hotel pans'").get().n, 120);
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM list_submission_batches').get().n, 2);
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM list_submission_items').get().n, 240);
-  await attachments.deleteAttachmentsForSourceItems(db, 'a', 'list_item', [...ids('a'), ...ids('b')]);
+  sqlite.prepare("UPDATE business_users SET role='owner',permission_template='owner' WHERE business_id='a' AND user_id='a-0'").run();
+  const managerLocals = { ...locals, userRole: 'admin', businessRole: 'owner', businessPermissionTemplate: 'owner' };
+  assert.equal((await admin.deleteListSection(formRequest({ section_id: 'list-b' }), managerLocals)).status, 404);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM item_attachments WHERE business_id='b'").get().n, 120);
+  assert.equal((await admin.deleteListSection(formRequest({ section_id: 'list-a' }), managerLocals)).success, true);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM item_attachments WHERE business_id='a'").get().n, 0);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM item_attachments WHERE business_id='b'").get().n, 120);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM list_submission_items').get().n, 240);
   assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
   console.log('PASS whole-list validation and value/history rollback, 120-item atomic submission, post-commit event only and scoped attachment deletion');
 } finally { test.close(); }
