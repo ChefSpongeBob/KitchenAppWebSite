@@ -31,6 +31,7 @@ function load(path, deps, extraSource = '') {
   }, exports);
   return exports;
 }
+const temperatureTiming = load('src/lib/temperatureTiming.ts', {});
 const sqlite = new DatabaseSync(':memory:');
 const now = Math.floor(Date.now() / 1000);
 sqlite.exec(`PRAGMA foreign_keys=ON;
@@ -182,7 +183,7 @@ sqlite.exec(readFileSync('migrations/0108_staff_health_indexes.sql', 'utf8'));
 sqlite.exec(readFileSync('migrations/0108_staff_health_indexes.sql', 'utf8'));
 const health = load('src/lib/server/platformHealth.ts', {
   '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff,
-  '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 }
+  '#lib/temperatureTiming.ts': temperatureTiming
 });
 const healthNow = 2_000_000;
 assert.equal(health.gatewayConnection(healthNow - 599, healthNow), 'Online');
@@ -470,10 +471,10 @@ sqlite.exec(`INSERT INTO business_store_entitlements
     FROM sessions s JOIN platform_staff_members m ON m.user_id=s.user_id WHERE s.user_id IN ('support','equipment');`);
 const dashboard = load('src/lib/server/platformStaffDashboard.ts', { '@sveltejs/kit': kit,
   '#lib/server/platformStaff.ts': staff, '#lib/server/platformHealth.ts': health,
-  '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 } });
+  '#lib/temperatureTiming.ts': temperatureTiming });
 sqlite.exec(readFileSync('migrations/0114_staff_operations_support.sql','utf8'));
 const overview = load('src/lib/server/platformStaffOverview.ts', { '@sveltejs/kit': kit,
-  '#lib/server/platformStaffDashboard.ts': dashboard, '#lib/server/temperatureMonitoring.ts': { TEMPERATURE_ONLINE_WINDOW_SECONDS: 600 } });
+  '#lib/server/platformStaffDashboard.ts': dashboard, '#lib/temperatureTiming.ts': temperatureTiming });
 const businessDetail = load('src/routes/staff/businesses/[id]/+page.server.ts', { '@sveltejs/kit': kit, '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffDashboard.ts': dashboard, '#lib/server/platformSupport.ts': {} });
 const activityPage = load('src/routes/staff/activity/+page.server.ts', { '#lib/server/platformStaff.ts': staff });
 const staffEntry = load('src/routes/staff/+page.server.ts', { '#lib/server/platformStaff.ts':staff, '#lib/server/platformStaffOverview.ts':overview });

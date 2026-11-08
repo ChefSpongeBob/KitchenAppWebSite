@@ -23,7 +23,7 @@ constexpr uint8_t RADIO_CHANNEL = 20;
 constexpr uint16_t RADIO_PAN = 0xC110;
 constexpr uint16_t GATEWAY_ADDRESS = 0x0001;
 constexpr int8_t RADIO_TX_POWER_DBM = 18;
-constexpr uint32_t SLEEP_SECONDS = 300;
+constexpr uint32_t SLEEP_SECONDS = 1200;
 constexpr uint8_t SEND_COUNT = 3;
 constexpr size_t AUTH_TAG_SIZE = 16;
 

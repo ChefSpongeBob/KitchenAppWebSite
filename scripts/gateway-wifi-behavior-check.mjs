@@ -146,6 +146,8 @@ const api = loadSource('src/routes/api/temps/+server.ts', {
   '#lib/server/appFeatures.ts': { loadAppFeatureModes: async () => ({ temps: monitoringEnabled ? 'all' : 'off' }) },
   '#lib/server/temperatureSensors.ts': { normalizeDeviceSerial: value => value.toLowerCase() },
   '#lib/server/temperatureDeviceProvisioning.ts': {},
+  '#lib/server/trial.ts': { getBusinessTrialAccess: async () => ({ allowApp: true }) },
+  '#lib/server/observability.ts': {},
   '#lib/server/temperatureMonitoring.ts': {}
 });
 async function gatewayRequest(body) {

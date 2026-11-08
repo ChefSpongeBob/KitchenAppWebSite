@@ -78,8 +78,14 @@ expect('src/routes/temper/+page.server.ts', 'live temperature labels use the act
   !source.includes('FROM sensor_nodes')
 );
 
+expect('src/lib/temperatureTiming.ts', 'node freshness/default continuity use 25 minutes and gateway heartbeats retain 10 minutes', (source) =>
+  source.includes('TEMPERATURE_DEFAULT_STALE_MINUTES = 25') &&
+  source.includes('TEMPERATURE_ONLINE_WINDOW_SECONDS = TEMPERATURE_DEFAULT_STALE_MINUTES * 60') &&
+  source.includes('TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS = 10 * 60')
+);
+
 expect('src/lib/server/temperatureMonitoring.ts', 'current temperature state is derived once from the latest sensor contact', (source) =>
-  source.includes('TEMPERATURE_ONLINE_WINDOW_SECONDS = 10 * 60') &&
+  source.includes("from '#lib/temperatureTiming.ts'") &&
   source.includes('deriveTemperatureSnapshotState') &&
   source.includes('last_contact_at: lastContactAt') &&
   source.includes("temperature: connectionStatus === 'online' ? snapshot.temperature : null") &&
@@ -103,7 +109,7 @@ expect('firmware/arduino/CriminiTempNode/CriminiTempNode.ino', 'node signs versi
   source.includes('signPacket(packet)') &&
   source.includes('advanceSequence()') &&
   source.includes('storage.putUInt("next_seq"') &&
-  source.includes('SLEEP_SECONDS = 300')
+  source.includes('SLEEP_SECONDS = 1200')
 );
 
 expect('migrations/0096_temperature_notification_eligibility.sql', 'high temperature alerts gain delayed notification eligibility', (source) =>
@@ -154,8 +160,8 @@ expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway ve
     source.includes('RETRY_INTERVAL_MS = 60000');
 });
 
-expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute status and requested refrigeration colors', (source) =>
-  source.includes('ONLINE_WINDOW_MS = 10 * 60 * 1000') &&
+expect('src/routes/temper/+page.svelte', 'temperature UI uses the shared node window and requested refrigeration colors', (source) =>
+  source.includes('ONLINE_WINDOW_MS = TEMPERATURE_ONLINE_WINDOW_SECONDS * 1000') &&
   source.includes('SAFE_TEMP_LOW_F = 30') &&
   source.includes('SAFE_TEMP_HIGH_F = 41') &&
   source.includes("view=latest") &&
@@ -164,6 +170,12 @@ expect('src/routes/temper/+page.svelte', 'temperature UI uses the ten-minute sta
   source.includes('Last check-in:') &&
   source.includes('.node-head span.offline') &&
   source.includes('#2563eb')
+);
+
+expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway retains measurement age across initial clock sync without radio or persistent-storage changes', (source) =>
+  source.includes('int64_t receivedAtUs;') && source.includes('packet, rssi, lqi, esp_timer_get_time()') &&
+  source.includes('(esp_timer_get_time() - reading.receivedAtUs) / 1000000LL') &&
+  source.includes('time(nullptr) - ageSeconds') && !source.includes('if (reading.receivedAt >=')
 );
 
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'XIAO gateway selects the external antenna before listening', (source) => {
@@ -197,7 +209,7 @@ expect('src/lib/server/temperatureMonitoring.ts', 'temperature helper evaluates 
 
 expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rules after saving readings', (source) =>
   source.includes('evaluateTemperatureReadings') &&
-  source.includes('TemperatureReading') &&
+  source.includes('TEMPERATURE_ONLINE_WINDOW_SECONDS') &&
   source.includes('humidity_pct') &&
   source.includes('packet_sequence') &&
   source.includes('wake_nonce') &&
@@ -216,9 +228,9 @@ expect('src/routes/api/temps/+server.ts', 'temp ingest evaluates real alert rule
 
 expect('src/routes/api/temps/+server.ts', 'temp ingest does not discard valid rows alongside unregistered nodes or refresh replayed nodes', (source) =>
   source.includes('const rejected = rawReadings.length - items.length') &&
-  source.includes('accepted: items.length, rejected, inserted: insertedRows.length') &&
+  source.includes('accepted: insertedRows.length, rejected: rawItems.length - insertedRows.length') &&
   source.includes('packet_sequence < ?') &&
-  source.indexOf('const insertedRows =') < source.indexOf('UPDATE temperature_sensor_nodes')
+  source.includes('WHERE changes() = 1') && source.includes('await db.batch(statements)')
 );
 
 expect('scripts/provision-temperature-gateway.mjs', 'factory provisioning stores a chosen gateway credential hash without generating a secret', (source) =>
@@ -237,8 +249,8 @@ expect('package.json', 'gateway provisioning is available as an explicit operati
 );
 
 expect('src/lib/server/temperatureDeviceProvisioning.ts', 'node ingest rejects sequences at or below the last accepted reading', (source) =>
-  source.includes('SELECT sensor_id, packet_sequence') &&
-  source.includes('input.packetSequence <= node.packet_sequence')
+  source.includes('SELECT node_serial, sensor_id, packet_sequence') &&
+  source.includes('reading.packetSequence <= node.packet_sequence')
 );
 
 expect('src/routes/admin/sensors/+page.server.ts', 'sensor admin loads and saves alert rules', (source) =>
@@ -375,3 +387,5 @@ for (const check of checks) {
 if (failed.length) process.exit(1);
 
 await import('./gateway-wifi-behavior-check.mjs');
+await import('./temperature-ingest-behavior-check.mjs');
+await import('./temperature-runtime-check.mjs');

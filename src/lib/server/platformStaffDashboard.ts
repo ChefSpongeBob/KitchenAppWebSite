@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PlatformStaffRole } from '#lib/server/platformStaff.ts';
 import { gatewayConnection } from '#lib/server/platformHealth.ts';
-import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/server/temperatureMonitoring.ts';
+import { TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
 
 type DB = App.RuntimeEnv['DB'];
 type Cursor = { at: number; id: string } | null;
@@ -87,7 +87,7 @@ export async function loadGatewayAttention(db: DB, url: URL, businessId?: string
        future AS (${base} AND COALESCE(d.last_seen_at, 0) > ? ORDER BY COALESCE(d.last_seen_at, 0), d.id LIMIT 21)
        SELECT d.*, b.name AS business_name FROM (SELECT * FROM offline UNION ALL SELECT * FROM future) d
        JOIN businesses b ON b.id = d.business_id ORDER BY COALESCE(d.last_seen_at, 0), d.id LIMIT 21`;
-  const bindings = businessId ? values : [...values, now - TEMPERATURE_ONLINE_WINDOW_SECONDS, ...values, now + 60];
+  const bindings = businessId ? values : [...values, now - TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS, ...values, now + 60];
   const result = await db.prepare(query).bind(...bindings).all<{ id: string; business_id: string; business_name: string; display_name: string;
       external_device_id: string; last_seen_at: number | null }>();
   return { gateways: result.results.slice(0, PAGE_SIZE).map(row => ({ ...row, connection: gatewayConnection(row.last_seen_at, now) })),

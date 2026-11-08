@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PlatformStaffRole } from '#lib/server/platformStaff.ts';
 import { dashboardWindow, DIAGNOSTIC_AREAS, DIAGNOSTIC_KINDS } from '#lib/server/platformStaffDashboard.ts';
-import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/server/temperatureMonitoring.ts';
+import { TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
 
 type DB = App.RuntimeEnv['DB'];
 
@@ -17,8 +17,8 @@ export async function loadStaffOverview(db: DB, role: PlatformStaffRole, url: UR
       COALESCE(SUM(CASE WHEN last_seen_at > ? THEN 1 ELSE 0 END), 0) AS timestamp_issues,
       COUNT(DISTINCT CASE WHEN COALESCE(last_seen_at, 0) <= ? OR last_seen_at > ? THEN business_id END) AS businesses
     FROM iot_devices WHERE device_type = 'sensor_gateway' AND is_active = 1 AND revoked_at IS NULL`)
-    .bind(now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60, now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60,
-      now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60)
+    .bind(now - TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS, now + 60, now - TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS, now + 60,
+      now - TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS, now + 60)
     .first<{ total: number; online: number; unconnected: number; offline: number; timestamp_issues: number; businesses: number }>();
   const gateways = { total: equipment?.total ?? 0, online: equipment?.online ?? 0, unconnected: equipment?.unconnected ?? 0,
     offline: equipment?.offline ?? 0, timestampIssues: equipment?.timestamp_issues ?? 0,
@@ -39,7 +39,7 @@ export async function loadStaffOverview(db: DB, role: PlatformStaffRole, url: UR
     UNION SELECT business_id FROM iot_devices WHERE device_type = 'sensor_gateway' AND is_active = 1 AND revoked_at IS NULL
       AND (COALESCE(last_seen_at, 0) <= ? OR last_seen_at > ?)
     UNION SELECT business_id FROM operational_events WHERE created_at >= ? AND created_at <= ? AND delivery_status = 'failed')`)
-    .bind(window.since, now, now - TEMPERATURE_ONLINE_WINDOW_SECONDS, now + 60, window.since, now).first<{ total: number }>();
+    .bind(window.since, now, now - TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS, now + 60, window.since, now).first<{ total: number }>();
   const support = await db.prepare(`SELECT status, COUNT(*) AS total,
       COALESCE(SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END), 0) AS urgent
     FROM platform_support_requests WHERE status IN ('open', 'waiting') GROUP BY status`)

@@ -1,5 +1,8 @@
 import { dev } from '$app/env';
 import { loadAppFeatureModes } from '#lib/server/appFeatures.ts';
+import { TEMPERATURE_DEFAULT_STALE_MINUTES, TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
+
+export { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
 
 type DB = App.RuntimeEnv['DB'];
 
@@ -53,11 +56,10 @@ export type CurrentTemperatureException = {
 
 const DEFAULT_HIGH_THRESHOLD = 42;
 const DEFAULT_LOW_THRESHOLD = 32;
-const DEFAULT_STALE_MINUTES = 15;
+const DEFAULT_STALE_MINUTES = TEMPERATURE_DEFAULT_STALE_MINUTES;
 const DEFAULT_OFFLINE_MINUTES = 45;
 const DEFAULT_COOLDOWN_MINUTES = 60;
 const HIGH_NOTIFICATION_DELAY_SECONDS = 60 * 60;
-export const TEMPERATURE_ONLINE_WINDOW_SECONDS = 10 * 60;
 
 let temperatureMonitoringSchemaEnsured = false;
 let temperatureMonitoringSchemaPromise: Promise<void> | null = null;

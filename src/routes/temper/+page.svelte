@@ -3,6 +3,7 @@
   import Layout from '#lib/components/ui/Layout.svelte';
   import PageHeader from '#lib/components/ui/PageHeader.svelte';
   import { startVisiblePolling } from '#lib/client/polling.ts';
+  import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
 
   type TemperatureNode = {
     sensor_id: number;
@@ -44,7 +45,7 @@
   let seenSensorIds: number[] = initialNodes.map((node) => node.sensor_id);
   const SAFE_TEMP_LOW_F = 30;
   const SAFE_TEMP_HIGH_F = 41;
-  const ONLINE_WINDOW_MS = 10 * 60 * 1000;
+  const ONLINE_WINDOW_MS = TEMPERATURE_ONLINE_WINDOW_SECONDS * 1000;
 
   const URL = '/api/temps?view=latest&limit=25';
 

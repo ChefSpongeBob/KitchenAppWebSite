@@ -96,7 +96,7 @@ export const actions: Actions = {
     if (!limit.allowed) return rateLimitFailure('Please wait before checking again.');
     try {
       const lastSeenAt = await loadGatewayConnectionStatus(db, businessId, gatewayId);
-      return { connected: lastSeenAt !== null && lastSeenAt > startedAt && now - lastSeenAt < 600, lastSeenAt };
+      return { connected: lastSeenAt !== null && lastSeenAt > startedAt && lastSeenAt <= now && now - lastSeenAt < 600, lastSeenAt };
     } catch (error) {
       return fail(400, { error: error instanceof Error ? error.message : 'Connection could not be checked.' });
     }

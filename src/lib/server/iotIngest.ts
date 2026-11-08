@@ -293,6 +293,8 @@ export async function authenticateIoTDevice(
         AND device_type = ?
         AND is_active = 1
         AND revoked_at IS NULL
+        AND EXISTS (SELECT 1 FROM businesses b WHERE b.id = iot_devices.business_id
+          AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment'))
       `
     )
     .bind(externalDeviceId, expectedType)
@@ -307,19 +309,20 @@ export async function authenticateIoTDevice(
   if (!row) return null;
 
   const now = Math.floor(Date.now() / 1000);
-  await db
+  const updated = await db
     .prepare(
       `
       UPDATE iot_devices
       SET last_seen_at = ?,
           updated_at = ?
-      WHERE id = ?
+      WHERE id = ? AND business_id = ? AND key_hash = ? AND is_active = 1 AND revoked_at IS NULL
       `
     )
-    .bind(now, now, row.id)
+    .bind(now, now, row.id, row.business_id, incomingHash)
     .run();
+  if (!updated.meta.changes) return null;
 
-  return mapIoTDevice(row);
+  return mapIoTDevice({ ...row, last_seen_at: now, updated_at: now });
 }
 
 export async function ensureIoTIngestGuardSchema(db: D1) {

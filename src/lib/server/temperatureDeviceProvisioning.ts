@@ -413,37 +413,42 @@ export async function claimTemperatureGateway(
     .bind(serial)
     .first<IoTDeviceRow>();
 
+  const inventory = await loadInventory(db, serial, 'sensor_gateway');
+  if (inventory?.reserved_business_id && inventory.reserved_business_id !== input.businessId) {
+    throw new Error('Gateway is reserved for another business.');
+  }
+  if (inventory?.claim_status === 'revoked') throw new Error('Gateway serial is not available.');
+  if (inventory?.claimed_business_id && inventory.claimed_business_id !== input.businessId) {
+    throw new Error('Gateway serial is already assigned.');
+  }
+
   if (existing) {
     if (existing.business_id !== input.businessId) throw new Error('Gateway serial is already assigned.');
     if (existing.device_type !== 'sensor_gateway') throw new Error('Serial is not a temperature gateway.');
-    await db
+    const saved = await db
       .prepare(
         `
         UPDATE iot_devices
         SET display_name = ?, is_active = 1, revoked_at = NULL, updated_at = ?
         WHERE id = ? AND business_id = ?
+          AND NOT EXISTS (SELECT 1 FROM iot_device_inventory i WHERE i.serial = ? AND
+            (i.claim_status = 'revoked' OR (i.claimed_business_id IS NOT NULL AND i.claimed_business_id <> ?)))
+          AND NOT EXISTS (SELECT 1 FROM iot_device_reservations r WHERE r.serial = ? AND r.business_id <> ?)
         `
       )
-      .bind(displayName, now, existing.id, input.businessId)
+      .bind(displayName, now, existing.id, input.businessId, serial, input.businessId, serial, input.businessId)
       .run();
+    if (!saved.meta.changes) throw new Error('Gateway assignment changed. Refresh and try again.');
     return { id: existing.id, serial };
   }
 
-  const inventory = await loadInventory(db, serial, 'sensor_gateway');
   if (!inventory) throw new Error('Gateway serial is not in device inventory.');
-  if (inventory.reserved_business_id && inventory.reserved_business_id !== input.businessId) {
-    throw new Error('Gateway is reserved for another business.');
-  }
-  if (inventory.claim_status === 'revoked') throw new Error('Gateway serial is not available.');
-  if (inventory.claimed_business_id && inventory.claimed_business_id !== input.businessId) {
-    throw new Error('Gateway serial is already assigned.');
-  }
   if (!inventory.key_hash || !inventory.key_prefix) {
     throw new Error('Gateway credentials are not provisioned.');
   }
 
   const id = crypto.randomUUID();
-  await db
+  const create = db
     .prepare(
       `
       INSERT INTO iot_devices (
@@ -451,23 +456,30 @@ export async function claimTemperatureGateway(
         key_hash, key_prefix, is_active, last_seen_at, revoked_at,
         created_by, created_at, updated_at
       )
-      VALUES (?, ?, 'sensor_gateway', ?, ?, ?, ?, 1, NULL, NULL, ?, ?, ?)
+      SELECT ?, ?, 'sensor_gateway', i.serial, ?, i.key_hash, i.key_prefix, 1, NULL, NULL, ?, ?, ?
+      FROM iot_device_inventory i
+      WHERE i.serial = ? AND i.device_type = 'sensor_gateway' AND i.claim_status <> 'revoked'
+        AND i.key_hash = ? AND i.key_prefix = ?
+        AND (i.claimed_business_id IS NULL OR i.claimed_business_id = ?)
+        AND i.claimed_iot_device_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM iot_device_reservations r WHERE r.serial = i.serial AND r.business_id <> ?)
       `
     )
     .bind(
       id,
       input.businessId,
-      serial,
       displayName,
-      inventory.key_hash,
-      inventory.key_prefix,
       input.createdBy ?? null,
       now,
-      now
-    )
-    .run();
+      now,
+      serial,
+      inventory.key_hash,
+      inventory.key_prefix,
+      input.businessId,
+      input.businessId
+    );
 
-  await db
+  const assign = db
     .prepare(
       `
       UPDATE iot_device_inventory
@@ -476,11 +488,14 @@ export async function claimTemperatureGateway(
           claimed_iot_device_id = ?,
           claimed_at = COALESCE(claimed_at, ?),
           updated_at = ?
-      WHERE serial = ?
+      WHERE serial = ? AND EXISTS (SELECT 1 FROM iot_devices d WHERE d.id = ? AND d.business_id = ?)
       `
     )
-    .bind(input.businessId, id, now, now, serial)
-    .run();
+    .bind(input.businessId, id, now, now, serial, id, input.businessId);
+  const results = await db.batch([create, assign]);
+  if (!results[0].meta.changes || !results[1].meta.changes) {
+    throw new Error('Gateway assignment changed. Refresh and try again.');
+  }
 
   return { id, serial };
 }
@@ -524,8 +539,8 @@ export async function claimTemperatureSensorNode(
   const now = Math.floor(Date.now() / 1000);
   const sensorId = sensorNodeIdFromSerial(nodeSerial);
   const collision = await db
-    .prepare(`SELECT node_serial FROM temperature_sensor_nodes WHERE sensor_id = ? AND node_serial <> ? LIMIT 1`)
-    .bind(sensorId, nodeSerial)
+    .prepare(`SELECT node_serial FROM temperature_sensor_nodes WHERE business_id = ? AND sensor_id = ? AND node_serial <> ? LIMIT 1`)
+    .bind(input.businessId, sensorId, nodeSerial)
     .first<{ node_serial: string }>();
   if (collision) throw new Error('This sensor serial conflicts with an existing sensor. Choose a different serial.');
   const existing = await db
@@ -552,7 +567,9 @@ export async function claimTemperatureSensorNode(
         packet_sequence, wake_nonce, lqi,
         revoked_at, created_by, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?
+      FROM iot_devices g WHERE g.id = ? AND g.business_id = ? AND g.device_type = 'sensor_gateway'
+        AND g.is_active = 1 AND g.revoked_at IS NULL
       ON CONFLICT(node_serial) DO UPDATE SET
         gateway_device_id = excluded.gateway_device_id,
         display_name = excluded.display_name,
@@ -562,6 +579,7 @@ export async function claimTemperatureSensorNode(
         revoked_at = NULL,
         updated_at = excluded.updated_at
       WHERE temperature_sensor_nodes.business_id = excluded.business_id
+      RETURNING id
       `
     )
     .bind(
@@ -575,12 +593,14 @@ export async function claimTemperatureSensorNode(
       '1.0.0',
       input.createdBy ?? null,
       now,
-      now
+      now,
+      input.gatewayDeviceId,
+      input.businessId
     )
-    .run();
-  if ((saved.meta?.changes ?? 0) !== 1) throw new Error('Sensor serial is already assigned.');
+    .first<{ id: string }>();
+  if (!saved) throw new Error('Sensor or gateway assignment changed. Refresh and try again.');
 
-  return { id: nodeId, nodeSerial, sensorId };
+  return { id: saved.id, nodeSerial, sensorId };
 }
 
 export async function revokeTemperatureSensorNode(db: D1, businessId: string, nodeId: string) {
@@ -614,55 +634,58 @@ export async function revokeTemperatureSensorNode(db: D1, businessId: string, no
 
 }
 
-export async function resolveGatewayNodeReading(
+export async function resolveGatewayNodeReadings(
   db: D1,
   input: {
     businessId: string;
     gatewayDeviceId: string;
-    nodeSerial: string;
-    temperature: number;
-    humidityPct?: number | null;
-    packetSequence?: number | null;
-    wakeNonce?: string | null;
-    lqi?: number | null;
-    ts: number;
-    batteryMv?: number | null;
-    rssi?: number | null;
+    readings: Array<{
+      nodeSerial: string;
+      temperature: number;
+      humidityPct?: number | null;
+      packetSequence?: number | null;
+      wakeNonce?: string | null;
+      lqi?: number | null;
+      ts: number;
+      batteryMv?: number | null;
+      rssi?: number | null;
+    }>;
   }
 ) {
   await ensureTemperatureDeviceProvisioningSchema(db);
-  const nodeSerial = normalizeDeviceSerial(input.nodeSerial);
-  if (!nodeSerial) return null;
-
-  const node = await db
+  if (!input.readings.length) return [];
+  const nodes = await db
     .prepare(
       `
-      SELECT sensor_id, packet_sequence
+      SELECT node_serial, sensor_id, packet_sequence
       FROM temperature_sensor_nodes
       WHERE business_id = ?
         AND gateway_device_id = ?
-        AND node_serial = ?
+        AND node_serial IN (SELECT value FROM json_each(?))
         AND is_active = 1
         AND revoked_at IS NULL
-      LIMIT 1
       `
     )
-    .bind(input.businessId, input.gatewayDeviceId, nodeSerial)
-    .first<{ sensor_id: number; packet_sequence: number | null }>();
-  if (!node) return null;
-  if (input.packetSequence == null ||
-      (node.packet_sequence !== null && input.packetSequence <= node.packet_sequence)) return null;
+    .bind(input.businessId, input.gatewayDeviceId, JSON.stringify(input.readings.map(row => normalizeDeviceSerial(row.nodeSerial))))
+    .all<{ node_serial: string; sensor_id: number; packet_sequence: number | null }>();
+  const bySerial = new Map((nodes.results ?? []).map(node => [node.node_serial, node]));
 
-  return {
-    sensor_id: node.sensor_id,
-    node_serial: nodeSerial,
-    temperature: input.temperature,
-    humidity_pct: input.humidityPct ?? null,
-    packet_sequence: input.packetSequence ?? null,
-    wake_nonce: input.wakeNonce ?? null,
-    lqi: input.lqi ?? null,
-    battery_mv: input.batteryMv ?? null,
-    rssi: input.rssi ?? null,
-    ts: input.ts
-  };
+  return input.readings.flatMap(reading => {
+    const nodeSerial = normalizeDeviceSerial(reading.nodeSerial);
+    const node = bySerial.get(nodeSerial);
+    if (!node || reading.packetSequence == null ||
+      (node.packet_sequence !== null && reading.packetSequence <= node.packet_sequence)) return [];
+    return [{
+      sensor_id: node.sensor_id,
+      node_serial: nodeSerial,
+      temperature: reading.temperature,
+      humidity_pct: reading.humidityPct ?? null,
+      packet_sequence: reading.packetSequence,
+      wake_nonce: reading.wakeNonce ?? null,
+      lqi: reading.lqi ?? null,
+      battery_mv: reading.batteryMv ?? null,
+      rssi: reading.rssi ?? null,
+      ts: reading.ts
+    }];
+  });
 }

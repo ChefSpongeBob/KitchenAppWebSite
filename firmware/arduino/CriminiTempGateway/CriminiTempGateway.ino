@@ -7,6 +7,7 @@
 #include <esp_ieee802154.h>
 #include <esp_wifi.h>
 #include <esp_random.h>
+#include <esp_timer.h>
 #include <freertos/queue.h>
 #include <mbedtls/md.h>
 #include <time.h>
@@ -68,7 +69,7 @@ struct QueuedReading {
   TemperaturePacket packet;
   int8_t rssi;
   uint8_t lqi;
-  uint32_t receivedAt;
+  int64_t receivedAtUs;
 };
 
 QueuedReading readings[MAX_PENDING_NODES] = {};
@@ -445,7 +446,7 @@ bool seenRecently(const TemperaturePacket& packet) {
 }
 
 void retainLatestReading(const TemperaturePacket& packet, int8_t rssi, uint8_t lqi) {
-  const QueuedReading reading = { packet, rssi, lqi, uint32_t(time(nullptr)) };
+  const QueuedReading reading = { packet, rssi, lqi, esp_timer_get_time() };
   for (size_t i = 0; i < readingCount; ++i) {
     if (strcmp(readings[i].packet.serial, packet.serial) == 0) {
       readings[i] = reading;
@@ -461,7 +462,7 @@ void retainLatestReading(const TemperaturePacket& packet, int8_t rssi, uint8_t l
 
   size_t oldest = 0;
   for (size_t i = 1; i < readingCount; ++i) {
-    if (readings[i].receivedAt < readings[oldest].receivedAt) oldest = i;
+    if (readings[i].receivedAtUs < readings[oldest].receivedAtUs) oldest = i;
   }
   readings[oldest] = reading;
 }
@@ -554,7 +555,10 @@ String requestBody() {
     body += ",\"wake_nonce\":\"" + String(nonce) + "\"";
     body += ",\"rssi\":" + String(reading.rssi);
     body += ",\"lqi\":" + String(reading.lqi);
-    if (reading.receivedAt >= 1700000000) body += ",\"ts\":" + String(reading.receivedAt);
+    // Reconstruct capture time after NTP, including readings received before the clock was set.
+    const int64_t ageSeconds = (esp_timer_get_time() - reading.receivedAtUs) / 1000000LL;
+    const uint32_t measuredAt = static_cast<uint32_t>(time(nullptr) - ageSeconds);
+    body += ",\"ts\":" + String(measuredAt);
     body += '}';
   }
   body += "]}";

@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/server/temperatureMonitoring.ts';
+import { TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
 import { staffPageNumber, type PlatformStaffRole } from '#lib/server/platformStaff.ts';
 
 type DB = App.RuntimeEnv['DB'];
@@ -13,7 +13,7 @@ export function staffQueueStatus(value: string | null): StaffQueueStatus {
 export function gatewayConnection(lastSeenAt: number | null, now: number) {
   if (!lastSeenAt || lastSeenAt < 0) return 'Never connected';
   if (lastSeenAt > now + 60) return 'Timestamp issue';
-  return now - lastSeenAt < TEMPERATURE_ONLINE_WINDOW_SECONDS ? 'Online' : 'Offline';
+  return now - lastSeenAt < TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS ? 'Online' : 'Offline';
 }
 
 type QueueRow = {

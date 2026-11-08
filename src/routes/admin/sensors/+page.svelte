@@ -7,6 +7,11 @@
   import { onMount, tick } from 'svelte';
   import { pushToast } from '#lib/client/toasts.ts';
   import {
+    TEMPERATURE_DEFAULT_STALE_MINUTES,
+    TEMPERATURE_ONLINE_WINDOW_SECONDS,
+    TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS
+  } from '#lib/temperatureTiming.ts';
+  import {
     readGatewaySetupProgress,
     saveGatewaySetupProgress
   } from '#lib/client/gatewayProvisioning.ts';
@@ -81,14 +86,13 @@
   let setupNetworkPassword = '';
   let setupComplete = false;
   let setupError = '';
-  const ONLINE_WINDOW_SECONDS = 10 * 60;
 
   $: gatewayDevices = data.gateways;
   $: activeSensorNodes = data.sensorNodes.filter((node) => node.isActive === 1);
   $: registeredSensorCount = activeSensorNodes.length;
   $: registeredGatewayCount = gatewayDevices.filter((device) => device.isActive === 1).length;
   $: onlineSensorCount = activeSensorNodes.filter((node) => isOnline(node.lastSeenAt)).length;
-  $: onlineGatewayCount = gatewayDevices.filter((device) => device.isActive === 1 && isOnline(device.lastSeenAt)).length;
+  $: onlineGatewayCount = gatewayDevices.filter((device) => device.isActive === 1 && isOnline(device.lastSeenAt, TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS)).length;
   $: latestCheckIn = Math.max(
     0,
     ...data.sensorNodes.map((node) => node.lastSeenAt ?? 0),
@@ -122,8 +126,8 @@
     });
   }
 
-  function isOnline(value: number | null) {
-    return Boolean(value && Math.floor(Date.now() / 1000) - value < ONLINE_WINDOW_SECONDS);
+  function isOnline(value: number | null, windowSeconds = TEMPERATURE_ONLINE_WINDOW_SECONDS) {
+    return Boolean(value && Math.floor(Date.now() / 1000) - value < windowSeconds);
   }
 
   function sensorName(sensorId: number) {
@@ -138,7 +142,7 @@
         sensor_id: sensorId,
         high_threshold: 42,
         low_threshold: 32,
-        stale_after_minutes: 15,
+        stale_after_minutes: TEMPERATURE_DEFAULT_STALE_MINUTES,
         offline_after_minutes: 45,
         alert_cooldown_minutes: 60,
         is_alerting_enabled: 1
@@ -313,8 +317,8 @@
                   <span class="unit-name"><span class="material-icons" aria-hidden="true">router</span><strong>{device.displayName}</strong></span>
                   <span>{device.externalDeviceId}</span>
                   <span>{formatShortTime(device.lastSeenAt)}</span>
-                  <small class:offline={device.isActive === 1 && !isOnline(device.lastSeenAt)}>
-                    {device.isActive !== 1 ? 'Revoked' : isOnline(device.lastSeenAt) ? 'Online' : 'Offline'}
+                  <small class:offline={device.isActive === 1 && !isOnline(device.lastSeenAt, TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS)}>
+                    {device.isActive !== 1 ? 'Revoked' : isOnline(device.lastSeenAt, TEMPERATURE_GATEWAY_ONLINE_WINDOW_SECONDS) ? 'Online' : 'Offline'}
                   </small>
                   <span class="material-icons expand-icon" aria-hidden="true">expand_more</span>
                 </summary>

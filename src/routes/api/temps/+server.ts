@@ -4,11 +4,13 @@ import { allowIoTIngest, authenticateIoTDevice } from '#lib/server/iotIngest.ts'
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
 import { loadAppFeatureModes } from '#lib/server/appFeatures.ts';
 import { normalizeDeviceSerial } from '#lib/server/temperatureSensors.ts';
-import { resolveGatewayNodeReading } from '#lib/server/temperatureDeviceProvisioning.ts';
+import { resolveGatewayNodeReadings } from '#lib/server/temperatureDeviceProvisioning.ts';
+import { getBusinessTrialAccess } from '#lib/server/trial.ts';
+import { logOperationalError } from '#lib/server/observability.ts';
 import {
   evaluateTemperatureReadings,
   loadLatestTemperatureSnapshots,
-  type TemperatureReading
+  TEMPERATURE_ONLINE_WINDOW_SECONDS
 } from '#lib/server/temperatureMonitoring.ts';
 
 type TempRow = {
@@ -44,7 +46,12 @@ const MIN_AHT20_TEMPERATURE_F = -40;
 const MAX_AHT20_TEMPERATURE_F = 185;
 const TENANT_TEMP_CACHE_CONTROL = 'private, max-age=10, stale-while-revalidate=20';
 
-function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
+function numericValue(value: unknown) {
+  return typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')
+    ? Number(value) : NaN;
+}
+
+function normalizeReading(input: Record<string, unknown>, now: number): RawTempRow | null {
   const serialRaw =
     input.node_serial ??
     input.nodeSerial ??
@@ -54,7 +61,7 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
     input.deviceSerial;
   const tempRaw = input.temperature ?? input.temp;
   const humidityRaw = input.humidity_pct ?? input.humidityPct ?? input.humidity ?? input.relative_humidity;
-  const tsRaw = input.ts ?? input.timestamp ?? Math.floor(Date.now() / 1000);
+  const tsRaw = input.ts ?? input.timestamp ?? now;
   const batteryRaw = input.battery_mv ?? input.batteryMv ?? input.battery;
   const rssiRaw = input.rssi ?? input.signal;
   const sequenceRaw = input.packet_sequence ?? input.packetSequence ?? input.sequence ?? input.seq;
@@ -62,19 +69,21 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
   const lqiRaw = input.lqi ?? input.link_quality ?? input.linkQuality;
 
   const node_serial = normalizeDeviceSerial(String(serialRaw ?? ''));
-  const temperature = Number(tempRaw);
-  const humidity_pct = Number(humidityRaw);
-  const ts = Number(tsRaw);
-  const battery_mv = Number(batteryRaw);
-  const rssi = Number(rssiRaw);
-  const packet_sequence = Number(sequenceRaw);
-  const wake_nonce = String(nonceRaw ?? '').trim().slice(0, 64);
-  const lqi = Number(lqiRaw);
+  const temperature = numericValue(tempRaw);
+  const humidity_pct = numericValue(humidityRaw);
+  const ts = numericValue(tsRaw);
+  const battery_mv = numericValue(batteryRaw);
+  const rssi = numericValue(rssiRaw);
+  const packet_sequence = numericValue(sequenceRaw);
+  const wake_nonce = typeof nonceRaw === 'string' ? nonceRaw.trim() : '';
+  const lqi = numericValue(lqiRaw);
 
-  if (!node_serial || !Number.isFinite(temperature) ||
+  if (typeof serialRaw !== 'string' || node_serial !== serialRaw.trim().toLowerCase() ||
+      !node_serial || node_serial.length >= 32 || !Number.isFinite(temperature) ||
       temperature < MIN_AHT20_TEMPERATURE_F || temperature > MAX_AHT20_TEMPERATURE_F ||
-      !Number.isInteger(ts) || ts <= 0 ||
-      !Number.isInteger(packet_sequence) || packet_sequence <= 0 || !wake_nonce) {
+      !Number.isSafeInteger(ts) || ts < 1_577_836_800 || ts > now + 60 ||
+      !Number.isSafeInteger(packet_sequence) || packet_sequence <= 0 || packet_sequence > 0xffffffff ||
+      !wake_nonce || wake_nonce.length > 64) {
     return null;
   }
 
@@ -89,27 +98,6 @@ function normalizeReading(input: Record<string, unknown>): RawTempRow | null {
     battery_mv: Number.isFinite(battery_mv) ? battery_mv : null,
     rssi: Number.isFinite(rssi) ? rssi : null
   };
-}
-
-async function resolveReadingSensor(
-  db: App.RuntimeEnv['DB'],
-  businessId: string,
-  gatewayDeviceId: string,
-  row: RawTempRow
-): Promise<TempRow | null> {
-  return resolveGatewayNodeReading(db, {
-    businessId,
-    gatewayDeviceId,
-    nodeSerial: row.node_serial ?? '',
-    temperature: row.temperature,
-    humidityPct: row.humidity_pct,
-    packetSequence: row.packet_sequence,
-    wakeNonce: row.wake_nonce,
-    lqi: row.lqi,
-    ts: row.ts,
-    batteryMv: row.battery_mv,
-    rssi: row.rssi
-  });
 }
 
 export const GET: RequestHandler = async ({ url, request, locals }) => {
@@ -216,6 +204,9 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   if (featureModes.temps === 'off') {
     return json({ error: 'Temperature monitoring is disabled for this workspace.' }, { status: 403 });
   }
+  if (!(await getBusinessTrialAccess(db, businessId)).allowApp) {
+    return json({ error: 'Workspace activation required.' }, { status: 403 });
+  }
 
   let body: unknown;
   try {
@@ -248,30 +239,29 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     return json({ error: 'Too many readings supplied.' }, { status: 413 });
   }
 
+  const now = Math.floor(Date.now() / 1000);
   const rawReadings = rawItems
-    .map((entry) => normalizeReading((entry ?? {}) as Record<string, unknown>))
+    .map((entry) => normalizeReading((entry ?? {}) as Record<string, unknown>, now))
     .filter((entry): entry is RawTempRow => entry !== null);
   if (rawReadings.length !== rawItems.length) {
     return json({ error: 'Invalid reading in batch.' }, { status: 400 });
   }
-  const resolved = await Promise.all(rawReadings.map((entry) => resolveReadingSensor(db, businessId, device.id, entry)));
-  const items = resolved.filter((entry): entry is TempRow => entry !== null);
+  const items: TempRow[] = await resolveGatewayNodeReadings(db, {
+    businessId, gatewayDeviceId: device.id,
+    readings: rawReadings.map(row => ({ nodeSerial: row.node_serial ?? '', temperature: row.temperature,
+      humidityPct: row.humidity_pct, packetSequence: row.packet_sequence, wakeNonce: row.wake_nonce,
+      lqi: row.lqi, ts: row.ts, batteryMv: row.battery_mv, rssi: row.rssi }))
+  });
   const rejected = rawReadings.length - items.length;
   if (items.length === 0) return json({ accepted: 0, rejected, inserted: 0 });
 
-  const sensorSignature = items
-    .map((row) => row.sensor_id)
-    .sort((a, b) => a - b)
-    .join(',');
-  const timestampSignature = Array.from(new Set(items.map((row) => row.ts)))
-    .sort((a, b) => a - b)
-    .join(',');
   const packetSignature = items
     .map((row) => `${row.sensor_id}:${row.ts}:${row.packet_sequence ?? ''}:${row.wake_nonce ?? ''}`)
     .sort()
     .join('|');
-  const guardKey = `temps:${businessId}:${packetSignature || `${sensorSignature}:${timestampSignature}`}`;
-  const allowed = await allowIoTIngest(db, guardKey, 60);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(packetSignature)));
+  const guardKey = `temps:${businessId}:${Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')}`;
+  const allowed = await allowIoTIngest(db, guardKey, 60, 120);
 
   if (!allowed) {
     return json(
@@ -282,12 +272,17 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     );
   }
 
-  const statements = items.map((row) =>
-    db
+  // Recheck authority/sequence at the write boundary and commit each reading with its node state.
+  const statements = items.flatMap((row) => [db
       .prepare(
         `
         INSERT OR IGNORE INTO temps (sensor_id, temperature, humidity_pct, packet_sequence, wake_nonce, lqi, ts, business_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?
+        FROM temperature_sensor_nodes sn
+        JOIN iot_devices g ON g.id = sn.gateway_device_id AND g.business_id = sn.business_id
+        WHERE sn.business_id = ? AND sn.gateway_device_id = ? AND sn.node_serial = ? AND sn.sensor_id = ?
+          AND sn.is_active = 1 AND sn.revoked_at IS NULL AND g.is_active = 1 AND g.revoked_at IS NULL
+          AND (sn.packet_sequence IS NULL OR sn.packet_sequence < ?)
       `
       )
       .bind(
@@ -298,15 +293,10 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
         row.wake_nonce ?? null,
         row.lqi ?? null,
         row.ts,
-        businessId
-      )
-  );
-
-  const results = await db.batch(statements);
-  const insertedRows = items.filter((_, index) => (results[index]?.meta?.changes ?? 0) > 0);
-  if (insertedRows.length > 0) {
-    const now = Math.floor(Date.now() / 1000);
-    await db.batch(insertedRows.map((row) => db.prepare(`
+        businessId,
+        businessId, device.id, row.node_serial ?? '', row.sensor_id, row.packet_sequence
+      ),
+    db.prepare(`
       UPDATE temperature_sensor_nodes
       SET last_seen_at = ?,
           battery_mv = COALESCE(?, battery_mv),
@@ -316,10 +306,10 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
           wake_nonce = COALESCE(?, wake_nonce),
           lqi = COALESCE(?, lqi),
           updated_at = ?
-      WHERE business_id = ? AND gateway_device_id = ? AND node_serial = ?
+      WHERE changes() = 1 AND business_id = ? AND gateway_device_id = ? AND node_serial = ?
         AND (packet_sequence IS NULL OR packet_sequence < ?)
     `).bind(
-      now,
+      row.ts,
       row.battery_mv ?? null,
       row.humidity_pct,
       row.rssi ?? null,
@@ -331,13 +321,19 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
       device.id,
       row.node_serial ?? '',
       row.packet_sequence
-    )));
+    )]);
+
+  const results = await db.batch(statements);
+  const insertedRows = items.filter((_, index) => (results[index * 2]?.meta?.changes ?? 0) > 0);
+  const currentReadings = insertedRows.filter(row => now - row.ts < TEMPERATURE_ONLINE_WINDOW_SECONDS);
+  try {
+    if (currentReadings.length > 0) await evaluateTemperatureReadings(db, {
+      businessId, deviceId: device.externalDeviceId, readings: currentReadings
+    });
+  } catch (error) {
+    logOperationalError({ event: 'temperature_rule_evaluation_failed', request, businessId, error });
   }
-  if (insertedRows.length > 0) await evaluateTemperatureReadings(db, {
-    businessId,
-    deviceId: device.externalDeviceId,
-    readings: insertedRows
-  });
-  await cleanupExpiredTemps(db);
-  return json({ accepted: items.length, rejected, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
+  try { await cleanupExpiredTemps(db); }
+  catch (error) { logOperationalError({ event: 'temperature_cleanup_failed', request, businessId, error }); }
+  return json({ accepted: insertedRows.length, rejected: rawItems.length - insertedRows.length, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
 };
