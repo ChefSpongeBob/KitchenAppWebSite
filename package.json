@@ -68,7 +68,7 @@
 		"test:media-access": "node ./scripts/media-access-check.mjs",
 		"test:production-schema": "node ./scripts/production-schema-check.mjs",
 		"test:report-exports": "node ./scripts/report-export-check.mjs",
-		"test:scale-performance": "node ./scripts/scale-performance-check.mjs",
+		"test:scale-performance": "node ./scripts/scale-performance-check.mjs && node ./scripts/schedule-read-resource-check.mjs",
 		"test:auth-abuse": "node ./scripts/auth-abuse-check.mjs",
 		"test:hr-onboarding": "node ./scripts/hr-onboarding-check.mjs",
 		"test:admin-consolidation": "node ./scripts/admin-consolidation-check.mjs",

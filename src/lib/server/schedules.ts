@@ -1678,7 +1678,14 @@ function roleIsAllowed(
 export async function loadScheduleWeek(
   db: DB,
   weekStart: string,
-  options?: { publishedOnly?: boolean; userId?: string | null; ensureWeek?: boolean; businessId?: string | null }
+  options?: {
+    publishedOnly?: boolean;
+    userId?: string | null;
+    ensureWeek?: boolean;
+    businessId?: string | null;
+    shiftUserId?: string;
+    shiftDate?: string;
+  }
 ) {
   await ensureScheduleSchema(db);
   await ensureTenantSchema(db, true);
@@ -1739,6 +1746,19 @@ export async function loadScheduleWeek(
   const useDraft = !options?.publishedOnly && week.draft_initialized === 1;
   const shiftTable = useDraft ? 'schedule_draft_shifts' : 'schedule_shifts';
   const teamTable = useDraft ? 'schedule_draft_week_team' : 'schedule_week_team';
+  // The employee read filter is separate from userId, the actor creating a manager's week.
+  const shiftUserId = options?.shiftUserId;
+  const personalSchedule = shiftUserId !== undefined;
+  const shiftFilters: string[] = [];
+  const shiftFilterBindings: string[] = [];
+  if (shiftUserId !== undefined) {
+    shiftFilters.push('AND s.user_id = ?');
+    shiftFilterBindings.push(shiftUserId);
+  }
+  if (options?.shiftDate !== undefined) {
+    shiftFilters.push('AND s.shift_date = ?');
+    shiftFilterBindings.push(options.shiftDate);
+  }
   const rows = await db
     .prepare(
       `
@@ -1764,10 +1784,11 @@ export async function loadScheduleWeek(
       JOIN users u ON u.id = member.user_id
       WHERE s.week_id = ? AND s.business_id = ?
         AND s.shift_date >= ? AND s.shift_date <= ?
+        ${shiftFilters.join('\n')}
       ORDER BY s.shift_date ASC, s.start_time ASC, s.sort_order ASC, COALESCE(u.display_name, u.email) ASC
       `
     )
-    .bind(week.id, businessId, week.week_start, addDays(week.week_start, 6))
+    .bind(week.id, businessId, week.week_start, addDays(week.week_start, 6), ...shiftFilterBindings)
     .all<{
       id: string;
       week_id: string;
@@ -1802,7 +1823,7 @@ export async function loadScheduleWeek(
     sortOrder: row.sort_order ?? 0
   })) satisfies ScheduleShift[];
 
-  const teamRows = await db
+  const teamRows = personalSchedule ? { results: [] } : await db
     .prepare(
       `
       SELECT user_id
@@ -1855,9 +1876,14 @@ export async function loadMyWeekSchedule(
   weekStart: string,
   userId: string,
   businessId?: string | null,
-  options: { publishedOnly?: boolean } = {}
+  options: { publishedOnly?: boolean; shiftDate?: string } = {}
 ) {
-  const result = await loadScheduleWeek(db, weekStart, { publishedOnly: options.publishedOnly ?? true, businessId });
+  const result = await loadScheduleWeek(db, weekStart, {
+    publishedOnly: options.publishedOnly ?? true,
+    businessId,
+    shiftUserId: userId,
+    shiftDate: options.shiftDate
+  });
   return {
     week: result.week,
     shifts: result.shifts.filter((shift) => shift.userId === userId),
@@ -1875,7 +1901,8 @@ export async function loadTodayShifts(
   await ensureScheduleSchema(db);
   const weekStart = getWeekStart(new Date(`${date}T00:00:00`));
   const schedule = await loadMyWeekSchedule(db, weekStart, userId, businessId, {
-    publishedOnly: options.publishedOnly ?? true
+    publishedOnly: options.publishedOnly ?? true,
+    shiftDate: date
   });
   return schedule.shifts
     .filter((shift) => shift.shiftDate === date)
