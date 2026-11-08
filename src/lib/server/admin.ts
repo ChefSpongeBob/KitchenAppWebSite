@@ -470,6 +470,25 @@ async function deleteUnreferencedDocumentMedia(db: D1, locals: App.Locals, busin
   if (!referenced) await locals.MEDIA_BUCKET.delete(key);
 }
 
+type DocumentWriteSnapshot = {
+  slug: string;
+  title: string;
+  section: string;
+  category: string;
+  content: string | null;
+  file_url: string | null;
+  is_active: number;
+  updated_at: number;
+};
+
+// Compare the record read before the upload, including changes made within the same second.
+const documentWriteCondition = `slug IS ? AND title IS ? AND section IS ? AND category IS ?
+  AND content IS ? AND file_url IS ? AND is_active IS ? AND updated_at IS ?`;
+function documentWriteBindings(record: DocumentWriteSnapshot) {
+  return [record.slug, record.title, record.section, record.category, record.content,
+    record.file_url, record.is_active, record.updated_at];
+}
+
 function extensionFromFilename(name: string) {
   const trimmed = name.trim();
   const dotIndex = trimmed.lastIndexOf('.');
@@ -5517,10 +5536,16 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   if (!id || !title) return fail(400, { error: 'Document id and title are required.' });
   if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
 
-  const existing = await db.prepare(`SELECT slug, section, category, file_url FROM documents WHERE id = ? AND business_id = ?`)
-    .bind(id, businessId).first<{ slug: string; section: string; category: string; file_url: string | null }>();
+  const existing = await db.prepare(`SELECT slug, title, section, category, content, file_url, is_active, updated_at
+    FROM documents WHERE id = ? AND business_id = ?`)
+    .bind(id, businessId).first<DocumentWriteSnapshot>();
   if (!existing) return fail(404, { error: 'Document not found.' });
   requireFeatureAccess(locals, documentFeatureKey(existing), documentFeatureKey({ slug, section, category }));
+  const displayedFileUrl = formData.get('existing_file_url');
+  if (displayedFileUrl !== null && String(displayedFileUrl) !== (existing.file_url ?? '')) {
+    return fail(409, { error: 'This document changed. Refresh and try again.' });
+  }
+  fileUrl = existing.file_url ?? '';
   let uploadedUrl = '';
 
   const upload = formData.get('file');
@@ -5549,16 +5574,22 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   }
 
   try {
-    await db
+    const result = await db
     .prepare(
       `
       UPDATE documents
       SET slug = ?, title = ?, section = ?, category = ?, content = ?, file_url = ?, is_active = ?, updated_at = ?
-      WHERE id = ? AND business_id = ?
+      WHERE id = ? AND business_id = ? AND ${documentWriteCondition}
       `
     )
-    .bind(slug, title, section, category, content || null, fileUrl || null, isActive, Math.floor(Date.now() / 1000), id, businessId)
+    .bind(slug, title, section, category, content || null, fileUrl || null, isActive, Math.floor(Date.now() / 1000), id, businessId,
+      ...documentWriteBindings(existing))
     .run();
+    if (!result.meta.changes) {
+      if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
+        .catch(() => console.warn('Document upload cleanup unavailable.'));
+      return fail(409, { error: 'This document changed. Refresh and try again.' });
+    }
   } catch (error) {
     if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
       .catch(() => console.warn('Document upload cleanup unavailable.'));
@@ -5584,15 +5615,22 @@ export async function deleteDocument(request: Request, locals: App.Locals) {
   if (!id) return fail(400, { error: 'Missing document id.' });
 
   const existing = await db
-    .prepare(`SELECT slug, section, category, file_url FROM documents WHERE id = ? AND business_id = ? LIMIT 1`)
+    .prepare(`SELECT slug, title, section, category, content, file_url, is_active, updated_at
+      FROM documents WHERE id = ? AND business_id = ? LIMIT 1`)
     .bind(id, businessId)
-    .first<{ slug: string; section: string; category: string; file_url: string | null }>();
+    .first<DocumentWriteSnapshot>();
 
   if (!existing) return fail(404, { error: 'Document not found.' });
   requireFeatureAccess(locals, documentFeatureKey(existing));
 
-  await deleteAttachmentsForTarget(db, businessId, 'document', id);
-  await db.prepare(`DELETE FROM documents WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
+  const results = await db.batch([
+    db.prepare(`DELETE FROM item_attachments WHERE business_id = ? AND target_type = 'document' AND target_id = ?
+      AND EXISTS (SELECT 1 FROM documents WHERE id = ? AND business_id = ? AND ${documentWriteCondition})`)
+      .bind(businessId, id, id, businessId, ...documentWriteBindings(existing)),
+    db.prepare(`DELETE FROM documents WHERE id = ? AND business_id = ? AND ${documentWriteCondition}`)
+      .bind(id, businessId, ...documentWriteBindings(existing))
+  ]);
+  if (!results[1].meta.changes) return fail(409, { error: 'This document changed. Refresh and try again.' });
 
   await deleteUnreferencedDocumentMedia(db, locals, businessId, existing.file_url ?? '')
     .catch(() => console.warn('Document media cleanup unavailable.'));
@@ -6800,6 +6838,15 @@ export async function sendEmployeeOnboardingPackage(
       payrollClassification
     }
   });
+  const emailResult = await sendEmployeeOnboardingPackageEmail({
+    env,
+    origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
+    employeeEmail: membership.email,
+    employeeName: membership.display_name,
+    businessName: locals.businessName,
+    packageId: created.packageId
+  });
+
   await recordOperationalEventBestEffort(
     db,
     {
@@ -6811,19 +6858,11 @@ export async function sendEmployeeOnboardingPackage(
       subjectType: 'employee_onboarding_package',
       subjectId: created.packageId,
       title: 'Onboarding package sent',
-      payload: { payrollClassification }
+      payload: { payrollClassification, emailSentDirectly: emailResult.sent }
     },
     request
   );
 
-  const emailResult = await sendEmployeeOnboardingPackageEmail({
-    env,
-    origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
-    employeeEmail: membership.email,
-    employeeName: membership.display_name,
-    businessName: locals.businessName,
-    packageId: created.packageId
-  });
 
   return {
     success: true,

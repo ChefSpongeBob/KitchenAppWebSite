@@ -70,6 +70,7 @@ type RecipientCandidateRow = EmailRecipient & {
   business_role: string;
   permission_template: string;
   permission_overrides: string | null;
+  position_overrides: string | null;
 };
 
 let operationalEventSchemaEnsured = false;
@@ -200,7 +201,7 @@ export async function recordOperationalEvent(db: DB, input: OperationalEventInpu
   const id = crypto.randomUUID();
   const dedupeKey = asText(input.dedupeKey, 240) || null;
 
-  await db
+  const stored = await db
     .prepare(
       `
       INSERT INTO operational_events (
@@ -230,6 +231,7 @@ export async function recordOperationalEvent(db: DB, input: OperationalEventInpu
         payload_json = excluded.payload_json,
         metadata_json = excluded.metadata_json,
         updated_at = excluded.updated_at
+      RETURNING id
       `
     )
     .bind(
@@ -252,9 +254,9 @@ export async function recordOperationalEvent(db: DB, input: OperationalEventInpu
       now,
       now
     )
-    .run();
+    .first<{ id: string }>();
 
-  return id;
+  return stored?.id ?? null;
 }
 
 export async function recordOperationalEventBestEffort(
@@ -412,13 +414,14 @@ export async function recordOperationalDeliveryAttempt(
 ) {
   await ensureOperationalEventSchema(db);
   const now = args.now ?? Math.floor(Date.now() / 1000);
-  await db
+  const attempt = db
     .prepare(
       `
       INSERT INTO operational_event_delivery_attempts (
         id, event_id, business_id, channel, status, provider_message_id, error_message, attempted_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM operational_events WHERE id = ? AND business_id = ?)
       `
     )
     .bind(
@@ -429,15 +432,16 @@ export async function recordOperationalDeliveryAttempt(
       args.status,
       args.providerMessageId ?? null,
       asText(args.errorMessage, 500) || null,
-      now
-    )
-    .run();
+      now,
+      args.eventId,
+      args.businessId
+    );
 
   const deliveryStatus: OperationalEventStatus =
     args.deliveryStatusOverride ??
     (args.status === 'sent' ? 'delivered' : args.status === 'failed' ? 'failed' : args.status);
 
-  await db
+  const update = db
     .prepare(
       `
       UPDATE operational_events
@@ -462,8 +466,8 @@ export async function recordOperationalDeliveryAttempt(
       now,
       args.eventId,
       args.businessId
-    )
-    .run();
+    );
+  await db.batch([attempt, update]);
 }
 
 function textValue(value: unknown, fallback = '') {
@@ -575,8 +579,11 @@ async function loadRecipientCandidates(db: DB, businessId: string) {
         u.email,
         u.display_name,
         COALESCE(bu.role, 'staff') AS business_role,
-        COALESCE(bu.permission_template, bu.role, 'staff') AS permission_template,
-        GROUP_CONCAT(erp.permission_key || ':' || erp.is_enabled) AS permission_overrides
+        COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff') AS permission_template,
+        (SELECT GROUP_CONCAT(erp.permission_key || ':' || erp.is_enabled) FROM employee_role_permissions erp
+          WHERE erp.business_id = bu.business_id AND erp.user_id = bu.user_id) AS permission_overrides,
+        (SELECT GROUP_CONCAT(bpp.permission_key || ':' || bpp.is_enabled) FROM business_position_permissions bpp
+          WHERE bpp.business_id = bu.business_id AND bpp.position_id = bp.id) AS position_overrides
       FROM users u
       JOIN business_users bu
         ON bu.user_id = u.id
@@ -584,15 +591,12 @@ async function loadRecipientCandidates(db: DB, businessId: string) {
         AND bu.is_active = 1
       LEFT JOIN user_preferences up
         ON up.user_id = u.id
-      LEFT JOIN employee_role_permissions erp
-        ON erp.business_id = bu.business_id
-        AND erp.user_id = u.id
+      LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
       WHERE COALESCE(u.is_active, 1) = 1
 		AND COALESCE(up.email_updates, 0) = 1
 		AND up.email_updates_consented_at IS NOT NULL
         AND u.email IS NOT NULL
         AND trim(u.email) <> ''
-      GROUP BY u.id, u.email, u.display_name, bu.role, bu.permission_template
       ORDER BY COALESCE(u.display_name, u.email) ASC
       `
     )
@@ -606,7 +610,8 @@ function recipientHasCapability(row: RecipientCandidateRow, capability: Business
   const capabilities = resolveBusinessCapabilities(
     row.business_role,
     row.permission_template,
-    parseCapabilityOverrides(row.permission_overrides)
+    parseCapabilityOverrides(row.permission_overrides),
+    parseCapabilityOverrides(row.position_overrides)
   );
   return capabilities.includes(capability);
 }
@@ -620,7 +625,7 @@ async function loadRecipientsWithCapability(db: DB, event: OperationalEventRow, 
 
 async function loadOnboardingReviewRecipients(db: DB, event: OperationalEventRow) {
   const candidates = (await loadRecipientCandidates(db, event.business_id)).filter(
-    (row) => row.id !== event.actor_user_id && recipientHasCapability(row, 'manage_onboarding')
+    (row) => row.id !== event.actor_user_id && recipientHasCapability(row, 'review_onboarding')
   );
   if (candidates.length === 0) return [];
 
@@ -715,6 +720,7 @@ async function loadAllBusinessRecipients(db: DB, event: OperationalEventRow) {
 
 async function loadTargetRecipient(db: DB, event: OperationalEventRow): Promise<EmailRecipient[]> {
   if (!event.target_user_id) return [];
+  const essentialPacketMessage = ['onboarding.package.sent', 'onboarding.package.approved', 'onboarding.package.returned'].includes(event.event_type);
   return db
     .prepare(
       `
@@ -731,14 +737,13 @@ async function loadTargetRecipient(db: DB, event: OperationalEventRow): Promise<
         ON up.user_id = u.id
       WHERE u.id = ?
         AND COALESCE(u.is_active, 1) = 1
-		AND COALESCE(up.email_updates, 0) = 1
-		AND up.email_updates_consented_at IS NOT NULL
+        AND (? = 1 OR (COALESCE(up.email_updates, 0) = 1 AND up.email_updates_consented_at IS NOT NULL))
         AND u.email IS NOT NULL
         AND trim(u.email) <> ''
       LIMIT 1
       `
     )
-    .bind(event.business_id, event.target_user_id)
+    .bind(event.business_id, event.target_user_id, essentialPacketMessage ? 1 : 0)
     .first<EmailRecipient>()
     .then((recipient) => (recipient?.email ? [recipient] : []));
 }
@@ -834,6 +839,9 @@ async function deliverEventByEmail(
   env: Partial<App.RuntimeEnv> | undefined,
   event: OperationalEventRow
 ) {
+  if (event.event_type === 'onboarding.package.sent' && safeParseJsonObject(event.payload_json).emailSentDirectly === true) {
+    return { status: 'skipped' as const, reason: 'Packet email was already delivered by the send action.' };
+  }
   const recipients = await loadEventEmailRecipients(db, event);
   if (recipients.length === 0) {
     return { status: 'skipped' as const, reason: 'No opted-in email recipients.' };
@@ -933,7 +941,9 @@ export async function processOperationalEvents(db: DB, args: ProcessOperationalE
 
     try {
       const feature = eventFeature(event);
-      const delivery = feature && disabledFeatures.has(`${event.business_id}:${feature}`)
+      const delivery = event.expires_at !== null && event.expires_at <= now
+        ? { status: 'skipped' as const, reason: 'Event expired before delivery.' }
+        : feature && disabledFeatures.has(`${event.business_id}:${feature}`)
         ? { status: 'skipped' as const, reason: 'Feature disabled for this workspace.' }
         : await deliverEventByEmail(db, args.env, event);
       if (delivery.status === 'sent') {
@@ -978,7 +988,10 @@ export async function processOperationalEvents(db: DB, args: ProcessOperationalE
         now
       });
     } catch (error) {
-      summary.retrying += 1;
+      const nextAttemptNumber = (event.delivery_attempts ?? 0) + 1;
+      const finalFailure = nextAttemptNumber >= maxAttempts;
+      if (finalFailure) summary.failed += 1;
+      else summary.retrying += 1;
       logOperationalError({
         event: 'operational_event_delivery_failed',
         request: args.request,
@@ -996,8 +1009,8 @@ export async function processOperationalEvents(db: DB, args: ProcessOperationalE
         channel: 'internal',
         status: 'failed',
         errorMessage: error instanceof Error ? error.message : 'Delivery processor failed.',
-        deliveryStatusOverride: 'pending',
-        nextAttemptAt: now + retryDelaySeconds((event.delivery_attempts ?? 0) + 1),
+        deliveryStatusOverride: finalFailure ? 'failed' : 'pending',
+        nextAttemptAt: finalFailure ? null : now + retryDelaySeconds(nextAttemptNumber),
         now
       });
     }

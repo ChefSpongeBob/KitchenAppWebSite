@@ -247,7 +247,7 @@ export async function loadTemperatureReport(
         ON sn.business_id = t.business_id
         AND sn.sensor_id = t.sensor_id
       WHERE t.business_id = ?
-        AND date(t.ts, 'unixepoch') BETWEEN ? AND ?
+        AND t.ts >= unixepoch(?) AND t.ts < unixepoch(?, '+1 day')
       ORDER BY t.ts DESC
       LIMIT 1000
       `
@@ -275,7 +275,7 @@ export async function loadTemperatureReport(
         ON sn.business_id = a.business_id
         AND sn.sensor_id = a.sensor_id
       WHERE a.business_id = ?
-        AND date(a.last_seen_at, 'unixepoch') BETWEEN ? AND ?
+        AND a.last_seen_at >= unixepoch(?) AND a.last_seen_at < unixepoch(?, '+1 day')
       ORDER BY a.last_seen_at DESC
       LIMIT 500
       `
@@ -318,7 +318,7 @@ export async function loadTemperatureHourlyAverageReport(
         ON sn.business_id = t.business_id
         AND sn.sensor_id = t.sensor_id
       WHERE t.business_id = ?
-        AND date(t.ts, 'unixepoch') BETWEEN ? AND ?
+        AND t.ts >= unixepoch(?) AND t.ts < unixepoch(?, '+1 day')
       GROUP BY event_date, event_hour, t.sensor_id, sensor_name
       ORDER BY event_date DESC, event_hour DESC, sensor_name ASC
       LIMIT 3000

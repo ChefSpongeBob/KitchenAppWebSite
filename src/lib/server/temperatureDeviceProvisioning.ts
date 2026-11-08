@@ -371,6 +371,7 @@ export async function loadTemperatureSensorNodes(db: D1, businessId: string) {
       FROM temperature_sensor_nodes tsn
       LEFT JOIN iot_devices gateway
         ON gateway.id = tsn.gateway_device_id
+        AND gateway.business_id = tsn.business_id
       WHERE tsn.business_id = ?
       ORDER BY tsn.is_active DESC, tsn.display_name ASC
       `

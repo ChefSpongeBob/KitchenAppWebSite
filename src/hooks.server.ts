@@ -3,6 +3,7 @@ import { isRedirect, redirect } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { env, waitUntil } from 'cloudflare:workers';
 import { hashSessionToken } from '#lib/server/auth.ts';
+import { workspaceIntentFailure } from '#lib/server/workspaceIntent.ts';
 import { canRoleAccessFeature, resolveFeatureKeyForUrl } from '#lib/features/appFeatures.ts';
 import { loadAppFeatureModes } from '#lib/server/appFeatures.ts';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
@@ -37,6 +38,7 @@ import { findPlatformStaff, isPlatformStaffPath, isStaffSecurityPath, loadStaffS
 import { recordRequestDiagnostic } from '#lib/server/platformDiagnostics.ts';
 
 const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
+	'/register',
 	'/admin',
 	'/billing',
 	'/lists',
@@ -204,6 +206,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		const response = await resolve(event);
 		if (
 			response.status < 500 &&
+			(!pathname.startsWith('/register') || response.status < 400) &&
 			event.locals.DB &&
 			event.locals.env &&
 			shouldDispatchOperationalEvents(pathname, event.request.method)
@@ -460,6 +463,12 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			existingBusinessContext ??
 			(await bootstrapBusinessForUser(db, session.found_user_id, session.user_role, null));
 		await ensureTenantSchema(db);
+
+		if (!isAuthRoute && !isPublicApiRoute && !isWorkspaceSwitchRoute && (isPrivateRoute || pathname === '/support')) {
+			const conflict = await workspaceIntentFailure(db, event.request, event.url,
+				session.found_user_id, businessContext.businessId, requestedBusinessId);
+			if (conflict) return applySecurityHeaders(conflict);
+		}
 
 		if (requestedBusinessId !== businessContext.businessId) {
 			event.cookies.set(

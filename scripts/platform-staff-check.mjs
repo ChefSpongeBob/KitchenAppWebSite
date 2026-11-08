@@ -268,6 +268,7 @@ const hooks = load('src/hooks.server.ts', {
   '$app/env': { building: false, dev: false },
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location) },
   '#lib/server/auth.ts': { hashSessionToken: async token => `hashed-${token}` },
+  '#lib/server/workspaceIntent.ts': loadServerModules()('src/lib/server/workspaceIntent.ts'),
   '#lib/features/appFeatures.ts': { resolveFeatureKeyForUrl: () => null },
   '#lib/server/appFeatures.ts': { loadAppFeatureModes: async () => ({}) },
   '#lib/server/tenant.ts': { ensureTenantSchema: async () => {} },

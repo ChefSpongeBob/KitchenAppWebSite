@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { onMount } from "svelte";
-  import { afterNavigate } from "$app/navigation";
+  import { afterNavigate, beforeNavigate } from "$app/navigation";
   import { browser } from "$app/env";
   import { navigating as navigatingState, page as pageState } from "$app/state";
   import { toStore } from "svelte/store";
@@ -25,6 +25,9 @@
   import { managerNavigationGroups } from "#lib/navigation/managerNavigation.ts";
   import ToastStack from "#lib/components/ui/ToastStack.svelte";
   import { nativeServerUrl } from "#lib/client/nativeServerUrl.ts";
+  import { installWorkspaceIntent } from "#lib/client/workspaceIntent.ts";
+  import { WORKSPACE_CHANGED_MESSAGE } from "#lib/workspaceIntent.ts";
+  import { pushToast } from "#lib/client/toasts.ts";
 
   type FeatureAwareNavItem = NavItem & {
     featureKey?: AppFeatureKey;
@@ -378,12 +381,23 @@
     marketingMenuOpen = false;
   }
 
+  let workspaceIntent: ReturnType<typeof installWorkspaceIntent> | undefined;
+  beforeNavigate(({ from, to }) => {
+    // Explicit sign-in/registration navigation may select a different account or restaurant.
+    if (from && to && /^\/(login|register)(\/|$)/.test(from.url.pathname) &&
+      !/^\/(login|register)(\/|$)/.test(to.url.pathname)) {
+      workspaceIntent?.beginAuthenticationNavigation();
+    }
+  });
   afterNavigate(() => {
+    workspaceIntent?.finishAuthenticationNavigation();
     if (!browser) return;
     requestAnimationFrame(setupScrollReveal);
   });
 
   onMount(() => {
+    workspaceIntent = installWorkspaceIntent(() => data.user?.businessId,
+      () => pushToast(WORKSPACE_CHANGED_MESSAGE, 'error', 0));
     document.documentElement.classList.add("reveal-ready");
     narrowViewportQuery = window.matchMedia("(max-width: 900px)");
     coarsePointerQuery = window.matchMedia("(pointer: coarse)");
@@ -416,6 +430,7 @@
     }
 
     return () => {
+      workspaceIntent?.();
       revealObserver?.disconnect();
       window.clearTimeout(revealFailSafeTimer);
       teardownViewportListener();

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
 
 const test = createTestD1();
@@ -128,6 +129,29 @@ try {
   for (const path of ['/app', '/admin', '/admin/feature-matrix', '/admin/onboarding', '/settings', '/reports/onboarding']) assert.equal((await probe(path)).resolved, true, path);
   await setModes(definitions.defaultAppFeatureModes);
   for (const path of gatedPaths) assert.equal((await probe(path)).resolved, true, `${path} should be restored when enabled`);
+  const routePaths = new Set();
+  function inventory(directory = 'src/routes') {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = directory + '/' + entry.name;
+      if (entry.isDirectory()) inventory(path);
+      else if (/^\+(?:page\.svelte|page\.server\.ts|server\.ts)$/.test(entry.name)) {
+        routePaths.add((directory.slice('src/routes'.length) || '/').replace(/\[(?:\.\.\.)?[^\]]+\]/g, 'fixture'));
+      }
+    }
+  }
+  inventory();
+  const publicPages = new Set(['/', '/about', '/account-deletion', '/billing-terms', '/features', '/how-it-works', '/pricing', '/privacy', '/support', '/terms']);
+  const publicService = path => /^\/api\/internal\//.test(path) || /^\/api\/billing\/(app-store-notifications|google-play-notifications)$/.test(path);
+  let protectedRoutes = 0;
+  for (const path of routePaths) {
+    const publicPath = publicPages.has(path) || /^\/(login|logout|register|forgot-password|reset-password)(\/|$)/.test(path) || publicService(path);
+    assert.equal((await probe(path, { anonymous: true })).resolved, publicPath, `Anonymous route policy: ${path}`);
+    if (!publicPath) {
+      protectedRoutes++;
+      assert.equal((await probe(path)).resolved, !path.startsWith('/staff'), `Restaurant ownership never grants Staff access: ${path}`);
+    }
+  }
+  console.log(`PASS actual filesystem route inventory: ${routePaths.size} pages/endpoints classified, ${protectedRoutes} protected routes deny anonymous access, restaurant owner still denied Staff`);
   assert.equal((await probe('/admin', { anonymous: true })).resolved, false);
   assert.equal((await probe('/app', { business: 'b' })).event.locals.businessId, 'a', 'A tampered cookie must not select an unauthorized tenant');
   insert('business_users', { business_id: 'b', user_id: 'owner-a', role: 'staff', permission_template: 'staff', created_at: now, updated_at: now });
