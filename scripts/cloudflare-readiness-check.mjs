@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 const root = process.cwd();
 const checks = [];
@@ -47,9 +48,19 @@ expect('Native and web server build directories stay separate',
 const scripts = packageJson.scripts ?? {};
 // Windows npm installs can prune these optional entries even though Linux npm ci requires them.
 const lockedPackages = JSON.parse(read('package-lock.json') || '{}').packages ?? {};
-expect('Release lockfile has no local filesystem links',
-  Object.values(lockedPackages).every(entry => !entry.link && !String(entry.resolved ?? '').startsWith('file:')) &&
-  Object.values(lockedPackages['']?.dependencies ?? {}).every(version => !String(version).startsWith('file:')));
+const mergePatchFile = 'vendor/deepmerge/crimini-deepmerge-4.3.1-patched.1.tgz';
+const mergePatchSpec = `file:${mergePatchFile}`;
+const mergePatchIntegrity = fs.existsSync(mergePatchFile)
+  ? `sha512-${createHash('sha512').update(fs.readFileSync(mergePatchFile)).digest('base64')}` : null;
+expect('Release lockfile rejects filesystem links and permits only the integrity-pinned merge archive',
+  Boolean(mergePatchIntegrity) &&
+  Object.entries(lockedPackages).every(([name, entry]) => !entry.link && !entry.extraneous &&
+    (!String(entry.resolved ?? '').startsWith('file:') ||
+      (name === 'node_modules/deepmerge' && entry.name === '@crimini/deepmerge' &&
+        entry.resolved === mergePatchSpec && entry.integrity === mergePatchIntegrity))) &&
+  ['dependencies', 'devDependencies'].every(group =>
+    Object.entries(lockedPackages['']?.[group] ?? {}).every(([name, version]) =>
+      !String(version).startsWith('file:') || (group === 'devDependencies' && name === 'deepmerge' && version === mergePatchSpec))));
 expect('Release lockfile matches declared direct dependencies',
   ['dependencies', 'devDependencies'].every(group => JSON.stringify(lockedPackages['']?.[group] ?? {}) === JSON.stringify(packageJson[group] ?? {})));
 const requiredEmnapi = new Set(Object.values(lockedPackages).flatMap(entry =>
