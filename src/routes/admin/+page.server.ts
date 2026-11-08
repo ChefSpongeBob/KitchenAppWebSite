@@ -201,7 +201,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     schedulePending = await countPendingScheduleRequests(db, businessId, visibleUserIds);
 
     if (allowedDepartments.length > 0) {
-      const departmentPlaceholders = allowedDepartments.map(() => '?').join(', ');
       const rows = await db
         .prepare(
           `
@@ -210,12 +209,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           JOIN users u ON u.id = s.user_id
           WHERE s.shift_date BETWEEN ? AND ?
             AND s.business_id = ?
-            AND s.department IN (${departmentPlaceholders})
+            AND s.department IN (SELECT value FROM json_each(?))
             ${hasIsActive ? 'AND COALESCE(u.is_active, 1) = 1' : ''}
           GROUP BY s.shift_date
           `
         )
-        .bind(startIso, endIso, businessId, ...allowedDepartments)
+        .bind(startIso, endIso, businessId, JSON.stringify(allowedDepartments))
         .all<{ day: string; staffed: number }>();
       for (const row of rows.results ?? []) {
         if (staffingByDay.has(row.day)) staffingByDay.set(row.day, row.staffed ?? 0);

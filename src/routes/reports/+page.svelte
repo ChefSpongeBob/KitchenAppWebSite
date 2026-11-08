@@ -1,6 +1,7 @@
 <script lang="ts">
   import Layout from '#lib/components/ui/Layout.svelte';
   import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import { resolveFeatureKeyForPath, type AppFeatureAccess } from '#lib/features/appFeatures.ts';
 
   type ReportLink = {
     href: string;
@@ -8,7 +9,11 @@
     icon: string;
   };
 
-  export let data: { canViewTodoLog: boolean };
+  export let data: { canViewTodoLog: boolean; featureAccess: AppFeatureAccess };
+  const enabledReport = (report: ReportLink, access: AppFeatureAccess) => {
+    const feature = resolveFeatureKeyForPath(report.href.split('?')[0]);
+    return !feature || access[feature];
+  };
 
   const serviceReports: ReportLink[] = [
     { href: '/reports/lists?domain=preplists', title: 'Prep History', icon: 'restaurant' },
@@ -28,19 +33,21 @@
     { href: '/reports/temperature', title: 'Temperature Report', icon: 'device_thermostat' }
   ];
 
-  $: visiblePeopleReports = data.canViewTodoLog
+  $: visibleServiceReports = serviceReports.filter((report) => enabledReport(report, data.featureAccess));
+  $: visiblePeopleReports = (data.canViewTodoLog && data.featureAccess.todo
     ? [...peopleReports, { href: '/todo/log', title: 'ToDo History', icon: 'task_alt' }]
-    : peopleReports;
+    : peopleReports).filter((report) => enabledReport(report, data.featureAccess));
+  $: visibleSystemReports = systemReports.filter((report) => enabledReport(report, data.featureAccess));
 </script>
 
 <Layout>
   <PageHeader title="Reports" />
 
   <div class="reports-page">
-    <section class="report-group">
+    {#if visibleServiceReports.length}<section class="report-group">
       <h2>Service</h2>
       <div class="report-links">
-        {#each serviceReports as report}
+        {#each visibleServiceReports as report}
           <a href={report.href} class="report-link">
             <span class="material-icons report-icon" aria-hidden="true">{report.icon}</span>
             <strong>{report.title}</strong>
@@ -48,9 +55,9 @@
           </a>
         {/each}
       </div>
-    </section>
+    </section>{/if}
 
-    <section class="report-group">
+    {#if visiblePeopleReports.length}<section class="report-group">
       <h2>People & Labor</h2>
       <div class="report-links">
         {#each visiblePeopleReports as report}
@@ -61,12 +68,12 @@
           </a>
         {/each}
       </div>
-    </section>
+    </section>{/if}
 
-    <section class="report-group">
+    {#if visibleSystemReports.length}<section class="report-group">
       <h2>Systems</h2>
       <div class="report-links">
-        {#each systemReports as report}
+        {#each visibleSystemReports as report}
           <a href={report.href} class="report-link">
             <span class="material-icons report-icon" aria-hidden="true">{report.icon}</span>
             <strong>{report.title}</strong>
@@ -74,7 +81,7 @@
           </a>
         {/each}
       </div>
-    </section>
+    </section>{/if}
   </div>
 </Layout>
 

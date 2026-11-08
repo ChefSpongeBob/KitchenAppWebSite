@@ -12,8 +12,6 @@ type DB = App.RuntimeEnv['DB'];
 
 let featureSchemaEnsured = false;
 let ensureFeatureSchemaPromise: Promise<void> | null = null;
-const seededBusinessFeatureModes = new Set<string>();
-const seedBusinessFeaturePromises = new Map<string, Promise<void>>();
 
 async function ensureAppFeatureSchema(db: DB) {
   if (!dev) {
@@ -79,44 +77,10 @@ async function ensureAppFeatureSchema(db: DB) {
   await ensureFeatureSchemaPromise;
 }
 
-async function seedBusinessFeatureModes(db: DB, businessId: string) {
-  if (seededBusinessFeatureModes.has(businessId)) return;
-  const pending = seedBusinessFeaturePromises.get(businessId);
-  if (pending) {
-    await pending;
-    return;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const promise = (async () => {
-    for (const feature of appFeatureDefinitions) {
-      await db
-        .prepare(
-          `
-          INSERT INTO app_feature_flags_business (business_id, feature_key, mode, updated_at, updated_by)
-          VALUES (?, ?, ?, ?, NULL)
-          ON CONFLICT(business_id, feature_key) DO NOTHING
-          `
-        )
-        .bind(businessId, feature.key, defaultAppFeatureModes[feature.key], now)
-        .run();
-    }
-    seededBusinessFeatureModes.add(businessId);
-  })();
-
-  seedBusinessFeaturePromises.set(businessId, promise);
-  try {
-    await promise;
-  } finally {
-    seedBusinessFeaturePromises.delete(businessId);
-  }
-}
-
 export async function loadAppFeatureModes(db: DB, businessId?: string | null): Promise<AppFeatureModes> {
   await ensureAppFeatureSchema(db);
 
   if (businessId) {
-    await seedBusinessFeatureModes(db, businessId);
     const rows = await db
       .prepare(
         `
@@ -162,45 +126,26 @@ export async function saveAppFeatureModes(
   await ensureAppFeatureSchema(db);
 
   const now = Math.floor(Date.now() / 1000);
-  if (businessId) {
-    await seedBusinessFeatureModes(db, businessId);
-    for (const feature of appFeatureDefinitions) {
-      const mode = nextModes[feature.key];
-      if (!mode) continue;
-
-      await db
-        .prepare(
-          `
+  const statements = appFeatureDefinitions.flatMap((feature) => {
+    const mode = nextModes[feature.key];
+    if (!mode) return [];
+    return [businessId
+      ? db.prepare(`
           INSERT INTO app_feature_flags_business (business_id, feature_key, mode, updated_at, updated_by)
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(business_id, feature_key) DO UPDATE SET
             mode = excluded.mode,
             updated_at = excluded.updated_at,
             updated_by = excluded.updated_by
-          `
-        )
-        .bind(businessId, feature.key, mode, now, updatedBy)
-        .run();
-    }
-    return;
-  }
-
-  for (const feature of appFeatureDefinitions) {
-    const mode = nextModes[feature.key];
-    if (!mode) continue;
-
-    await db
-      .prepare(
-        `
+        `).bind(businessId, feature.key, mode, now, updatedBy)
+      : db.prepare(`
         INSERT INTO app_feature_flags (feature_key, mode, updated_at, updated_by)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(feature_key) DO UPDATE SET
           mode = excluded.mode,
           updated_at = excluded.updated_at,
           updated_by = excluded.updated_by
-        `
-      )
-      .bind(feature.key, mode, now, updatedBy)
-      .run();
-  }
+      `).bind(feature.key, mode, now, updatedBy)];
+  });
+  if (statements.length) await db.batch(statements);
 }

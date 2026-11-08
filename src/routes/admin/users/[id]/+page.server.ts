@@ -1,5 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
+import { featureAccessForLocals } from '#lib/server/featureAccess.ts';
 import {
 	approveEmployeeOnboardingPackage,
 	addEmployeeCertification,
@@ -81,7 +82,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		'manage_permissions',
 		locals.businessCapabilities
 	);
-	const canManageScheduleAssignments = hasBusinessCapability(
+	const schedulingEnabled = featureAccessForLocals(locals).scheduling;
+	const canManageScheduleAssignments = schedulingEnabled && hasBusinessCapability(
 		locals.businessRole,
 		locals.businessPermissionTemplate,
 		'manage_schedule',
@@ -160,9 +162,9 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 					emergency_contact_relationship: ''
 				}),
 		loadEmployeeEmploymentRecord(db, employee.id, businessId),
-		loadScheduleDepartments(db, businessId),
-		loadScheduleRoleDefinitions(db, businessId),
-		loadScheduleRoleAccessByUser(db, businessId, [employee.id]),
+		schedulingEnabled ? loadScheduleDepartments(db, businessId) : Promise.resolve([]),
+		schedulingEnabled ? loadScheduleRoleDefinitions(db, businessId) : Promise.resolve([]),
+		schedulingEnabled ? loadScheduleRoleAccessByUser(db, businessId, [employee.id]) : Promise.resolve(new Map()),
 		shouldLoadOnboarding
 			? loadEmployeeOnboarding(db, employee.id, businessId, {
 					env: locals.env,

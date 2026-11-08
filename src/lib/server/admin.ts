@@ -1,4 +1,6 @@
 import { dev } from '$app/env';
+import { requireFeatureAccess } from '#lib/server/featureAccess.ts';
+import { documentFeatureKey } from '#lib/features/appFeatures.ts';
 import { fail, redirect } from '@sveltejs/kit';
 import type { ReadableStream as WorkerReadableStream } from '@cloudflare/workers-types';
 import {
@@ -451,6 +453,21 @@ function documentMediaKeyFromUrl(fileUrl: string) {
     .split('/')
     .map((part) => decodeURIComponent(part))
     .join('/');
+}
+
+async function deleteUnreferencedDocumentMedia(db: D1, locals: App.Locals, businessId: string, fileUrl: string) {
+  const key = documentMediaKeyFromUrl(fileUrl);
+  if (!key?.startsWith(`businesses/${businessId}/documents/`) || !locals.MEDIA_BUCKET) return;
+  const referenced = await db.prepare(`
+    SELECT 1 AS found FROM documents WHERE business_id = ?1 AND file_url = ?2
+    UNION ALL SELECT 1 FROM businesses WHERE id = ?1 AND sidebar_logo_url = ?2
+    UNION ALL SELECT 1 FROM employee_onboarding_template_items WHERE business_id = ?1 AND source_file_url = ?2
+    UNION ALL SELECT 1 FROM employee_onboarding_items WHERE business_id = ?1 AND (file_url = ?2 OR source_file_url = ?2)
+    UNION ALL SELECT 1 FROM employee_i9_verifications WHERE business_id = ?1 AND completed_i9_file_url = ?2
+    UNION ALL SELECT 1 FROM employee_i9_document_copies WHERE business_id = ?1 AND file_url = ?2
+    LIMIT 1
+  `).bind(businessId, fileUrl).first();
+  if (!referenced) await locals.MEDIA_BUCKET.delete(key);
 }
 
 function extensionFromFilename(name: string) {
@@ -1051,7 +1068,7 @@ export async function loadAdminSections(db: D1, businessId: string) {
         i.is_checked,
         i.sort_order
       FROM list_sections s
-      LEFT JOIN list_items i ON i.section_id = s.id
+      LEFT JOIN list_items i ON i.section_id = s.id AND i.business_id = s.business_id
       WHERE s.domain IN ('preplists', 'inventory', 'orders')
         AND s.business_id = ?
       ORDER BY s.domain ASC, s.slug ASC, i.sort_order ASC, i.created_at ASC
@@ -1121,7 +1138,7 @@ export async function loadAdminChecklists(db: D1, businessId: string) {
         i.is_checked,
         i.sort_order
       FROM checklist_sections s
-      LEFT JOIN checklist_items i ON i.section_id = s.id
+      LEFT JOIN checklist_items i ON i.section_id = s.id AND i.business_id = s.business_id
       WHERE s.business_id = ?
       ORDER BY s.slug ASC, i.sort_order ASC, i.created_at ASC
       `
@@ -1450,8 +1467,7 @@ export async function loadAdminUsers(db: D1, businessId: string) {
         `
       )
       .bind(businessId)
-      .all<{ user_id: string; permission_key: string; is_enabled: number }>()
-      .catch(() => ({ results: [] as Array<{ user_id: string; permission_key: string; is_enabled: number }> })),
+      .all<{ user_id: string; permission_key: string; is_enabled: number }>(),
     loadBusinessPositions(db, businessId, true)
   ]);
   const positionsById = new Map(positions.map((position) => [position.id, position]));
@@ -4368,6 +4384,19 @@ export async function loadAdminEmployeeSpotlight(db: D1, businessId: string) {
   return loadEmployeeSpotlight(db, businessId);
 }
 
+async function requireCreatorCategoryFeatures(
+  db: D1, businessId: string, locals: App.Locals, editorType: string, category: string, nextCategory?: string
+) {
+  if (editorType === 'recipe') return requireFeatureAccess(locals, 'recipes');
+  requireFeatureAccess(locals, documentFeatureKey({ category }));
+  if (nextCategory) requireFeatureAccess(locals, documentFeatureKey({ category: nextCategory }));
+  // A general category can also contain menus; classify existing records, not just the submitted name.
+  const documents = await db.prepare(`SELECT DISTINCT slug, section, category FROM documents
+    WHERE business_id = ? AND TRIM(COALESCE(category, '')) = ?`)
+    .bind(businessId, category).all<{ slug: string; section: string; category: string }>();
+  for (const document of documents.results ?? []) requireFeatureAccess(locals, documentFeatureKey(document));
+}
+
 export async function createCreatorCategory(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   const db = locals.DB;
@@ -4385,6 +4414,7 @@ export async function createCreatorCategory(request: Request, locals: App.Locals
     return fail(400, { error: 'Category name is required.' });
   }
 
+  await requireCreatorCategoryFeatures(db, businessId, locals, editorType, category);
   await ensureCreatorCategoryRegistry(db);
   await db
     .prepare(
@@ -4416,6 +4446,7 @@ export async function updateCreatorCategory(request: Request, locals: App.Locals
   if (!previousCategory || !nextCategory) {
     return fail(400, { error: 'Both current and new category names are required.' });
   }
+  await requireCreatorCategoryFeatures(db, businessId, locals, editorType, previousCategory, nextCategory);
   if (previousCategory === nextCategory) return { success: true };
 
   if (editorType === 'recipe') {
@@ -4466,6 +4497,7 @@ export async function deleteCreatorCategory(request: Request, locals: App.Locals
     return fail(400, { error: 'Category name is required.' });
   }
 
+  await requireCreatorCategoryFeatures(db, businessId, locals, editorType, category);
   const inUse =
     editorType === 'recipe'
       ? await db
@@ -4505,6 +4537,7 @@ export async function deleteCreatorCategory(request: Request, locals: App.Locals
 }
 
 export async function createListSection(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4616,6 +4649,7 @@ export async function createListSection(request: Request, locals: App.Locals) {
 }
 
 export async function updateListSection(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4645,6 +4679,7 @@ export async function updateListSection(request: Request, locals: App.Locals) {
 }
 
 export async function deleteListSection(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4672,6 +4707,7 @@ export async function deleteListSection(request: Request, locals: App.Locals) {
 }
 
 export async function createChecklistCategory(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4736,6 +4772,7 @@ function checklistSectionTitle(title: string) {
 }
 
 export async function updateChecklistCategory(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4804,6 +4841,7 @@ export async function updateChecklistCategory(request: Request, locals: App.Loca
 }
 
 export async function deleteChecklistCategory(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4847,6 +4885,7 @@ export async function deleteChecklistCategory(request: Request, locals: App.Loca
 }
 
 export async function addListItem(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4916,6 +4955,7 @@ export async function addListItem(request: Request, locals: App.Locals) {
 }
 
 export async function updateListItem(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4950,6 +4990,7 @@ export async function updateListItem(request: Request, locals: App.Locals) {
 }
 
 export async function deleteListItem(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -4966,6 +5007,7 @@ export async function deleteListItem(request: Request, locals: App.Locals) {
 }
 
 export async function addChecklistItem(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5014,6 +5056,7 @@ export async function addChecklistItem(request: Request, locals: App.Locals) {
 }
 
 export async function updateChecklistItem(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5036,6 +5079,7 @@ export async function updateChecklistItem(request: Request, locals: App.Locals) 
 }
 
 export async function deleteChecklistItem(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'lists');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5052,6 +5096,7 @@ export async function deleteChecklistItem(request: Request, locals: App.Locals) 
 }
 
 export async function createRecipe(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'recipes');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5100,6 +5145,7 @@ export async function createRecipe(request: Request, locals: App.Locals) {
 }
 
 export async function updateRecipe(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'recipes');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5153,6 +5199,7 @@ export async function updateRecipe(request: Request, locals: App.Locals) {
 }
 
 export async function deleteRecipe(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'recipes');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5169,6 +5216,7 @@ export async function deleteRecipe(request: Request, locals: App.Locals) {
 }
 
 export async function createTodo(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'todo');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5211,6 +5259,7 @@ export async function createTodo(request: Request, locals: App.Locals) {
 }
 
 export async function deleteTodo(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'todo');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5294,6 +5343,7 @@ export async function deleteAdminReminder(request: Request, locals: App.Locals) 
 }
 
 export async function approveWhiteboard(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'whiteboard');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5322,6 +5372,7 @@ export async function approveWhiteboard(request: Request, locals: App.Locals) {
 }
 
 export async function rejectWhiteboard(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'whiteboard');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5350,6 +5401,7 @@ export async function rejectWhiteboard(request: Request, locals: App.Locals) {
 }
 
 export async function deleteWhiteboard(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'whiteboard');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5381,8 +5433,10 @@ export async function createDocument(request: Request, locals: App.Locals) {
   const category = formString(formData, 'category', 120) || 'General';
   const providedSlug = normalizeSlug(rawSlug === 'custom' ? customSlug : rawSlug);
   const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
+  requireFeatureAccess(locals, documentFeatureKey({ slug, section, category }));
   const content = formMultilineString(formData, 'content', 2000);
   let fileUrl = String(formData.get('file_url') ?? '').trim();
+  let uploadedUrl = '';
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
   if (!title) return fail(400, { error: 'Title is required.' });
@@ -5407,6 +5461,7 @@ export async function createDocument(request: Request, locals: App.Locals) {
     try {
       const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
       fileUrl = uploaded.url;
+      uploadedUrl = uploaded.url;
     } catch {
       return fail(503, { error: 'File upload storage is unavailable locally.' });
     }
@@ -5418,7 +5473,8 @@ export async function createDocument(request: Request, locals: App.Locals) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  await db
+  try {
+    await db
     .prepare(
       `
       INSERT INTO documents (
@@ -5429,6 +5485,11 @@ export async function createDocument(request: Request, locals: App.Locals) {
     )
     .bind(crypto.randomUUID(), slug, title, section, category, content || null, fileUrl || null, isActive, now, now, businessId)
     .run();
+  } catch (error) {
+    if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
+      .catch(() => console.warn('Document upload cleanup unavailable.'));
+    throw error;
+  }
 
   return { success: true };
 }
@@ -5451,11 +5512,16 @@ export async function updateDocument(request: Request, locals: App.Locals) {
   const slug = providedSlug || normalizeSlug(title) || normalizeSlug(category) || 'document';
   const content = formMultilineString(formData, 'content', 2000);
   let fileUrl = String(formData.get('file_url') ?? '').trim();
-  const existingFileUrl = String(formData.get('existing_file_url') ?? '').trim();
   const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
 
   if (!id || !title) return fail(400, { error: 'Document id and title are required.' });
   if (!/^[a-z0-9-]+$/.test(slug)) return fail(400, { error: 'Slug can only use letters, numbers, and hyphens.' });
+
+  const existing = await db.prepare(`SELECT slug, section, category, file_url FROM documents WHERE id = ? AND business_id = ?`)
+    .bind(id, businessId).first<{ slug: string; section: string; category: string; file_url: string | null }>();
+  if (!existing) return fail(404, { error: 'Document not found.' });
+  requireFeatureAccess(locals, documentFeatureKey(existing), documentFeatureKey({ slug, section, category }));
+  let uploadedUrl = '';
 
   const upload = formData.get('file');
   if (upload instanceof File && upload.size > 0) {
@@ -5475,17 +5541,15 @@ export async function updateDocument(request: Request, locals: App.Locals) {
 
     try {
       const uploaded = await uploadDocumentMedia(locals.MEDIA_BUCKET, businessId, slug, upload);
-      const previousKey = documentMediaKeyFromUrl(existingFileUrl);
-      if (previousKey && previousKey !== uploaded.key) {
-        await locals.MEDIA_BUCKET.delete(previousKey);
-      }
       fileUrl = uploaded.url;
+      uploadedUrl = uploaded.url;
     } catch {
       return fail(503, { error: 'File upload storage is unavailable locally.' });
     }
   }
 
-  await db
+  try {
+    await db
     .prepare(
       `
       UPDATE documents
@@ -5495,6 +5559,15 @@ export async function updateDocument(request: Request, locals: App.Locals) {
     )
     .bind(slug, title, section, category, content || null, fileUrl || null, isActive, Math.floor(Date.now() / 1000), id, businessId)
     .run();
+  } catch (error) {
+    if (uploadedUrl) await deleteUnreferencedDocumentMedia(db, locals, businessId, uploadedUrl)
+      .catch(() => console.warn('Document upload cleanup unavailable.'));
+    throw error;
+  }
+  if (existing.file_url && existing.file_url !== fileUrl) {
+    await deleteUnreferencedDocumentMedia(db, locals, businessId, existing.file_url)
+      .catch(() => console.warn('Document media cleanup unavailable.'));
+  }
 
   return { success: true };
 }
@@ -5511,22 +5584,24 @@ export async function deleteDocument(request: Request, locals: App.Locals) {
   if (!id) return fail(400, { error: 'Missing document id.' });
 
   const existing = await db
-    .prepare(`SELECT file_url FROM documents WHERE id = ? AND business_id = ? LIMIT 1`)
+    .prepare(`SELECT slug, section, category, file_url FROM documents WHERE id = ? AND business_id = ? LIMIT 1`)
     .bind(id, businessId)
-    .first<{ file_url: string | null }>();
+    .first<{ slug: string; section: string; category: string; file_url: string | null }>();
+
+  if (!existing) return fail(404, { error: 'Document not found.' });
+  requireFeatureAccess(locals, documentFeatureKey(existing));
 
   await deleteAttachmentsForTarget(db, businessId, 'document', id);
   await db.prepare(`DELETE FROM documents WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
 
-  const mediaKey = documentMediaKeyFromUrl(existing?.file_url ?? '');
-  if (mediaKey && locals.MEDIA_BUCKET) {
-    await locals.MEDIA_BUCKET.delete(mediaKey);
-  }
+  await deleteUnreferencedDocumentMedia(db, locals, businessId, existing.file_url ?? '')
+    .catch(() => console.warn('Document media cleanup unavailable.'));
 
   return { success: true };
 }
 
 export async function saveAnnouncement(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'announcements');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5543,6 +5618,7 @@ export async function saveAnnouncement(request: Request, locals: App.Locals) {
 }
 
 export async function saveEmployeeSpotlight(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'employee_spotlight');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -5576,6 +5652,7 @@ export async function saveEmployeeSpotlight(request: Request, locals: App.Locals
 }
 
 export async function deleteAnnouncementHistory(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'announcements');
   requireAdmin(locals.userRole);
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
@@ -6202,6 +6279,7 @@ export async function deleteUser(request: Request, locals: App.Locals) {
 }
 
 export async function toggleScheduleDepartmentApproval(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'scheduling');
   requireAdmin(locals.userRole);
   if (
     !hasBusinessCapability(

@@ -69,7 +69,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Temps',
     description: 'Temperature dashboard and node telemetry views.',
     userRoutePrefixes: ['/temper'],
-    adminRoutePrefixes: []
+    adminRoutePrefixes: ['/admin/sensors']
   },
   {
     key: 'announcements',
@@ -231,6 +231,11 @@ export function resolveFeatureKeyForUrl(url: URL): AppFeatureKey | null {
 export function resolveFeatureKeyForPath(pathname: string): AppFeatureKey | null {
   if (pathname === '/api/whiteboard') return 'whiteboard';
   if (pathname === '/api/temps') return 'temps';
+  const reportFeature = /^\/reports\/(lists|schedule|requests|temperature|waste)(?:\.csv)?(?:\/|$)/.exec(pathname)?.[1];
+  if (reportFeature === 'lists') return 'lists';
+  if (reportFeature === 'schedule' || reportFeature === 'requests') return 'scheduling';
+  if (reportFeature === 'temperature') return 'temps';
+  if (reportFeature === 'waste') return 'waste_tracker';
 
   for (const feature of appFeatureDefinitions) {
     for (const prefix of feature.userRoutePrefixes) {
@@ -241,4 +246,10 @@ export function resolveFeatureKeyForPath(pathname: string): AppFeatureKey | null
     }
   }
   return null;
+}
+
+export function documentFeatureKey(document: { slug?: string | null; section?: string | null; category?: string | null }): 'menus' | 'documents' {
+  return document.category?.trim().toLowerCase() === 'menu' ||
+    document.section?.trim().toLowerCase() === 'menu' ||
+    document.slug?.trim().toLowerCase().startsWith('menu') ? 'menus' : 'documents';
 }

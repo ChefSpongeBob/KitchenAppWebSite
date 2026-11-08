@@ -62,7 +62,7 @@
 		"test:email-system": "node ./scripts/email-system-check.mjs",
 		"test:native-push": "node ./scripts/native-push-check.mjs",
 		"test:temperature-monitoring": "node ./scripts/temperature-monitoring-check.mjs",
-		"test:tenant-isolation": "node ./scripts/tenant-isolation-check.mjs",
+		"test:tenant-isolation": "node ./scripts/tenant-isolation-check.mjs && node ./scripts/tenant-data-behavior-check.mjs && node ./scripts/feature-access-behavior-check.mjs && node ./scripts/content-storage-behavior-check.mjs && node ./scripts/client-resource-behavior-check.mjs",
 		"test:db-governance": "node ./scripts/db-governance-check.mjs",
 		"test:iot-device-auth": "node ./scripts/iot-device-auth-check.mjs",
 		"test:media-access": "node ./scripts/media-access-check.mjs",

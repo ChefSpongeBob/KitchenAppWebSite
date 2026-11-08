@@ -2,6 +2,8 @@ import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
 import { ensureTenantSchema, requireBusinessId } from '#lib/server/tenant.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { requireFeatureAccess } from '#lib/server/featureAccess.ts';
+import { documentFeatureKey } from '#lib/features/appFeatures.ts';
 
 type DB = App.RuntimeEnv['DB'];
 
@@ -117,19 +119,21 @@ async function targetExists(
   db: DB,
   businessId: string,
   targetType: ItemAttachmentTargetType,
-  targetId: string
+  targetId: string,
+  locals: App.Locals
 ) {
   const row =
     targetType === 'recipe'
       ? await db
           .prepare(`SELECT id FROM recipes WHERE CAST(id AS TEXT) = ? AND business_id = ? LIMIT 1`)
           .bind(targetId, businessId)
-          .first<{ id: string }>()
+          .first<{ id: string; slug?: string; section?: string; category?: string }>()
       : await db
-          .prepare(`SELECT id FROM documents WHERE id = ? AND business_id = ? AND COALESCE(is_active, 1) = 1 LIMIT 1`)
+          .prepare(`SELECT id, slug, section, category FROM documents WHERE id = ? AND business_id = ? AND COALESCE(is_active, 1) = 1 LIMIT 1`)
           .bind(targetId, businessId)
-          .first<{ id: string }>();
+          .first<{ id: string; slug: string; section: string; category: string }>();
 
+  if (row) requireFeatureAccess(locals, targetType === 'recipe' ? 'recipes' : documentFeatureKey(row));
   return Boolean(row?.id);
 }
 
@@ -176,7 +180,6 @@ export async function loadItemAttachmentsForItems(
   const emptyMap = new Map<string, ItemAttachment[]>();
   if (uniqueIds.length === 0) return emptyMap;
 
-  const placeholders = uniqueIds.map(() => '?').join(', ');
   const rows = await db
     .prepare(
       `
@@ -204,13 +207,25 @@ export async function loadItemAttachmentsForItems(
         AND d.id = a.target_id
         AND d.business_id = a.business_id
         AND COALESCE(d.is_active, 1) = 1
+      LEFT JOIN app_feature_flags_business source_feature
+        ON source_feature.business_id = a.business_id AND source_feature.feature_key = 'lists'
+      LEFT JOIN app_feature_flags_business target_feature
+        ON target_feature.business_id = a.business_id
+        AND target_feature.feature_key = CASE
+          WHEN a.target_type = 'recipe' THEN 'recipes'
+          WHEN LOWER(TRIM(COALESCE(d.category, ''))) = 'menu'
+            OR LOWER(TRIM(COALESCE(d.section, ''))) = 'menu'
+            OR LOWER(TRIM(COALESCE(d.slug, ''))) LIKE 'menu%' THEN 'menus'
+          ELSE 'documents' END
       WHERE a.business_id = ?
+        AND COALESCE(source_feature.mode, 'all') != 'off'
+        AND COALESCE(target_feature.mode, 'all') != 'off'
         AND a.source_type = ?
-        AND a.source_item_id IN (${placeholders})
+        AND a.source_item_id IN (SELECT value FROM json_each(?))
       ORDER BY a.created_at ASC
       `
     )
-    .bind(businessId, sourceType, ...uniqueIds)
+    .bind(businessId, sourceType, JSON.stringify(uniqueIds))
     .all<{
       id: string;
       source_type: ItemAttachmentSourceType;
@@ -241,6 +256,7 @@ export async function loadItemAttachmentsForItems(
 
 export async function createItemAttachment(request: Request, locals: App.Locals) {
   if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
+  requireFeatureAccess(locals, 'lists');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -265,7 +281,7 @@ export async function createItemAttachment(request: Request, locals: App.Locals)
     return fail(404, { error: 'Item not found.' });
   }
 
-  if (!(await targetExists(db, businessId, targetType, targetId))) {
+  if (!(await targetExists(db, businessId, targetType, targetId, locals))) {
     return fail(404, { error: 'Attachment target not found.' });
   }
 
@@ -295,6 +311,7 @@ export async function createItemAttachment(request: Request, locals: App.Locals)
 
 export async function attachTargetToItem(request: Request, locals: App.Locals) {
   if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
+  requireFeatureAccess(locals, 'lists');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -319,7 +336,7 @@ export async function attachTargetToItem(request: Request, locals: App.Locals) {
     return fail(404, { error: 'Item not found.' });
   }
 
-  if (!(await targetExists(db, businessId, targetType, targetId))) {
+  if (!(await targetExists(db, businessId, targetType, targetId, locals))) {
     return fail(404, { error: 'Attachment target not found.' });
   }
 
@@ -349,6 +366,7 @@ export async function attachTargetToItem(request: Request, locals: App.Locals) {
 
 export async function deleteItemAttachment(request: Request, locals: App.Locals) {
   if (!canManageItemAttachments(locals)) return fail(403, { error: 'Admin only.' });
+  requireFeatureAccess(locals, 'lists');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
@@ -358,6 +376,12 @@ export async function deleteItemAttachment(request: Request, locals: App.Locals)
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '').trim();
   if (!id) return fail(400, { error: 'Missing attachment id.' });
+
+  const existing = await db.prepare(`SELECT target_type, target_id FROM item_attachments WHERE id = ? AND business_id = ?`)
+    .bind(id, businessId).first<{ target_type: ItemAttachmentTargetType; target_id: string }>();
+  if (!existing || !(await targetExists(db, businessId, existing.target_type, existing.target_id, locals))) {
+    return fail(404, { error: 'Attachment not found.' });
+  }
 
   await db.prepare(`DELETE FROM item_attachments WHERE id = ? AND business_id = ?`).bind(id, businessId).run();
   return { success: true };
@@ -385,17 +409,16 @@ export async function deleteAttachmentsForSourceItems(
   await ensureItemAttachmentSchema(db);
   const ids = Array.from(new Set(sourceItemIds.filter(Boolean)));
   if (ids.length === 0) return;
-  const placeholders = ids.map(() => '?').join(', ');
   await db
     .prepare(
       `
       DELETE FROM item_attachments
       WHERE business_id = ?
         AND source_type = ?
-        AND source_item_id IN (${placeholders})
+        AND source_item_id IN (SELECT value FROM json_each(?))
       `
     )
-    .bind(businessId, sourceType, ...ids)
+    .bind(businessId, sourceType, JSON.stringify(ids))
     .run();
 }
 

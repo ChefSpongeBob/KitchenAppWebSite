@@ -1,4 +1,5 @@
 import { dev } from '$app/env';
+import { loadAppFeatureModes } from '#lib/server/appFeatures.ts';
 
 type DB = App.RuntimeEnv['DB'];
 
@@ -629,6 +630,7 @@ export async function processTemperatureStaleAlerts(
   now = nowSeconds()
 ) {
   await ensureTemperatureMonitoringSchema(db);
+  if ((await loadAppFeatureModes(db, businessId)).temps === 'off') return { processed: 0 };
   const rows = await db
     .prepare(
       `

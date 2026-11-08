@@ -126,7 +126,8 @@ export async function recordListSubmission(
   domain: ListDomain,
   sectionId: string,
   submittedBy: string | null | undefined,
-  valuesByItemId: Map<string, string>
+  valuesByItemId: Map<string, string>,
+  updates: ReturnType<DB['prepare']>[] = []
 ) {
   await ensureHistorySchema(db);
   await ensureTenantSchema(db, true);
@@ -135,11 +136,10 @@ export async function recordListSubmission(
     .prepare(`SELECT title FROM list_sections WHERE id = ? AND business_id = ? LIMIT 1`)
     .bind(sectionId, businessId)
     .first<{ title: string }>();
-  if (!section) return;
+  if (!section) return false;
 
   const itemIds = Array.from(valuesByItemId.keys()).filter(Boolean);
-  if (itemIds.length === 0) return;
-  const placeholders = itemIds.map(() => '?').join(', ');
+  if (itemIds.length === 0) return false;
   const rows = await db
     .prepare(
       `
@@ -147,11 +147,11 @@ export async function recordListSubmission(
       FROM list_items
       WHERE business_id = ?
         AND section_id = ?
-        AND id IN (${placeholders})
+        AND id IN (SELECT value FROM json_each(?))
       ORDER BY sort_order ASC, created_at ASC
       `
     )
-    .bind(businessId, sectionId, ...itemIds)
+    .bind(businessId, sectionId, JSON.stringify(itemIds))
     .all<{
       id: string;
       content: string;
@@ -160,9 +160,10 @@ export async function recordListSubmission(
       is_checked: number | null;
     }>();
 
+  if (!rows.results?.length) return false;
   const now = Math.floor(Date.now() / 1000);
   const batchId = crypto.randomUUID();
-  await db
+  const statements = [...updates, db
     .prepare(
       `
       INSERT INTO list_submission_batches (
@@ -171,11 +172,8 @@ export async function recordListSubmission(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(batchId, businessId, domain, sectionId, section.title, submittedBy ?? null, now, businessDayFromUnix(now))
-    .run();
-
-  for (const row of rows.results ?? []) {
-    await db
+    .bind(batchId, businessId, domain, sectionId, section.title, submittedBy ?? null, now, businessDayFromUnix(now)),
+    ...rows.results.map((row) => db
       .prepare(
         `
         INSERT INTO list_submission_items (
@@ -195,9 +193,9 @@ export async function recordListSubmission(
         valuesByItemId.get(row.id) ?? '',
         row.par_count ?? 0,
         row.is_checked ?? 0
-      )
-      .run();
-  }
+      ))];
+  await db.batch(statements);
+  return true;
 }
 
 export async function recordListItemActivity(

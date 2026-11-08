@@ -20,6 +20,13 @@ function isPublicNavigationPath(pathname: string) {
 	return PUBLIC_NAVIGATION_PATHS.has(pathname);
 }
 
+function canCacheResponse(response: Response, requestUrl: URL) {
+	if (!response.ok || response.redirected) return false;
+	if (/no-store|no-cache|private/i.test(response.headers.get('cache-control') ?? '')) return false;
+	const responseUrl = new URL(response.url || requestUrl.href);
+	return responseUrl.origin === requestUrl.origin && responseUrl.pathname === requestUrl.pathname;
+}
+
 self.addEventListener('install', (event) => {
 	event.waitUntil(
 		caches.open(CACHE).then((cache) => {
@@ -74,7 +81,7 @@ self.addEventListener('fetch', (event) => {
 				.then((response) => {
 					// Only public marketing pages get navigation cache. Private app/admin
 					// routes must always reflect the current server session.
-					if (isPublicNavigation) {
+					if (isPublicNavigation && canCacheResponse(response, url)) {
 						const copy = response.clone();
 						caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
 					}
@@ -97,8 +104,10 @@ self.addEventListener('fetch', (event) => {
 				response ||
 				fetch(event.request)
 					.then((networkResponse) => {
-						const copy = networkResponse.clone();
-						caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
+						if (canCacheResponse(networkResponse, url)) {
+							const copy = networkResponse.clone();
+							caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
+						}
 						return networkResponse;
 					})
 					.catch(async () => {

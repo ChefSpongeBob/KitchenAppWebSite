@@ -32,7 +32,11 @@ export function createTestD1(source) {
   function prepare(sql) {
     let values = [];
     const statement = {
-      bind(...input) { values = input; return statement; },
+      bind(...input) {
+        if (input.length > 100) throw new Error(`D1 bound-parameter limit exceeded: ${input.length} > 100`);
+        values = input;
+        return statement;
+      },
       async first(column) {
         queryCount++;
         const row = sqlite.prepare(sql).get(...values) ?? null;

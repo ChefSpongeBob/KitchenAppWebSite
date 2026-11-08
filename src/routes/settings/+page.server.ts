@@ -22,6 +22,7 @@ import {
 import { ensureUserPreferencesSchema } from '#lib/server/userPreferences.ts';
 import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { COMMUNICATION_CONSENT_VERSION } from '#lib/communicationConsent.ts';
+import { featureAccessForLocals } from '#lib/server/featureAccess.ts';
 
 async function getUsersColumns(db: App.RuntimeEnv['DB']) {
   return getTableColumns(db, 'users');
@@ -48,6 +49,7 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   if (!db) throw redirect(303, '/login');
   const businessId = locals.businessId;
   if (!businessId) throw redirect(303, '/login');
+  const schedulingEnabled = featureAccessForLocals(locals).scheduling;
 
   await ensureUserPreferencesSchema(db);
   await ensureEmployeeProfilesTable(db);
@@ -79,9 +81,9 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 
   const [profile, approvalsByUser, availability, pendingAvailability, preferences, sessions, onboardingPackage] = await Promise.all([
     loadAdminEmployeeProfile(db, locals.userId, businessId),
-    loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId),
-    loadUserScheduleAvailability(db, locals.userId, businessId),
-    loadUserPendingScheduleAvailabilityRequest(db, locals.userId, businessId),
+    schedulingEnabled ? loadScheduleDepartmentApprovalsByUser(db, [locals.userId], businessId) : Promise.resolve(new Map()),
+    schedulingEnabled ? loadUserScheduleAvailability(db, locals.userId, businessId) : Promise.resolve([]),
+    schedulingEnabled ? loadUserPendingScheduleAvailabilityRequest(db, locals.userId, businessId) : Promise.resolve(null),
     db
       .prepare(
         `
@@ -118,7 +120,8 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   ]);
 
   return {
-    activeTab: resolveActiveTab(url.searchParams.get('tab')),
+    activeTab: !schedulingEnabled && url.searchParams.get('tab') === 'availability' ? 'profile' : resolveActiveTab(url.searchParams.get('tab')),
+    schedulingEnabled,
     user: {
       id: user.id,
       username: user.display_name ?? '',

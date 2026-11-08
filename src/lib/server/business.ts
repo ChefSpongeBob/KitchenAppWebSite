@@ -488,8 +488,7 @@ export async function loadBusinessCapabilityOverrides(
       `
     )
     .bind(businessId, userId)
-    .all<{ permission_key: string; is_enabled: number }>()
-    .catch(() => ({ results: [] as Array<{ permission_key: string; is_enabled: number }> }));
+    .all<{ permission_key: string; is_enabled: number }>();
 
   const validCapabilities = new Set<string>(ALL_BUSINESS_CAPABILITIES);
   const overrides: BusinessCapabilityOverrides = {};

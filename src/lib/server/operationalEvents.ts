@@ -1,4 +1,5 @@
 import { dev } from '$app/env';
+import type { AppFeatureKey } from '#lib/features/appFeatures.ts';
 import { getAppBaseUrl, renderCriminiEmail, sendTransactionalEmail } from '#lib/server/email.ts';
 import { logOperationalError } from '#lib/server/observability.ts';
 import {
@@ -892,6 +893,16 @@ type ProcessOperationalEventsArgs = {
   now?: number;
 };
 
+function eventFeature(event: OperationalEventRow): AppFeatureKey | null {
+  if (event.event_type.startsWith('schedule.')) return 'scheduling';
+  if (event.event_type.startsWith('list.')) return 'lists';
+  if (event.event_type.startsWith('todo.')) return 'todo';
+  if (event.event_type.startsWith('temperature.')) return 'temps';
+  if (event.event_type.startsWith('waste.')) return 'waste_tracker';
+  if (event.event_type.startsWith('announcement.')) return 'announcements';
+  return null;
+}
+
 export async function processOperationalEvents(db: DB, args: ProcessOperationalEventsArgs = {}) {
   await ensureOperationalEventSchema(db);
   const now = args.now ?? Math.floor(Date.now() / 1000);
@@ -899,6 +910,12 @@ export async function processOperationalEvents(db: DB, args: ProcessOperationalE
   const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
   const released = await releaseStaleOperationalEvents(db, 600, limit, now);
   const events = await loadReadyOperationalEvents(db, limit, now);
+  const disabled = events.length ? await db.prepare(`SELECT business_id, feature_key
+    FROM app_feature_flags_business WHERE mode = 'off'
+    AND business_id IN (SELECT value FROM json_each(?))`)
+    .bind(JSON.stringify([...new Set(events.map((event) => event.business_id))]))
+    .all<{ business_id: string; feature_key: string }>() : { results: [] };
+  const disabledFeatures = new Set((disabled.results ?? []).map((row) => `${row.business_id}:${row.feature_key}`));
   const summary = {
     checked: events.length,
     claimed: 0,
@@ -915,7 +932,10 @@ export async function processOperationalEvents(db: DB, args: ProcessOperationalE
     summary.claimed += 1;
 
     try {
-      const delivery = await deliverEventByEmail(db, args.env, event);
+      const feature = eventFeature(event);
+      const delivery = feature && disabledFeatures.has(`${event.business_id}:${feature}`)
+        ? { status: 'skipped' as const, reason: 'Feature disabled for this workspace.' }
+        : await deliverEventByEmail(db, args.env, event);
       if (delivery.status === 'sent') {
         summary.delivered += 1;
         await recordOperationalDeliveryAttempt(db, {

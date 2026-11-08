@@ -2,6 +2,8 @@ import type { RequestHandler } from './$types';
 import { logOperationalEvent } from '#lib/server/observability.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { canAccessEmployeeSensitiveData, writeSensitiveRecordAudit } from '#lib/server/sensitive.ts';
+import { documentFeatureKey } from '#lib/features/appFeatures.ts';
+import { featureAccessForLocals } from '#lib/server/featureAccess.ts';
 
 function decodeMediaKey(value: string) {
   try {
@@ -169,21 +171,25 @@ export const GET: RequestHandler = async ({ params, locals, request }) => {
       return new Response('Not found.', { status: 404 });
     }
 
-    const documentRecord = await locals.DB
+    const documentRecords = await locals.DB
       .prepare(
         `
-        SELECT id
+        SELECT id, slug, section, category
         FROM documents
         WHERE file_url = ?
           AND business_id = ?
           AND COALESCE(is_active, 1) = 1
-        LIMIT 1
         `
       )
       .bind(fileUrl, locals.businessId)
-      .first<{ id: string }>();
+      .all<{ id: string; slug: string; section: string; category: string }>();
 
-    if (!documentRecord) {
+    const featureAccess = featureAccessForLocals(locals);
+    if ((documentRecords.results ?? []).some((document) => !featureAccess[documentFeatureKey(document)])) {
+      return new Response('Forbidden.', { status: 403, headers: { 'cache-control': 'private, no-store' } });
+    }
+
+    if (!documentRecords.results?.length) {
       const templateRecord = await locals.DB
         .prepare(
           `

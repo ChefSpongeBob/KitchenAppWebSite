@@ -2,6 +2,7 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { cleanupExpiredTemps } from '#lib/server/retention.ts';
 import { allowIoTIngest, authenticateIoTDevice } from '#lib/server/iotIngest.ts';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { loadAppFeatureModes } from '#lib/server/appFeatures.ts';
 import { normalizeDeviceSerial } from '#lib/server/temperatureSensors.ts';
 import { resolveGatewayNodeReading } from '#lib/server/temperatureDeviceProvisioning.ts';
 import {
@@ -211,6 +212,10 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     return json({ error: 'Gateway credentials required.' }, { status: 401 });
   }
   const businessId = device.businessId;
+  const featureModes = await loadAppFeatureModes(db, businessId);
+  if (featureModes.temps === 'off') {
+    return json({ error: 'Temperature monitoring is disabled for this workspace.' }, { status: 403 });
+  }
 
   let body: unknown;
   try {

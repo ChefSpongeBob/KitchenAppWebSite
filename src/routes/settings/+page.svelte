@@ -31,6 +31,7 @@
 
   export let data: {
     activeTab: string;
+    schedulingEnabled: boolean;
     user: {
       id: string;
       username: string;
@@ -116,10 +117,10 @@
     </div>
 
     <div class="profile-meta">
-      <div class="meta-item">
+      {#if data.schedulingEnabled}<div class="meta-item">
         <span>Departments</span>
         <strong>{departmentSummary}</strong>
-      </div>
+      </div>{/if}
       <div class="meta-item">
         <span>Status</span>
         <strong>Profile active</strong>
@@ -143,9 +144,9 @@
   {/if}
 
   <nav class="settings-nav" aria-label="Settings sections">
-    <button type="button" class:active={activeTab === 'availability'} on:click={() => (activeTab = 'availability')}>
+    {#if data.schedulingEnabled}<button type="button" class:active={activeTab === 'availability'} on:click={() => (activeTab = 'availability')}>
       Availability
-    </button>
+    </button>{/if}
     <button type="button" class:active={activeTab === 'profile'} on:click={() => (activeTab = 'profile')}>
       Profile
     </button>
@@ -154,7 +155,7 @@
     </button>
   </nav>
 
-  {#if activeTab === 'availability'}
+  {#if activeTab === 'availability' && data.schedulingEnabled}
     <section class="panel">
       <header class="panel-head">
         <div>

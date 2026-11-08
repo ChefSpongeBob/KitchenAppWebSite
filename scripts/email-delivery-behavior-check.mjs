@@ -56,6 +56,10 @@ try {
   assert.equal((await process('schedule.published')).delivered, 1);
   assert.deepEqual(sent.map(row => row.body.to).sort(), ['employee-a@example.invalid','manager-kitchen@example.invalid','manager-service@example.invalid','owner-a@example.invalid']);
   assert.equal(sent.some(row => row.body.to.includes('other-tenant')), false);
+  await load('src/lib/server/appFeatures.ts').saveAppFeatureModes(db, { scheduling: 'off' }, null, 'a');
+  assert.equal((await process('schedule.published')).skipped, 1);
+  assert.equal(sent.length, 0, 'Disabling a feature must also suppress its queued operational email');
+  await load('src/lib/server/appFeatures.ts').saveAppFeatureModes(db, { scheduling: 'all' }, null, 'a');
   assert.equal((await process('onboarding.package.approved')).delivered, 1);
   assert.deepEqual(sent.map(row => row.body.to), ['employee-a@example.invalid']);
   sent.length = 0;

@@ -219,6 +219,7 @@ export function createListPage(
       const now = Math.floor(Date.now() / 1000);
       let updatedCount = 0;
       const valuesByItemId = new Map<string, string>();
+      const updates: ReturnType<DB['prepare']>[] = [];
       const useTextValues = options.valueType === 'text';
       const amountTextEnabled = useTextValues ? await hasAmountTextColumn(db) : false;
       for (const item of items.results ?? []) {
@@ -227,25 +228,24 @@ export function createListPage(
         if (useTextValues && amountTextEnabled) {
           const value = String(raw).trim();
           valuesByItemId.set(item.id, value);
-          await db
+          updates.push(db
             .prepare(`UPDATE list_items SET amount_text = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
-            .bind(value, now, item.id, businessId)
-            .run();
+            .bind(value, now, item.id, businessId));
         } else {
           const parsed = parseNonNegativeNumber(raw, options.valueLabel);
           if (!parsed.ok) return fail(400, { error: parsed.error });
 
           valuesByItemId.set(item.id, String(parsed.value));
-          await db
+          updates.push(db
             .prepare(`UPDATE list_items SET amount = ?, updated_at = ? WHERE id = ? AND business_id = ?`)
-            .bind(parsed.value, now, item.id, businessId)
-            .run();
+            .bind(parsed.value, now, item.id, businessId));
         }
         updatedCount += 1;
       }
       if (updatedCount === 0) return fail(400, { error: `No ${options.valueLabel.toLowerCase()} values were submitted.` });
 
-      await recordListSubmission(db, businessId, domain, section.id, locals.userId, valuesByItemId);
+      const submitted = await recordListSubmission(db, businessId, domain, section.id, locals.userId, valuesByItemId, updates);
+      if (!submitted) return fail(404, { error: 'List section not found.' });
       await recordOperationalEventBestEffort(db, {
         businessId,
         eventType: `list.${domain}.submitted`,

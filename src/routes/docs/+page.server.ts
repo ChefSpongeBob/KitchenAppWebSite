@@ -29,7 +29,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   const categoryKeys = categories.map((category) => normalizeCategoryKey(category));
-  const placeholders = categoryKeys.map(() => '?').join(', ');
   const docsResult = await db
     .prepare(
       `
@@ -37,14 +36,14 @@ export const load: PageServerLoad = async ({ locals }) => {
         FROM documents
         WHERE is_active = 1
           AND business_id = ?
-          AND LOWER(TRIM(COALESCE(category, ''))) IN (${placeholders})
+          AND LOWER(TRIM(COALESCE(category, ''))) IN (SELECT value FROM json_each(?))
           AND LOWER(TRIM(COALESCE(category, ''))) != 'menu'
           AND LOWER(TRIM(COALESCE(section, ''))) != 'menu'
           AND LOWER(TRIM(COALESCE(slug, ''))) NOT LIKE 'menu%'
         ORDER BY section ASC, category ASC, title ASC
       `
     )
-    .bind(businessId, ...categoryKeys)
+    .bind(businessId, JSON.stringify(categoryKeys))
     .all<DocRow>();
 
   return {

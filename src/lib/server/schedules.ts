@@ -1,4 +1,5 @@
 import { dev } from '$app/env';
+import { requireFeatureAccess } from '#lib/server/featureAccess.ts';
 import { fail } from '@sveltejs/kit';
 import {
   isValidScheduleDepartment,
@@ -319,17 +320,16 @@ async function scheduleUserAccessFailure(
   if (scope.allowedDepartments.length === 0) {
     return fail(403, { error: 'That employee is outside your schedule access.' });
   }
-  const placeholders = scope.allowedDepartments.map(() => '?').join(', ');
   const row = await db
     .prepare(
       `
       SELECT user_id
       FROM user_schedule_departments
-      WHERE business_id = ? AND user_id = ? AND department IN (${placeholders})
+      WHERE business_id = ? AND user_id = ? AND department IN (SELECT value FROM json_each(?))
       LIMIT 1
       `
     )
-    .bind(businessId, userId, ...scope.allowedDepartments)
+    .bind(businessId, userId, JSON.stringify(scope.allowedDepartments))
     .first<{ user_id: string }>();
   return row ? null : fail(403, { error: 'That employee is outside your schedule access.' });
 }
@@ -390,8 +390,7 @@ export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: st
     return new Map<string, ScheduleDepartment[]>();
   }
 
-  const placeholders = requestedUserIds?.map(() => '?').join(', ');
-  const userFilter = requestedUserIds ? `user_id IN (${placeholders}) AND` : '';
+  const userFilter = requestedUserIds ? `user_id IN (SELECT value FROM json_each(?)) AND` : '';
   const rows = await db
     .prepare(
       `
@@ -401,7 +400,7 @@ export async function loadScheduleDepartmentApprovalsByUser(db: DB, userIds?: st
       ORDER BY department ASC
       `
     )
-    .bind(...(requestedUserIds ?? []), businessId ?? '')
+    .bind(...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : []), businessId ?? '')
     .all<{ user_id: string; department: string }>();
 
   const approvals = new Map<string, ScheduleDepartment[]>();
@@ -430,17 +429,16 @@ export async function loadScheduleAvailabilityByUser(db: DB, userIds?: string[],
     return new Map<string, UserScheduleAvailability[]>();
   }
 
-  const placeholders = requestedUserIds?.map(() => '?').join(', ');
   const rows = await db
     .prepare(
       `
       SELECT user_id, weekday, is_available, start_time, end_time
       FROM user_schedule_availability
-      WHERE ${requestedUserIds ? `user_id IN (${placeholders}) AND` : ''} business_id = ?
+      WHERE ${requestedUserIds ? `user_id IN (SELECT value FROM json_each(?)) AND` : ''} business_id = ?
       ORDER BY weekday ASC
       `
     )
-    .bind(...(requestedUserIds ?? []), businessId ?? '')
+    .bind(...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : []), businessId ?? '')
     .all<{
       user_id: string;
       weekday: number;
@@ -480,7 +478,6 @@ export async function loadPendingScheduleAvailabilityRequests(
 
   const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
   if (requestedUserIds && requestedUserIds.length === 0) return [];
-  const placeholders = requestedUserIds?.map(() => '?').join(', ');
   const rows = await db
     .prepare(
       `
@@ -503,12 +500,12 @@ export async function loadPendingScheduleAvailabilityRequests(
       JOIN users u ON u.id = member.user_id
       WHERE r.business_id = ?
         AND r.status = 'pending'
-        ${requestedUserIds ? `AND r.user_id IN (${placeholders})` : ''}
+        ${requestedUserIds ? `AND r.user_id IN (SELECT value FROM json_each(?))` : ''}
       ORDER BY r.updated_at ASC
       LIMIT 100
       `
     )
-    .bind(businessId, ...(requestedUserIds ?? []))
+    .bind(businessId, ...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : []))
     .all<{
       id: string;
       user_id: string;
@@ -557,9 +554,9 @@ export async function countPendingScheduleRequests(
   const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
   if (requestedUserIds && requestedUserIds.length === 0) return 0;
   const userFilter = requestedUserIds
-    ? `AND user_id IN (${requestedUserIds.map(() => '?').join(', ')})`
+    ? `AND user_id IN (SELECT value FROM json_each(?))`
     : '';
-  const bindings = [businessId, ...(requestedUserIds ?? [])];
+  const bindings = [businessId, ...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : [])];
   const [timeOff, availability] = await Promise.all([
     db
       .prepare(
@@ -602,7 +599,6 @@ async function loadScheduleAssignableUsersById(db: DB, userIds: string[], busine
     return new Map<string, ScheduleAssignableUser>();
   }
 
-  const placeholders = requestedUserIds.map(() => '?').join(', ');
   const departments = await loadScheduleDepartments(db, businessId);
   const [rows, approvalsByUser] = await Promise.all([
     db
@@ -614,11 +610,11 @@ async function loadScheduleAssignableUsersById(db: DB, userIds: string[], busine
         WHERE bu.business_id = ?
           AND COALESCE(u.is_active, 1) = 1
           AND COALESCE(bu.is_active, 1) = 1
-          AND u.id IN (${placeholders})
+          AND u.id IN (SELECT value FROM json_each(?))
         ORDER BY COALESCE(u.display_name, u.email) ASC
         `
       )
-      .bind(businessId ?? '', ...requestedUserIds)
+      .bind(businessId ?? '', JSON.stringify(requestedUserIds))
       .all<{ id: string; display_name: string | null; email: string; role: string | null }>(),
     loadScheduleDepartmentApprovalsByUser(db, requestedUserIds, businessId)
   ]);
@@ -1618,7 +1614,6 @@ export async function loadScheduleRoleAccessByUser(
   await ensureScheduleSchema(db);
   const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
   if (requestedUserIds && requestedUserIds.length === 0) return new Map();
-  const placeholders = requestedUserIds?.map(() => '?').join(', ');
 
   const [settings, selectedRoles] = await Promise.all([
     db
@@ -1626,10 +1621,10 @@ export async function loadScheduleRoleAccessByUser(
         `
         SELECT user_id, restrict_to_selected
         FROM user_schedule_role_settings
-        WHERE business_id = ? ${requestedUserIds ? `AND user_id IN (${placeholders})` : ''}
+        WHERE business_id = ? ${requestedUserIds ? `AND user_id IN (SELECT value FROM json_each(?))` : ''}
         `
       )
-      .bind(businessId, ...(requestedUserIds ?? []))
+      .bind(businessId, ...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : []))
       .all<{ user_id: string; restrict_to_selected: number }>(),
     db
       .prepare(
@@ -1641,11 +1636,11 @@ export async function loadScheduleRoleAccessByUser(
          AND roles.business_id = access.business_id
          AND roles.is_active = 1
         WHERE access.business_id = ?
-          ${requestedUserIds ? `AND access.user_id IN (${placeholders})` : ''}
+          ${requestedUserIds ? `AND access.user_id IN (SELECT value FROM json_each(?))` : ''}
         ORDER BY roles.department ASC, roles.sort_order ASC, roles.role_name ASC
         `
       )
-      .bind(businessId, ...(requestedUserIds ?? []))
+      .bind(businessId, ...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : []))
       .all<{ user_id: string; role_definition_id: string }>()
   ]);
 
@@ -2466,7 +2461,6 @@ export async function loadPendingScheduleTimeOffRequests(
 
   const requestedUserIds = userIds ? Array.from(new Set(userIds.filter(Boolean))) : null;
   if (requestedUserIds && requestedUserIds.length === 0) return [];
-  const placeholders = requestedUserIds?.map(() => '?').join(', ');
   const rows = await db
     .prepare(
       `
@@ -2491,12 +2485,12 @@ export async function loadPendingScheduleTimeOffRequests(
       JOIN users u ON u.id = member.user_id
       WHERE r.business_id = ?
         AND r.status = 'pending'
-        ${requestedUserIds ? `AND r.user_id IN (${placeholders})` : ''}
+        ${requestedUserIds ? `AND r.user_id IN (SELECT value FROM json_each(?))` : ''}
       ORDER BY r.start_date ASC, r.created_at ASC
       LIMIT 100
       `
     )
-    .bind(businessId, ...(requestedUserIds ?? []))
+    .bind(businessId, ...(requestedUserIds ? [JSON.stringify(requestedUserIds)] : []))
     .all<{
       id: string;
       user_id: string;
@@ -2609,17 +2603,16 @@ function prepareScheduleDraftScopeDelete(
   if (allowedDepartments.length === 0) {
     return db.prepare(`DELETE FROM ${table} WHERE 1 = 0`);
   }
-  const placeholders = allowedDepartments.map(() => '?').join(', ');
   return db
     .prepare(
       `DELETE FROM ${table}
-       WHERE week_id = ? AND business_id = ? AND department IN (${placeholders})
+       WHERE week_id = ? AND business_id = ? AND department IN (SELECT value FROM json_each(?))
          AND EXISTS (
            SELECT 1 FROM schedule_weeks
            WHERE id = ? AND business_id = ? AND draft_write_token = ?
          )`
     )
-    .bind(weekId, businessId, ...allowedDepartments, weekId, businessId, writeToken);
+    .bind(weekId, businessId, JSON.stringify(allowedDepartments), weekId, businessId, writeToken);
 }
 
 async function replaceScheduleDraftWeekDataAtomic(
@@ -6082,6 +6075,7 @@ export async function applyScheduleTemplateToWeek(request: Request, locals: App.
 }
 
 export async function saveUserScheduleRoleAccess(request: Request, locals: App.Locals) {
+  requireFeatureAccess(locals, 'scheduling');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   if (!requireScheduleManager(locals)) return fail(403, { error: 'Schedule access required.' });
@@ -6140,16 +6134,15 @@ export async function saveUserScheduleRoleAccess(request: Request, locals: App.L
 
   let selectedDefinitions: ScheduleRoleDefinition[] = [];
   if (selectedRoleIds.length > 0) {
-    const placeholders = selectedRoleIds.map(() => '?').join(', ');
     const rows = await db
       .prepare(
         `
         SELECT id, department, role_name, sort_order
         FROM schedule_role_definitions
-        WHERE business_id = ? AND is_active = 1 AND id IN (${placeholders})
+        WHERE business_id = ? AND is_active = 1 AND id IN (SELECT value FROM json_each(?))
         `
       )
-      .bind(businessId, ...selectedRoleIds)
+      .bind(businessId, JSON.stringify(selectedRoleIds))
       .all<{ id: string; department: string; role_name: string; sort_order: number }>();
     selectedDefinitions = (rows.results ?? []).map((row) => ({
       id: row.id,

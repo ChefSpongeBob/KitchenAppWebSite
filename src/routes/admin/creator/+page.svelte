@@ -103,6 +103,8 @@
     initialEditorType: EditorType;
     initialListDomain: ListDomain;
     initialCategoryEditorType: CategoryEditorType;
+    availableEditors: Exclude<EditorType, 'category'>[];
+    availableCategoryEditors: CategoryEditorType[];
   };
 
   let editorType: EditorType = data.initialEditorType;
@@ -380,11 +382,11 @@
         <label>
           <span>Editor</span>
           <select bind:value={editorType}>
-            <option value="category">Categories</option>
-            <option value="list">Lists</option>
-            <option value="recipe">Recipes</option>
-            <option value="document">Documents</option>
-            <option value="menu">Menus</option>
+            {#if data.availableCategoryEditors.length}<option value="category">Categories</option>{/if}
+            {#if data.availableEditors.includes('list')}<option value="list">Lists</option>{/if}
+            {#if data.availableEditors.includes('recipe')}<option value="recipe">Recipes</option>{/if}
+            {#if data.availableEditors.includes('document')}<option value="document">Documents</option>{/if}
+            {#if data.availableEditors.includes('menu')}<option value="menu">Menus</option>{/if}
           </select>
         </label>
         {#if editorType === 'list'}
@@ -401,9 +403,9 @@
           <label>
             <span>Category Type</span>
             <select bind:value={categoryEditorType}>
-              <option value="list">List</option>
-              <option value="recipe">Recipe</option>
-              <option value="document">Document</option>
+              {#if data.availableCategoryEditors.includes('list')}<option value="list">List</option>{/if}
+              {#if data.availableCategoryEditors.includes('recipe')}<option value="recipe">Recipe</option>{/if}
+              {#if data.availableCategoryEditors.includes('document')}<option value="document">Document</option>{/if}
             </select>
           </label>
         {/if}

@@ -137,11 +137,13 @@ assert.equal((await actionsModule.actions.gateway_connection(event({ gateway_id:
 console.log('PASS desktop setup requires management access and a fresh check-in before reporting connected');
 
 let authenticated = true;
+let monitoringEnabled = true;
 const api = loadSource('src/routes/api/temps/+server.ts', {
   '@sveltejs/kit': { json: (value, options) => Response.json(value, options) },
   '#lib/server/retention.ts': {},
   '#lib/server/iotIngest.ts': { authenticateIoTDevice: async () => authenticated ? { id: 'gateway-a', businessId: 'business-a' } : null },
   '#lib/server/tenant.ts': { ensureTenantSchema: async () => {} },
+  '#lib/server/appFeatures.ts': { loadAppFeatureModes: async () => ({ temps: monitoringEnabled ? 'all' : 'off' }) },
   '#lib/server/temperatureSensors.ts': { normalizeDeviceSerial: value => value.toLowerCase() },
   '#lib/server/temperatureDeviceProvisioning.ts': {},
   '#lib/server/temperatureMonitoring.ts': {}
@@ -160,6 +162,9 @@ assert.deepEqual(await response.json(), { connected: true });
 authenticated = false;
 assert.equal((await gatewayRequest({ gateway_status: true })).status, 401);
 authenticated = true;
+monitoringEnabled = false;
+assert.equal((await gatewayRequest({ gateway_status: true })).status, 403);
+monitoringEnabled = true;
 assert.equal((await gatewayRequest({ gateway_status: true, password: 'must-not-be-accepted' })).status, 400);
 console.log('PASS authenticated gateway check-in works without creating temperature rows or accepting Wi-Fi credentials');
 

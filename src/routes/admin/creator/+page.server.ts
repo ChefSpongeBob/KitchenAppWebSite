@@ -30,16 +30,23 @@ import {
 } from '#lib/server/admin.ts';
 import { attachTargetToItem, createItemAttachment, deleteItemAttachment } from '#lib/server/itemAttachments.ts';
 import { requireBusinessId } from '#lib/server/tenant.ts';
+import { error } from '@sveltejs/kit';
+import { documentFeatureKey } from '#lib/features/appFeatures.ts';
+import { featureAccessForLocals } from '#lib/server/featureAccess.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   requireAdmin(locals.userRole);
   const db = locals.DB;
+  const featureAccess = featureAccessForLocals(locals);
+  const availableEditors = (['list', 'recipe', 'document', 'menu'] as const)
+    .filter((editor) => featureAccess[editor === 'list' ? 'lists' : editor === 'recipe' ? 'recipes' : editor === 'menu' ? 'menus' : 'documents']);
+  if (!availableEditors.length) error(403, 'Creator features are disabled for this workspace.');
 
   const editorParam = url.searchParams.get('editor')?.trim().toLowerCase() ?? '';
   const domainParam = url.searchParams.get('domain')?.trim().toLowerCase() ?? '';
   const typeParam = url.searchParams.get('type')?.trim().toLowerCase() ?? '';
 
-  const initialEditorType: 'category' | 'list' | 'recipe' | 'document' | 'menu' =
+  let initialEditorType: 'category' | 'list' | 'recipe' | 'document' | 'menu' =
     editorParam === 'category' ||
     editorParam === 'recipe' ||
     editorParam === 'document' ||
@@ -47,14 +54,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     editorParam === 'menu'
       ? editorParam
       : 'list';
+  if (initialEditorType !== 'category' && !availableEditors.includes(initialEditorType)) {
+    initialEditorType = availableEditors[0];
+  }
 
   const initialListDomain: 'preplists' | 'checklists' | 'inventory' | 'orders' =
     domainParam === 'inventory' || domainParam === 'orders' || domainParam === 'preplists' || domainParam === 'checklists'
       ? domainParam
       : 'preplists';
 
-  const initialCategoryEditorType: 'list' | 'recipe' | 'document' =
+  let initialCategoryEditorType: 'list' | 'recipe' | 'document' =
     typeParam === 'recipe' || typeParam === 'document' ? typeParam : 'list';
+  const availableCategoryEditors = availableEditors.filter((editor) => editor !== 'menu');
+  if (!availableCategoryEditors.length && initialEditorType === 'category') initialEditorType = 'menu';
+  if (!availableCategoryEditors.includes(initialCategoryEditorType)) initialCategoryEditorType = availableCategoryEditors[0] ?? 'document';
 
   if (!db) {
     return {
@@ -75,16 +88,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       },
       initialEditorType,
       initialListDomain,
-      initialCategoryEditorType
+      initialCategoryEditorType,
+      availableEditors,
+      availableCategoryEditors
     };
   }
   const businessId = requireBusinessId(locals);
 
   const [sections, checklists, recipes, documents, creatorCatalog] = await Promise.all([
-    loadAdminSections(db, businessId),
-    loadAdminChecklists(db, businessId),
-    loadAdminRecipes(db, businessId),
-    loadAdminDocuments(db, businessId),
+    featureAccess.lists ? loadAdminSections(db, businessId) : Promise.resolve({ preplists: [], inventory: [], orders: [] }),
+    featureAccess.lists ? loadAdminChecklists(db, businessId) : Promise.resolve([]),
+    featureAccess.recipes ? loadAdminRecipes(db, businessId) : Promise.resolve([]),
+    featureAccess.documents || featureAccess.menus ? loadAdminDocuments(db, businessId) : Promise.resolve([]),
     loadAdminCreatorCatalog(db, businessId)
   ]);
 
@@ -92,11 +107,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     sections,
     checklists,
     recipes,
-    documents,
-    creatorCatalog,
+    documents: documents.filter((document) => featureAccess[documentFeatureKey(document)]),
+    creatorCatalog: {
+      preplists: featureAccess.lists ? creatorCatalog.preplists : [],
+      inventory: featureAccess.lists ? creatorCatalog.inventory : [],
+      orders: featureAccess.lists ? creatorCatalog.orders : [],
+      recipes: featureAccess.recipes ? creatorCatalog.recipes : [],
+      documents: creatorCatalog.documents.filter((category) => featureAccess[documentFeatureKey({ category })])
+    },
     initialEditorType,
     initialListDomain,
-    initialCategoryEditorType
+    initialCategoryEditorType,
+    availableEditors,
+    availableCategoryEditors
   };
 };
 
