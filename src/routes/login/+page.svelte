@@ -53,6 +53,9 @@
 	$: staffLogin = $page.url.searchParams.get('staff') === '1';
 	$: turnstileSiteKey = data?.turnstileSiteKey ?? '';
 	$: registrationComplete = !staffLogin && $page.url.searchParams.get('registered') === 'success';
+	$: inviteCode = $page.url.searchParams.get('invite') ?? '';
+	$: loginAction = staffLogin ? '?/login&staff=1' : `?/login${inviteCode ? `&invite=${encodeURIComponent(inviteCode)}` : ''}`;
+	$: notYouAction = staffLogin ? '?/not_you&staff=1' : `?/not_you${inviteCode ? `&invite=${encodeURIComponent(inviteCode)}` : ''}`;
 	$: seededEmail = form?.email ?? '';
 	$: if (seededEmail !== lastSeededEmail) {
 		emailValue = seededEmail;
@@ -89,7 +92,7 @@
 			</div>
 		{/if}
 
-		<form method="POST" action={$page.url.searchParams.get('staff') === '1' ? '?/login&staff=1' : '?/login'} class="auth-form" use:enhance={enhanceLogin}>
+		<form method="POST" action={loginAction} class="auth-form" use:enhance={enhanceLogin}>
 			<div class="auth-form-head">
 				<h2>{registrationComplete ? 'Login' : 'Sign in'}</h2>
 			</div>
@@ -158,7 +161,7 @@
 				</div>
 				<div class="session-actions">
 					<a href={activeSession.continuePath || '/app'} class="auth-secondary-button">Continue</a>
-					<form method="POST" action={$page.url.searchParams.get('staff') === '1' ? '?/not_you&staff=1' : '?/not_you'} use:enhance>
+					<form method="POST" action={notYouAction} use:enhance>
 						<button type="submit" class="auth-link-button">Not you?</button>
 					</form>
 				</div>

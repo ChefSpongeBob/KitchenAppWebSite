@@ -1,24 +1,10 @@
-import { error, redirect, type RequestHandler } from '@sveltejs/kit';
+import { error, json, redirect, type RequestHandler } from '@sveltejs/kit';
 import {
 	ACTIVE_BUSINESS_COOKIE,
-	getActiveBusinessCookieOptions
+	getActiveBusinessCookieOptions,
+	restaurantLandingPath
 } from '#lib/server/activeBusiness.ts';
 import { getUserBusinessContext } from '#lib/server/business.ts';
-
-function getSafeRedirectTarget(request: Request) {
-	const fallback = '/app';
-	const referer = request.headers.get('referer');
-	if (!referer) return fallback;
-
-	try {
-		const refererUrl = new URL(referer);
-		const requestUrl = new URL(request.url);
-		if (refererUrl.origin !== requestUrl.origin) return fallback;
-		return `${refererUrl.pathname}${refererUrl.search}${refererUrl.hash}`;
-	} catch {
-		return fallback;
-	}
-}
 
 export const POST: RequestHandler = async ({ locals, request, cookies }) => {
 	const db = locals.DB;
@@ -32,5 +18,7 @@ export const POST: RequestHandler = async ({ locals, request, cookies }) => {
 	if (!context || context.businessId !== businessId) throw error(403, 'Workspace unavailable.');
 
 	cookies.set(ACTIVE_BUSINESS_COOKIE, businessId, getActiveBusinessCookieOptions(request));
-	throw redirect(303, getSafeRedirectTarget(request));
+	const target = formData.get('entry') === 'login' ? await restaurantLandingPath(db, locals.userId, businessId) : '/app';
+	if (request.headers.get('accept') === 'application/json') return json({ location: target });
+	throw redirect(303, target);
 };

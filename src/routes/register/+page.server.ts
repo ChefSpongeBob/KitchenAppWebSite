@@ -42,6 +42,7 @@ import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import { ensureScheduleSchema } from '#lib/server/schedules.ts';
 import { COMMUNICATION_CONSENT_VERSION } from '#lib/communicationConsent.ts';
+import { acceptExistingAccountInvitation, loadBusinessInvitation } from '#lib/server/businessInvitations.ts';
 import type { PageServerLoad } from './$types';
 
 type RegisterActiveSlideId = 'tier' | 'business' | 'security' | 'schedule' | 'purchase';
@@ -377,6 +378,9 @@ export const actions: Actions = {
 		try {
 			registerPhase = 'read_form';
 			const formData = await request.formData();
+			if (formData.get('existing_account') === '1') {
+				return await acceptExistingAccountInvitation({ request, locals, url, cookies }, formData);
+			}
 
 			const displayName = normalizeFormText(formData, 'display_name', { maxLength: 120 });
 			const ownerTitle = toOptionalString(formData, 'owner_title', 120);
@@ -1624,9 +1628,31 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			inviteEmail = String(legacyInvite?.email_normalized ?? '').trim().toLowerCase();
 		}
 	}
+	let existingInviteAccount = false;
+	let canAcceptInvite = false;
+	let invitationBusinessName = '';
+	const acceptedInvitation = inviteCode && locals.DB && locals.userId
+		? await locals.DB.prepare(`SELECT b.id AS businessId, b.name AS businessName
+			FROM business_invites i JOIN businesses b ON b.id = i.business_id
+			JOIN business_users m ON m.business_id = i.business_id AND m.user_id = i.used_by_user_id AND m.is_active = 1
+			WHERE i.invite_code = ? AND i.used_by_user_id = ? AND i.used_at IS NOT NULL LIMIT 1`)
+			.bind(inviteCode, locals.userId).first<{ businessId: string; businessName: string }>()
+		: null;
+	if (inviteEmail && locals.DB) {
+		const account = await locals.DB.prepare('SELECT id, is_active FROM users WHERE email_normalized = ? LIMIT 1')
+			.bind(inviteEmail).first<{ id: string; is_active: number }>();
+		existingInviteAccount = Boolean(account);
+		canAcceptInvite = Boolean(account && account.is_active === 1 && account.id === locals.userId);
+		const invitation = await loadBusinessInvitation(locals.DB, inviteCode);
+		invitationBusinessName = invitation?.business_name ?? '';
+	}
 	return {
 		inviteCode: inviteCode || null,
 		inviteEmail: inviteEmail || null,
+		existingInviteAccount,
+		canAcceptInvite,
+		invitationBusinessName,
+		acceptedInvitation,
 		onboardingRequired,
 		agreementVersion: LIABILITY_AGREEMENT_VERSION
 	};

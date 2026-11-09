@@ -91,10 +91,10 @@ expect('src/routes/logout/+page.server.ts', 'logout revokes session and clears w
   source.includes('getActiveBusinessCookieDeleteOptions')
 );
 
-expect('src/routes/workspace/switch/+server.ts', 'workspace switching is membership checked and same-origin redirected', (source) =>
+expect('src/routes/workspace/switch/+server.ts', 'workspace switching is membership checked and uses fixed local destinations', (source) =>
   source.includes('getUserBusinessContext') &&
   source.includes('context.businessId !== businessId') &&
-  source.includes('refererUrl.origin !== requestUrl.origin') &&
+  source.includes('restaurantLandingPath') && source.includes(": '/app'") &&
   source.includes('ACTIVE_BUSINESS_COOKIE')
 );
 

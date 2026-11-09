@@ -326,11 +326,18 @@ assert.equal(clearedCookies, 0);
 staff.findPlatformStaff = normalLookup;
 console.log('PASS staff lookup failure denies access without destroying an otherwise valid login session');
 const loginSource = readFileSync('src/routes/login/+page.svelte', 'utf8');
-assert.ok(loginSource.includes("'?/login&staff=1' : '?/login'"), 'Staff destination must survive the actual named login form action');
+assert.ok(loginSource.includes('action={loginAction}'), 'The actual login form must use its computed destination');
+const loginActionExpression = loginSource.match(/\$:\s*loginAction\s*=\s*([^\n]+);/)?.[1];
+assert.ok(loginActionExpression, 'Named login action must have an inspectable destination');
+const loginDestination = new Function('staffLogin', 'inviteCode', 'return (' + loginActionExpression + ')');
+assert.equal(loginDestination(true, 'SOME-INVITE'), '?/login&staff=1', 'Staff destination wins over restaurant invitations');
+assert.equal(loginDestination(false, ''), '?/login');
+assert.equal(loginDestination(false, 'ADDITIONAL-INVITE'), '?/login&invite=ADDITIONAL-INVITE');
 const login = load('src/routes/login/+page.server.ts', {
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location), fail: (status, data) => ({ status, data }) },
   '$app/env': { dev: false }, '#lib/server/auth.ts': {}, '#lib/server/authCookies.ts': {},
   '#lib/server/activeBusiness.ts': {}, '#lib/server/dbSchema.ts': {}, '#lib/server/business.ts': {},
+  '#lib/invitations.ts': load('src/lib/invitations.ts', {}),
   '#lib/server/permissions.ts': {}, '#lib/server/security.ts': {}, '#lib/server/turnstile.ts': { getTurnstileSiteKey: () => 'test-site-key' },
   '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffEmail.ts': {}
 });

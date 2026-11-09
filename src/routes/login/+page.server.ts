@@ -8,10 +8,12 @@ import {
 } from '#lib/server/authCookies.ts';
 import {
 	ACTIVE_BUSINESS_COOKIE,
-	getActiveBusinessCookieDeleteOptions
+	getActiveBusinessCookieDeleteOptions,
+	restaurantLandingPath
 } from '#lib/server/activeBusiness.ts';
 import { hasColumn } from '#lib/server/dbSchema.ts';
-import { bootstrapBusinessForUser, getUserBusinessContext } from '#lib/server/business.ts';
+import { bootstrapBusinessForUser, getUserBusinessContext, loadUserBusinessMemberships } from '#lib/server/business.ts';
+import { normalizeInvitationCode, invitationRegistrationPath, invitationLoginPath } from '#lib/invitations.ts';
 import { effectiveAppRoleFromBusinessRole } from '#lib/server/permissions.ts';
 import {
 	checkRateLimit,
@@ -36,28 +38,15 @@ async function resolvePostLoginPath(
 	if (url?.searchParams.get('staff') === '1') {
 		return await findPlatformStaff(db, userId) ? '/staff' : '/app';
 	}
+	const inviteCode = normalizeInvitationCode(url?.searchParams.get('invite'));
+	if (inviteCode) return invitationRegistrationPath(inviteCode);
+	const memberships = await loadUserBusinessMemberships(db, userId);
+	if (memberships.length > 1) return '/workspace';
+	if (memberships.length === 0) return '/workspace';
 	if (url?.searchParams.get('onboarding') === '1') {
 		return '/settings?onboarding=1';
 	}
-	if (!businessId) return '/app';
-
-	const onboardingPackage = await db
-		.prepare(
-			`
-			SELECT id
-			FROM employee_onboarding_packages
-			WHERE business_id = ?
-			  AND user_id = ?
-			  AND status IN ('sent', 'in_progress', 'returned')
-			ORDER BY updated_at DESC
-			LIMIT 1
-			`
-		)
-		.bind(businessId, userId)
-		.first<{ id: string }>()
-		.catch(() => null);
-
-	return onboardingPackage?.id ? '/settings?onboarding=1' : '/app';
+	return restaurantLandingPath(db, userId, memberships[0].businessId);
 }
 
 async function hasEmailNormalizedColumn(db: App.RuntimeEnv['DB']) {
@@ -195,6 +184,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
 	not_you: async ({ cookies, locals, request, url }) => {
 		await revokeActiveSession(locals.DB, cookies, request);
+		const inviteCode = normalizeInvitationCode(url.searchParams.get('invite'));
+		if (inviteCode && url.searchParams.get('staff') !== '1') throw redirect(303, invitationLoginPath(inviteCode));
 		throw redirect(303, url.searchParams.get('staff') === '1' ? '/login?staff=1&switch=1' : '/login?switch=1');
 	},
 	login: async ({ request, cookies, locals, getClientAddress, url }) => {
@@ -445,7 +436,7 @@ export const actions: Actions = {
 			}
 
 			let businessContext = staffLogin ? null : await getUserBusinessContext(db, user.id);
-			if (!businessContext && !staffLogin) {
+			if (!businessContext && !staffLogin && !normalizeInvitationCode(url.searchParams.get('invite'))) {
 				if (!dev) {
 					await db
 						.prepare(

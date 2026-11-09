@@ -74,6 +74,21 @@ for (const origin of ['https://localhost', 'capacitor://localhost']) {
   assert.equal(request.signal.aborted, true);
   assert.equal(response.status, 400);
 
+  transport.reply(Response.json({ location: '/app' }));
+  await transport.window.fetch('/workspace/switch', { method: 'POST', headers: { accept: 'application/json' },
+    body: new URLSearchParams({ business_id: 'fixture-b' }) });
+  const selection = transport.calls.at(-1);
+  assert.equal(selection.url, 'https://criminiops.com/workspace/switch');
+  assert.equal(selection.headers.get('x-crimini-native'), '1');
+  assert.equal(selection.headers.get('accept'), 'application/json');
+  assert.equal(selection.credentials, 'include');
+  assert.equal(await selection.text(), 'business_id=fixture-b');
+  for (const path of ['/workspace/__data.json', '/register/__data.json?invite=FIXTURE-INVITE']) {
+    await transport.window.fetch(path);
+    assert.equal(transport.calls.at(-1).url, 'https://criminiops.com' + path);
+    assert.equal(transport.calls.at(-1).credentials, 'include');
+  }
+
   const failure = new Error('Network unavailable');
   transport.reply(Promise.reject(failure));
   await assert.rejects(transport.window.fetch('/login/__data.json'), error => error === failure);

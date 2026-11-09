@@ -25,6 +25,7 @@
   import { managerNavigationGroups } from "#lib/navigation/managerNavigation.ts";
   import ToastStack from "#lib/components/ui/ToastStack.svelte";
   import { nativeServerUrl } from "#lib/client/nativeServerUrl.ts";
+  import { nativeRestaurantSwitch } from "#lib/client/restaurantSwitch.ts";
   import { installWorkspaceIntent } from "#lib/client/workspaceIntent.ts";
   import { WORKSPACE_CHANGED_MESSAGE } from "#lib/workspaceIntent.ts";
   import { pushToast } from "#lib/client/toasts.ts";
@@ -277,7 +278,7 @@
     "/specials",
     "/billing"
   ];
-  $: isOnboardingRoute = currentPath === "/register" || currentPath.startsWith("/register/");
+  $: isOnboardingRoute = currentPath === "/workspace" || currentPath === "/register" || currentPath.startsWith("/register/");
   $: isStaffRoute = currentPath === "/staff" || currentPath.startsWith("/staff/") ||
     (currentPath === "/login" && $page.url.searchParams.get("staff") === "1");
   $: isMarketingRoute =
@@ -384,8 +385,8 @@
   let workspaceIntent: ReturnType<typeof installWorkspaceIntent> | undefined;
   beforeNavigate(({ from, to }) => {
     // Explicit sign-in/registration navigation may select a different account or restaurant.
-    if (from && to && /^\/(login|register)(\/|$)/.test(from.url.pathname) &&
-      !/^\/(login|register)(\/|$)/.test(to.url.pathname)) {
+    if (from && to && /^\/(login|register|workspace)(\/|$)/.test(from.url.pathname) &&
+      !/^\/(login|register|workspace)(\/|$)/.test(to.url.pathname)) {
       workspaceIntent?.beginAuthenticationNavigation();
     }
   });
@@ -548,7 +549,7 @@
           <strong>{data.user?.businessName?.trim() || 'Crimini'}</strong>
         </div>
         {#if userBusinesses.length > 1}
-          <form method="POST" action="/workspace/switch" class="workspace-switch-form">
+          <form method="POST" action="/workspace/switch" class="workspace-switch-form" use:nativeRestaurantSwitch>
             <select name="business_id" aria-label="Workspace" on:change={submitWorkspaceSwitch}>
               {#each userBusinesses as business}
                 <option value={business.businessId} selected={business.businessId === data.user?.businessId}>

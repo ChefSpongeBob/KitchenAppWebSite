@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { enhance } from '$app/forms';
 
 	type FormValues = {
 		displayName: string;
@@ -20,6 +21,7 @@
 
 	export let inviteCode: string;
 	export let inviteEmail = '';
+	export let existingAccount = false;
 	export let form:
 		| {
 				error?: string;
@@ -105,7 +107,7 @@
 	let feedback = '';
 	let clientFingerprint = '';
 
-	const steps = ['Name & Birthday', 'Address', 'Contact & Login', 'Welcome'];
+	$: steps = ['Name & Birthday', 'Address', existingAccount ? 'Contact' : 'Contact & Login', 'Welcome'];
 
 	onMount(() => {
 		let introTimer: number | undefined;
@@ -173,6 +175,7 @@
 			event.preventDefault();
 			return;
 		}
+		if (existingAccount) return;
 		if (!password || !confirmPassword) {
 			feedback = 'Enter and confirm your password.';
 			event.preventDefault();
@@ -235,7 +238,8 @@
 				<span style={`width:${((activeStep + 1) / 4) * 100}%`}></span>
 			</div>
 
-			<form method="POST" on:submit={validateSubmission}>
+			<form method="POST" on:submit={validateSubmission} use:enhance>
+				{#if existingAccount}<input type="hidden" name="existing_account" value="1" />{/if}
 				<input type="hidden" name="invite_code" value={inviteCode} />
 				<input type="hidden" name="display_name" value={fullName.trim()} />
 				<input type="hidden" name="real_name" value={fullName.trim()} />
@@ -305,7 +309,7 @@
 										required
 									/>
 								</label>
-								<label>
+								{#if !existingAccount}<label>
 									<span>Password</span>
 									<div class="password-field">
 										<input
@@ -335,9 +339,10 @@
 										</button>
 									</div>
 								</label>
+								{/if}
 							</div>
 
-							<section class="consents" aria-labelledby="contact-permission-title">
+							{#if !existingAccount}<section class="consents" aria-labelledby="contact-permission-title">
 								<div class="consent-heading">
 									<h2 id="contact-permission-title">Notification permission</h2>
 									<p>Choose how Crimini and your restaurant may contact you about work.</p>
@@ -359,7 +364,7 @@
 									</div>
 								</fieldset>
 								<p class="consent-legal">You may change these choices later in Profile &amp; Settings. See our <a href="/terms" target="_blank" rel="noreferrer">Terms</a> and <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</p>
-							</section>
+							</section>{/if}
 						{/if}
 					</div>
 				{/key}
@@ -375,7 +380,7 @@
 					{#if activeStep < 2}
 						<button type="button" class="continue" on:click={nextStep}>Continue</button>
 					{:else}
-						<button type="submit" class="continue">Create account</button>
+						<button type="submit" class="continue">{existingAccount ? 'Join restaurant' : 'Create account'}</button>
 					{/if}
 				</footer>
 			</form>

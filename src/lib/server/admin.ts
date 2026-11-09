@@ -3783,6 +3783,77 @@ export async function loadEmployeeOnboarding(
   };
 }
 
+export async function prepareEmployeeOnboardingPacket(
+  db: D1,
+  options: { businessId: string; userId: string; createdBy?: string | null; ownerPacket?: boolean;
+    payrollClassification?: 'employee' | 'contractor'; auditId?: string; now?: number }
+) {
+  await ensureEmployeeOnboardingTables(db);
+  const now = options.now ?? Math.floor(Date.now() / 1000);
+  const packageId = crypto.randomUUID();
+  const previous = await db.prepare(`SELECT id, COALESCE(version, 1) AS version FROM employee_onboarding_packages
+    WHERE business_id = ? AND user_id = ? ORDER BY COALESCE(version, 1) DESC, updated_at DESC LIMIT 1`)
+    .bind(options.businessId, options.userId).first<{ id: string; version: number }>();
+  const templateItems = await loadEmployeeOnboardingTemplate(db, options.businessId);
+  const businessState = await loadBusinessRegisteredState(db, options.businessId);
+  const onboardingItems = composeEmployeeOnboardingPacket(templateItems, businessState);
+  if (onboardingItems.length > 200) throw new Error('Onboarding packets are limited to 200 forms.');
+  const guard = options.auditId ? 'EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)' : '1 = 1';
+  const guardValues = options.auditId ? [options.auditId] : [];
+  const actor = options.createdBy ?? null;
+  const statements = [db.prepare(`INSERT INTO employee_onboarding_packages (
+    id, business_id, user_id, status, payroll_classification, sent_at, completed_at, approved_at, approved_by,
+    created_by, updated_at, manager_note, submitted_at, returned_at, returned_by, locked_at, version, supersedes_package_id
+  ) SELECT ?, ?, ?, 'sent', ?, ?, NULL, NULL, NULL, ?, ?, '', NULL, NULL, NULL, NULL, ?, ? WHERE ${guard}`)
+    .bind(packageId, options.businessId, options.userId, options.payrollClassification ?? 'employee', now,
+      actor, now, Math.max(1, Number(previous?.version ?? 0) + 1), previous?.id ?? null, ...guardValues)];
+  for (const item of onboardingItems) {
+    const itemId = crypto.randomUUID();
+    const classification = classifyOnboardingComplianceItem(item);
+    statements.push(db.prepare(`INSERT INTO employee_onboarding_items (
+      id, package_id, business_id, user_id, item_type, form_key, title, description, status, file_url, file_name,
+      form_payload, source_file_url, source_file_name, signed_name, manager_note, sort_order, created_at,
+      submitted_at, reviewed_at, reviewed_by
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', '', '', ?, ?, '', '', ?, ?, NULL, NULL, NULL WHERE ${guard}`)
+      .bind(itemId, packageId, options.businessId, options.userId, item.item_type, item.form_key, item.title,
+        item.description, item.source_file_url, item.source_file_name, item.sort_order, now, ...guardValues));
+    statements.push(db.prepare(`INSERT INTO employee_compliance_requirements (
+      id, business_id, requirement_key, title, category, applies_to_type, is_required, requires_document,
+      requires_signature, default_due_days, renewal_interval_days, retention_years, is_active, created_at, updated_at, updated_by
+    ) SELECT ?, ?, ?, ?, ?, 'employee', 1, ?, ?, NULL, NULL, ?, 1, ?, ?, ? WHERE ${guard}
+      ON CONFLICT(business_id, requirement_key) DO NOTHING`)
+      .bind(crypto.randomUUID(), options.businessId, classification.requirementKey, classification.title,
+        classification.category, classification.requiresDocument ? 1 : 0, classification.requiresSignature ? 1 : 0,
+        classification.retentionYears, now, now, actor, ...guardValues));
+    if (classification.sensitiveScope && classification.sensitiveRecordType) {
+      statements.push(db.prepare(`INSERT INTO employee_sensitive_record_vault (
+        id, business_id, user_id, record_scope, record_type, status, created_at, updated_at, updated_by
+      ) SELECT ?, ?, ?, ?, ?, 'empty', ?, ?, ? WHERE ${guard}
+        ON CONFLICT(business_id, user_id, record_scope, record_type) DO NOTHING`)
+        .bind(crypto.randomUUID(), options.businessId, options.userId, classification.sensitiveScope,
+          classification.sensitiveRecordType, now, now, actor, ...guardValues));
+    }
+    statements.push(db.prepare(`INSERT INTO employee_compliance_documents (
+      id, business_id, user_id, requirement_id, onboarding_item_id, document_type, status, file_url, file_name,
+      signed_name, submitted_at, reviewed_at, reviewed_by, created_at, updated_at
+    ) SELECT ?, ?, ?, r.id, ?, ?, 'pending', '', '', '', NULL, NULL, NULL, ?, ?
+      FROM employee_compliance_requirements r WHERE r.business_id = ? AND r.requirement_key = ? AND ${guard}`)
+      .bind(crypto.randomUUID(), options.businessId, options.userId, itemId, classification.documentType,
+        now, now, options.businessId, classification.requirementKey, ...guardValues));
+  }
+  statements.push(db.prepare(`INSERT INTO employee_employment_records (
+    business_id, user_id, employment_status, employment_type, onboarding_package_id, created_at, updated_at, updated_by
+  ) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard}
+    ON CONFLICT(business_id, user_id) DO UPDATE SET
+      employment_status = CASE WHEN employee_employment_records.employment_status = 'terminated' THEN 'terminated'
+        WHEN employee_employment_records.employment_type = 'owner' OR excluded.employment_type = 'owner' THEN 'active' ELSE 'onboarding' END,
+      employment_type = CASE WHEN employee_employment_records.employment_type = 'owner' THEN 'owner' ELSE excluded.employment_type END,
+      onboarding_package_id = excluded.onboarding_package_id, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+    .bind(options.businessId, options.userId, options.ownerPacket ? 'active' : 'onboarding',
+      options.ownerPacket ? 'owner' : options.payrollClassification ?? 'employee', packageId, now, now, actor, ...guardValues));
+  return { packageId, statements };
+}
+
 async function createEmployeeOnboardingPackageForUser(
   db: D1,
   options: {
@@ -3847,196 +3918,13 @@ async function createEmployeeOnboardingPackageForUser(
     return { created: false, packageId: existingActive.id, status: existingActive.status };
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const packageId = crypto.randomUUID();
-  const payrollClassification = options.payrollClassification === 'contractor' ? 'contractor' : 'employee';
-  const previousPackage = await db
-    .prepare(
-      `
-      SELECT id, COALESCE(version, 1) AS version
-      FROM employee_onboarding_packages
-      WHERE business_id = ? AND user_id = ?
-      ORDER BY COALESCE(version, 1) DESC, updated_at DESC
-      LIMIT 1
-      `
-    )
-    .bind(options.businessId, options.userId)
-    .first<{ id: string; version: number }>();
-  const version = Math.max(1, Number(previousPackage?.version ?? 0) + 1);
-
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_onboarding_packages (
-        id,
-        business_id,
-        user_id,
-        status,
-        payroll_classification,
-        sent_at,
-        completed_at,
-        approved_at,
-        approved_by,
-        created_by,
-        updated_at,
-        manager_note,
-        submitted_at,
-        returned_at,
-        returned_by,
-        locked_at,
-        version,
-        supersedes_package_id
-      )
-      VALUES (?, ?, ?, 'sent', ?, ?, NULL, NULL, NULL, ?, ?, '', NULL, NULL, NULL, NULL, ?, ?)
-      `
-    )
-    .bind(
-      packageId,
-      options.businessId,
-      options.userId,
-      payrollClassification,
-      now,
-      options.createdBy ?? null,
-      now,
-      version,
-      previousPackage?.id ?? null
-    )
-    .run();
-
-  const templateItems = await loadEmployeeOnboardingTemplate(db, options.businessId);
-  const businessState = await loadBusinessRegisteredState(db, options.businessId);
-  const onboardingItems = composeEmployeeOnboardingPacket(templateItems, businessState);
-
-  for (const item of onboardingItems) {
-    const onboardingItemId = crypto.randomUUID();
-    await db
-      .prepare(
-        `
-        INSERT INTO employee_onboarding_items (
-          id,
-          package_id,
-          business_id,
-          user_id,
-          item_type,
-          form_key,
-          title,
-          description,
-          status,
-          file_url,
-          file_name,
-          form_payload,
-          source_file_url,
-          source_file_name,
-          signed_name,
-          manager_note,
-          sort_order,
-          created_at,
-          submitted_at,
-          reviewed_at,
-          reviewed_by
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', '', '', ?, ?, '', '', ?, ?, NULL, NULL, NULL)
-        `
-      )
-      .bind(
-        onboardingItemId,
-        packageId,
-        options.businessId,
-        options.userId,
-        item.item_type,
-        item.form_key,
-        item.title,
-        item.description,
-        item.source_file_url,
-        item.source_file_name,
-        item.sort_order,
-        now
-      )
-      .run();
-
-    await upsertComplianceDocumentForOnboardingItem(
-      db,
-      {
-        id: onboardingItemId,
-        business_id: options.businessId,
-        user_id: options.userId,
-        item_type: item.item_type,
-        form_key: item.form_key,
-        title: item.title,
-        status: 'pending',
-        file_url: '',
-        file_name: '',
-        signed_name: '',
-        submitted_at: null,
-        reviewed_at: null,
-        reviewed_by: null
-      },
-      options.createdBy ?? null,
-      now
-    );
-  }
-
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_employment_records (
-        business_id,
-        user_id,
-        employment_status,
-        employment_type,
-        onboarding_package_id,
-        created_at,
-        updated_at,
-        updated_by
-      )
-      VALUES (?, ?, 'onboarding', ?, ?, ?, ?, ?)
-      ON CONFLICT(business_id, user_id) DO UPDATE SET
-        employment_status = CASE
-          WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
-          WHEN employee_employment_records.employment_type = 'owner' THEN 'active'
-          ELSE 'onboarding'
-        END,
-        employment_type = CASE
-          WHEN employee_employment_records.employment_type = 'owner' THEN employee_employment_records.employment_type
-          ELSE excluded.employment_type
-        END,
-        onboarding_package_id = CASE
-          WHEN employee_employment_records.employment_type = 'owner' THEN employee_employment_records.onboarding_package_id
-          ELSE excluded.onboarding_package_id
-        END,
-        updated_at = excluded.updated_at,
-        updated_by = excluded.updated_by
-      `
-    )
-    .bind(
-      options.businessId,
-      options.userId,
-      payrollClassification,
-      packageId,
-      now,
-      now,
-      options.createdBy ?? null
-    )
-    .run();
-
-  if (normalizeBusinessRole(membership?.role) === 'owner' && options.allowOwnerPacket) {
-    await db
-      .prepare(
-        `
-        UPDATE employee_employment_records
-        SET employment_status = CASE WHEN employment_status = 'terminated' THEN employment_status ELSE 'active' END,
-          employment_type = 'owner',
-          onboarding_package_id = ?,
-          updated_at = ?,
-          updated_by = COALESCE(?, updated_by)
-        WHERE business_id = ? AND user_id = ?
-        `
-      )
-      .bind(packageId, now, options.createdBy ?? null, options.businessId, options.userId)
-      .run();
-  }
-
-  return { created: true, packageId, status: 'sent' as const };
+  const plan = await prepareEmployeeOnboardingPacket(db, {
+    businessId: options.businessId, userId: options.userId, createdBy: options.createdBy,
+    payrollClassification: options.payrollClassification,
+    ownerPacket: normalizeBusinessRole(membership?.role) === 'owner' && options.allowOwnerPacket
+  });
+  await db.batch(plan.statements);
+  return { created: true, packageId: plan.packageId, status: 'sent' as const };
 }
 
 export async function ensureEmployeeOnboardingRequirement(

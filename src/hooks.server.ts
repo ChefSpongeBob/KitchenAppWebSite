@@ -189,7 +189,8 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		pathname === '/api/billing/native-purchase';
 	const isBillingRecoveryRoute = isBillingRoute || isBillingRecoveryApiRoute;
 	const isWorkspaceSwitchRoute = pathname === '/workspace/switch';
-	const isAccessRecoveryRoute = isBillingRecoveryRoute || isWorkspaceSwitchRoute;
+	const isWorkspaceSelectionRoute = pathname === '/workspace' || isWorkspaceSwitchRoute;
+	const isAccessRecoveryRoute = isBillingRecoveryRoute || isWorkspaceSelectionRoute;
 
 	const isPrivateRoute = !isAuthRoute && !isPublicMarketingRoute && !isPublicApiRoute;
 	if (!isPublicApiRoute && !isTrustedStateChangingRequest(event.request, event.url)) {
@@ -446,6 +447,12 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			requestedBusinessId
 		);
 		if (!existingBusinessContext && !dev) {
+			if (isAuthRoute || isWorkspaceSelectionRoute) {
+				event.locals.userId = session.found_user_id;
+				event.locals.sessionId = session.id;
+				event.locals.userRole = 'user';
+				return resolveWithNoStore();
+			}
 			logOperationalEvent({
 				level: 'error',
 				event: 'session_business_missing',
@@ -464,7 +471,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			(await bootstrapBusinessForUser(db, session.found_user_id, session.user_role, null));
 		await ensureTenantSchema(db);
 
-		if (!isAuthRoute && !isPublicApiRoute && !isWorkspaceSwitchRoute && (isPrivateRoute || pathname === '/support')) {
+		if (!isAuthRoute && !isPublicApiRoute && !isWorkspaceSelectionRoute && (isPrivateRoute || pathname === '/support')) {
 			const conflict = await workspaceIntentFailure(db, event.request, event.url,
 				session.found_user_id, businessContext.businessId, requestedBusinessId);
 			if (conflict) return applySecurityHeaders(conflict);
@@ -507,7 +514,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			? await getBusinessTrialAccess(db, businessContext.businessId, now)
 			: null;
 		if (trialAccess && !trialAccess.allowApp) {
-			if (trialAccess.shouldPurge) {
+			if (trialAccess.shouldPurge && !isWorkspaceSelectionRoute) {
 				logOperationalEvent({
 					level: 'warn',
 					event: 'trial_expired_purge_started',
