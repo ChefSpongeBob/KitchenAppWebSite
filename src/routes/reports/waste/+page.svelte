@@ -12,6 +12,7 @@
   import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type WasteRow = {
+    id: string;
     product: string;
     amount: number | null;
     unit: string;
@@ -24,6 +25,8 @@
   };
 
   export let data: {
+    timeZone?: string;
+    hasMore?: boolean;
     startDate: string;
     endDate: string;
     rows: WasteRow[];
@@ -42,6 +45,7 @@
 
   function dateLabel(timestamp: number) {
     return new Date(timestamp * 1000).toLocaleString('en-US', {
+      timeZone: data.timeZone ?? 'UTC',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -54,7 +58,7 @@
     title: `${row.product} | ${dateLabel(row.created_at)}`,
     meta: `${row.amount ?? '-'} ${row.unit} | ${row.reason}`,
     detail: row.submitted_by_name,
-    href: `/reports/waste.csv?start=${row.created_date}&end=${row.created_date}&created_at=${row.created_at}`,
+    href: `/reports/waste.csv?start=${row.created_date}&end=${row.created_date}&entry_id=${encodeURIComponent(row.id)}`,
     icon: 'delete_sweep'
   }));
   $: metrics = [
@@ -63,8 +67,8 @@
     { label: 'Submitted By', value: new Set(data.rows.map((row) => row.submitted_by_name)).size }
   ] satisfies ReportMetric[];
   $: tableRows = data.rows.map(
-    (row, index): ReportTableRow => ({
-      id: `${row.created_at}-${index}`,
+    (row): ReportTableRow => ({
+      id: row.id,
       cells: {
         date: dateLabel(row.created_at),
         product: row.product,
@@ -83,6 +87,7 @@
   <ReportToolbar exportHref={csvHref} />
   <ReportDateFilters startDate={data.startDate} endDate={data.endDate} />
   <ReportSummaryStrip {metrics} />
-  <ReportDataTable columns={tableColumns} rows={tableRows} empty="No waste entries in this range." />
+  {#if data.hasMore}<p>Summary counts cover the preview. Narrow the date range to see more.</p>{/if}
+  <ReportDataTable hasMore={data.hasMore ?? false} columns={tableColumns} rows={tableRows} empty="No waste entries in this range." />
   <ReportExportList {entries} empty="No waste log exports yet." icon="delete_sweep" collapsed />
 </Layout>

@@ -19,6 +19,8 @@ const TENANT_TABLES = [
   'list_items',
   'checklist_sections',
   'checklist_items',
+  'checklist_completed_runs',
+  'checklist_completed_run_items',
   'item_attachments',
   'list_submission_batches',
   'list_submission_items',

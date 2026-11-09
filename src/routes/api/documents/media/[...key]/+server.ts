@@ -31,6 +31,7 @@ export const GET: RequestHandler = async ({ params, locals, request }) => {
   }
 
   const key = decodeMediaKey(params.key);
+  if (key.startsWith('temperature-reports/')) return new Response('Not found.', { status: 404 });
 
   if (!key || key.includes('..') || key.startsWith('/') || key.includes('\\')) {
     return new Response('Missing media key.', { status: 400 });

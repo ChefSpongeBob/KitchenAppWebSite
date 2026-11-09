@@ -1,4 +1,9 @@
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { reportRange, reportRows, reportRowLimit, reportHourAt, reportHourLabel, REPORT_EXPORT_LIMIT, type ReportOptions } from '#lib/server/reporting.ts';
+
+import { visitTemperatureArchives, type ArchivedTemperatureReading } from '#lib/server/temperatureArchive.ts';
+import { TEMPERATURE_ARCHIVE_SECONDS } from '#lib/temperatureTiming.ts';
+import { error } from '@sveltejs/kit';
 
 type DB = App.RuntimeEnv['DB'];
 
@@ -73,6 +78,7 @@ export type OnboardingReportRow = {
 };
 
 export type WasteReportRow = {
+  id: string;
   product: string;
   amount: number | null;
   unit: string;
@@ -84,26 +90,14 @@ export type WasteReportRow = {
   created_date: string;
 };
 
-function isoDate(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
-
-function clampRange(start: string | null, end: string | null, fallbackDays: number): ReportRange {
-  const today = new Date();
-  const endDate = end && /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : isoDate(today);
-  const startFallback = new Date(today);
-  startFallback.setDate(startFallback.getDate() - fallbackDays);
-  const startDate = start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? start : isoDate(startFallback);
-  return { startDate, endDate };
-}
-
 export async function loadScheduleRequestsReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null } = {}
+  params: ReportOptions = {}
 ) {
   await ensureTenantSchema(db, true);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+  const range = reportRange(params, 60);
+  const { startDate, endDate, timeZone, startTs, endTs } = range;
 
   const timeOff = await db
     .prepare(
@@ -131,7 +125,7 @@ export async function loadScheduleRequestsReport(
       WHERE r.business_id = ?
         AND r.start_date BETWEEN ? AND ?
       ORDER BY r.start_date DESC, r.updated_at DESC
-      LIMIT 500
+      LIMIT ${reportRowLimit(params)}
       `
     )
     .bind(businessId, startDate, endDate)
@@ -164,7 +158,7 @@ export async function loadScheduleRequestsReport(
       WHERE r.business_id = ?
         AND o.shift_date BETWEEN ? AND ?
       ORDER BY o.shift_date DESC, r.updated_at DESC
-      LIMIT 500
+      LIMIT ${reportRowLimit(params)}
       `
     )
     .bind(businessId, startDate, endDate)
@@ -202,30 +196,64 @@ export async function loadScheduleRequestsReport(
       WHERE o.business_id = ?
         AND s.shift_date BETWEEN ? AND ?
       ORDER BY s.shift_date DESC, o.updated_at DESC
-      LIMIT 500
+      LIMIT ${reportRowLimit(params)}
       `
     )
     .bind(businessId, startDate, endDate)
     .all<ScheduleRequestReportRow>();
 
+  const availability = await db.prepare(`
+    SELECT 'availability' AS request_type, r.availability_json,
+      COALESCE(u.display_name, u.email, 'Unknown') AS employee_name,
+      COALESCE(u.email, '') AS employee_email, r.status,
+      '' AS department, '' AS role_name, '' AS start_time, '' AS end_label, '' AS note,
+      r.manager_note, r.created_at, r.updated_at, r.resolved_at,
+      COALESCE(manager.display_name, manager.email, '') AS resolved_by_name
+    FROM user_schedule_availability_requests r
+    JOIN users u ON u.id = r.user_id
+    LEFT JOIN users manager ON manager.id = r.resolved_by_user_id
+    WHERE r.business_id = ? AND r.updated_at >= ? AND r.updated_at < ?
+    ORDER BY r.updated_at DESC, r.id ASC LIMIT ${reportRowLimit(params)}
+  `).bind(businessId, startTs, endTs).all<Omit<ScheduleRequestReportRow, 'request_date' | 'detail'> & { availability_json: string }>();
+  const availabilityRows = (availability.results ?? []).map(({ availability_json, ...row }) => ({
+    ...row, request_date: range.dateAt(row.updated_at), detail: availabilityDescription(availability_json)
+  }));
   const rows = [
     ...(timeOff.results ?? []),
     ...(openShiftRequests.results ?? []),
-    ...(shiftOffers.results ?? [])
+    ...(shiftOffers.results ?? []),
+    ...availabilityRows
   ]
-    .sort((a, b) => b.request_date.localeCompare(a.request_date) || b.updated_at - a.updated_at)
-    .slice(0, 1000);
+    .sort((a, b) => b.request_date.localeCompare(a.request_date) || b.updated_at - a.updated_at);
 
-  return { startDate, endDate, rows };
+  return { startDate, endDate, timeZone, ...reportRows(rows, params) };
+}
+
+function availabilityDescription(value: string) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  try {
+    const rows: unknown = JSON.parse(value);
+    if (!Array.isArray(rows) || rows.length !== 7) return 'Availability not recorded';
+    const seen = new Set<number>();
+    const lines = rows.map(row => {
+      if (!row || !Number.isInteger(row.weekday) || row.weekday < 0 || row.weekday > 6 || seen.has(row.weekday)) throw new Error('Invalid day');
+      seen.add(row.weekday);
+      const available = row.isAvailable === true || row.isAvailable === 1;
+      if (available && (![row.startTime, row.endTime].every(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)) || row.startTime >= row.endTime)) throw new Error('Invalid time');
+      return { day: row.weekday as number, text: `${days[row.weekday]}: ${available ? row.startTime + '-' + row.endTime : 'Unavailable'}` };
+    });
+    return lines.sort((a, b) => a.day - b.day).map(row => row.text).join('; ');
+  } catch { return 'Availability not recorded'; }
 }
 
 export async function loadTemperatureReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null } = {}
+  params: ReportOptions = {}
 ) {
   await ensureTenantSchema(db, true);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 14);
+  const range = reportRange(params, 14);
+  const { startDate, endDate, timeZone, startTs, endTs } = range;
 
   const readings = await db
     .prepare(
@@ -247,12 +275,12 @@ export async function loadTemperatureReport(
         ON sn.business_id = t.business_id
         AND sn.sensor_id = t.sensor_id
       WHERE t.business_id = ?
-        AND t.ts >= unixepoch(?) AND t.ts < unixepoch(?, '+1 day')
+        AND t.ts >= ? AND t.ts < ?
       ORDER BY t.ts DESC
-      LIMIT 1000
+      LIMIT ${reportRowLimit(params)}
       `
     )
-    .bind(businessId, startDate, endDate)
+    .bind(businessId, startTs, endTs)
     .all<TemperatureReportRow>();
 
   const alerts = await db
@@ -275,68 +303,108 @@ export async function loadTemperatureReport(
         ON sn.business_id = a.business_id
         AND sn.sensor_id = a.sensor_id
       WHERE a.business_id = ?
-        AND a.last_seen_at >= unixepoch(?) AND a.last_seen_at < unixepoch(?, '+1 day')
+        AND a.last_seen_at >= ? AND a.last_seen_at < ?
       ORDER BY a.last_seen_at DESC
-      LIMIT 500
+      LIMIT ${reportRowLimit(params)}
       `
     )
-    .bind(businessId, startDate, endDate)
+    .bind(businessId, startTs, endTs)
     .all<TemperatureReportRow>();
 
   const rows = [...(alerts.results ?? []), ...(readings.results ?? [])]
-    .sort((a, b) => b.event_time - a.event_time)
-    .slice(0, 1500);
+    .sort((a, b) => b.event_time - a.event_time);
 
-  return { startDate, endDate, rows };
+  return { startDate, endDate, timeZone, ...reportRows(rows.map(row => ({ ...row,
+    event_date: range.dateAt(row.event_time)
+  })), params) };
 }
 
-export async function loadTemperatureHourlyAverageReport(
+type TemperatureReportOptions = ReportOptions & { archiveBucket?: App.RuntimeEnv['DOC_MEDIA'] };
+
+async function visitTemperatureReportReadings(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null } = {}
+  params: TemperatureReportOptions,
+  visit: (row: ArchivedTemperatureReading) => void
 ) {
   await ensureTenantSchema(db, true);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 14);
+  const range = reportRange(params, 14);
+  const { endTs } = range;
+  const startTs = Math.max(range.startTs, Math.floor(Date.now() / 1000) - TEMPERATURE_ARCHIVE_SECONDS);
+  const result = await db.prepare(`
+    SELECT t.id, t.sensor_id, t.temperature, t.humidity_pct, t.ts,
+      COALESCE(sn.display_name, 'Sensor ' || t.sensor_id) AS sensor_name
+    FROM temps t LEFT JOIN temperature_sensor_nodes sn
+      ON sn.business_id = t.business_id AND sn.sensor_id = t.sensor_id
+    WHERE t.business_id = ? AND t.ts >= ? AND t.ts < ?
+    ORDER BY t.ts DESC, t.id DESC LIMIT 10001
+  `).bind(businessId, startTs, endTs).all<ArchivedTemperatureReading>();
+  const live = reportRows(result.results ?? [], { ...params, export: true }).rows;
+  const liveIds = new Set(live.map(row => row.id));
+  try {
+    if (params.archiveBucket) await visitTemperatureArchives(params.archiveBucket, businessId, startTs, endTs,
+      row => { if (!liveIds.has(row.id)) visit(row); });
+  } catch (failure) {
+    if (failure && typeof failure === 'object' && 'status' in failure && failure.status === 413) throw failure;
+    error(503, 'Temperature reports are temporarily unavailable. Please retry.');
+  }
+  for (const row of live) visit(row);
+  return range;
+}
 
-  const rows = await db
-    .prepare(
-      `
-      SELECT
-        date(t.ts, 'unixepoch') AS event_date,
-        strftime('%H:00', t.ts, 'unixepoch') AS event_hour,
-        t.sensor_id,
-        COALESCE(sn.display_name, 'Sensor ' || t.sensor_id) AS sensor_name,
-        ROUND(AVG(t.temperature), 2) AS avg_temperature,
-        ROUND(MIN(t.temperature), 2) AS min_temperature,
-        ROUND(MAX(t.temperature), 2) AS max_temperature,
-        ROUND(AVG(t.humidity_pct), 2) AS avg_humidity_pct,
-        ROUND(MIN(t.humidity_pct), 2) AS min_humidity_pct,
-        ROUND(MAX(t.humidity_pct), 2) AS max_humidity_pct,
-        COUNT(*) AS reading_count
-      FROM temps t
-      LEFT JOIN temperature_sensor_nodes sn
-        ON sn.business_id = t.business_id
-        AND sn.sensor_id = t.sensor_id
-      WHERE t.business_id = ?
-        AND t.ts >= unixepoch(?) AND t.ts < unixepoch(?, '+1 day')
-      GROUP BY event_date, event_hour, t.sensor_id, sensor_name
-      ORDER BY event_date DESC, event_hour DESC, sensor_name ASC
-      LIMIT 3000
-      `
-    )
-    .bind(businessId, startDate, endDate)
-    .all<TemperatureHourlyAverageReportRow>();
+export async function loadTemperatureReadingsReport(db: DB, businessId: string, params: TemperatureReportOptions = {}) {
+  const rows: ArchivedTemperatureReading[] = [];
+  const range = await visitTemperatureReportReadings(db, businessId, params, row => {
+    if (rows.length >= REPORT_EXPORT_LIMIT) error(413, 'This report is too large. Choose a shorter date range and download again.');
+    rows.push(row);
+  });
+  rows.sort((a, b) => b.ts - a.ts || a.sensor_id - b.sensor_id || b.id - a.id);
+  return { startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone, ...reportRows(rows, params) };
+}
 
-  return { startDate, endDate, rows: rows.results ?? [] };
+export async function loadTemperatureHourlyAverageReport(db: DB, businessId: string, params: TemperatureReportOptions = {}) {
+  const range = reportRange(params, 14);
+  const { startDate, endDate, timeZone } = range;
+  const hourAt = reportHourAt(range);
+  type Bucket = { hour_start: number; sensor_id: number; sensor_name: string; sum: number; count: number;
+    min: number; max: number; humiditySum: number; humidityCount: number; humidityMin: number; humidityMax: number };
+  const buckets = new Map<string, Bucket>();
+  const add = (row: ArchivedTemperatureReading) => {
+    const hour = hourAt(row.ts);
+    const key = row.sensor_id + ':' + hour;
+    const bucket = buckets.get(key) ?? { hour_start: hour, sensor_id: row.sensor_id, sensor_name: row.sensor_name,
+      sum: 0, count: 0, min: Infinity, max: -Infinity, humiditySum: 0, humidityCount: 0, humidityMin: Infinity, humidityMax: -Infinity };
+    bucket.sum += row.temperature; bucket.count++; bucket.min = Math.min(bucket.min, row.temperature); bucket.max = Math.max(bucket.max, row.temperature);
+    if (row.humidity_pct !== null) {
+      bucket.humiditySum += row.humidity_pct; bucket.humidityCount++;
+      bucket.humidityMin = Math.min(bucket.humidityMin, row.humidity_pct); bucket.humidityMax = Math.max(bucket.humidityMax, row.humidity_pct);
+    }
+    buckets.set(key, bucket);
+    if (buckets.size > 10_000) error(413, 'This report is too large. Choose a shorter date range and download again.');
+  };
+  await visitTemperatureReportReadings(db, businessId, params, add);
+  const labels = new Map<number, { event_date: string; event_hour: string }>();
+  const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const rows = [...buckets.values()].sort((a,b) => b.hour_start - a.hour_start || a.sensor_id - b.sensor_id).map(bucket => {
+    let label = labels.get(bucket.hour_start);
+    if (!label) { label = { event_date: range.dateAt(bucket.hour_start), event_hour: reportHourLabel(bucket.hour_start, timeZone) }; labels.set(bucket.hour_start, label); }
+    return { ...label, hour_start: bucket.hour_start, sensor_id: bucket.sensor_id, sensor_name: bucket.sensor_name,
+      avg_temperature: round(bucket.sum / bucket.count), min_temperature: round(bucket.min), max_temperature: round(bucket.max),
+      avg_humidity_pct: bucket.humidityCount ? round(bucket.humiditySum / bucket.humidityCount) : null,
+      min_humidity_pct: bucket.humidityCount ? round(bucket.humidityMin) : null,
+      max_humidity_pct: bucket.humidityCount ? round(bucket.humidityMax) : null, reading_count: bucket.count };
+  });
+  return { startDate, endDate, timeZone, archivesAvailable: Boolean(params.archiveBucket), ...reportRows(rows, params, 3000) };
 }
 
 export async function loadOnboardingReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null } = {}
+  params: ReportOptions = {}
 ) {
   await ensureTenantSchema(db, true);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+  const range = reportRange(params, 60);
+  const { startDate, endDate, timeZone, startTs, endTs } = range;
 
   const rows = await db
     .prepare(
@@ -365,25 +433,26 @@ export async function loadOnboardingReport(
         ON i.package_id = p.id
         AND i.business_id = p.business_id
       WHERE p.business_id = ?
-        AND date(p.updated_at, 'unixepoch') BETWEEN ? AND ?
+        AND p.updated_at >= ? AND p.updated_at < ?
       GROUP BY p.id, u.display_name, u.email, approved.display_name, approved.email, created.display_name, created.email
       ORDER BY p.updated_at DESC
-      LIMIT 1000
+      LIMIT ${reportRowLimit(params)}
       `
     )
-    .bind(businessId, startDate, endDate)
+    .bind(businessId, startTs, endTs)
     .all<OnboardingReportRow>();
 
-  return { startDate, endDate, rows: rows.results ?? [] };
+  return { startDate, endDate, timeZone, ...reportRows(rows.results ?? [], params) };
 }
 
 export async function loadWasteReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null; createdAt?: string | number | null } = {}
+  params: ReportOptions & { createdAt?: string | number | null; entryId?: string | null } = {}
 ) {
   await ensureTenantSchema(db, true);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+  const range = reportRange(params, 60);
+  const { startDate, endDate, timeZone, startTs, endTs } = range;
   const createdAt = Number(params.createdAt);
   const hasCreatedAt = Number.isFinite(createdAt) && createdAt > 0;
 
@@ -391,6 +460,7 @@ export async function loadWasteReport(
     .prepare(
       `
       SELECT
+        w.id,
         w.product,
         w.amount,
         w.unit,
@@ -403,14 +473,15 @@ export async function loadWasteReport(
       FROM waste_logs w
       LEFT JOIN users u ON u.id = w.submitted_by_user_id
       WHERE w.business_id = ?
-        AND date(w.created_at, 'unixepoch') BETWEEN ? AND ?
+        AND w.created_at >= ? AND w.created_at < ?
         ${hasCreatedAt ? 'AND w.created_at = ?' : ''}
-      ORDER BY w.created_at DESC
-      LIMIT 1000
+        ${params.entryId ? 'AND w.id = ?' : ''}
+      ORDER BY w.created_at DESC, w.id ASC
+      LIMIT ${reportRowLimit(params)}
       `
     )
-    .bind(businessId, startDate, endDate, ...(hasCreatedAt ? [createdAt] : []))
+    .bind(businessId, startTs, endTs, ...(hasCreatedAt ? [createdAt] : []), ...(params.entryId ? [params.entryId] : []))
     .all<WasteReportRow>();
 
-  return { startDate, endDate, rows: rows.results ?? [] };
+  return { startDate, endDate, timeZone, ...reportRows((rows.results ?? []).map(row => ({ ...row, created_date: range.dateAt(row.created_at) })), params) };
 }

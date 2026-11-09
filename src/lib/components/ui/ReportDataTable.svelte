@@ -16,6 +16,7 @@
   export let rows: ReportTableRow[] = [];
   export let empty = 'No report activity in this range.';
   export let limit = 100;
+  export let hasMore = false;
 
   $: visibleRows = rows.slice(0, limit);
 </script>
@@ -42,8 +43,8 @@
         </tbody>
       </table>
     </div>
-    {#if rows.length > visibleRows.length}
-      <p class="limit-note">Showing {visibleRows.length} of {rows.length} rows. Full results are available in CSV.</p>
+    {#if rows.length > visibleRows.length || hasMore}
+      <p class="limit-note">Showing {visibleRows.length} of {hasMore ? 'at least ' : ''}{rows.length} rows. CSV downloads use the full filter, not this preview.</p>
     {/if}
   {:else}
     <p class="empty-state">{empty}</p>

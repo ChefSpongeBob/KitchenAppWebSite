@@ -9,6 +9,7 @@
   import ReportExportList, { type ReportExportEntry } from '#lib/components/ui/ReportExportList.svelte';
   import ReportSummaryStrip, { type ReportMetric } from '#lib/components/ui/ReportSummaryStrip.svelte';
   import ReportToolbar from '#lib/components/ui/ReportToolbar.svelte';
+  import { reportMonthBounds as monthBounds } from '#lib/reportDates.ts';
   import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type RequestRow = {
@@ -29,6 +30,8 @@
   };
 
   export let data: {
+    timeZone?: string;
+    hasMore?: boolean;
     startDate: string;
     endDate: string;
     rows: RequestRow[];
@@ -51,13 +54,6 @@
     return dateIso.slice(0, 7);
   }
 
-  function monthBounds(month: string) {
-    const start = `${month}-01`;
-    const endDate = new Date(`${start}T00:00:00`);
-    endDate.setMonth(endDate.getMonth() + 1);
-    endDate.setDate(0);
-    return { start, end: endDate.toISOString().slice(0, 10) };
-  }
 
   function monthLabel(month: string) {
     return new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', {
@@ -125,6 +121,7 @@
   <ReportToolbar exportHref={csvHref} />
   <ReportDateFilters startDate={data.startDate} endDate={data.endDate} />
   <ReportSummaryStrip {metrics} />
-  <ReportDataTable columns={tableColumns} rows={tableRows} empty="No schedule requests in this range." />
-  <ReportExportList {entries} empty="No schedule request exports yet." icon="swap_horiz" collapsed />
+  {#if data.hasMore}<p>Summary counts cover the preview. Narrow the date range to see more.</p>{/if}
+  <ReportDataTable hasMore={data.hasMore ?? false} columns={tableColumns} rows={tableRows} empty="No schedule requests in this range." />
+  <ReportExportList {entries} partial={data.hasMore ?? false} empty="No schedule request exports yet." icon="swap_horiz" collapsed />
 </Layout>

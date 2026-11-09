@@ -43,9 +43,9 @@ for (const component of ['ReportToolbar', 'ReportDateFilters', 'ReportSummaryStr
   );
 }
 
-expect('src/lib/server/history.ts', 'CSV escaping prevents spreadsheet formula injection', (source) =>
+expect('src/lib/server/csv.ts', 'CSV escaping prevents spreadsheet formula injection', (source) =>
   source.includes("const raw = String(value ?? '')") &&
-  source.includes("/^[=+\\-@\\t\\r]/") &&
+  source.includes("\\uFF1D") && source.includes("\\u0000-\\u001f") &&
   source.includes("`'${raw}`")
 );
 
@@ -59,8 +59,8 @@ expect('src/lib/server/reports.ts', 'report helpers keep exports tenant scoped a
     'WHERE t.business_id = ?',
     'WHERE p.business_id = ?',
     'WHERE w.business_id = ?',
-    'LIMIT 1000',
-    'LIMIT 500'
+    'reportRowLimit(params)',
+    'reportRows(rows, params)'
   ].every((token) => source.includes(token))
 );
 

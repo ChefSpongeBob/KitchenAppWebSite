@@ -140,6 +140,8 @@ let authenticated = true;
 let monitoringEnabled = true;
 const api = loadSource('src/routes/api/temps/+server.ts', {
   '@sveltejs/kit': { json: (value, options) => Response.json(value, options) },
+  'cloudflare:workers': { waitUntil() { throw Error('No request context in this isolated test.'); } },
+  '#lib/temperatureTiming.ts': loadSource('src/lib/temperatureTiming.ts', {}),
   '#lib/server/retention.ts': {},
   '#lib/server/iotIngest.ts': { authenticateIoTDevice: async () => authenticated ? { id: 'gateway-a', businessId: 'business-a' } : null },
   '#lib/server/tenant.ts': { ensureTenantSchema: async () => {} },

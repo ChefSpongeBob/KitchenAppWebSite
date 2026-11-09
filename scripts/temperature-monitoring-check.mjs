@@ -283,7 +283,7 @@ expect('src/routes/admin/+page.server.ts', 'manager temperature exceptions use c
 expect('src/routes/app/+page.svelte', 'dashboard suppresses old temperatures after a sensor goes offline', (source) =>
   source.includes("node.connectionStatus === 'online'") &&
   source.includes('node.temperature !== null') &&
-  source.includes('<span class="offline-reading">Offline</span>')
+  source.includes('class="offline-reading temperature-history-trigger"') && source.includes('>Offline</button>')
 );
 
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway hosts protected Wi-Fi setup for desktop and phone browsers', (source) =>
@@ -389,3 +389,5 @@ if (failed.length) process.exit(1);
 await import('./gateway-wifi-behavior-check.mjs');
 await import('./temperature-ingest-behavior-check.mjs');
 await import('./temperature-runtime-check.mjs');
+await import('./temperature-history-behavior-check.mjs');
+await import('./temperature-history-runtime-check.mjs');

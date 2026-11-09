@@ -1,4 +1,6 @@
 import { cleanupPlatformDiagnostics } from '../../src/lib/server/platformDiagnostics.ts';
+import { cleanupChecklistHistory } from '../../src/lib/server/checklistHistory.ts';
+import { cleanupTemperatureArchives } from '../../src/lib/server/temperatureArchive.ts';
 
 function processorUrl(baseUrl) {
   return `${String(baseUrl || 'https://criminiops.com').replace(/\/+$/, '')}/api/internal/operational-events/process`;
@@ -106,6 +108,10 @@ export default {
       jobs.push(dispatchTemperatureAlerts(env));
     }
     if (scheduledMinute % 60 === 0 && env.DB) {
+      if (env.DOC_MEDIA) jobs.push(cleanupTemperatureArchives(env.DOC_MEDIA)
+        .catch(() => console.warn('Temperature archive cleanup unavailable.')));
+      jobs.push(cleanupChecklistHistory(env.DB)
+        .catch(() => console.warn('Checklist history cleanup unavailable.')));
       jobs.push(cleanupPlatformDiagnostics(env.DB).then(summary => console.log('Diagnostic retention cleanup complete.', summary))
         .catch(() => console.warn('Diagnostic retention cleanup unavailable.')));
     }

@@ -26,6 +26,7 @@ export function createTestD1(source) {
       sqlite.exec(readFileSync('migrations/0113_staff_diagnostics_dashboard.sql', 'utf8'));
       sqlite.exec(readFileSync('migrations/0114_staff_operations_support.sql', 'utf8'));
       sqlite.exec(readFileSync('migrations/0115_business_time_zone.sql', 'utf8'));
+      sqlite.exec(readFileSync('migrations/0116_checklist_completed_runs.sql', 'utf8'));
       sqlite.exec('COMMIT');
     } catch (error) { sqlite.exec('ROLLBACK'); throw error; }
   }
@@ -69,7 +70,8 @@ export function createTestD1(source) {
 
 export function loadServerModules(overrides = {}) {
   const cache = new Map();
-  const common = { '$app/env': { dev: false, building: false, browser: false }, '@sveltejs/kit': kit, ...overrides };
+  const common = { '$app/env': { dev: false, building: false, browser: false }, '@sveltejs/kit': kit,
+    'cloudflare:workers': { waitUntil() { throw new Error('No request execution context in this isolated Node test.'); } }, ...overrides };
   function load(file) {
     const path = resolve(file);
     if (cache.has(path)) return cache.get(path);

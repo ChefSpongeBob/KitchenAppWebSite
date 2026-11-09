@@ -1,5 +1,9 @@
 import { dev } from '$app/env';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
+import { getBusinessDate } from '#lib/timeZones.ts';
+import { addReportDays } from '#lib/reportDates.ts';
+import { completedChecklistRunStatements, CHECKLIST_HISTORY_SECONDS } from '#lib/server/checklistHistory.ts';
+import { reportRange, reportRows, reportRowLimit, type ReportOptions } from '#lib/server/reporting.ts';
 
 type DB = App.RuntimeEnv['DB'];
 type ListDomain = 'preplists' | 'inventory' | 'orders';
@@ -143,7 +147,8 @@ export async function recordListSubmission(
   const rows = await db
     .prepare(
       `
-      SELECT id, content, COALESCE(details, '') AS details, COALESCE(par_count, 0) AS par_count, COALESCE(is_checked, 0) AS is_checked
+      SELECT id, content, COALESCE(details, '') AS details, COALESCE(par_count, 0) AS par_count, COALESCE(is_checked, 0) AS is_checked,
+        completed_at, (SELECT COALESCE(display_name, email, 'Unknown') FROM users WHERE id = list_items.completed_by) AS completed_by_name
       FROM list_items
       WHERE business_id = ?
         AND section_id = ?
@@ -158,6 +163,8 @@ export async function recordListSubmission(
       details: string | null;
       par_count: number | null;
       is_checked: number | null;
+      completed_by_name: string | null;
+      completed_at: number | null;
     }>();
 
   if (!rows.results?.length) return false;
@@ -167,20 +174,20 @@ export async function recordListSubmission(
     .prepare(
       `
       INSERT INTO list_submission_batches (
-        id, business_id, domain, section_id, section_title_snapshot, submitted_by, submitted_at, business_day
+        id, business_id, domain, section_id, section_title_snapshot, submitted_by, submitted_at, business_day, submitted_by_name_snapshot
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(display_name, email, 'Unknown') FROM users WHERE id = ?))
       `
     )
-    .bind(batchId, businessId, domain, sectionId, section.title, submittedBy ?? null, now, businessDayFromUnix(now)),
+    .bind(batchId, businessId, domain, sectionId, section.title, submittedBy ?? null, now, businessDayFromUnix(now), submittedBy ?? null),
     ...rows.results.map((row) => db
       .prepare(
         `
         INSERT INTO list_submission_items (
           id, batch_id, business_id, item_id, item_name_snapshot, details_snapshot,
-          submitted_value, par_count_snapshot, is_checked_snapshot
+          submitted_value, par_count_snapshot, is_checked_snapshot, completed_by_name_snapshot, completed_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       )
       .bind(
@@ -192,7 +199,9 @@ export async function recordListSubmission(
         row.details ?? '',
         valuesByItemId.get(row.id) ?? '',
         row.par_count ?? 0,
-        row.is_checked ?? 0
+        row.is_checked ?? 0,
+        row.is_checked ? row.completed_by_name ?? 'Not recorded' : '',
+        row.is_checked ? row.completed_at : null
       ))];
   await db.batch(statements);
   return true;
@@ -215,8 +224,10 @@ export async function setListItemCompletion(
   // changes() binds the history row to this transition inside the same D1 transaction.
   const results = await db.batch([
     db.prepare(`UPDATE ${table} SET is_checked = ?, updated_at = ?
+      , completed_by = ?, completed_at = ?
       WHERE id = ? AND section_id = ? AND business_id = ? AND COALESCE(is_checked, 0) <> ?`)
-      .bind(isChecked, now, itemId, sectionId, businessId, isChecked),
+      .bind(isChecked, now, isChecked ? actorUserId ?? null : null, isChecked ? now : null,
+        itemId, sectionId, businessId, isChecked),
     db
     .prepare(
       `
@@ -240,7 +251,8 @@ export async function setListItemCompletion(
       sectionId,
       businessId,
       isChecked
-    )
+    ),
+    ...(domain === 'checklists' && isChecked === 1 ? completedChecklistRunStatements(db, businessId, sectionId, actorUserId, now) : [])
   ]);
   if (results[0].meta.changes) return { changed: true };
   const item = await db.prepare(`SELECT id FROM ${table} WHERE id = ? AND section_id = ? AND business_id = ?`)
@@ -338,149 +350,89 @@ export async function recordSchedulePublishSnapshot(
   ]);
 }
 
-function clampRange(start: string | null, end: string | null, fallbackDays: number) {
-  const today = new Date();
-  const endDate = end && /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : today.toISOString().slice(0, 10);
-  const startFallback = new Date(today);
-  startFallback.setDate(startFallback.getDate() - fallbackDays);
-  const startDate = start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? start : startFallback.toISOString().slice(0, 10);
-  return { startDate, endDate };
-}
-
 export async function loadListHistoryReport(
   db: DB,
   businessId: string,
   domain: ActivityDomain,
-  params: { start?: string | null; end?: string | null; sectionId?: string | null; submittedAt?: string | number | null } = {}
+  params: ReportOptions & { sectionId?: string | null; submittedAt?: string | number | null; batchId?: string | null } = {}
 ) {
   await ensureHistorySchema(db);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 14);
+  const { startDate, endDate, timeZone, startTs, endTs, dateAt } = reportRange(params, 14);
   const submittedAt = Number(params.submittedAt);
   const hasSubmittedAt = Number.isFinite(submittedAt) && submittedAt > 0;
   if (domain === 'checklists') {
-    const sectionClause = params.sectionId ? `AND a.section_id = ?` : '';
-    const submittedClause = hasSubmittedAt ? `AND a.occurred_at = ?` : '';
-    const binds = [
-      businessId,
-      startDate,
-      endDate,
-      ...(params.sectionId ? [params.sectionId] : []),
-      ...(hasSubmittedAt ? [submittedAt] : [])
-    ];
-
-    const rows = await db
-      .prepare(
-        `
-        SELECT
-          date(a.occurred_at, 'unixepoch') AS business_day,
-          a.occurred_at AS submitted_at,
-          COALESCE(s.title, 'Checklist') AS section_title_snapshot,
-          COALESCE(u.display_name, u.email, 'Unknown') AS submitted_by_name,
-          a.item_name_snapshot,
-          '' AS details_snapshot,
-          CASE WHEN a.event_type = 'completed' THEN 'Complete' ELSE 'Reopened' END AS submitted_value,
-          0 AS par_count_snapshot,
-          CASE WHEN a.event_type = 'completed' THEN 1 ELSE 0 END AS is_checked_snapshot,
-          CASE WHEN a.event_type = 'completed' THEN COALESCE(u.display_name, u.email, 'Unknown') ELSE NULL END AS completed_by_name,
-          CASE WHEN a.event_type = 'completed' THEN a.occurred_at ELSE NULL END AS completed_at,
-          a.event_type
-        FROM list_item_activity_events a
-        LEFT JOIN checklist_sections s
-          ON s.id = a.section_id
-          AND s.business_id = a.business_id
-        LEFT JOIN users u ON u.id = a.actor_user_id
-        WHERE a.business_id = ?
-          AND a.domain = 'checklists'
-          AND date(a.occurred_at, 'unixepoch') BETWEEN ? AND ?
-          ${sectionClause}
-          ${submittedClause}
-        ORDER BY a.occurred_at DESC, section_title_snapshot ASC, a.item_name_snapshot ASC
-        LIMIT 1000
-        `
-      )
-      .bind(...binds)
-      .all<{
-        business_day: string;
-        submitted_at: number;
-        section_title_snapshot: string;
-        submitted_by_name: string;
-        item_name_snapshot: string;
-        details_snapshot: string | null;
-        submitted_value: string;
-        par_count_snapshot: number;
-        is_checked_snapshot: number;
-        completed_by_name: string | null;
-        completed_at: number | null;
-        event_type: string;
+    const rows = await db.prepare(`
+      SELECT r.id AS batch_id, r.section_id, r.submitted_at,
+        r.section_title_snapshot, r.submitted_by_name_snapshot AS submitted_by_name,
+        i.item_name_snapshot, '' AS details_snapshot, 'Complete' AS submitted_value,
+        0 AS par_count_snapshot, 1 AS is_checked_snapshot,
+        i.completed_by_name_snapshot AS completed_by_name, i.completed_at, 'completed' AS event_type
+      FROM checklist_completed_runs r JOIN checklist_completed_run_items i ON i.run_id = r.id AND i.business_id = r.business_id
+      WHERE r.business_id = ? AND r.submitted_at >= ? AND r.submitted_at < ? AND r.submitted_at >= ?
+        ${params.sectionId ? 'AND r.section_id = ?' : ''}
+        ${params.batchId ? 'AND r.id = ?' : ''}
+      ORDER BY r.submitted_at DESC, r.id ASC, i.item_id ASC
+      LIMIT ${reportRowLimit(params)}
+    `).bind(businessId, startTs, endTs, Math.floor(Date.now() / 1000) - CHECKLIST_HISTORY_SECONDS,
+      ...(params.sectionId ? [params.sectionId] : []), ...(params.batchId ? [params.batchId] : [])).all<{
+        batch_id: string; section_id: string; submitted_at: number; section_title_snapshot: string;
+        submitted_by_name: string; item_name_snapshot: string; details_snapshot: string;
+        submitted_value: string; par_count_snapshot: number; is_checked_snapshot: number;
+        completed_by_name: string | null; completed_at: number | null; event_type: string;
       }>();
-
-    return { startDate, endDate, rows: rows.results ?? [] };
+    return { startDate, endDate, timeZone, recentStart: addReportDays(getBusinessDate(timeZone), -6), ...reportRows((rows.results ?? []).map(row => ({ ...row,
+      business_day: dateAt(row.submitted_at)
+    })), params) };
   }
 
   const sectionClause = params.sectionId ? `AND b.section_id = ?` : '';
   const submittedClause = hasSubmittedAt ? `AND b.submitted_at = ?` : '';
+  const batchClause = params.batchId ? 'AND b.id = ?' : '';
   const binds = [
     businessId,
     domain,
-    startDate,
-    endDate,
+    startTs,
+    endTs,
     ...(params.sectionId ? [params.sectionId] : []),
-    ...(hasSubmittedAt ? [submittedAt] : [])
+    ...(hasSubmittedAt ? [submittedAt] : []),
+    ...(params.batchId ? [params.batchId] : [])
   ];
 
   const rows = await db
     .prepare(
       `
       SELECT
+        b.id AS batch_id,
+        b.section_id,
         b.business_day,
         b.submitted_at,
         b.section_title_snapshot,
-        COALESCE(u.display_name, u.email, 'Unknown') AS submitted_by_name,
+        COALESCE(b.submitted_by_name_snapshot, u.display_name, u.email, 'Unknown') AS submitted_by_name,
         i.item_name_snapshot,
         i.details_snapshot,
         i.submitted_value,
         i.par_count_snapshot,
         i.is_checked_snapshot,
-        (
-          SELECT COALESCE(au.display_name, au.email, 'Unknown')
-          FROM list_item_activity_events a
-          LEFT JOIN users au ON au.id = a.actor_user_id
-          WHERE a.business_id = b.business_id
-            AND a.domain = b.domain
-            AND a.section_id = b.section_id
-            AND a.item_id = i.item_id
-            AND a.event_type = 'completed'
-            AND a.occurred_at <= b.submitted_at
-          ORDER BY a.occurred_at DESC
-          LIMIT 1
-        ) AS completed_by_name,
-        (
-          SELECT a.occurred_at
-          FROM list_item_activity_events a
-          WHERE a.business_id = b.business_id
-            AND a.domain = b.domain
-            AND a.section_id = b.section_id
-            AND a.item_id = i.item_id
-            AND a.event_type = 'completed'
-            AND a.occurred_at <= b.submitted_at
-          ORDER BY a.occurred_at DESC
-          LIMIT 1
-        ) AS completed_at,
+        CASE WHEN i.is_checked_snapshot = 1 THEN COALESCE(i.completed_by_name_snapshot, 'Not recorded') ELSE '' END AS completed_by_name,
+        i.completed_at,
         'submitted' AS event_type
       FROM list_submission_items i
       JOIN list_submission_batches b ON b.id = i.batch_id AND b.business_id = i.business_id
       LEFT JOIN users u ON u.id = b.submitted_by
       WHERE b.business_id = ?
         AND b.domain = ?
-        AND b.business_day BETWEEN ? AND ?
+        AND b.submitted_at >= ? AND b.submitted_at < ?
         ${sectionClause}
         ${submittedClause}
-      ORDER BY b.business_day DESC, b.submitted_at DESC, b.section_title_snapshot ASC, i.item_name_snapshot ASC
-      LIMIT 1000
+        ${batchClause}
+      ORDER BY b.submitted_at DESC, b.id ASC, i.id ASC
+      LIMIT ${reportRowLimit(params)}
       `
     )
     .bind(...binds)
     .all<{
+      batch_id: string;
+      section_id: string;
       business_day: string;
       submitted_at: number;
       section_title_snapshot: string;
@@ -495,22 +447,25 @@ export async function loadListHistoryReport(
       event_type: string;
     }>();
 
-  return { startDate, endDate, rows: rows.results ?? [] };
+  return { startDate, endDate, timeZone, ...reportRows((rows.results ?? []).map(row => ({ ...row,
+    business_day: dateAt(row.submitted_at)
+  })), params) };
 }
 
 export async function loadScheduleHistoryReport(
   db: DB,
   businessId: string,
-  params: { start?: string | null; end?: string | null; version?: string | number | null } = {}
+  params: ReportOptions & { version?: string | number | null; publishId?: string | null } = {}
 ) {
   await ensureHistorySchema(db);
-  const { startDate, endDate } = clampRange(params.start ?? null, params.end ?? null, 60);
+  const { startDate, endDate, timeZone, startTs, endTs } = reportRange(params, 60);
   const versionNumber = Number(params.version);
   const hasVersionFilter = Number.isFinite(versionNumber) && versionNumber > 0;
   const rows = await db
     .prepare(
       `
       SELECT
+        p.id AS publish_id,
         p.week_start,
         p.version_number,
         p.published_at,
@@ -530,12 +485,14 @@ export async function loadScheduleHistoryReport(
       WHERE p.business_id = ?
         AND p.week_start BETWEEN ? AND ?
         ${hasVersionFilter ? 'AND p.version_number = ?' : ''}
-      ORDER BY p.week_start DESC, p.version_number DESC, s.shift_date ASC, s.start_time ASC
-      LIMIT 1500
+        ${params.publishId ? 'AND p.id = ?' : ''}
+      ORDER BY p.week_start DESC, p.version_number DESC, s.shift_date ASC, s.start_time ASC, s.id ASC
+      LIMIT ${reportRowLimit(params, 1500)}
       `
     )
-    .bind(businessId, startDate, endDate, ...(hasVersionFilter ? [versionNumber] : []))
+    .bind(businessId, startDate, endDate, ...(hasVersionFilter ? [versionNumber] : []), ...(params.publishId ? [params.publishId] : []))
     .all<{
+      publish_id: string;
       week_start: string;
       version_number: number;
       published_at: number;
@@ -551,11 +508,7 @@ export async function loadScheduleHistoryReport(
       notes: string | null;
     }>();
 
-  return { startDate, endDate, rows: rows.results ?? [] };
+  return { startDate, endDate, timeZone, ...reportRows(rows.results ?? [], params, 1500) };
 }
 
-export function csvEscape(value: unknown) {
-  const raw = String(value ?? '');
-  const text = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
+export { csvEscape } from '#lib/server/csv.ts';

@@ -65,9 +65,13 @@ const REQUIRED_CORE_TABLES = [
 	'temperature_sensor_settings',
 	'temperature_alert_events',
 	'waste_logs'
+  ,'checklist_completed_runs', 'checklist_completed_run_items'
 ];
 
 const REQUIRED_CORE_INDEXES = [
+  'idx_checklist_runs_business_submitted', 'idx_checklist_runs_expiry', 'idx_checklist_activity_expiry',
+  'idx_list_submission_batches_business_time',
+  'idx_schedule_availability_requests_business_updated',
   'idx_events_platform_staff_recent',
   'idx_support_recent',
   'idx_support_active_recent',
@@ -165,6 +169,13 @@ const REQUIRED_CORE_INDEXES = [
 ];
 
 const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
+  checklist_sections: ['last_completed_run_id'],
+  checklist_items: ['completed_by', 'completed_at'],
+  list_items: ['completed_by', 'completed_at'],
+  list_submission_batches: ['submitted_by_name_snapshot'],
+  list_submission_items: ['completed_by_name_snapshot', 'completed_at'],
+  checklist_completed_runs: ['id', 'business_id', 'section_id', 'section_title_snapshot', 'submitted_by_name_snapshot', 'submitted_at'],
+  checklist_completed_run_items: ['run_id', 'business_id', 'item_id', 'item_name_snapshot', 'completed_by_name_snapshot', 'completed_at'],
   businesses: ['time_zone'],
   platform_support_requests: ['id', 'business_id', 'requester_user_id', 'created_by', 'submission_id', 'source', 'subject', 'category', 'priority', 'status', 'revision', 'created_at', 'updated_at'],
   platform_support_messages: ['id', 'business_id', 'request_id', 'author_user_id', 'author_type', 'visibility', 'body', 'created_at'],

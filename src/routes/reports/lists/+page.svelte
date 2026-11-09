@@ -9,10 +9,13 @@
   import ReportExportList, { type ReportExportEntry } from '#lib/components/ui/ReportExportList.svelte';
   import ReportSummaryStrip, { type ReportMetric } from '#lib/components/ui/ReportSummaryStrip.svelte';
   import ReportToolbar, { type ReportToolbarLink } from '#lib/components/ui/ReportToolbar.svelte';
+  import { addReportDays as addDays, reportWeekStart as weekStart, reportMonthBounds } from '#lib/reportDates.ts';
   import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type ListDomain = 'preplists' | 'inventory' | 'orders' | 'checklists';
   type ListHistoryRow = {
+    batch_id: string;
+    section_id: string;
     business_day: string;
     submitted_at: number;
     section_title_snapshot: string;
@@ -29,6 +32,9 @@
 
   export let data: {
     domain: ListDomain;
+    timeZone?: string;
+    hasMore?: boolean;
+    recentStart?: string;
     startDate: string;
     endDate: string;
     rows: ListHistoryRow[];
@@ -66,18 +72,7 @@
     { href: '/reports/lists?domain=checklists', label: 'Checklists', icon: 'fact_check', active: data.domain === 'checklists' }
   ] satisfies ReportToolbarLink[];
 
-  function weekStart(dateIso: string) {
-    const date = new Date(`${dateIso}T00:00:00`);
-    const day = date.getDay();
-    date.setDate(date.getDate() - day);
-    return date.toISOString().slice(0, 10);
-  }
 
-  function addDays(dateIso: string, days: number) {
-    const date = new Date(`${dateIso}T00:00:00`);
-    date.setDate(date.getDate() + days);
-    return date.toISOString().slice(0, 10);
-  }
 
   function formatDate(dateIso: string) {
     return new Date(`${dateIso}T00:00:00`).toLocaleDateString('en-US', {
@@ -89,10 +84,7 @@
 
   function submissionEntries(rows: ListHistoryRow[]) {
     const groups = rows.reduce<Record<string, { row: ListHistoryRow; itemCount: number }>>((map, row) => {
-      const key =
-        data.domain === 'checklists'
-          ? `${row.business_day}:${row.section_title_snapshot}`
-          : `${row.business_day}:${row.section_title_snapshot}:${row.submitted_at}`;
+      const key = row.batch_id;
       const existing = map[key];
       if (existing) existing.itemCount += 1;
       else map[key] = { row, itemCount: 1 };
@@ -104,20 +96,17 @@
       .map(({ row, itemCount }): ReportExportEntry => ({
         title: `${row.section_title_snapshot} | ${formatDate(row.business_day)}`,
         meta: `${itemCount} item${itemCount === 1 ? '' : 's'} | ${row.submitted_by_name}`,
-        href:
-          data.domain === 'checklists'
-            ? `/reports/lists.csv?domain=${data.domain}&start=${row.business_day}&end=${row.business_day}`
-            : `/reports/lists.csv?domain=${data.domain}&start=${row.business_day}&end=${row.business_day}&submitted_at=${row.submitted_at}`,
+        href: `/reports/lists.csv?domain=${data.domain}&start=${row.business_day}&end=${row.business_day}&batch_id=${encodeURIComponent(row.batch_id)}`,
         icon: icons[data.domain]
       }));
   }
 
   function weeklyEntries(rows: ListHistoryRow[]) {
-    const groups = rows.reduce<Record<string, { week: string; itemCount: number; submissions: number }>>((map, row) => {
+    const groups = rows.reduce<Record<string, { week: string; itemCount: number; submissions: Set<string> }>>((map, row) => {
       const week = weekStart(row.business_day);
-      const existing = map[week] ?? { week, itemCount: 0, submissions: 0 };
+      const existing = map[week] ?? { week, itemCount: 0, submissions: new Set<string>() };
       existing.itemCount += 1;
-      existing.submissions += 1;
+      existing.submissions.add(row.batch_id);
       map[week] = existing;
       return map;
     }, {});
@@ -126,15 +115,35 @@
       .sort((a, b) => b.week.localeCompare(a.week))
       .map((entry): ReportExportEntry => ({
         title: `Week of ${formatDate(entry.week)}`,
-        meta: `${entry.itemCount} item${entry.itemCount === 1 ? '' : 's'} | ${entry.submissions} line${entry.submissions === 1 ? '' : 's'}`,
+        meta: `${entry.itemCount} item${entry.itemCount === 1 ? '' : 's'} | ${entry.submissions.size} submission${entry.submissions.size === 1 ? '' : 's'}`,
         href: `/reports/lists.csv?domain=${data.domain}&start=${entry.week}&end=${addDays(entry.week, 6)}`,
         icon: icons[data.domain]
       }));
   }
 
-  $: entries = data.domain === 'orders' ? weeklyEntries(data.rows) : submissionEntries(data.rows);
+  function checklistEntries(rows: ListHistoryRow[]) {
+    const recentStart = data.recentStart ?? addDays(data.endDate, -6);
+    const groups = new Map<string, { start: string; end: string; count: number; runs: Set<string> }>();
+    for (const row of rows) {
+      const recent = row.business_day >= recentStart;
+      const period = recent ? { start: weekStart(row.business_day), end: addDays(weekStart(row.business_day), 6) }
+        : reportMonthBounds(row.business_day.slice(0, 7));
+      const start = [period.start, data.startDate, ...(recent ? [recentStart] : [])].sort().at(-1)!;
+      const end = [period.end, data.endDate, ...(!recent ? [addDays(recentStart, -1)] : [])].sort()[0];
+      const key = start + ':' + end;
+      const group = groups.get(key) ?? { start, end, count: 0, runs: new Set<string>() };
+      group.count++; group.runs.add(row.batch_id); groups.set(key, group);
+    }
+    return [...groups.values()].sort((a,b) => b.start.localeCompare(a.start)).map((group): ReportExportEntry => ({
+      title: formatDate(group.start) + ' to ' + formatDate(group.end),
+      meta: group.runs.size + ' completed runs | ' + group.count + ' items',
+      href: '/reports/lists.csv?domain=checklists&start=' + group.start + '&end=' + group.end,
+      icon: icons.checklists
+    }));
+  }
+  $: entries = data.domain === 'orders' ? weeklyEntries(data.rows) : data.domain === 'checklists' ? checklistEntries(data.rows) : submissionEntries(data.rows);
   $: metrics = [
-    { label: 'Submissions', value: entries.length },
+    { label: 'Submissions', value: new Set(data.rows.map(row => row.batch_id)).size },
     { label: 'Items', value: data.rows.length },
     { label: 'Completed', value: data.rows.filter((row) => Boolean(row.is_checked_snapshot)).length }
   ] satisfies ReportMetric[];
@@ -160,6 +169,7 @@
   <ReportToolbar exportHref={csvHref} links={reportLinks} />
   <ReportDateFilters startDate={data.startDate} endDate={data.endDate} hidden={{ domain: data.domain }} />
   <ReportSummaryStrip {metrics} />
-  <ReportDataTable columns={tableColumns} rows={tableRows} />
-  <ReportExportList {entries} empty="No history exports yet." icon={icons[data.domain]} collapsed />
+  {#if data.hasMore}<p>Summary counts cover the preview. Narrow the date range to see more.</p>{/if}
+  <ReportDataTable hasMore={data.hasMore ?? false} columns={tableColumns} rows={tableRows} />
+  <ReportExportList {entries} partial={data.hasMore ?? false} empty="No history exports yet." icon={icons[data.domain]} collapsed />
 </Layout>

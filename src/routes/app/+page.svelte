@@ -3,6 +3,8 @@
   import Layout from '#lib/components/ui/Layout.svelte';
   import SchoolOfFish from '#lib/components/ui/SchoolOfFish.svelte';
   import TempGraph from '#lib/components/ui/TempGraph.svelte';
+  import TemperatureHistory from '#lib/components/ui/TemperatureHistory.svelte';
+  import { TEMPERATURE_REPORT_INTERVAL_SECONDS } from '#lib/temperatureTiming.ts';
   import GuidedSpotlightTour from '#lib/components/ui/GuidedSpotlightTour.svelte';
   import { startVisiblePolling } from '#lib/client/polling.ts';
   import { formatScheduleTimeLabel } from '#lib/assets/schedule.ts';
@@ -74,6 +76,7 @@
     refreshedAt?: number;
     featureAccess?: AppFeatureAccess;
     businessName?: string;
+    businessId?: string;
   };
   type GuidedStep = {
     selector: string;
@@ -99,6 +102,9 @@
   let menuDocs: MenuDoc[] = data.menuDocs ?? [];
   let topIdeas: Idea[] = data.topIdeas ?? [];
   let nodeTemps: NodeTemp[] = data.nodeTemps ?? [];
+  let selectedTemperature: NodeTemp | null = null;
+  let historyBusinessId = data.businessId;
+  $: if (data.businessId !== historyBusinessId) { selectedTemperature = null; historyBusinessId = data.businessId; }
   let todayMeta = data.todayMeta ?? { assignedCount: 0, unassignedCount: 0 };
   const featureAccess: AppFeatureAccess =
     data.featureAccess ?? buildFeatureAccess(defaultAppFeatureModes, isAdmin ? 'admin' : 'user');
@@ -230,7 +236,7 @@
 
     const buckets = new Map<number, { sum: number; count: number }>();
     for (const row of rows) {
-      const bucket = Math.floor(row.ts / 300) * 300;
+      const bucket = Math.floor(row.ts / TEMPERATURE_REPORT_INTERVAL_SECONDS) * TEMPERATURE_REPORT_INTERVAL_SECONDS;
       const current = buckets.get(bucket) ?? { sum: 0, count: 0 };
       current.sum += row.temperature;
       current.count += 1;
@@ -510,14 +516,15 @@
             >
               <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
               {#if node.connectionStatus === 'online' && node.temperature !== null}
-                <span>
+                <button type="button" class="temperature-history-trigger" on:click={() => selectedTemperature = node}
+                  aria-label={`View ${node.nodeName ?? `Node ${node.sensorId}`} temperature history`}>
                   {node.temperature.toFixed(1)}F
                   {#if node.humidityPct !== null}
                     / {node.humidityPct.toFixed(0)}%
                   {/if}
-                </span>
+                </button>
               {:else}
-                <span class="offline-reading">Offline</span>
+                <button type="button" class="offline-reading temperature-history-trigger" on:click={() => selectedTemperature = node}>Offline</button>
               {/if}
             </div>
           {/each}
@@ -617,8 +624,13 @@
     </div>
   </section>
 </Layout>
+{#if selectedTemperature && featureAccess.temps}
+  <TemperatureHistory sensorId={selectedTemperature.sensorId} name={selectedTemperature.nodeName ?? `Node ${selectedTemperature.sensorId}`}
+    refreshToken={nodeTemps.find(node => node.sensorId === selectedTemperature?.sensorId)?.ts ?? 0} onClose={() => selectedTemperature = null} />
+{/if}
 
 <style>
+  .temperature-history-trigger { padding: 0.15rem 0; border: 0; border-bottom: 1px solid var(--color-divider); border-radius: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .page-header { padding: 3rem 1rem 0.5rem; }
   .page-header h1 { margin: 0; font-size: 2.2rem; font-weight: var(--weight-semibold); letter-spacing: -0.03em; }
   .header-sub { margin: 0.35rem 0 0; color: var(--color-text-muted); font-size: 0.9rem; }

@@ -84,18 +84,18 @@ try {
 
   const reports = load('src/lib/server/reports.ts');
   for (const id of ['a','b']) insert('waste_logs', { id: `waste-${id}`, business_id: id, product: id === 'a' ? '=SUM(1,1)' : 'PRIVATE OTHER TENANT PRODUCT', amount: 4, unit: 'lb', reason: 'discarded', notes: 'quoted, "text"', submitted_by_user_id: `owner-${id}`, created_at: now });
-  const params = { start: '2020-01-01', end: '2030-01-01' };
+  const params = { start: '2026-01-01', end: '2027-12-31' };
   assert.equal((await reports.loadWasteReport(db, 'a', params)).rows.length, 1);
   assert.equal((await reports.loadWasteReport(db, 'a', { ...params, createdAt: now + 1 })).rows.length, 0);
   assert.equal((await reports.loadWasteReport(db, "a' OR 1=1--", params)).rows.length, 0);
   const csvRoute = load('src/routes/reports/waste.csv/+server.ts');
-  const csv = await csvRoute.GET({ locals, url: new URL('https://criminiops.com/reports/waste.csv?start=2020-01-01&end=2030-01-01') });
+  const csv = await csvRoute.GET({ locals, url: new URL('https://criminiops.com/reports/waste.csv?start=2026-01-01&end=2027-12-31') });
   const body = await csv.text();
   assert.ok(body.includes("'=SUM(1,1)"));
   assert.ok(body.includes('"quoted, ""text"""'));
   assert.equal(body.includes('PRIVATE OTHER TENANT PRODUCT'), false);
-  assert.match(csv.headers.get('content-disposition'), /2020-01-01-to-2030-01-01/);
-  const scheduleCsv = await load('src/routes/reports/schedule.csv/+server.ts').GET({ locals, url: new URL('https://criminiops.com/reports/schedule.csv?start=2020-01-01&end=2030-01-01') });
+  assert.match(csv.headers.get('content-disposition'), /2026-01-01-to-2027-12-31/);
+  const scheduleCsv = await load('src/routes/reports/schedule.csv/+server.ts').GET({ locals, url: new URL('https://criminiops.com/reports/schedule.csv?start=2026-01-01&end=2027-12-31') });
   const scheduleBody = await scheduleCsv.text();
   assert.ok(scheduleBody.includes('09:00'));
   assert.equal(scheduleBody.includes('10:00'), false, 'Export must use published history, not unfinished draft');
@@ -160,3 +160,4 @@ await import('./schedule-runtime-check.mjs');
 await import('./content-workflow-behavior-check.mjs');
 await import('./content-runtime-check.mjs');
 await import('./kitchen-tools-behavior-check.mjs');
+await import('./report-behavior-check.mjs');

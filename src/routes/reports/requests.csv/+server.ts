@@ -13,6 +13,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   if (!db) return new Response('Database unavailable', { status: 503 });
 
   const report = await loadScheduleRequestsReport(db, requireBusinessId(locals), {
+    timeZone: locals.businessTimeZone,
+    export: true,
     start: url.searchParams.get('start'),
     end: url.searchParams.get('end')
   });
@@ -57,6 +59,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   return new Response(`\uFEFF${lines.join('\n')}`, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
+      'cache-control': 'private, no-store',
+      'x-content-type-options': 'nosniff',
+      'x-report-time-zone': report.timeZone,
       'content-disposition': `attachment; filename="schedule-requests-${report.startDate}-to-${report.endDate}.csv"`
     }
   });

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Layout from '#lib/components/ui/Layout.svelte';
   import PageHeader from '#lib/components/ui/PageHeader.svelte';
+  import TemperatureHistory from '#lib/components/ui/TemperatureHistory.svelte';
   import { startVisiblePolling } from '#lib/client/polling.ts';
   import { TEMPERATURE_ONLINE_WINDOW_SECONDS } from '#lib/temperatureTiming.ts';
 
@@ -25,9 +26,13 @@
 
   export let data: {
     nodes?: TemperatureNode[];
+    businessId?: string;
   };
 
   const initialNodes = data.nodes ?? [];
+  let selectedSensor: number | null = null;
+  let historyBusinessId = data.businessId;
+  $: if (data.businessId !== historyBusinessId) { selectedSensor = null; historyBusinessId = data.businessId; }
   let latest: Record<number, number> = Object.fromEntries(
     initialNodes.filter((node) => node.temperature !== null).map((node) => [node.sensor_id, node.temperature as number])
   );
@@ -204,13 +209,15 @@
         </div>
 
         {#if isOnline(lastSeen[node]) && latest[node] !== undefined}
-          <div class="temp">{latest[node].toFixed(1)}F</div>
+          <button type="button" class="temp history-trigger" on:click={() => selectedSensor = node}
+            aria-label={`View ${nodeNames[node] ?? `Node ${node}`} temperature history`}>{latest[node].toFixed(1)}F</button>
           {#if humidity[node] !== undefined}
             <small class="humidity">Humidity: {humidity[node].toFixed(0)}%</small>
           {/if}
           <small class="seen">Last update: {formatTime(readingSeen[node])}</small>
         {:else}
-          <div class="temp offline">--</div>
+          <button type="button" class="temp offline history-trigger" on:click={() => selectedSensor = node}
+            aria-label={`View ${nodeNames[node] ?? `Node ${node}`} temperature history`}>--</button>
           <small class="seen">
             {lastSeen[node] ? `Last check-in: ${formatTime(lastSeen[node])}` : 'No readings yet'}
           </small>
@@ -220,8 +227,15 @@
   </div>
 {/if}
 </Layout>
+{#key data.businessId}
+  {#if selectedSensor !== null}
+    <TemperatureHistory sensorId={selectedSensor} name={nodeNames[selectedSensor] ?? `Node ${selectedSensor}`}
+      refreshToken={readingSeen[selectedSensor] ?? 0} onClose={() => selectedSensor = null} />
+  {/if}
+{/key}
 
 <style>
+  .history-trigger { display: block; padding: 0; border: 0; border-bottom: 1px solid var(--color-divider); border-radius: 0; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; }
   .status-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

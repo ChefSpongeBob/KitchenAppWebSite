@@ -67,7 +67,7 @@
 		"test:iot-device-auth": "node ./scripts/iot-device-auth-check.mjs",
 		"test:media-access": "node ./scripts/media-access-check.mjs",
 		"test:production-schema": "node ./scripts/production-schema-check.mjs",
-		"test:report-exports": "node ./scripts/report-export-check.mjs",
+		"test:report-exports": "node ./scripts/report-export-check.mjs && node ./scripts/report-behavior-check.mjs && node ./scripts/temperature-history-behavior-check.mjs && node ./scripts/temperature-history-runtime-check.mjs",
 		"test:scale-performance": "node ./scripts/scale-performance-check.mjs && node ./scripts/schedule-read-resource-check.mjs && node ./scripts/route-resource-behavior-check.mjs && node ./scripts/workspace-intent-behavior-check.mjs",
 		"test:auth-abuse": "node ./scripts/auth-abuse-check.mjs",
 		"test:hr-onboarding": "node ./scripts/hr-onboarding-check.mjs",

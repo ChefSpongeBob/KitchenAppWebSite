@@ -86,8 +86,13 @@ try {
   const averages = await measure('temperature-report', () => load('src/lib/server/reports.ts').loadTemperatureHourlyAverageReport(db, 'target', { start: day, end: day }), 1, 150000);
   const reportPlan = sqlite.prepare('EXPLAIN QUERY PLAN ' + averages.queries[0].sql).all(...averages.queries[0].bindings).map(row => row.detail);
   assert.ok(reportPlan.some(detail => /SEARCH t USING INDEX idx_temps_business_ts \(business_id=\? AND ts>\? AND ts<\?\)/.test(detail)), JSON.stringify(reportPlan));
-  const legacySql = averages.queries[0].sql.replace("t.ts >= unixepoch(?) AND t.ts < unixepoch(?, '+1 day')", "date(t.ts, 'unixepoch') BETWEEN ? AND ?");
-  assert.deepEqual(averages.value.rows, sqlite.prepare(legacySql).all(...averages.queries[0].bindings), 'Indexed filtering preserves the old report results');
+  const expected = sqlite.prepare(`SELECT sensor_id, CAST(ts/3600 AS INTEGER)*3600 hour_start,
+    COUNT(*) reading_count, ROUND(AVG(temperature),2) avg_temperature, ROUND(AVG(humidity_pct),2) avg_humidity_pct
+    FROM temps WHERE business_id=? AND ts>=unixepoch(?) AND ts<unixepoch(?,'+1 day')
+    GROUP BY sensor_id,hour_start ORDER BY hour_start DESC,sensor_id ASC`).all('target',day,day);
+  assert.deepEqual(averages.value.rows.map(row=>({sensor_id:row.sensor_id,hour_start:row.hour_start,
+    reading_count:row.reading_count,avg_temperature:row.avg_temperature,avg_humidity_pct:row.avg_humidity_pct})),expected.map(row=>({...row})),
+    'Indexed raw + archive aggregation must preserve the independently calculated hourly results');
   const history = await measure('list-history', () => load('src/routes/reports/lists/+page.server.ts').load({ locals, url: new URL(`https://criminiops.com/reports/lists?start=${day}&end=${day}`) }), 1, 200000);
   assert.equal(history.value.rows.length, 300);
   const summary = await measure('temperature-api', async () => {

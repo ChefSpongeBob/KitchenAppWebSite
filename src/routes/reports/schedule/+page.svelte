@@ -12,6 +12,7 @@
   import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type ScheduleHistoryRow = {
+    publish_id: string;
     week_start: string;
     version_number: number;
     published_at: number;
@@ -32,6 +33,8 @@
   };
 
   export let data: {
+    timeZone?: string;
+    hasMore?: boolean;
     startDate: string;
     endDate: string;
     rows: ScheduleHistoryRow[];
@@ -71,6 +74,7 @@
   function formatPublishedDate(timestamp: number) {
     if (!timestamp) return 'Not recorded';
     return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+      timeZone: data.timeZone ?? 'UTC',
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -78,7 +82,7 @@
   }
 
   function weekCsvHref(week: PublishedWeek) {
-    return `/reports/schedule.csv?start=${week.week_start}&end=${week.week_start}&version=${week.version_number}`;
+    return `/reports/schedule.csv?start=${week.week_start}&end=${week.week_start}&publish_id=${encodeURIComponent(week.publish_id)}`;
   }
 
   $: entries = publishedWeeks.map((week): ReportExportEntry => ({
@@ -115,6 +119,7 @@
   <ReportToolbar exportHref={csvHref} />
   <ReportDateFilters startDate={data.startDate} endDate={data.endDate} />
   <ReportSummaryStrip {metrics} />
-  <ReportDataTable columns={tableColumns} rows={tableRows} empty="No published schedules in this range." />
-  <ReportExportList {entries} empty="No published schedules yet." icon="calendar_month" collapsed />
+  {#if data.hasMore}<p>Summary counts cover the preview. Narrow the date range to see more.</p>{/if}
+  <ReportDataTable hasMore={data.hasMore ?? false} columns={tableColumns} rows={tableRows} empty="No published schedules in this range." />
+  <ReportExportList {entries} partial={data.hasMore ?? false} empty="No published schedules yet." icon="calendar_month" collapsed />
 </Layout>

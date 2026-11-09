@@ -9,6 +9,7 @@
   import ReportExportList, { type ReportExportEntry } from '#lib/components/ui/ReportExportList.svelte';
   import ReportSummaryStrip, { type ReportMetric } from '#lib/components/ui/ReportSummaryStrip.svelte';
   import ReportToolbar from '#lib/components/ui/ReportToolbar.svelte';
+  import { addReportDays as addDays, reportWeekStart as weekStart } from '#lib/reportDates.ts';
   import { nativeServerUrl } from '#lib/client/nativeServerUrl.ts';
 
   type TemperatureRow = {
@@ -26,6 +27,9 @@
   };
 
   export let data: {
+    timeZone?: string;
+    hasMore?: boolean;
+    archivesAvailable?: boolean;
     startDate: string;
     endDate: string;
     rows: TemperatureRow[];
@@ -42,6 +46,7 @@
   ];
 
   $: csvHref = nativeServerUrl(`/reports/temperature.csv?start=${data.startDate}&end=${data.endDate}`);
+  $: readingLinks = [{ href: nativeServerUrl(`/reports/temperature.csv?format=readings&start=${data.startDate}&end=${data.endDate}`), label: 'Original Readings CSV', icon: 'download' }];
 
   function formatDate(dateIso: string) {
     return new Date(`${dateIso}T00:00:00`).toLocaleDateString('en-US', {
@@ -51,18 +56,7 @@
     });
   }
 
-  function weekStart(dateIso: string) {
-    const date = new Date(`${dateIso}T00:00:00`);
-    const day = date.getDay();
-    date.setDate(date.getDate() - day);
-    return date.toISOString().slice(0, 10);
-  }
 
-  function addDays(dateIso: string, days: number) {
-    const date = new Date(`${dateIso}T00:00:00`);
-    date.setDate(date.getDate() + days);
-    return date.toISOString().slice(0, 10);
-  }
 
   function uniqueNodeCount(rows: TemperatureRow[]) {
     return new Set(rows.map((row) => row.sensor_id)).size;
@@ -135,9 +129,11 @@
 <Layout>
   <PageHeader title="Temperature Report" />
 
-  <ReportToolbar exportHref={csvHref} />
+  <ReportToolbar exportHref={csvHref} links={readingLinks} exportLabel="Hourly CSV" />
   <ReportDateFilters startDate={data.startDate} endDate={data.endDate} />
   <ReportSummaryStrip {metrics} />
-  <ReportDataTable columns={tableColumns} rows={tableRows} empty="No temperature readings in this range." />
-  <ReportExportList {entries} empty="No temperature exports yet." icon="device_thermostat" collapsed />
+  {#if data.archivesAvailable === false}<p>Historical archives are unavailable. Only live records are shown.</p>{/if}
+  {#if data.hasMore}<p>Summary counts cover the preview. Narrow the date range to see more.</p>{/if}
+  <ReportDataTable hasMore={data.hasMore ?? false} columns={tableColumns} rows={tableRows} empty="No temperature readings in this range." />
+  <ReportExportList {entries} partial={data.hasMore ?? false} empty="No temperature exports yet." icon="device_thermostat" collapsed />
 </Layout>

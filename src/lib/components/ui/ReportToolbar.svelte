@@ -9,6 +9,7 @@
 
 <script lang="ts">
   export let exportHref = '';
+  export let exportLabel = 'Full CSV';
   export let links: ReportToolbarLink[] = [];
 </script>
 
@@ -28,7 +29,7 @@
   {#if exportHref}
     <a class="export-link" href={exportHref}>
       <span class="material-icons" aria-hidden="true">download</span>
-      Full CSV
+      {exportLabel}
     </a>
   {/if}
 </nav>

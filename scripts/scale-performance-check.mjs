@@ -110,10 +110,10 @@ expect('migrations/0081_billing_webhook_lifecycle_indexes.sql', 'billing webhook
   ].every((indexName) => source.includes(indexName))
 );
 
-expect('src/lib/server/history.ts', 'list history reports include checklist activity and item executors', (source) =>
+expect('src/lib/server/history.ts', 'list history reports use completed checklist runs and frozen item executors', (source) =>
   source.includes("domain === 'checklists'") &&
-  source.includes('list_item_activity_events a') &&
-  source.includes('completed_by_name') &&
+  source.includes('FROM checklist_completed_runs r') &&
+  source.includes('i.completed_by_name_snapshot') &&
   source.includes('idx_list_item_activity_lookup')
 );
 

@@ -2,6 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
 import { loadItemAttachmentsForItems, type ItemAttachment } from '#lib/server/itemAttachments.ts';
 import { setListItemCompletion } from '#lib/server/history.ts';
+import { resetChecklistRun } from '#lib/server/checklistHistory.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 
 type DB = App.RuntimeEnv['DB'];
@@ -256,10 +257,7 @@ export function createChecklistPage(sectionSlug: string, pageTitle: string, opti
       const section = await getSection(db, sectionSlug, businessId);
       if (!section) return fail(404, { error: 'Checklist not found.' });
 
-      await db
-        .prepare(`UPDATE checklist_items SET is_checked = 0, updated_at = ? WHERE section_id = ? AND business_id = ?`)
-        .bind(Math.floor(Date.now() / 1000), section.id, businessId)
-        .run();
+      await resetChecklistRun(db, businessId, section.id);
 
       return { success: true };
     }

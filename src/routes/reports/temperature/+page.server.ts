@@ -13,5 +13,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const end = url.searchParams.get('end');
   if (!db) return { startDate: '', endDate: '', rows: [] };
 
-  return await loadTemperatureHourlyAverageReport(db, requireBusinessId(locals), { start, end });
+  return await loadTemperatureHourlyAverageReport(db, requireBusinessId(locals), { start, end, archiveBucket: locals.env?.DOC_MEDIA, timeZone: locals.businessTimeZone });
 };

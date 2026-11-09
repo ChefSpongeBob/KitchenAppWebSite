@@ -40,7 +40,7 @@ const { outputFiles } = await build({
       try { return await POST({request,url:new URL(request.url),locals:{env,DB:db}}); }
       catch { return Response.json({error:'isolated transaction failure'},{status:500}); }
     }};`, resolveDir: process.cwd(), sourcefile: 'temperature-runtime-fixture.ts' },
-  bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false,
+  bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, external: ['cloudflare:workers'],
   plugins: [{ name: 'production-environment', setup(build) {
     build.onResolve({ filter: /^\$app\/env$/ }, () => ({ path: 'environment', namespace: 'fixture' }));
     build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const dev=false; export const building=false; export const browser=false;' }));
@@ -48,7 +48,7 @@ const { outputFiles } = await build({
 });
 const runtime = new Miniflare({ host: '127.0.0.1', port: 0, cf: false, telemetry: { enabled: false }, workers: [{
   config: { name: 'temperature-runtime-check', compatibilityDate: config.compatibility_date, compatibilityFlags: config.compatibility_flags,
-    env: { DB: { type: 'd1', id: 'isolated-temperature-runtime' } },
+    env: { DB: { type: 'd1', id: 'isolated-temperature-runtime' }, DOC_MEDIA: { type: 'r2', name: 'isolated-ingest-archive' } },
     manifest: { mainModule: 'index.js', modules: { 'index.js': { type: 'esm', contents: outputFiles[0].text } } }
   },
   dev: { outboundService: { type: 'fetcher', handler: () => { throw Error('Temperature tests must not send network requests'); } } }

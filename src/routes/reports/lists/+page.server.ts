@@ -24,6 +24,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   return {
     domain,
-    ...(await loadListHistoryReport(db, requireBusinessId(locals), domain, { start, end }))
+    ...(await loadListHistoryReport(db, requireBusinessId(locals), domain, { start, end, timeZone: locals.businessTimeZone }))
   };
 };

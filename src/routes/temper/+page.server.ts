@@ -8,6 +8,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   const businessId = requireBusinessId(locals);
 
   return {
-    nodes: await loadLatestTemperatureSnapshots(db, businessId, 25)
+    nodes: await loadLatestTemperatureSnapshots(db, businessId, 25),
+    businessId
   };
 };

@@ -13,5 +13,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const end = url.searchParams.get('end');
   if (!db) return { startDate: '', endDate: '', rows: [] };
 
-  return await loadScheduleRequestsReport(db, requireBusinessId(locals), { start, end });
+  return await loadScheduleRequestsReport(db, requireBusinessId(locals), { start, end, timeZone: locals.businessTimeZone });
 };

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
+import { createTestR2 } from './helpers/test-r2.mjs';
 
 let failures = 0;
 async function check(label, work) {
@@ -34,11 +35,13 @@ async function check(label, work) {
     const api = load('src/routes/api/temps/+server.ts');
     const locals = (business = 'a', database = db) => ({ DB: database, env: { DB: database }, businessId: business, userId: 'owner-' + business, userRole: 'admin', businessRole: 'owner', businessPermissionTemplate: 'owner' });
     const reading = (extra = {}) => ({ node_serial: 'fixture-node-a', temperature: 37, humidity_pct: 48.5, packet_sequence: 1, wake_nonce: 'abcdef01', lqi: 200, ts: now, ...extra });
-    async function post(body, { business = 'a', database = db, headers = {} } = {}) {
+    async function post(body, { business = 'a', database = db, headers = {}, archiveBucket } = {}) {
       const request = new Request('https://criminiops.com/api/temps', { method: 'POST', headers: {
         'content-type': 'application/json', 'x-device-id': 'fixture-gateway-' + business, 'x-device-key': 'fixture-credential-' + business, ...headers
       }, body: typeof body === 'string' ? body : JSON.stringify(body) });
-      return api.POST({ request, url: new URL(request.url), locals: locals(business, database) });
+      const scope = locals(business, database);
+      scope.env.DOC_MEDIA = archiveBucket;
+      return api.POST({ request, url: new URL(request.url), locals: scope });
     }
     await work({ sqlite, db, test, load, insert, provisioning, gateways, node, api, locals, reading, post, now });
     assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
@@ -322,6 +325,21 @@ await check('old buffered highs cannot raise current alerts, and post-commit mai
   assert.equal((await post(reading({ packet_sequence: 2, temperature: 60 }))).status, 201);
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM temps').get().n, 2);
   assert.equal(sqlite.prepare("SELECT packet_sequence FROM temperature_sensor_nodes WHERE node_serial='fixture-node-a'").get().packet_sequence, 2);
+});
+
+await check('real ingest rotates only archived surplus and rejects replays after that row leaves D1', async ({ post, reading, now, sqlite, load }) => {
+  const storage = createTestR2();
+  for (let sequence=1;sequence<=27;sequence++) {
+    const response = await post(reading({ packet_sequence:sequence, ts:now-(27-sequence)*1200 }), { archiveBucket:storage.bucket });
+    assert.equal(response.status,201);
+  }
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM temps').get().n,24);
+  const archived=[];
+  await load('src/lib/server/temperatureArchive.ts').visitTemperatureArchives(storage.bucket,'a',now-86400,now+1,row=>archived.push(row),now);
+  assert.equal(archived.length,3);
+  const replay = await post(reading({ packet_sequence:1, wake_nonce:'different-nonce', ts:now }), { archiveBucket:storage.bucket });
+  assert.deepEqual(await replay.json(),{accepted:0,rejected:1,inserted:0});
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM temps').get().n,24);
 });
 
 if (failures) { console.error(`${failures} temperature integration checks failed.`); process.exitCode = 1; }

@@ -1,4 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
+import { waitUntil } from 'cloudflare:workers';
 import { cleanupExpiredTemps } from '#lib/server/retention.ts';
 import { allowIoTIngest, authenticateIoTDevice } from '#lib/server/iotIngest.ts';
 import { ensureTenantSchema } from '#lib/server/tenant.ts';
@@ -7,6 +8,7 @@ import { normalizeDeviceSerial } from '#lib/server/temperatureSensors.ts';
 import { resolveGatewayNodeReadings } from '#lib/server/temperatureDeviceProvisioning.ts';
 import { getBusinessTrialAccess } from '#lib/server/trial.ts';
 import { logOperationalError } from '#lib/server/observability.ts';
+import { TEMPERATURE_HISTORY_READINGS, TEMPERATURE_HISTORY_SECONDS, TEMPERATURE_REPORT_INTERVAL_SECONDS } from '#lib/temperatureTiming.ts';
 import {
   evaluateTemperatureReadings,
   loadLatestTemperatureSnapshots,
@@ -117,23 +119,31 @@ export const GET: RequestHandler = async ({ url, request, locals }) => {
     : DEFAULT_TEMP_QUERY_LIMIT;
   const sensor = url.searchParams.get('sensor');
   const view = url.searchParams.get('view')?.trim().toLowerCase() ?? '';
+  if (view === 'history' && !sensor) return json({ error: 'Choose a sensor.' }, { status: 400 });
 
   if (sensor) {
     const sensorId = Number(sensor);
+    if (!Number.isSafeInteger(sensorId) || sensorId < 1) return json({ error: 'Choose a sensor.' }, { status: 400 });
+    const now = Math.floor(Date.now() / 1000);
     const result = await db
       .prepare(
         `
         SELECT sensor_id, temperature, humidity_pct, ts
         FROM temps
-        WHERE sensor_id = ? AND business_id = ?
-        ORDER BY ts DESC
+        WHERE sensor_id = ? AND business_id = ? AND ts > ? AND ts <= ?
+          AND EXISTS (SELECT 1 FROM temperature_sensor_nodes sn WHERE sn.sensor_id = temps.sensor_id
+            AND sn.business_id = temps.business_id AND sn.is_active = 1 AND sn.revoked_at IS NULL)
+        ORDER BY ts DESC, id DESC
         LIMIT ?
       `
       )
-      .bind(sensorId, businessId, limit)
+      .bind(sensorId, businessId, now - TEMPERATURE_HISTORY_SECONDS, now, TEMPERATURE_HISTORY_READINGS)
       .all<TempRow>();
-    return json(result.results ?? [], {
-      headers: { 'cache-control': TENANT_TEMP_CACHE_CONTROL }
+    return json(view === 'history' ? {
+      readings: result.results ?? [], start: now - TEMPERATURE_HISTORY_SECONDS, end: now,
+      intervalSeconds: TEMPERATURE_REPORT_INTERVAL_SECONDS, timeZone: locals.businessTimeZone ?? 'UTC'
+    } : result.results ?? [], {
+      headers: { 'cache-control': 'private, no-store' }
     });
   }
 
@@ -333,7 +343,11 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   } catch (error) {
     logOperationalError({ event: 'temperature_rule_evaluation_failed', request, businessId, error });
   }
-  try { await cleanupExpiredTemps(db); }
-  catch (error) { logOperationalError({ event: 'temperature_cleanup_failed', request, businessId, error }); }
+  if (insertedRows.length) {
+    const maintenance = cleanupExpiredTemps(db, locals.env.DOC_MEDIA, businessId,
+      [...new Set(insertedRows.map(row => row.sensor_id))])
+      .catch(error => logOperationalError({ event: 'temperature_cleanup_failed', request, businessId, error }));
+    try { waitUntil(maintenance); } catch { await maintenance; }
+  }
   return json({ accepted: insertedRows.length, rejected: rawItems.length - insertedRows.length, inserted: insertedRows.length }, { status: insertedRows.length ? 201 : 200 });
 };

@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { processTemperatureStaleAlerts } from '#lib/server/temperatureMonitoring.ts';
 import { bearerTokenFromRequest, constantTimeTokenEqual } from '#lib/server/requestTokens.ts';
+import { cleanupExpiredTemps } from '#lib/server/retention.ts';
 
 const MAX_BUSINESS_BATCH = 25;
 
@@ -44,10 +45,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   for (let offset = 0; offset < businessIds.length; offset += 5) {
     const batch = businessIds.slice(offset, offset + 5);
     const results = await Promise.all(
-      batch.map(async (businessId) => ({
-        businessId,
-        ...(await processTemperatureStaleAlerts(db, businessId))
-      }))
+      batch.map(async (businessId) => {
+        const summary = await processTemperatureStaleAlerts(db, businessId);
+        await cleanupExpiredTemps(db, locals.env.DOC_MEDIA, businessId);
+        return { businessId, ...summary };
+      })
     );
     summaries.push(...results);
   }

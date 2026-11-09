@@ -9,6 +9,7 @@ import { requireBusinessId } from '#lib/server/tenant.ts';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '#lib/server/userPreferences.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { loadLatestTemperatureSnapshots } from '#lib/server/temperatureMonitoring.ts';
+import { TEMPERATURE_REPORT_INTERVAL_SECONDS } from '#lib/temperatureTiming.ts';
 
 type HomeTask = {
   id: string;
@@ -277,7 +278,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const bucketAverages = new Map<number, { sum: number; count: number }>();
   for (const row of rows) {
-    const bucket = Math.floor(row.ts / 300) * 300;
+    const bucket = Math.floor(row.ts / TEMPERATURE_REPORT_INTERVAL_SECONDS) * TEMPERATURE_REPORT_INTERVAL_SECONDS;
     const current = bucketAverages.get(bucket) ?? { sum: 0, count: 0 };
     current.sum += row.temperature;
     current.count += 1;
@@ -292,6 +293,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     isAdmin,
     guided,
     featureAccess,
+    businessId,
     businessName: locals.businessName ?? 'Crimini',
     userName,
     announcement,

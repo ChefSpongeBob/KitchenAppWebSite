@@ -278,13 +278,13 @@ export function createListPage(
       if (useTextValues && amountTextEnabled) {
         await db
           .prepare(
-            `UPDATE list_items SET amount = 0, amount_text = '', is_checked = 0, updated_at = ? WHERE section_id = ? AND business_id = ?`
+            `UPDATE list_items SET amount = 0, amount_text = '', is_checked = 0, completed_by = NULL, completed_at = NULL, updated_at = ? WHERE section_id = ? AND business_id = ?`
           )
           .bind(now, section.id, businessId)
           .run();
       } else {
         await db
-          .prepare(`UPDATE list_items SET amount = 0, is_checked = 0, updated_at = ? WHERE section_id = ? AND business_id = ?`)
+          .prepare(`UPDATE list_items SET amount = 0, is_checked = 0, completed_by = NULL, completed_at = NULL, updated_at = ? WHERE section_id = ? AND business_id = ?`)
           .bind(now, section.id, businessId)
           .run();
       }

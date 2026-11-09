@@ -16,6 +16,7 @@
   export let icon = 'description';
   export let collapsed = false;
   export let label = 'Downloads';
+  export let partial = false;
 </script>
 
 <svelte:element this={collapsed ? 'details' : 'div'} class:download-history={collapsed}>
@@ -31,7 +32,7 @@
             <span class="material-icons" aria-hidden="true">{entry.icon ?? icon}</span>
             <div>
               <h2>{entry.title}</h2>
-              <p>{entry.meta}</p>
+              <p>{partial ? 'Preview: ' : ''}{entry.meta}</p>
               {#if entry.detail}
                 <small>{entry.detail}</small>
               {/if}
