@@ -67,7 +67,8 @@ expect('src/routes/register/+page.server.ts', 'signup is rate limited and audite
   source.includes("action: 'signup_ip'") &&
   source.includes("action: 'signup_email'") &&
   source.includes('validateNewPassword') &&
-  source.includes('signup_completed_new_business')
+  source.includes('db.batch(plan.statements)') &&
+  read('src/lib/server/registration.ts').includes('signup_completed_new_business')
 );
 
 expect('src/lib/server/admin.ts', 'invite and admin session controls are protected', (source) =>

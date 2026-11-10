@@ -70,6 +70,7 @@ const inventory = read('docs/DB_ROUTE_INVENTORY.md');
 const tenantSource = read('src/lib/server/tenant.ts');
 const adminSource = read('src/lib/server/admin.ts');
 const registerSource = read('src/routes/register/+page.server.ts');
+const registrationPlanSource = read('src/lib/server/registration.ts');
 const packageJson = read('package.json');
 
 const catalog = parseInventoryCatalog(inventory);
@@ -177,18 +178,21 @@ pushCheck(
   checks,
   'legacy user_invites is not an active creation path',
   !/INSERT\s+INTO\s+user_invites/i.test(adminSource) && !/INSERT\s+INTO\s+user_invites/i.test(registerSource),
-  'user_invites may be read/claimed for legacy compatibility, but new invites must not insert into it.'
+  'Unscoped legacy invitations must not create or attach a restaurant account.'
 );
 
 pushCheck(
   checks,
   'registration claims business invites with business/email/expiry guards',
-  registerSource.includes('UPDATE business_invites') &&
-    registerSource.includes('AND business_id = ?') &&
-    registerSource.includes('AND email_normalized = ?') &&
-    registerSource.includes('AND used_at IS NULL') &&
-    registerSource.includes('AND revoked_at IS NULL') &&
-    registerSource.includes('AND (expires_at IS NULL OR expires_at >= ?)'),
+  registerSource.includes('db.batch(plan.statements)') &&
+    !registerSource.includes('FROM user_invites') &&
+    registrationPlanSource.includes('UPDATE business_invites') &&
+    registrationPlanSource.includes('i.business_id = ?') &&
+    registrationPlanSource.includes('i.email_normalized = ?') &&
+    registrationPlanSource.includes('i.used_at IS NULL') &&
+    registrationPlanSource.includes('i.revoked_at IS NULL') &&
+    registrationPlanSource.includes('(i.expires_at IS NULL OR i.expires_at >= unixepoch())') &&
+    registrationPlanSource.includes("billing.status IN ('paid', 'active')"),
   'Business invite acceptance must be scoped and race-safe.'
 );
 

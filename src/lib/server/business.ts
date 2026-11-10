@@ -444,14 +444,22 @@ export async function ensureDefaultBusinessPositions(
   actorUserId: string | null = null
 ) {
   await ensureBusinessSchema(db);
-  const now = Math.floor(Date.now() / 1000);
+  await db.batch(prepareDefaultBusinessPositions(db, businessId, actorUserId));
+}
+
+export function prepareDefaultBusinessPositions(
+  db: D1,
+  businessId: string,
+  actorUserId: string | null = null,
+  now = Math.floor(Date.now() / 1000),
+  auditId: string | null = null
+) {
   const defaults = [
     { name: 'Team Member', accountType: 'staff', sortOrder: 10 },
     { name: 'Manager', accountType: 'manager', sortOrder: 20 },
     { name: 'External', accountType: 'external', sortOrder: 30 }
   ] as const;
-  await db.batch(
-    defaults.map((position) =>
+  return defaults.map((position) =>
       db
         .prepare(
           `
@@ -459,7 +467,8 @@ export async function ensureDefaultBusinessPositions(
             id, business_id, name, description, account_type, base_template,
             is_active, sort_order, created_by, created_at, updated_at
           )
-          VALUES (?, ?, ?, '', ?, ?, 1, ?, ?, ?, ?)
+          SELECT ?, ?, ?, '', ?, ?, 1, ?, ?, ?, ?
+          WHERE ? IS NULL OR EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
           `
         )
         .bind(
@@ -471,9 +480,10 @@ export async function ensureDefaultBusinessPositions(
           position.sortOrder,
           actorUserId,
           now,
-          now
+          now,
+          auditId,
+          auditId
         )
-    )
   );
 }
 

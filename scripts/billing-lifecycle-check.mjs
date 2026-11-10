@@ -56,8 +56,9 @@ expect('src/lib/server/business.ts', 'workspace lookup accepts lifecycle states 
 expect('src/routes/register/+page.server.ts', 'public trial signup is disabled before account creation', (source) =>
   source.includes("const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')") &&
   source.includes('Trial signup is not available right now') &&
-  source.includes("const initialBusinessStatus = 'pending_payment'") &&
-  source.includes("statusOverride: 'pending_payment'") &&
+  read('src/lib/server/registration.ts').includes("?, 'pending_payment',") &&
+  read('src/lib/server/registration.ts').includes("statusOverride: 'pending_payment'") &&
+  source.includes('db.batch(plan.statements)') &&
   !source.includes('createTrialDenialRecord') &&
   !source.includes('Free trial unavailable')
 );

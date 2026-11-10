@@ -3761,7 +3761,8 @@ export async function loadEmployeeOnboarding(
 export async function prepareEmployeeOnboardingPacket(
   db: D1,
   options: { businessId: string; userId: string; createdBy?: string | null; ownerPacket?: boolean;
-    payrollClassification?: 'employee' | 'contractor'; auditId?: string; now?: number }
+    payrollClassification?: 'employee' | 'contractor'; auditId?: string; now?: number;
+    initialProfile?: AdminEmployeeProfile; env?: Partial<App.RuntimeEnv> }
 ) {
   await ensureEmployeeOnboardingTables(db);
   const now = options.now ?? Math.floor(Date.now() / 1000);
@@ -3776,22 +3777,28 @@ export async function prepareEmployeeOnboardingPacket(
   const guard = options.auditId ? 'EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)' : '1 = 1';
   const guardValues = options.auditId ? [options.auditId] : [];
   const actor = options.createdBy ?? null;
+  const initialPayloads = onboardingItems.map(item => options.initialProfile && item.item_type === 'form'
+    ? profilePayloadForCompletedOnboardingItem(options.initialProfile, item.form_key) : null);
   const statements = [db.prepare(`INSERT INTO employee_onboarding_packages (
     id, business_id, user_id, status, payroll_classification, sent_at, completed_at, approved_at, approved_by,
     created_by, updated_at, manager_note, submitted_at, returned_at, returned_by, locked_at, version, supersedes_package_id
-  ) SELECT ?, ?, ?, 'sent', ?, ?, NULL, NULL, NULL, ?, ?, '', NULL, NULL, NULL, NULL, ?, ? WHERE ${guard}`)
-    .bind(packageId, options.businessId, options.userId, options.payrollClassification ?? 'employee', now,
+  ) SELECT ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, '', NULL, NULL, NULL, NULL, ?, ? WHERE ${guard}`)
+    .bind(packageId, options.businessId, options.userId, initialPayloads.some(Boolean) ? 'in_progress' : 'sent', options.payrollClassification ?? 'employee', now,
       actor, now, Math.max(1, Number(previous?.version ?? 0) + 1), previous?.id ?? null, ...guardValues)];
-  for (const item of onboardingItems) {
+  for (const [index, item] of onboardingItems.entries()) {
     const itemId = crypto.randomUUID();
     const classification = classifyOnboardingComplianceItem(item);
+    const initialPayload = initialPayloads[index];
+    const status = initialPayload ? 'submitted' : 'pending';
+    const submittedAt = initialPayload ? now : null;
+    const formPayload = initialPayload ? JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, initialPayload)) : '';
     statements.push(db.prepare(`INSERT INTO employee_onboarding_items (
       id, package_id, business_id, user_id, item_type, form_key, title, description, status, file_url, file_name,
       form_payload, source_file_url, source_file_name, signed_name, manager_note, sort_order, created_at,
       submitted_at, reviewed_at, reviewed_by
-    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', '', '', ?, ?, '', '', ?, ?, NULL, NULL, NULL WHERE ${guard}`)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, '', '', ?, ?, ?, NULL, NULL WHERE ${guard}`)
       .bind(itemId, packageId, options.businessId, options.userId, item.item_type, item.form_key, item.title,
-        item.description, item.source_file_url, item.source_file_name, item.sort_order, now, ...guardValues));
+        item.description, status, formPayload, item.source_file_url, item.source_file_name, item.sort_order, now, submittedAt, ...guardValues));
     statements.push(db.prepare(`INSERT INTO employee_compliance_requirements (
       id, business_id, requirement_key, title, category, applies_to_type, is_required, requires_document,
       requires_signature, default_due_days, renewal_interval_days, retention_years, is_active, created_at, updated_at, updated_by
@@ -3807,14 +3814,35 @@ export async function prepareEmployeeOnboardingPacket(
         ON CONFLICT(business_id, user_id, record_scope, record_type) DO NOTHING`)
         .bind(crypto.randomUUID(), options.businessId, options.userId, classification.sensitiveScope,
           classification.sensitiveRecordType, now, now, actor, ...guardValues));
+      if (initialPayload) {
+        const encrypted = await encryptSensitiveJsonPayload(options.env, initialPayload, {
+          businessId: options.businessId, userId: options.userId,
+          recordScope: classification.sensitiveScope, recordType: classification.sensitiveRecordType
+        });
+        statements.push(db.prepare(`UPDATE employee_sensitive_record_vault SET status = 'active',
+          encrypted_payload = ?, payload_iv = ?, payload_tag = ?, key_version = ?, encryption_algorithm = ?,
+          locked_at = NULL, updated_at = ?, updated_by = ?
+          WHERE business_id = ? AND user_id = ? AND record_scope = ? AND record_type = ? AND ${guard}`)
+          .bind(encrypted.encryptedPayload, encrypted.payloadIv, encrypted.payloadTag, encrypted.keyVersion,
+            encrypted.encryptionAlgorithm, now, actor, options.businessId, options.userId,
+            classification.sensitiveScope, classification.sensitiveRecordType, ...guardValues));
+        statements.push(db.prepare(`INSERT INTO employee_sensitive_record_audit (
+          id, business_id, user_id, vault_record_id, actor_user_id, action, metadata_json, created_at
+        ) SELECT ?, business_id, user_id, id, ?, 'sensitive_record_encrypted_write', ?, ?
+          FROM employee_sensitive_record_vault
+          WHERE business_id = ? AND user_id = ? AND record_scope = ? AND record_type = ? AND ${guard}`)
+          .bind(crypto.randomUUID(), actor, JSON.stringify({ recordScope: classification.sensitiveScope,
+            recordType: classification.sensitiveRecordType }), now, options.businessId, options.userId,
+            classification.sensitiveScope, classification.sensitiveRecordType, ...guardValues));
+      }
     }
     statements.push(db.prepare(`INSERT INTO employee_compliance_documents (
       id, business_id, user_id, requirement_id, onboarding_item_id, document_type, status, file_url, file_name,
       signed_name, submitted_at, reviewed_at, reviewed_by, created_at, updated_at
-    ) SELECT ?, ?, ?, r.id, ?, ?, 'pending', '', '', '', NULL, NULL, NULL, ?, ?
+    ) SELECT ?, ?, ?, r.id, ?, ?, ?, '', '', '', ?, NULL, NULL, ?, ?
       FROM employee_compliance_requirements r WHERE r.business_id = ? AND r.requirement_key = ? AND ${guard}`)
       .bind(crypto.randomUUID(), options.businessId, options.userId, itemId, classification.documentType,
-        now, now, options.businessId, classification.requirementKey, ...guardValues));
+        status, submittedAt, now, now, options.businessId, classification.requirementKey, ...guardValues));
   }
   statements.push(db.prepare(`INSERT INTO employee_employment_records (
     business_id, user_id, employment_status, employment_type, onboarding_package_id, created_at, updated_at, updated_by

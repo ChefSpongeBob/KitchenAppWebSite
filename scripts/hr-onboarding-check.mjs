@@ -45,7 +45,8 @@ expect('src/lib/server/admin.ts', 'contractors cannot receive employee onboardin
 expect('src/routes/register/+page.server.ts', 'employee invite onboarding skips contractors', (source) =>
   source.includes('businessInvite.onboarding_required === 1') &&
   source.includes("businessInvite.employment_type !== 'contractor'") &&
-  source.includes('ensureEmployeeOnboardingRequirement')
+  source.includes('prepareNewAccountRegistration') &&
+  read('src/lib/server/registration.ts').includes("invitation.employment_type !== 'contractor'")
 );
 
 expect('src/lib/server/admin.ts', 'owner invites are owner-only with explicitly optional onboarding packets', (source) =>
@@ -64,14 +65,14 @@ expect('src/routes/admin/onboarding/+page.svelte', 'employee packets are explici
   !source.includes('name="packet_item_ids"')
 );
 
-expect('src/routes/register/+page.server.ts', 'invited owners only receive employment onboarding when explicitly selected', (source) =>
-  source.includes("if (invitedBusinessRole !== 'owner' || businessInvite.onboarding_required === 1)") &&
-  source.includes("invitedBusinessRole === 'owner' ? 'active' : 'onboarding'") &&
-  source.includes("invitedBusinessRole === 'owner' ? 'owner' : businessInvite.employment_type") &&
-  source.includes("allowOwnerPacket: invitedBusinessRole === 'owner'") &&
+expect('src/lib/server/registration.ts', 'invited owners only receive employment onboarding when explicitly selected', (source) =>
+  source.includes('!invitation || !owner || packetRequired') &&
+  source.includes("owner ? 'active' : 'onboarding'") &&
+  source.includes("owner ? 'owner' : invitation!.employment_type") &&
+  source.includes('ownerPacket: owner') &&
   source.includes('INSERT INTO employee_employment_records') &&
-  source.includes('recordLegalAgreementAcceptance') &&
-  source.includes('if (!inviteCode)')
+  source.includes('prepareLegalAgreementAcceptance') &&
+  source.includes('if (business)')
 );
 
 expect('src/lib/server/email.ts', 'invite email copy matches packet requirement', (source) =>
@@ -110,7 +111,7 @@ expect('src/lib/components/onboarding/OwnerRegistration.svelte', 'purchaser comm
   source.includes('type="radio" name="sms_updates"')
 );
 
-expect('src/routes/register/+page.server.ts', 'registration records communication consent evidence', (source) =>
+expect('src/lib/server/registration.ts', 'registration records communication consent evidence', (source) =>
   source.includes('email_updates_consented_at') &&
   source.includes('sms_updates_consented_at') &&
   source.includes('COMMUNICATION_CONSENT_VERSION') &&
@@ -129,8 +130,9 @@ expect('migrations/0099_communication_consent_records.sql', 'communication conse
 
 expect('src/routes/register/+page.server.ts', 'invite registration saves personal information to the tenant employee profile', (source) =>
   source.includes('await ensureEmployeeProfilesTable(db)') &&
-  source.includes('INSERT INTO employee_profiles') &&
-  source.includes('ON CONFLICT(business_id, user_id) DO UPDATE SET') &&
+  read('src/lib/server/registration.ts').includes('INSERT INTO employee_profiles') &&
+  source.includes('db.batch(plan.statements)') &&
+  read('src/lib/server/registration.ts').includes('profile: AdminEmployeeProfile') &&
   source.includes('realName || accountDisplayName') &&
   source.includes('userPhone ||') &&
   source.includes('birthday ||') &&
@@ -153,13 +155,13 @@ expect('src/routes/register/+page.server.ts', 'owner registration uploads brandi
   source.includes('businesses/${newBusinessId}/documents/') &&
   source.includes("section: 'Docs'") &&
   source.includes("section: 'Menu'") &&
-  source.includes('creator_category_registry') &&
+  read('src/lib/server/registration.ts').includes('creator_category_registry') &&
   source.includes('uploadedBusinessLogoUrl')
 );
 
 expect('src/routes/register/+page.server.ts', 'completed invite registration opens the employee welcome step', (source) =>
   source.includes('/register/welcome?onboarding=') &&
-  source.includes("businessInvite?.onboarding_required === 1 ? '1' : '0'")
+  source.includes("plan.packageId ? '1' : '0'")
 );
 
 expect('src/routes/register/welcome/+page.svelte', 'employee welcome step provides install and browser paths', (source) =>

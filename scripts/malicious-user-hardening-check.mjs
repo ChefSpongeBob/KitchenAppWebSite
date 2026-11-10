@@ -158,8 +158,9 @@ expect('src/routes/register/+page.server.ts', 'public owner signup is closed unl
 expect('src/routes/register/+page.server.ts', 'new business signup starts pending payment unless activated by store billing', (source) =>
   source.includes("const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')") &&
   source.includes('Trial signup is not available right now') &&
-  source.includes("const initialBusinessStatus = 'pending_payment'") &&
-  source.includes("statusOverride: 'pending_payment'") &&
+  read('src/lib/server/registration.ts').includes("?, 'pending_payment',") &&
+  read('src/lib/server/registration.ts').includes("statusOverride: 'pending_payment'") &&
+  source.includes('db.batch(plan.statements)') &&
   !source.includes("VALUES (?, ?, ?, ?, 'active'") &&
   !source.includes("const initialBusinessStatus = purchaseMode === 'buy_now' ? 'pending_payment' : 'trialing'")
 );

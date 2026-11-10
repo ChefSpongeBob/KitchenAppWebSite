@@ -18,6 +18,7 @@ for (const id of ['a', 'b']) {
   insert('businesses', { id, name: `Test ${id}`, slug: `test-${id}`, plan_tier: 'large', created_at: now, updated_at: now });
   insert('users', { id: `owner-${id}`, email: `owner-${id}@example.invalid`, email_normalized: `owner-${id}@example.invalid`, display_name: 'Same owner name', created_at: now, updated_at: now });
   insert('business_users', { business_id: id, user_id: `owner-${id}`, role: 'owner', permission_template: 'owner', created_at: now, updated_at: now });
+  insert('business_trials', { business_id: id, owner_user_id: `owner-${id}`, status: 'active', trial_started_at: now, trial_ends_at: now, created_at: now, updated_at: now });
   insert('schedule_departments', { id: `dept-${id}`, name: 'Kitchen', business_id: id, created_at: now, updated_at: now });
   insert('schedule_role_definitions', { id: `role-${id}`, department: 'Kitchen', role_name: 'Cook', business_id: id, created_at: now, updated_at: now });
   insert('user_schedule_departments', { business_id: id, user_id: `owner-${id}`, department: 'Kitchen', updated_at: now });
@@ -105,8 +106,7 @@ try {
 
   const register = loadServerModules({
     '#lib/server/observability.ts': { logOperationalEvent() {}, logOperationalError() {} },
-    '#lib/server/operationalEvents.ts': { async recordOperationalEventBestEffort() { return null; } },
-    '#lib/server/trial.ts': { getRequestIpAddress: () => '192.0.2.1', getBusinessTrialAccess: async () => ({ mode: 'active', allowApp: true }) }
+    '#lib/server/operationalEvents.ts': { async recordOperationalEventBestEffort() { return null; } }
   })('src/routes/register/+page.server.ts');
   const email = 'invited@example.invalid';
   insert('business_invites', { id: 'invite-a', business_id: 'a', email, email_normalized: email,

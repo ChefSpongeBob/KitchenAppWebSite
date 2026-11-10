@@ -739,6 +739,20 @@ export async function initializeBusinessTrial(
 	}
 ) {
 	await ensureTrialSchema(db);
+	await db.batch(prepareBusinessTrial(db, args));
+	if (args.identity && (args.statusOverride ?? (args.eligible ? 'trialing' : 'expired')) === 'trialing') {
+		await recordTrialIdentityClaims(db, args.identity, {
+			businessId: args.businessId, userId: args.ownerUserId, source: 'trial_granted', status: 'active',
+			now: args.now ?? Math.floor(Date.now() / 1000)
+		});
+	}
+}
+
+export function prepareBusinessTrial(
+	db: D1,
+	args: Parameters<typeof initializeBusinessTrial>[1],
+	auditId: string | null = null
+) {
 
 	const now = args.now ?? Math.floor(Date.now() / 1000);
 	const status: TrialStatus =
@@ -753,7 +767,7 @@ export async function initializeBusinessTrial(
 					? 'active'
 					: status;
 
-	await db
+	return [db
 		.prepare(
 			`
       INSERT INTO business_trials (
@@ -766,7 +780,8 @@ export async function initializeBusinessTrial(
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE ? IS NULL OR EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
     `
 		)
 		.bind(
@@ -777,31 +792,19 @@ export async function initializeBusinessTrial(
 			trialEndsAt,
 			args.denialReason ?? null,
 			now,
-			now
-		)
-		.run();
-
-	await db
+			now,
+			auditId,
+			auditId
+		), db
 		.prepare(
 			`
       UPDATE businesses
       SET status = ?,
           updated_at = ?
-      WHERE id = ?
+      WHERE id = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?))
     `
 		)
-		.bind(businessStatus, now, args.businessId)
-		.run();
-
-	if (args.identity && status === 'trialing') {
-		await recordTrialIdentityClaims(db, args.identity, {
-			businessId: args.businessId,
-			userId: args.ownerUserId,
-			source: 'trial_granted',
-			status: 'active',
-			now
-		});
-	}
+		.bind(businessStatus, now, args.businessId, auditId, auditId)];
 }
 
 export async function getBusinessTrialAccess(

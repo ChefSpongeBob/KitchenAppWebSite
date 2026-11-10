@@ -101,11 +101,19 @@ export async function upsertStoreBillingPlaceholder(
 	}
 ) {
 	await ensureStoreBillingPlaceholderSchema(db);
+	await prepareStoreBillingPlaceholder(db, args).run();
+}
+
+export function prepareStoreBillingPlaceholder(
+	db: D1,
+	args: Parameters<typeof upsertStoreBillingPlaceholder>[1],
+	auditId: string | null = null
+) {
 	const now = args.now ?? Math.floor(Date.now() / 1000);
 	const preferredStore = normalizePreference(args.preferredStore);
 	const status = args.status ?? 'pending_setup';
 
-	await db
+	return db
 		.prepare(
 			`
       INSERT INTO store_billing_placeholders (
@@ -118,7 +126,8 @@ export async function upsertStoreBillingPlaceholder(
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE ? IS NULL OR EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
       ON CONFLICT(business_id) DO UPDATE SET
         owner_user_id = excluded.owner_user_id,
         preferred_store = excluded.preferred_store,
@@ -136,9 +145,10 @@ export async function upsertStoreBillingPlaceholder(
 			args.addOnTempMonitoring ? 1 : 0,
 			status,
 			now,
-			now
-		)
-		.run();
+			now,
+			auditId,
+			auditId
+		);
 }
 
 export async function readStoreBillingPlaceholder(db: D1, businessId: string) {

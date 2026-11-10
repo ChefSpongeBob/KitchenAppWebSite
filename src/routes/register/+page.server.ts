@@ -1,6 +1,6 @@
 import { dev } from '$app/env';
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
-import { hashPassword, hashSessionToken } from '#lib/server/auth.ts';
+import { hashPassword } from '#lib/server/auth.ts';
 import { getSessionCookieName, getSessionCookieOptions } from '#lib/server/authCookies.ts';
 import {
 	ACTIVE_BUSINESS_COOKIE,
@@ -9,26 +9,22 @@ import {
 import { hasColumn } from '#lib/server/dbSchema.ts';
 import {
 	ensureBusinessSchema,
-	ensureDefaultBusinessPositions,
 	loadPositionCapabilityOverrides,
 	reserveBusinessSlug
 } from '#lib/server/business.ts';
 import {
-	ensureEmployeeOnboardingRequirement,
-	ensureEmployeeProfilesTable,
-	loadEmployeeOnboarding
+	ensureEmployeeProfilesTable
 } from '#lib/server/admin.ts';
 import {
-	LIABILITY_AGREEMENT_KEY,
 	LIABILITY_AGREEMENT_VERSION,
-	recordLegalAgreementAcceptance
+	ensureLegalAgreementSchema
 } from '#lib/server/legal.ts';
 import {
 	getBusinessTrialAccess,
 	getRequestIpAddress,
-	initializeBusinessTrial
+	ensureTrialSchema
 } from '#lib/server/trial.ts';
-import { upsertStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
+import { ensureStoreBillingPlaceholderSchema } from '#lib/server/storeBilling.ts';
 import { validateNewPassword } from '#lib/server/passwordReset.ts';
 import { checkRateLimit, writeAuditLog, writeAuditLogSafe } from '#lib/server/security.ts';
 import { ensureUserPreferencesSchema } from '#lib/server/userPreferences.ts';
@@ -41,7 +37,10 @@ import { sendSignupConfirmationEmail } from '#lib/server/email.ts';
 import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import { ensureScheduleSchema } from '#lib/server/schedules.ts';
-import { COMMUNICATION_CONSENT_VERSION } from '#lib/communicationConsent.ts';
+import { prepareNewAccountRegistration, type NewAccountInvitation } from '#lib/server/registration.ts';
+import { isSensitiveEncryptionConfigured } from '#lib/server/sensitive.ts';
+import { logOperationalError } from '#lib/server/observability.ts';
+import { isCalendarDate } from '#lib/timeZones.ts';
 import { acceptExistingAccountInvitation, loadBusinessInvitation } from '#lib/server/businessInvitations.ts';
 import type { PageServerLoad } from './$types';
 
@@ -99,20 +98,6 @@ type RegistrationDocumentUpload = {
 	url: string;
 };
 
-function parseInviteDepartments(value: string | null | undefined, fallback = '') {
-	try {
-		const parsed = JSON.parse(value || '[]');
-		if (Array.isArray(parsed)) {
-			const cleaned = parsed.map((item) => String(item ?? '').trim()).filter(Boolean);
-			if (cleaned.length > 0) return Array.from(new Set(cleaned));
-		}
-	} catch {
-		// Fall back to legacy invite department fields below.
-	}
-	const normalizedFallback = fallback.trim();
-	return normalizedFallback ? [normalizedFallback] : [];
-}
-
 const PLAN_TIER_MAP: Record<string, 'starter' | 'growth' | 'enterprise'> = {
 	small: 'starter',
 	medium: 'growth',
@@ -134,72 +119,25 @@ async function hasRoleColumn(db: App.RuntimeEnv['DB']) {
 	return hasColumn(db, 'users', 'role');
 }
 
-async function cleanupPartialRegisteredUser(db: App.RuntimeEnv['DB'], userId: string) {
-	await db.prepare(`DELETE FROM user_preferences WHERE user_id = ?`).bind(userId).run();
-	await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
-}
-
-async function createRegistrationSession({
-	db,
-	cookies,
-	request,
-	userId,
-	businessId,
-	now
-}: {
-	db: App.RuntimeEnv['DB'];
-	cookies: Parameters<Actions['default']>[0]['cookies'];
-	request: Request;
-	userId: string;
-	businessId: string;
-	now: number;
-}) {
-	const deviceId = crypto.randomUUID();
-	const sessionId = crypto.randomUUID();
-	const sessionToken = crypto.randomUUID();
-	const sessionTokenHash = await hashSessionToken(sessionToken);
-	const expires = now + 60 * 60 * 24 * 30;
-
-	await db
-		.prepare(
-			`
-			INSERT INTO devices (
-				id,
-				user_id,
-				pin_hash,
-				user_agent,
-				last_ip,
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, '', ?, ?, ?, ?)
-		`
-		)
-		.bind(deviceId, userId, request.headers.get('user-agent') ?? null, getRequestIpAddress(request), now, now)
-		.run();
-
-	await db
-		.prepare(
-			`
-			INSERT INTO sessions (
-				id,
-				user_id,
-				device_id,
-				session_token_hash,
-				created_at,
-				last_seen_at,
-				expires_at
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`
-		)
-		.bind(sessionId, userId, deviceId, sessionTokenHash, now, now, expires)
-		.run();
-
-	cookies.set(getSessionCookieName(), sessionToken, getSessionCookieOptions(request));
-	cookies.set(ACTIVE_BUSINESS_COOKIE, businessId, getActiveBusinessCookieOptions(request));
-	cookies.delete('session_id', { path: '/' });
-	cookies.delete('session_id_pwa', { path: '/' });
+async function cleanupRegistrationMedia(
+  db: App.RuntimeEnv['DB'] | null,
+  bucket: App.Locals['MEDIA_BUCKET'],
+  keys: string[]
+) {
+  if (!db || !bucket || keys.length === 0) return;
+  try {
+    const byUrl = new Map(keys.map(key => [mediaUrlForKey(key), key]));
+    const rows = await db.prepare(
+      'SELECT value AS url FROM json_each(?) candidate WHERE NOT EXISTS ' +
+      '(SELECT 1 FROM businesses WHERE sidebar_logo_url = candidate.value) AND NOT EXISTS ' +
+      '(SELECT 1 FROM documents WHERE file_url = candidate.value)'
+    ).bind(JSON.stringify([...byUrl.keys()])).all<{ url: string }>();
+    const unreferenced = (rows.results ?? []).map(row => byUrl.get(row.url)!);
+    if (unreferenced.length) await bucket.delete(unreferenced);
+  } catch {
+    // An ambiguous database result must never cause a committed upload to be deleted.
+    logOperationalError({ event: 'registration_media_cleanup_failed', metadata: { phase: 'cleanup' } });
+  }
 }
 
 function toOptionalString(form: FormData, key: string, maxLength: number) {
@@ -373,7 +311,7 @@ export const actions: Actions = {
 		let registerDb: App.RuntimeEnv['DB'] | null = null;
 		let registerEmail = '';
 		let registerPhase = 'start';
-		let registrationMediaCommitted = false;
+		let registrationCommitted = false;
 		const registrationMediaKeys: string[] = [];
 		try {
 			registerPhase = 'read_form';
@@ -425,7 +363,6 @@ export const actions: Actions = {
 			const smsUpdatesResponse = String(formData.get('sms_updates') ?? '').trim();
 			const wantsEmailUpdates = emailUpdatesResponse === '1';
 			const wantsSmsUpdates = smsUpdatesResponse === '1';
-			const clientFingerprint = String(formData.get('client_fingerprint') || '').trim();
 			const purchaseModeRaw = String(formData.get('purchase_mode') || 'buy_now')
 				.trim()
 				.toLowerCase();
@@ -496,6 +433,9 @@ export const actions: Actions = {
 			if (!email || !confirmEmail || !password || !confirmPassword) {
 				return registerFailure(400, 'All fields required.', 'security', submittedValues);
 			}
+			if (!looksLikeEmail(email) || email.length > 254) {
+				return registerFailure(400, 'Enter a valid email address.', 'security', submittedValues);
+			}
 			if (!['0', '1'].includes(emailUpdatesResponse) || !['0', '1'].includes(smsUpdatesResponse)) {
 				return registerFailure(400, 'Choose Yes or No for both notification options.', 'security', submittedValues);
 			}
@@ -523,7 +463,7 @@ export const actions: Actions = {
 			if (passwordError) {
 				return registerFailure(400, String(passwordError.data?.error ?? 'Enter a valid password.'), 'security', submittedValues);
 			}
-			if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+			if (birthday && !isCalendarDate(birthday)) {
 				return registerFailure(400, 'Birthday must use a valid date.', 'security', submittedValues);
 			}
 			if (contactEmail && !looksLikeEmail(contactEmail)) {
@@ -661,142 +601,29 @@ export const actions: Actions = {
 			const now = Math.floor(Date.now() / 1000);
 			registerPhase = 'invite_lookup';
 
-			let businessInvite:
-				| {
-						id: string;
-						business_id: string;
-						email_normalized: string;
-						role: string;
-						permission_template: string;
-						position_id: string | null;
-						employment_type: string;
-						job_title: string;
-						department: string;
-						primary_schedule_department: string;
-						schedule_departments_json: string;
-						start_date: string;
-						pay_type: string;
-						manager_user_id: string | null;
-						onboarding_required: number;
-						expires_at: number | null;
-						revoked_at: number | null;
-						used_at: number | null;
-				  }
-				| null = null;
-			let invite:
-				| {
-						id: string;
-						email_normalized: string;
-						expires_at: number | null;
-						revoked_at: number | null;
-						used_at: number | null;
-						invited_by: string | null;
-				  }
-				| null = null;
-			if (inviteCode) {
-				businessInvite = await db
-					.prepare(
-						`
-				SELECT
-					id,
-					business_id,
-					email_normalized,
-					role,
-					permission_template,
-					position_id,
-					employment_type,
-					job_title,
-					department,
-					primary_schedule_department,
-					schedule_departments_json,
-					start_date,
-					pay_type,
-					manager_user_id,
-					onboarding_required,
-					expires_at,
-					revoked_at,
-					used_at
-				FROM business_invites
-				WHERE invite_code = ?
-				LIMIT 1
-			`
-					)
-					.bind(inviteCode)
-					.first<{
-						id: string;
-						business_id: string;
-						email_normalized: string;
-						role: string;
-						permission_template: string;
-						position_id: string | null;
-						employment_type: string;
-						job_title: string;
-						department: string;
-						primary_schedule_department: string;
-						schedule_departments_json: string;
-						start_date: string;
-						pay_type: string;
-						manager_user_id: string | null;
-						onboarding_required: number;
-						expires_at: number | null;
-						revoked_at: number | null;
-						used_at: number | null;
-					}>();
-
-				if (businessInvite) {
-					if (businessInvite.revoked_at !== null || businessInvite.used_at !== null) {
-						return registerFailure(400, 'Invite code is invalid.', 'security', submittedValues);
-					}
-
-					if (businessInvite.email_normalized !== email) {
-						return registerFailure(400, 'Invite code does not match this email address.', 'security', submittedValues);
-					}
-
-					if (businessInvite.expires_at !== null && businessInvite.expires_at < now) {
-						return registerFailure(400, 'Invite code has expired.', 'security', submittedValues);
-					}
-
-					const invitedBusinessAccess = await getBusinessTrialAccess(
-						db,
-						businessInvite.business_id,
-						now
-					);
-					if (invitedBusinessAccess.mode !== 'active' || !invitedBusinessAccess.allowApp) {
-						return registerFailure(403, 'This workspace is not active yet.', 'security', submittedValues);
-					}
-				} else {
-					invite = await db
-						.prepare(
-							`
-					SELECT id, email_normalized, expires_at, revoked_at, used_at, invited_by
-					FROM user_invites
-					WHERE invite_code = ?
-					LIMIT 1
-				`
-						)
-						.bind(inviteCode)
-						.first<{
-							id: string;
-							email_normalized: string;
-							expires_at: number | null;
-							revoked_at: number | null;
-							used_at: number | null;
-							invited_by: string | null;
-						}>();
-
-					if (!invite || invite.revoked_at !== null || invite.used_at !== null) {
-						return registerFailure(400, 'Invite code is invalid.', 'security', submittedValues);
-					}
-
-					if (invite.email_normalized !== email) {
-						return registerFailure(400, 'Invite code does not match this email address.', 'security', submittedValues);
-					}
-
-					if (invite.expires_at !== null && invite.expires_at < now) {
-						return registerFailure(400, 'Invite code has expired.', 'security', submittedValues);
-					}
-				}
-			}
+			const businessInvite = inviteCode ? await db.prepare(
+        'SELECT id, business_id, email_normalized, role, permission_template, position_id, employment_type, ' +
+        'job_title, department, primary_schedule_department, schedule_departments_json, start_date, pay_type, ' +
+        'manager_user_id, onboarding_required, expires_at, revoked_at, used_at FROM business_invites WHERE invite_code = ? LIMIT 1'
+      ).bind(inviteCode).first<NewAccountInvitation & { expires_at: number | null; revoked_at: number | null; used_at: number | null }>() : null;
+      if (inviteCode) {
+        if (!businessInvite || businessInvite.revoked_at !== null || businessInvite.used_at !== null) {
+          return registerFailure(400, 'This invitation is unavailable. Ask your manager for a fresh restaurant invitation.', 'security', submittedValues);
+        }
+        if (businessInvite.email_normalized !== email) {
+          return registerFailure(400, 'This invitation does not match your email address.', 'security', submittedValues);
+        }
+        if (businessInvite.expires_at !== null && businessInvite.expires_at < now) {
+          return registerFailure(400, 'This invitation has expired. Ask your manager for a fresh invitation.', 'security', submittedValues);
+        }
+        const access = await getBusinessTrialAccess(db, businessInvite.business_id, now);
+        if (access.mode !== 'active' || !access.allowApp) {
+          return registerFailure(403, 'This workspace is not active yet.', 'security', submittedValues);
+        }
+        if (businessInvite.onboarding_required === 1 && businessInvite.employment_type !== 'contractor' && !isSensitiveEncryptionConfigured(locals.env)) {
+          return registerFailure(503, 'Onboarding is temporarily unavailable. Please try again shortly.', 'security', submittedValues);
+        }
+      }
 
 			const newBusinessId = inviteCode ? null : crypto.randomUUID();
 			let uploadedBusinessLogoUrl: string | null = null;
@@ -811,20 +638,20 @@ export const actions: Actions = {
 				if (businessLogo) {
 					const extension = fileExtension(businessLogo.name) || 'jpg';
 					const key = `businesses/${newBusinessId}/branding/sidebar-logo-${crypto.randomUUID()}.${extension}`;
+					registrationMediaKeys.push(key);
 					uploadedBusinessLogoUrl = await uploadRegistrationFile(
 						locals.MEDIA_BUCKET,
 						key,
 						businessLogo,
 						'public, max-age=31536000, immutable'
 					);
-					registrationMediaKeys.push(key);
 				}
 
 				for (const document of businessDocuments) {
 					const slug = `setup-${newBusinessId.slice(0, 8)}-${crypto.randomUUID().slice(0, 12)}`;
 					const key = `businesses/${newBusinessId}/documents/${slug}/${crypto.randomUUID()}.pdf`;
-					const uploadedUrl = await uploadRegistrationFile(locals.MEDIA_BUCKET, key, document);
 					registrationMediaKeys.push(key);
+					const uploadedUrl = await uploadRegistrationFile(locals.MEDIA_BUCKET, key, document);
 					uploadedBusinessDocuments.push({
 						title: uploadTitle(document, 'Business document'),
 						slug,
@@ -837,8 +664,8 @@ export const actions: Actions = {
 				if (businessMenu) {
 					const slug = `menu-${newBusinessId.slice(0, 8)}-${crypto.randomUUID().slice(0, 12)}`;
 					const key = `businesses/${newBusinessId}/documents/${slug}/${crypto.randomUUID()}.pdf`;
-					const uploadedUrl = await uploadRegistrationFile(locals.MEDIA_BUCKET, key, businessMenu);
 					registrationMediaKeys.push(key);
+					const uploadedUrl = await uploadRegistrationFile(locals.MEDIA_BUCKET, key, businessMenu);
 					uploadedBusinessDocuments.push({
 						title: menuTitle || uploadTitle(businessMenu, 'Menu'),
 						slug,
@@ -852,738 +679,113 @@ export const actions: Actions = {
 			registerPhase = 'password_hash';
 			const userId = crypto.randomUUID();
 			const passwordHash = await hashPassword(password, locals.env);
-			let resolvedBusinessId: string | null = null;
 
-			registerPhase = 'create_user';
-			const invitedBusinessRole = normalizeBusinessRole(businessInvite?.role ?? '');
-			const invitedPositionOverrides = businessInvite?.position_id
-				? await loadPositionCapabilityOverrides(db, businessInvite.business_id, businessInvite.position_id)
-				: {};
-			const invitedCapabilities = businessInvite
-				? resolveBusinessCapabilities(
-						invitedBusinessRole,
-						businessInvite.permission_template,
-						{},
-						invitedPositionOverrides
-					)
-				: undefined;
-			const roleValue = inviteCode
-				? effectiveAppRoleFromBusinessRole(
-						invitedBusinessRole,
-						businessInvite?.permission_template,
-						invitedCapabilities
-					)
-				: 'admin';
-			if (hasNormalized) {
-				const sql = hasIsActive
-					? `
-			INSERT INTO users (
-				id,
-				email,
-				email_normalized,
-				password_hash,
-				display_name,
-				${hasRole ? 'role,' : ''}
-				is_active,
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ?, ${hasRole ? '?, ' : ''}1, ?, ?)
-		`
-					: `
-			INSERT INTO users (
-				id,
-				email,
-				email_normalized,
-				password_hash,
-				display_name,
-				${hasRole ? 'role,' : ''}
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ?, ${hasRole ? '?, ' : ''}?, ?)
-		`;
-				const stmt = db.prepare(sql);
-				if (hasIsActive && hasRole) {
-					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, roleValue, now, now).run();
-				} else if (hasIsActive) {
-					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, now, now).run();
-				} else if (hasRole) {
-					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, roleValue, now, now).run();
-				} else {
-					await stmt.bind(userId, email, email, passwordHash, accountDisplayName, now, now).run();
-				}
-			} else {
-				const sql = hasIsActive
-					? `
-			INSERT INTO users (
-				id,
-				email,
-				password_hash,
-				display_name,
-				${hasRole ? 'role,' : ''}
-				is_active,
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ${hasRole ? '?, ' : ''}1, ?, ?)
-		`
-					: `
-			INSERT INTO users (
-				id,
-				email,
-				password_hash,
-				display_name,
-				${hasRole ? 'role,' : ''}
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ${hasRole ? '?, ' : ''}?, ?)
-		`;
-				const stmt = db.prepare(sql);
-				if (hasIsActive && hasRole) {
-					await stmt.bind(userId, email, passwordHash, accountDisplayName, roleValue, now, now).run();
-				} else if (hasIsActive) {
-					await stmt.bind(userId, email, passwordHash, accountDisplayName, now, now).run();
-				} else if (hasRole) {
-					await stmt.bind(userId, email, passwordHash, accountDisplayName, roleValue, now, now).run();
-				} else {
-					await stmt.bind(userId, email, passwordHash, accountDisplayName, now, now).run();
-				}
-			}
+			registerPhase = 'prepare_registration';
+      await ensureUserPreferencesSchema(db);
+      await ensureEmployeeProfilesTable(db);
+      if (!inviteCode) {
+        await ensureLegalAgreementSchema(db);
+        await ensureTrialSchema(db);
+        await ensureStoreBillingPlaceholderSchema(db);
+      }
+      const invitedBusinessRole = normalizeBusinessRole(businessInvite?.role ?? '');
+      const invitedPositionOverrides = businessInvite?.position_id
+        ? await loadPositionCapabilityOverrides(db, businessInvite.business_id, businessInvite.position_id) : {};
+      const roleValue = businessInvite ? effectiveAppRoleFromBusinessRole(invitedBusinessRole,
+        businessInvite.permission_template, resolveBusinessCapabilities(invitedBusinessRole,
+          businessInvite.permission_template, {}, invitedPositionOverrides)) : 'admin';
+      const plan = await prepareNewAccountRegistration(db, {
+        userId, email, passwordHash, displayName: accountDisplayName, appRole: roleValue,
+        userColumns: { normalized: hasNormalized, active: hasIsActive, role: hasRole },
+        profile: { user_id: userId, real_name: realName || accountDisplayName, phone: userPhone || '',
+          birthday: birthday || '', address_line_1: userAddressLine1 || '', address_line_2: userAddressLine2 || '',
+          city: userCity || '', state: userState || '', postal_code: userPostalCode || '',
+          emergency_contact_name: emergencyContactName || '', emergency_contact_phone: emergencyContactPhone || '',
+          emergency_contact_relationship: emergencyContactRelationship || '' },
+        emailUpdates: wantsEmailUpdates, smsUpdates: wantsSmsUpdates, invitation: businessInvite, inviteCode,
+        business: newBusinessId ? { id: newBusinessId, name: businessName,
+          slug: await reserveBusinessSlug(db, requestedBusinessSlug || businessName), planTier,
+          logoUrl: uploadedBusinessLogoUrl, documents: uploadedBusinessDocuments, departments: scheduleSetup.departments,
+          legalName, registryId, contactEmail, contactPhone, websiteUrl, addressLine1, addressLine2, addressCity,
+          addressState, addressPostalCode, addressCountry, addOnTempMonitoring, ownerTitle,
+          storeBillingPreference: safeStoreBillingPreference } : null,
+        request, env: locals.env, now
+      });
+      registerPhase = 'commit_registration';
+      let committed = false;
+      try {
+        const result = await db.batch(plan.statements);
+        committed = Number(result[0]?.meta?.changes ?? 0) === 1;
+      } catch (error) {
+        // A lost commit response is not a failed registration when its exact audit and session exist.
+        const recovered = await db.prepare(`SELECT 1 FROM account_audit_logs a
+          JOIN sessions s ON s.id = ? AND s.user_id = a.actor_user_id
+          WHERE a.id = ? AND a.actor_user_id = ? AND a.target_user_id = ? AND a.business_id = ?`)
+          .bind(plan.sessionId, plan.auditId, userId, userId, plan.businessId).first();
+        if (!recovered) throw error;
+        committed = true;
+      }
+      if (!committed) {
+        await cleanupRegistrationMedia(db, locals.MEDIA_BUCKET, registrationMediaKeys);
+        return registerFailure(409, 'Registration changed. Refresh and try again, or sign in if your account was created.', 'security', submittedValues);
+      }
+      registrationCommitted = true;
+      const resolvedBusinessId = plan.businessId;
+      cookies.set(getSessionCookieName(), plan.sessionToken, getSessionCookieOptions(request));
+      cookies.set(ACTIVE_BUSINESS_COOKIE, resolvedBusinessId, getActiveBusinessCookieOptions(request));
+      cookies.delete('session_id', { path: '/' });
+      cookies.delete('session_id_pwa', { path: '/' });
 
-			registerPhase = 'user_preferences';
-			await ensureUserPreferencesSchema(db);
-			await ensureEmployeeProfilesTable(db);
-			await db
-				.prepare(
-					`
-			INSERT INTO user_preferences (
-				user_id,
-				email_updates,
-				sms_updates,
-				email_updates_consented_at,
-				sms_updates_consented_at,
-				communication_consent_version,
-				communication_consent_source,
-				dark_mode,
-				language,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ?, ?, 'registration', 0, 'en', ?)
-			ON CONFLICT(user_id) DO UPDATE SET
-				email_updates = excluded.email_updates,
-				sms_updates = excluded.sms_updates,
-				email_updates_consented_at = excluded.email_updates_consented_at,
-				sms_updates_consented_at = excluded.sms_updates_consented_at,
-				communication_consent_version = excluded.communication_consent_version,
-				communication_consent_source = excluded.communication_consent_source,
-				updated_at = excluded.updated_at
-		`
-				)
-				.bind(
-					userId,
-					wantsEmailUpdates ? 1 : 0,
-					wantsSmsUpdates ? 1 : 0,
-					wantsEmailUpdates ? now : null,
-					wantsSmsUpdates ? now : null,
-					COMMUNICATION_CONSENT_VERSION,
-					now
-				)
-				.run();
-
-			const consentBusinessId = businessInvite?.business_id ?? null;
-			await db.batch([
-				db
-					.prepare(
-						`INSERT INTO communication_consent_events (
-							id, user_id, business_id, channel, granted, disclosure_version, source, recorded_at
-						) VALUES (?, ?, ?, 'email', ?, ?, 'registration', ?)`
-					)
-					.bind(
-						crypto.randomUUID(),
-						userId,
-						consentBusinessId,
-						wantsEmailUpdates ? 1 : 0,
-						COMMUNICATION_CONSENT_VERSION,
-						now
-					),
-				db
-					.prepare(
-						`INSERT INTO communication_consent_events (
-							id, user_id, business_id, channel, granted, disclosure_version, source, recorded_at
-						) VALUES (?, ?, ?, 'sms', ?, ?, 'registration', ?)`
-					)
-					.bind(
-						crypto.randomUUID(),
-						userId,
-						consentBusinessId,
-						wantsSmsUpdates ? 1 : 0,
-						COMMUNICATION_CONSENT_VERSION,
-						now
-					)
-			]);
-
-			registerPhase = inviteCode ? 'accept_invite' : 'create_business';
-			if (businessInvite) {
-				const inviteClaim = await db
-					.prepare(
-						`
-				UPDATE business_invites
-				SET used_at = ?, used_by_user_id = ?
-				WHERE id = ?
-				  AND business_id = ?
-				  AND email_normalized = ?
-				  AND used_at IS NULL
-				  AND revoked_at IS NULL
-				  AND (expires_at IS NULL OR expires_at >= ?)
-			`
-					)
-					.bind(now, userId, businessInvite.id, businessInvite.business_id, email, now)
-					.run();
-				if (Number(inviteClaim.meta?.changes ?? 0) !== 1) {
-					await cleanupPartialRegisteredUser(db, userId);
-					return registerFailure(400, 'Invite code is invalid or has already been used.', 'security', submittedValues);
-				}
-				await db
-					.prepare(
-						`
-				INSERT INTO business_users (business_id, user_id, role, permission_template, position_id, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
-			`
-					)
-					.bind(
-						businessInvite.business_id,
-						userId,
-						invitedBusinessRole === 'user' ? 'staff' : invitedBusinessRole,
-						businessInvite.permission_template || invitedBusinessRole || 'staff',
-						businessInvite.position_id,
-						now,
-						now
-					)
-					.run();
-				if (invitedBusinessRole !== 'owner' || businessInvite.onboarding_required === 1) {
-					await db
-						.prepare(
-							`
-				INSERT INTO employee_employment_records (
-					business_id,
-					user_id,
-					employment_status,
-					employment_type,
-					job_title,
-					department,
-					primary_schedule_department,
-					hire_date,
-					start_date,
-					pay_type,
-					manager_user_id,
-					created_at,
-					updated_at,
-					updated_by
-				)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				ON CONFLICT(business_id, user_id) DO UPDATE SET
-					employment_status = CASE
-						WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
-						ELSE excluded.employment_status
-					END,
-					employment_type = excluded.employment_type,
-					job_title = excluded.job_title,
-					department = excluded.department,
-					primary_schedule_department = excluded.primary_schedule_department,
-					hire_date = excluded.hire_date,
-					start_date = excluded.start_date,
-					pay_type = excluded.pay_type,
-					manager_user_id = excluded.manager_user_id,
-					updated_at = excluded.updated_at,
-					updated_by = excluded.updated_by
-			`
-						)
-						.bind(
-							businessInvite.business_id,
-							userId,
-							invitedBusinessRole === 'owner' ? 'active' : 'onboarding',
-							invitedBusinessRole === 'owner' ? 'owner' : businessInvite.employment_type || 'employee',
-							businessInvite.job_title || '',
-							businessInvite.department || '',
-							businessInvite.primary_schedule_department || businessInvite.department || '',
-							businessInvite.start_date || '',
-							businessInvite.start_date || '',
-							businessInvite.pay_type || '',
-							businessInvite.manager_user_id ?? null,
-							now,
-							now,
-							businessInvite.manager_user_id ?? null
-						)
-						.run();
-
-					const invitedDepartments = parseInviteDepartments(
-						businessInvite.schedule_departments_json,
-						businessInvite.primary_schedule_department || businessInvite.department || ''
-					);
-					if (invitedDepartments.length > 0) {
-						await db.batch(
-							invitedDepartments.map((department) =>
-								db
-									.prepare(
-										`
-					INSERT OR IGNORE INTO user_schedule_departments (
-						user_id,
-						department,
-						updated_at,
-						business_id
-					)
-					VALUES (?, ?, ?, ?)
-				`
-									)
-									.bind(userId, department, now, businessInvite.business_id)
-							)
-						);
-					}
-				}
-				resolvedBusinessId = businessInvite.business_id;
-			} else if (invite) {
-				const legacyInviteClaim = await db
-					.prepare(
-						`
-				UPDATE user_invites
-				SET used_at = ?, used_by_user_id = ?
-				WHERE id = ?
-				  AND email_normalized = ?
-				  AND used_at IS NULL
-				  AND revoked_at IS NULL
-				  AND (expires_at IS NULL OR expires_at >= ?)
-			`
-				)
-					.bind(now, userId, invite.id, email, now)
-					.run();
-				if (Number(legacyInviteClaim.meta?.changes ?? 0) !== 1) {
-					await cleanupPartialRegisteredUser(db, userId);
-					return registerFailure(400, 'Invite code is invalid or has already been used.', 'security', submittedValues);
-				}
-
-				if (invite.invited_by) {
-					const inviterBusiness = await db
-						.prepare(
-							`
-					SELECT b.id AS business_id
-					FROM business_users bu
-					JOIN businesses b ON b.id = bu.business_id
-					WHERE bu.user_id = ?
-					  AND COALESCE(b.status, 'pending_payment') = 'active'
-					ORDER BY
-					  CASE bu.role
-					    WHEN 'owner' THEN 0
-					    WHEN 'admin' THEN 1
-					    WHEN 'general_manager' THEN 2
-              WHEN 'manager' THEN 2
-              WHEN 'foh_manager' THEN 3
-              WHEN 'boh_manager' THEN 3
-              WHEN 'hourly_manager' THEN 4
-              ELSE 5
-					  END ASC,
-					  b.created_at ASC
-					LIMIT 1
-				`
-						)
-						.bind(invite.invited_by)
-						.first<{ business_id: string }>();
-					if (inviterBusiness?.business_id) {
-						const invitedBusinessAccess = await getBusinessTrialAccess(
-							db,
-							inviterBusiness.business_id,
-							now
-						);
-						if (invitedBusinessAccess.mode !== 'active' || !invitedBusinessAccess.allowApp) {
-							await cleanupPartialRegisteredUser(db, userId);
-							return registerFailure(403, 'This workspace is not active yet.', 'security', submittedValues);
-						}
-						await db
-							.prepare(
-								`
-						INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
-            VALUES (?, ?, 'staff', 'staff', ?, ?)
-					`
-							)
-							.bind(inviterBusiness.business_id, userId, now, now)
-							.run();
-						resolvedBusinessId = inviterBusiness.business_id;
-					}
-				}
-			} else {
-				const businessId = newBusinessId!;
-				const businessSlug = await reserveBusinessSlug(db, requestedBusinessSlug || businessName);
-				const initialBusinessStatus = 'pending_payment';
-				await db
-					.prepare(
-						`
-				INSERT INTO businesses (
-					id,
-					name,
-					slug,
-					plan_tier,
-					status,
-					sidebar_logo_url,
-					legal_business_name,
-					registry_id,
-					contact_email,
-					contact_phone,
-					website_url,
-					address_line_1,
-					address_line_2,
-					address_city,
-					address_state,
-					address_postal_code,
-					address_country,
-					addon_temp_monitoring,
-					created_at,
-					updated_at
-				)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`
-					)
-					.bind(
-						businessId,
-						businessName,
-						businessSlug,
-						planTier,
-						initialBusinessStatus,
-						uploadedBusinessLogoUrl,
-						legalName || null,
-						registryId || null,
-						contactEmail || null,
-						contactPhone || null,
-						websiteUrl || null,
-						addressLine1 || null,
-						addressLine2 || null,
-						addressCity || null,
-						addressState || null,
-						addressPostalCode || null,
-						addressCountry || null,
-						addOnTempMonitoring ? 1 : 0,
-						now,
-						now
-					)
-					.run();
-
-				if (uploadedBusinessDocuments.some((document) => document.section === 'Docs')) {
-					await db
-						.prepare(
-							`
-							INSERT OR IGNORE INTO creator_category_registry (
-								id, business_id, editor_type, category, created_at
-							)
-							VALUES (?, ?, 'document', 'General', ?)
-							`
-						)
-						.bind(crypto.randomUUID(), businessId, now)
-						.run();
-				}
-
-				for (const document of uploadedBusinessDocuments) {
-					await db
-						.prepare(
-							`
-							INSERT INTO documents (
-								id, slug, title, section, category, content, file_url,
-								is_active, created_at, updated_at, business_id
-							)
-							VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?, ?)
-							`
-						)
-						.bind(
-							crypto.randomUUID(),
-							document.slug,
-							document.title,
-							document.section,
-							document.category,
-							document.url,
-							now,
-							now,
-							businessId
-						)
-						.run();
-				}
-				await db
-					.prepare(
-						`
-				INSERT INTO business_users (business_id, user_id, role, permission_template, created_at, updated_at)
-        VALUES (?, ?, 'owner', 'owner', ?, ?)
-			`
-					)
-					.bind(businessId, userId, now, now)
-					.run();
-				await ensureDefaultBusinessPositions(db, businessId, userId);
-
-				for (const [departmentIndex, department] of scheduleSetup.departments.entries()) {
-					await db
-						.prepare(
-							`INSERT INTO schedule_departments (
-								id, name, sort_order, is_active, created_at, updated_at, business_id
-							) VALUES (?, ?, ?, 1, ?, ?, ?)`
-						)
-						.bind(crypto.randomUUID(), department.name, departmentIndex, now, now, businessId)
-						.run();
-					await db
-						.prepare(
-							`INSERT INTO user_schedule_departments (
-								business_id, user_id, department, updated_at
-							) VALUES (?, ?, ?, ?)`
-						)
-						.bind(businessId, userId, department.name, now)
-						.run();
-					for (const [roleIndex, roleName] of department.roles.entries()) {
-						await db
-							.prepare(
-								`INSERT INTO schedule_role_definitions (
-									id, department, role_name, sort_order, is_active, created_at, updated_at, business_id
-								) VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
-							)
-							.bind(crypto.randomUUID(), department.name, roleName, roleIndex, now, now, businessId)
-							.run();
-					}
-				}
-				await db
-					.prepare(
-						`
-				INSERT INTO employee_employment_records (
-					business_id,
-					user_id,
-					employment_status,
-					employment_type,
-					job_title,
-					department,
-					primary_schedule_department,
-					hire_date,
-					start_date,
-					pay_type,
-					manager_user_id,
-					created_at,
-					updated_at,
-					updated_by
-				)
-				VALUES (?, ?, 'active', 'owner', ?, '', '', '', '', '', NULL, ?, ?, ?)
-				ON CONFLICT(business_id, user_id) DO UPDATE SET
-					employment_status = CASE
-						WHEN employee_employment_records.employment_status = 'terminated' THEN employee_employment_records.employment_status
-						ELSE 'active'
-					END,
-					employment_type = 'owner',
-					job_title = excluded.job_title,
-					updated_at = excluded.updated_at,
-					updated_by = excluded.updated_by
-			`
-					)
-					.bind(businessId, userId, ownerTitle || 'Owner', now, now, userId)
-					.run();
-				resolvedBusinessId = businessId;
-				await initializeBusinessTrial(db, {
-					businessId,
-					ownerUserId: userId,
-					eligible: true,
-					denialReason: null,
-					statusOverride: 'pending_payment',
-					identity: {
-						emailNormalized: email,
-						businessName,
-						clientFingerprint,
-						ipAddress: getRequestIpAddress(request),
-						userAgent: request.headers.get('user-agent') ?? ''
-					},
-					now
-				});
-				registrationMediaCommitted = true;
-			}
-
-			registerPhase = 'employee_profile';
-			if (!resolvedBusinessId) {
-				return registerFailure(
-					400,
-					'Could not attach this account to a workspace. Ask your admin for a fresh invite.',
-					'security',
-					submittedValues
-				);
-			}
-
-			await db
-				.prepare(
-					`
-			INSERT INTO employee_profiles (
-				business_id,
-				user_id,
-				real_name,
-				phone,
-				birthday,
-				address_line_1,
-				address_line_2,
-				city,
-				state,
-				postal_code,
-				emergency_contact_name,
-				emergency_contact_phone,
-				emergency_contact_relationship,
-				updated_at,
-				updated_by
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(business_id, user_id) DO UPDATE SET
-				real_name = excluded.real_name,
-				phone = excluded.phone,
-				birthday = excluded.birthday,
-				address_line_1 = excluded.address_line_1,
-				address_line_2 = excluded.address_line_2,
-				city = excluded.city,
-				state = excluded.state,
-				postal_code = excluded.postal_code,
-				emergency_contact_name = excluded.emergency_contact_name,
-				emergency_contact_phone = excluded.emergency_contact_phone,
-				emergency_contact_relationship = excluded.emergency_contact_relationship,
-				updated_at = excluded.updated_at,
-				updated_by = excluded.updated_by
-		`
-				)
-				.bind(
-					resolvedBusinessId,
-					userId,
-					realName || accountDisplayName,
-					userPhone || '',
-					birthday || '',
-					userAddressLine1 || '',
-					userAddressLine2 || '',
-					userCity || '',
-					userState || '',
-					userPostalCode || '',
-					emergencyContactName || '',
-					emergencyContactPhone || '',
-					emergencyContactRelationship || '',
-					now,
-					userId
-				)
-				.run();
-
-			if (businessInvite && businessInvite.onboarding_required === 1 && businessInvite.employment_type !== 'contractor') {
-				const onboarding = await ensureEmployeeOnboardingRequirement(db, resolvedBusinessId, userId, null, {
-					allowOwnerPacket: invitedBusinessRole === 'owner'
-				});
-				if (onboarding.packageId) {
-					await loadEmployeeOnboarding(db, userId, resolvedBusinessId, {
-						env: locals.env,
-						actorUserId: userId
-					});
-					await recordOperationalEventBestEffort(
-						db,
-						{
-							businessId: resolvedBusinessId,
-							eventType: 'onboarding.package.sent',
-							category: 'onboarding',
-							targetUserId: userId,
-							subjectType: 'employee_onboarding_package',
-							subjectId: onboarding.packageId,
-							title: 'Onboarding package ready'
-						},
-						request
-					);
-				}
-			}
-
-			registerPhase = 'legal_agreement';
-			if (!inviteCode) {
-				await recordLegalAgreementAcceptance(db, {
-					businessId: resolvedBusinessId,
-					userId,
-					agreementKey: LIABILITY_AGREEMENT_KEY,
-					agreementVersion: LIABILITY_AGREEMENT_VERSION,
-					acceptedAt: now,
-					acceptanceSource: 'register',
-					ipAddress: getRequestIpAddress(request),
-					userAgent: request.headers.get('user-agent') ?? ''
-				});
-			}
-
-			registerPhase = 'audit_success';
-			await writeAuditLog(db, {
-				action: inviteCode ? 'signup_completed_from_invite' : 'signup_completed_new_business',
-				request,
-				businessId: resolvedBusinessId,
-				actorUserId: userId,
-				targetUserId: userId,
-				email
-			});
-
-			registerPhase = 'signup_confirmation_email';
-			if (!inviteCode) {
-				const emailResult = await sendSignupConfirmationEmail({
-					env: locals.env,
-					origin: url.origin,
-					ownerEmail: email,
-					ownerName: accountDisplayName,
-					ownerTitle: ownerTitle || 'Owner',
-					businessName,
-					planTier
-				});
-				if (!emailResult.sent && !emailResult.skipped) {
-					console.warn('Signup confirmation email was not sent:', emailResult.reason ?? 'unknown error');
-				}
-			}
-
-			registerPhase = 'create_session';
-			await createRegistrationSession({
-				db,
-				cookies,
-				request,
-				userId,
-				businessId: resolvedBusinessId,
-				now
-			});
-
-			registerPhase = 'billing_or_redirect';
-			if (buyNowRequested) {
-				await upsertStoreBillingPlaceholder(db, {
-					businessId: resolvedBusinessId,
-					ownerUserId: userId,
-					preferredStore: safeStoreBillingPreference,
-					planTier,
-					addOnTempMonitoring,
-					status: 'pending_setup',
-					now
-				});
-				throw redirect(303, '/billing?purchase=pending');
-			}
+      registerPhase = 'post_commit_notifications';
+      try {
+        if (plan.packageId) {
+          await recordOperationalEventBestEffort(db, { businessId: resolvedBusinessId,
+            eventType: 'onboarding.package.sent', category: 'onboarding', targetUserId: userId,
+            subjectType: 'employee_onboarding_package', subjectId: plan.packageId, title: 'Onboarding package ready' }, request);
+        }
+        if (!inviteCode) {
+          await sendSignupConfirmationEmail({ env: locals.env, origin: url.origin, ownerEmail: email,
+            ownerName: accountDisplayName, ownerTitle: ownerTitle || 'Owner', businessName, planTier });
+        }
+      } catch {
+        logOperationalError({ event: 'registration_notification_failed', businessId: resolvedBusinessId,
+          userId, metadata: { phase: 'post_commit' } });
+      }
+      if (buyNowRequested) throw redirect(303, '/billing?purchase=pending');
 
 			throw redirect(
 				303,
 				inviteCode
-					? `/register/welcome?onboarding=${businessInvite?.onboarding_required === 1 ? '1' : '0'}`
+					? `/register/welcome?onboarding=${plan.packageId ? '1' : '0'}`
 					: '/welcome/admin'
 			);
 		} catch (err) {
-			if (!registrationMediaCommitted && registrationMediaKeys.length > 0 && locals.MEDIA_BUCKET) {
-				await Promise.allSettled(registrationMediaKeys.map((key) => locals.MEDIA_BUCKET!.delete(key)));
+			if (!registrationCommitted && registrationMediaKeys.length > 0 && locals.MEDIA_BUCKET) {
+				await cleanupRegistrationMedia(registerDb, locals.MEDIA_BUCKET, registrationMediaKeys);
 			}
 			if (isRedirect(err)) {
 				throw err;
 			}
 			const message = err instanceof Error ? err.message : String(err ?? '');
-			console.error('Register action failed:', message);
+			logOperationalError({ event: 'registration_failed', request, metadata: { phase: registerPhase } });
+			if (registrationCommitted) throw redirect(303, '/login');
 			if (registerDb) {
 				await writeAuditLogSafe(registerDb, {
 					action: 'signup_failed_exception',
 					request,
 					email: registerEmail || null,
 					metadata: {
-						phase: registerPhase,
-						message: message.slice(0, 240)
+						phase: registerPhase
 					}
 				});
 			}
-			if (message.includes('UNIQUE constraint failed')) {
+			if (/UNIQUE constraint failed: users\.(?:email_normalized|email)\b/.test(message)) {
 				return registerFailure(400, 'Account already exists.', 'security', submittedValues);
 			}
 			if (message.includes('D1_ERROR: no such table')) {
 				return registerFailure(503, 'Database tables are not ready yet.', 'purchase', submittedValues);
 			}
-			return registerFailure(500, 'Registration failed. Please try again.', 'purchase', submittedValues);
+			return registerFailure(503, 'Registration could not be saved. Please try again.', 'security', submittedValues);
 		}
 	}
 };
@@ -1611,22 +813,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			.first<{ onboarding_required: number; email_normalized: string }>();
 		onboardingRequired = invite?.onboarding_required === 1;
 		inviteEmail = String(invite?.email_normalized ?? '').trim().toLowerCase();
-		if (!inviteEmail) {
-			const legacyInvite = await locals.env.DB.prepare(
-				`
-				SELECT email_normalized
-				FROM user_invites
-				WHERE invite_code = ?
-				  AND revoked_at IS NULL
-				  AND used_at IS NULL
-				  AND (expires_at IS NULL OR expires_at >= ?)
-				LIMIT 1
-				`
-			)
-				.bind(inviteCode, now)
-				.first<{ email_normalized: string }>();
-			inviteEmail = String(legacyInvite?.email_normalized ?? '').trim().toLowerCase();
-		}
+
 	}
 	let existingInviteAccount = false;
 	let canAcceptInvite = false;

@@ -62,8 +62,15 @@ export async function recordLegalAgreementAcceptance(
 	}
 ) {
 	await ensureLegalAgreementSchema(db);
+	await prepareLegalAgreementAcceptance(db, args).run();
+}
 
-	await db
+export function prepareLegalAgreementAcceptance(
+	db: D1,
+	args: Parameters<typeof recordLegalAgreementAcceptance>[1],
+	auditId: string | null = null
+) {
+	return db
 		.prepare(
 			`
       INSERT OR IGNORE INTO legal_agreements (
@@ -78,7 +85,8 @@ export async function recordLegalAgreementAcceptance(
         user_agent,
         created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE ? IS NULL OR EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
     `
 		)
 		.bind(
@@ -91,7 +99,8 @@ export async function recordLegalAgreementAcceptance(
 			args.acceptanceSource.trim().toLowerCase().slice(0, 48),
 			String(args.ipAddress ?? '').trim().slice(0, 128) || null,
 			String(args.userAgent ?? '').trim().slice(0, 240) || null,
-			args.acceptedAt
-		)
-		.run();
+			args.acceptedAt,
+			auditId,
+			auditId
+		);
 }
