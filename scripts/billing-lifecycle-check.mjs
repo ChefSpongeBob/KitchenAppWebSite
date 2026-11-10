@@ -36,10 +36,10 @@ expect('src/lib/server/trial.ts', 'duplicate trial claims block reuse', (source)
   source.includes("trial_identity_claims.status IN ('active', 'used')")
 );
 
-expect('src/lib/server/trial.ts', 'cancellation snapshots before purge', (source) =>
-  source.includes('createBusinessLifecycleSnapshot') &&
-  source.includes('pre_purge') &&
-  source.includes('purgeBusinessWorkspaceData')
+expect('src/lib/server/trial.ts', 'cancellation blocks access without deleting restaurant records', (source) =>
+  source.includes('cancelBusinessAccess') &&
+  source.includes("status = 'canceled'") &&
+  !source.includes('purgeBusinessWorkspaceData') && !source.includes('shouldPurge: true')
 );
 
 expect('src/lib/server/trial.ts', 'paid conversion keeps tenant data and activates business', (source) =>
@@ -191,8 +191,8 @@ expect('src/lib/billing/nativeBilling.ts', 'web app has native billing bridge', 
   source.includes('nativeStoreForPlatform')
 );
 
-expect('docs/PROJECT_HANDOFF.md', 'lifecycle documentation exists', (source) =>
-  source.includes('Trial identity claims') && source.includes('pre-purge snapshot')
+expect('src/routes/account-deletion/+page.server.ts', 'deletion requests are recorded separately from access cancellation', (source) =>
+  source.includes('account_deletion_requests') && source.includes("'pending'") && !source.includes('DELETE FROM')
 );
 
 const failed = checks.filter((check) => !check.ok);

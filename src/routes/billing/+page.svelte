@@ -364,10 +364,10 @@
 			<details class="danger-section">
 				<summary>Cancel Workspace Setup</summary>
 				<div>
-					<p>This permanently removes workspace data before activation.</p>
+					<p>This blocks workspace access without deleting records. Store subscriptions must be canceled in your store account.</p>
 					<form method="POST" action="?/cancel" use:enhance>
 						<input type="hidden" name="client_fingerprint" value={clientFingerprint} />
-						<button type="submit" class="danger-btn">Cancel And Delete Workspace</button>
+						<button type="submit" class="danger-btn">Cancel Workspace Setup</button>
 					</form>
 				</div>
 			</details>

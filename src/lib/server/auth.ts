@@ -43,7 +43,7 @@ function nodeEnvValue(key: string) {
 function passwordPepper(env?: PasswordEnv) {
 	const configured = env?.PASSWORD_PEPPER?.trim() || nodeEnvValue('PASSWORD_PEPPER');
 	if (configured) return configured;
-	if (nodeEnvValue('NODE_ENV') !== 'production') return LOCAL_DEV_PASSWORD_PEPPER;
+	if (nodeEnvValue('NODE_ENV') === 'development') return LOCAL_DEV_PASSWORD_PEPPER;
 	throw new Error('PASSWORD_PEPPER is required.');
 }
 

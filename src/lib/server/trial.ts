@@ -1,10 +1,12 @@
 import { dev } from '$app/env';
 import { sha256Hex } from '#lib/server/auth.ts';
+import { resolveBusinessCapabilities, type BusinessCapabilityOverrides } from '#lib/server/permissions.ts';
+import { ACCOUNT_WRITE_RECEIPT, commitAccountMutation } from '#lib/server/authLifecycle.ts';
 
 type D1 = App.RuntimeEnv['DB'];
 
 const SEVEN_DAYS_SECONDS = 60 * 60 * 24 * 7;
-const TABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 
 let trialSchemaEnsured = false;
 let trialSchemaPromise: Promise<void> | null = null;
@@ -61,10 +63,6 @@ function normalizeBusinessName(value: string | null | undefined) {
 	return normalizeText(value, 120);
 }
 
-function stableJson(value: unknown) {
-	return JSON.stringify(value ?? null);
-}
-
 async function hashOptional(value: string | null | undefined) {
 	const normalized = normalizeText(value, 256);
 	if (!normalized) return null;
@@ -106,145 +104,6 @@ async function collectTrialIdentityClaims(identity: TrialIdentity) {
 	}
 
 	return claims;
-}
-
-function safeTableName(name: string) {
-	return TABLE_NAME_PATTERN.test(name);
-}
-
-async function listTables(db: D1) {
-	const rows = await db
-		.prepare(
-			`
-      SELECT name
-      FROM sqlite_master
-      WHERE type = 'table'
-        AND name NOT LIKE 'sqlite_%'
-    `
-		)
-		.all<{ name: string }>();
-	return (rows.results ?? []).map((row) => row.name).filter(safeTableName);
-}
-
-async function tableColumns(db: D1, tableName: string) {
-	if (!safeTableName(tableName)) return new Set<string>();
-	const rows = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
-	return new Set((rows.results ?? []).map((row) => row.name));
-}
-
-async function tableExists(db: D1, tableName: string) {
-	if (!safeTableName(tableName)) return false;
-	const row = await db
-		.prepare(
-			`
-      SELECT name
-      FROM sqlite_master
-      WHERE type = 'table'
-        AND name = ?
-      LIMIT 1
-    `
-		)
-		.bind(tableName)
-		.first<{ name: string }>();
-	return Boolean(row?.name);
-}
-
-async function businessUserIds(db: D1, businessId: string) {
-	const rows = await db
-		.prepare(
-			`
-      SELECT DISTINCT user_id
-      FROM business_users
-      WHERE business_id = ?
-    `
-		)
-		.bind(businessId)
-		.all<{ user_id: string }>();
-	return (rows.results ?? []).map((row) => row.user_id).filter(Boolean);
-}
-
-async function deleteByBusinessIdAcrossTables(db: D1, businessId: string) {
-	const excluded = new Set([
-		'account_audit_logs',
-		'business_lifecycle_snapshots',
-		'trial_denials',
-		'trial_identity_claims'
-	]);
-	const tables = await listTables(db);
-	for (const tableName of tables) {
-    if (tableName.startsWith('platform_staff_')) continue;
-		if (excluded.has(tableName)) continue;
-		const columns = await tableColumns(db, tableName);
-		if (!columns.has('business_id')) continue;
-		await db.prepare(`DELETE FROM ${tableName} WHERE business_id = ?`).bind(businessId).run();
-	}
-}
-
-async function deleteNonstandardTenantReferences(db: D1, businessId: string) {
-	if ((await tableExists(db, 'account_deletion_requests'))) {
-		const columns = await tableColumns(db, 'account_deletion_requests');
-		if (columns.has('requester_business_id')) {
-			await db
-				.prepare(`DELETE FROM account_deletion_requests WHERE requester_business_id = ?`)
-				.bind(businessId)
-				.run();
-		}
-	}
-
-	if ((await tableExists(db, 'iot_device_inventory'))) {
-		const columns = await tableColumns(db, 'iot_device_inventory');
-		if (columns.has('claimed_business_id')) {
-			const assignments: string[] = ['claimed_business_id = NULL'];
-			if (columns.has('claimed_iot_device_id')) assignments.push('claimed_iot_device_id = NULL');
-			if (columns.has('claim_status')) assignments.push("claim_status = 'available'");
-			if (columns.has('updated_at')) assignments.push('updated_at = ?');
-			const binds = columns.has('updated_at') ? [Math.floor(Date.now() / 1000), businessId] : [businessId];
-			await db
-				.prepare(`UPDATE iot_device_inventory SET ${assignments.join(', ')} WHERE claimed_business_id = ?`)
-				.bind(...binds)
-				.run();
-		}
-	}
-}
-
-async function deleteUserScopedData(db: D1, userId: string) {
-	const excluded = new Set(['users', 'business_users', 'trial_denials']);
-	const tables = await listTables(db);
-	for (const tableName of tables) {
-    if (tableName.startsWith('platform_staff_')) continue;
-		if (excluded.has(tableName)) continue;
-		const columns = await tableColumns(db, tableName);
-		if (!columns.has('user_id')) continue;
-		await db.prepare(`DELETE FROM ${tableName} WHERE user_id = ?`).bind(userId).run();
-	}
-}
-
-async function purgeBusinessWorkspaceData(db: D1, businessId: string) {
-	const userIds = await businessUserIds(db, businessId);
-	await deleteByBusinessIdAcrossTables(db, businessId);
-	await deleteNonstandardTenantReferences(db, businessId);
-	await db.prepare(`DELETE FROM businesses WHERE id = ?`).bind(businessId).run();
-
-	for (const userId of userIds) {
-		const membership = await db
-			.prepare(
-				`
-          SELECT 1
-          FROM business_users
-          WHERE user_id = ?
-          LIMIT 1
-        `
-			)
-			.bind(userId)
-			.first<{ 1: number }>();
-		if (membership) continue;
-		const platformMember = await db.prepare('SELECT user_id FROM platform_staff_members WHERE user_id = ? LIMIT 1')
-			.bind(userId).first();
-		if (platformMember) continue;
-
-		await deleteUserScopedData(db, userId);
-		await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
-	}
 }
 
 export function getRequestIpAddress(request: Request) {
@@ -563,169 +422,6 @@ export async function recordTrialIdentityClaims(
 	}
 }
 
-export async function createBusinessLifecycleSnapshot(
-	db: D1,
-	args: {
-		businessId: string;
-		requestedByUserId?: string | null;
-		reason: string;
-		notes?: string | null;
-		now?: number;
-	}
-) {
-	await ensureTrialSchema(db);
-
-	const now = args.now ?? Math.floor(Date.now() / 1000);
-	const snapshotId = crypto.randomUUID();
-	const tables = await listTables(db);
-	const tableCounts: Record<string, number> = {};
-
-	for (const tableName of tables) {
-		if (tableName.startsWith('platform_staff_')) continue;
-		const columns = await tableColumns(db, tableName);
-		if (!columns.has('business_id')) continue;
-		const row = await db
-			.prepare(`SELECT COUNT(*) AS total FROM ${tableName} WHERE business_id = ?`)
-			.bind(args.businessId)
-			.first<{ total: number }>();
-		tableCounts[tableName] = Number(row?.total ?? 0);
-	}
-
-	const business = await db
-		.prepare(
-			`
-      SELECT *
-      FROM businesses
-      WHERE id = ?
-      LIMIT 1
-    `
-		)
-		.bind(args.businessId)
-		.first<Record<string, unknown>>();
-	const trial = await db
-		.prepare(
-			`
-      SELECT *
-      FROM business_trials
-      WHERE business_id = ?
-      LIMIT 1
-    `
-		)
-		.bind(args.businessId)
-		.first<Record<string, unknown>>();
-	const billing = tables.includes('store_billing_placeholders')
-		? await db
-				.prepare(
-					`
-      SELECT *
-      FROM store_billing_placeholders
-      WHERE business_id = ?
-      LIMIT 1
-    `
-				)
-				.bind(args.businessId)
-				.first<Record<string, unknown>>()
-		: null;
-
-	await db
-		.prepare(
-			`
-      INSERT INTO business_lifecycle_snapshots (
-        id,
-        business_id,
-        requested_by_user_id,
-        reason,
-        status,
-        table_counts_json,
-        business_json,
-        trial_json,
-        billing_json,
-        created_at,
-        completed_at,
-        notes
-      )
-      VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?)
-    `
-		)
-		.bind(
-			snapshotId,
-			args.businessId,
-			args.requestedByUserId ?? null,
-			args.reason,
-			stableJson(tableCounts),
-			stableJson(business),
-			stableJson(trial),
-			stableJson(billing),
-			now,
-			now,
-			args.notes?.trim().slice(0, 240) || null
-		)
-		.run();
-
-	return snapshotId;
-}
-
-export async function createTrialDenialRecord(
-	db: D1,
-	identity: TrialIdentity,
-	source: 'expired' | 'canceled' | 'abuse' | 'manual',
-	notes = ''
-) {
-	await ensureTrialSchema(db);
-
-	const now = Math.floor(Date.now() / 1000);
-	const emailNormalized = normalizeText(identity.emailNormalized, 180) || null;
-	const businessNameNormalized = normalizeBusinessName(identity.businessName) || null;
-	const fingerprintHash = await hashOptional(identity.clientFingerprint);
-	const ipHash = await hashOptional(identity.ipAddress);
-	const userAgentHash = await hashOptional(identity.userAgent);
-
-	await db
-		.prepare(
-			`
-      INSERT INTO trial_denials (
-        id,
-        email_normalized,
-        business_name_normalized,
-        client_fingerprint_hash,
-        ip_hash,
-        user_agent_hash,
-        source,
-        created_at,
-        last_seen_at,
-        notes
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
-		)
-		.bind(
-			crypto.randomUUID(),
-			emailNormalized,
-			businessNameNormalized,
-			fingerprintHash,
-			ipHash,
-			userAgentHash,
-			source,
-			now,
-			now,
-			notes.trim().slice(0, 240) || null
-		)
-		.run();
-
-	await recordTrialIdentityClaims(db, identity, {
-		source:
-			source === 'expired'
-				? 'trial_expired'
-				: source === 'canceled'
-					? 'trial_canceled'
-					: source === 'manual'
-						? 'manual'
-						: 'trial_denied',
-		status: source === 'canceled' ? 'canceled' : source === 'expired' ? 'expired' : 'denied',
-		now
-	});
-}
-
 export async function initializeBusinessTrial(
 	db: D1,
 	args: {
@@ -865,7 +561,7 @@ export async function getBusinessTrialAccess(
 			};
 		}
 
-		await db
+		const expired = await db.batch([db
 			.prepare(
 				`
           UPDATE business_trials
@@ -874,26 +570,26 @@ export async function getBusinessTrialAccess(
               updated_at = ?
           WHERE business_id = ?
             AND status = 'trialing'
+            AND trial_ends_at <= ?
         `
 			)
-			.bind(now, businessId)
-			.run();
-		await db
+			.bind(now, businessId, now), db
 			.prepare(
 				`
           UPDATE businesses
           SET status = 'past_due',
               updated_at = ?
           WHERE id = ?
+            AND changes() = 1
         `
 			)
-			.bind(now, businessId)
-			.run();
+			.bind(now, businessId)]);
+		if (expired[0].meta.changes !== 1) return getBusinessTrialAccess(db, businessId, now);
 
 		return {
 			mode: 'expired',
 			allowApp: false,
-			shouldPurge: true,
+			shouldPurge: false,
 			trialEndsAt: trial.trial_ends_at,
 			secondsRemaining: 0,
 			denialReason: trial.denial_reason
@@ -962,7 +658,7 @@ export async function getBusinessTrialAccess(
 	return {
 		mode: 'expired',
 		allowApp: false,
-		shouldPurge: true,
+		shouldPurge: false,
 		trialEndsAt: trial.trial_ends_at,
 		secondsRemaining: 0,
 		denialReason: trial.denial_reason
@@ -1052,53 +748,38 @@ export async function convertBusinessToPaid(
 		.run();
 }
 
-export async function cancelTrialAndPurgeBusiness(
-	db: D1,
-	args: {
-		businessId: string;
-		identity: TrialIdentity;
-		source: 'expired' | 'canceled' | 'abuse' | 'manual';
-		reason?: string;
-		requestedByUserId?: string | null;
-		now?: number;
-	}
-) {
-	await ensureTrialSchema(db);
-	const now = args.now ?? Math.floor(Date.now() / 1000);
+const cancellationAuthoritySql = `SELECT json_object(
+  'role', bu.role, 'template', COALESCE(bp.base_template, bu.permission_template, bu.role, 'staff'),
+  'position', bu.position_id, 'status', b.status,
+  'individual', (SELECT json_group_array(json_array(permission_key, is_enabled)) FROM
+    (SELECT permission_key, is_enabled FROM employee_role_permissions WHERE business_id = bu.business_id AND user_id = bu.user_id ORDER BY permission_key)),
+  'positionOverrides', (SELECT json_group_array(json_array(permission_key, is_enabled)) FROM
+    (SELECT permission_key, is_enabled FROM business_position_permissions WHERE business_id = bu.business_id AND position_id = bp.id ORDER BY permission_key))
+) AS proof FROM business_users bu JOIN users u ON u.id = bu.user_id AND u.is_active = 1
+JOIN businesses b ON b.id = bu.business_id
+LEFT JOIN business_positions bp ON bp.id = bu.position_id AND bp.business_id = bu.business_id
+WHERE bu.business_id = ? AND bu.user_id = ? AND COALESCE(bu.is_active, 1) = 1
+  AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')`;
 
-	await createBusinessLifecycleSnapshot(db, {
-		businessId: args.businessId,
-		requestedByUserId: args.requestedByUserId ?? null,
-		reason: args.reason || args.source,
-		notes: 'pre_purge',
-		now
-	});
-	await createTrialDenialRecord(db, args.identity, args.source, args.reason ?? '');
-
-	await db
-		.prepare(
-			`
-      UPDATE business_trials
-      SET status = 'canceled',
-          canceled_at = ?,
-          cancellation_reason = ?,
-          updated_at = ?
-      WHERE business_id = ?
-    `
-		)
-		.bind(now, (args.reason ?? '').slice(0, 240) || null, now, args.businessId)
-		.run();
-	await db
-		.prepare(
-			`
-      UPDATE businesses
-      SET status = 'canceled',
-          updated_at = ?
-      WHERE id = ?
-    `
-		)
-		.bind(now, args.businessId)
-		.run();
-
-	await purgeBusinessWorkspaceData(db, args.businessId);
+export async function cancelBusinessAccess(db: D1, args: {
+  businessId: string; requestedByUserId: string; sessionId: string; request: Request;
+}) {
+  const row = await db.prepare(cancellationAuthoritySql).bind(args.businessId, args.requestedByUserId).first<{ proof: string }>();
+  if (!row) return false;
+  const state = JSON.parse(row.proof) as { role: string; template: string; individual: [string, number][]; positionOverrides: [string, number][] };
+  const overrides = (rows: [string, number][]) => Object.fromEntries(rows.map(([key, value]) => [key, value === 1])) as BusinessCapabilityOverrides;
+  if (!resolveBusinessCapabilities(state.role, state.template, overrides(state.individual), overrides(state.positionOverrides)).includes('manage_billing')) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return commitAccountMutation(db, {
+    action: 'billing_workspace_canceled', userId: args.requestedByUserId, email: '', businessId: args.businessId, request: args.request, now,
+    condition: `(${cancellationAuthoritySql}) = ? AND EXISTS (SELECT 1 FROM sessions s LEFT JOIN devices d ON d.id = s.device_id
+      WHERE s.id = ? AND s.user_id = ? AND s.revoked_at IS NULL AND s.expires_at > ?
+        AND (s.device_id IS NULL OR (d.id IS NOT NULL AND d.user_id = s.user_id AND d.revoked_at IS NULL)))`,
+    values: [args.businessId, args.requestedByUserId, row.proof, args.sessionId, args.requestedByUserId, now],
+    writes: id => [
+      db.prepare(`UPDATE business_trials SET status = 'canceled', canceled_at = ?, cancellation_reason = 'manual_workspace_cancel', updated_at = ?
+        WHERE business_id = ? AND ${ACCOUNT_WRITE_RECEIPT}`).bind(now, now, args.businessId, id),
+      db.prepare(`UPDATE businesses SET status = 'canceled', updated_at = ? WHERE id = ? AND ${ACCOUNT_WRITE_RECEIPT}`).bind(now, args.businessId, id)
+    ]
+  });
 }

@@ -1,6 +1,7 @@
 import { dev } from '$app/env';
 import { fail } from '@sveltejs/kit';
 import { hasColumn } from '#lib/server/dbSchema.ts';
+import { ACCOUNT_WRITE_RECEIPT, commitAccountMutation } from '#lib/server/authLifecycle.ts';
 
 const RESET_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const RESET_RECORD_RETENTION_SECONDS = 30 * 24 * 60 * 60;
@@ -129,41 +130,24 @@ export async function createPasswordResetRecord({
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = getPasswordResetExpiry(now);
 
-  await db
-    .prepare(`DELETE FROM password_resets WHERE expires_at < ? OR COALESCE(used_at, 0) < ?`)
-    .bind(now, now - RESET_RECORD_RETENTION_SECONDS)
-    .run();
-
-  await db
-    .prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL`)
-    .bind(now, userId)
-    .run();
-
-  await db
-    .prepare(
-      `
+  const id = crypto.randomUUID();
+  const identity = `EXISTS (SELECT 1 FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1
+    AND lower(trim(email)) = lower(trim(?)))`;
+  const results = await db.batch([
+    db.prepare(`DELETE FROM password_resets WHERE id IN (SELECT id FROM password_resets
+      WHERE expires_at <= ? OR (used_at IS NOT NULL AND used_at < ?) ORDER BY expires_at LIMIT 100)`)
+      .bind(now, now - RESET_RECORD_RETENTION_SECONDS),
+    db.prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL AND ${identity}`)
+      .bind(now, userId, userId, email),
+    db.prepare(`
       INSERT INTO password_resets (
         id, user_id, email, token_hash, created_at, expires_at, requested_ip
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `
-    )
-    .bind(crypto.randomUUID(), userId, email, tokenHash, now, expiresAt, requestedIp ?? null)
-    .run();
-
-  const record = await db
-    .prepare(
-      `
-      SELECT id
-      FROM password_resets
-      WHERE token_hash = ?
-      LIMIT 1
-    `
-    )
-    .bind(tokenHash)
-    .first<{ id: string }>();
-
-  return { id: record?.id ?? null, now, expiresAt };
+      SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${identity}`)
+      .bind(id, userId, email, tokenHash, now, expiresAt, requestedIp ?? null, userId, email)
+  ]);
+  if (results[2].meta.changes !== 1) throw new Error('Reset identity changed.');
+  return { id, now, expiresAt };
 }
 
 export async function deletePasswordResetRecordById(
@@ -190,12 +174,15 @@ export async function findValidPasswordResetByTokenHash(
         pr.expires_at,
         pr.used_at,
         u.display_name,
-        u.email AS user_email
+        u.email AS user_email,
+        u.password_hash
       FROM password_resets pr
       JOIN users u ON u.id = pr.user_id
       WHERE pr.token_hash = ?
         AND pr.used_at IS NULL
-        AND pr.expires_at >= ?
+        AND pr.expires_at > ?
+        AND COALESCE(u.is_active, 1) = 1
+        AND lower(trim(pr.email)) = lower(trim(u.email))
       LIMIT 1
     `
     )
@@ -208,7 +195,39 @@ export async function findValidPasswordResetByTokenHash(
       used_at: number | null;
       display_name: string | null;
       user_email: string;
+      password_hash: string;
     }>();
+}
+
+export async function completePasswordReset(options: {
+  db: App.RuntimeEnv['DB'];
+  reset: NonNullable<Awaited<ReturnType<typeof findValidPasswordResetByTokenHash>>>;
+  tokenHash: string;
+  passwordHash: string;
+  request: Request;
+  getClientAddress?: () => string;
+}) {
+  const { db, reset } = options;
+  const now = Math.floor(Date.now() / 1000);
+  return commitAccountMutation(db, {
+    action: 'password_reset_completed', userId: reset.user_id, email: reset.user_email,
+    request: options.request, getClientAddress: options.getClientAddress, now,
+    condition: `EXISTS (SELECT 1 FROM password_resets pr JOIN users u ON u.id = pr.user_id
+      WHERE pr.id = ? AND pr.token_hash = ? AND pr.user_id = ? AND pr.used_at IS NULL AND pr.expires_at > ?
+        AND COALESCE(u.is_active, 1) = 1 AND u.password_hash = ?
+        AND lower(trim(pr.email)) = lower(trim(u.email)) AND u.email = ?)`,
+    values: [reset.id, options.tokenHash, reset.user_id, now, reset.password_hash, reset.user_email],
+    writes: id => [
+      db.prepare(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND ${ACCOUNT_WRITE_RECEIPT}`)
+        .bind(options.passwordHash, now, reset.user_id, id),
+      db.prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL AND ${ACCOUNT_WRITE_RECEIPT}`)
+        .bind(now, reset.user_id, id),
+      db.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND ${ACCOUNT_WRITE_RECEIPT}`)
+        .bind(now, reset.user_id, id),
+      db.prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL AND ${ACCOUNT_WRITE_RECEIPT}`)
+        .bind(now, now, reset.user_id, id)
+    ]
+  });
 }
 
 export function genericResetRequestSuccess() {

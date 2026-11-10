@@ -50,7 +50,7 @@ sqlite.exec(readFileSync('migrations/0086_temperature_gateway_nodes.sql', 'utf8'
 const migration = readFileSync('migrations/0107_platform_staff_console.sql', 'utf8');
 sqlite.exec(migration);
 sqlite.exec(migration);
-sqlite.exec(`CREATE TABLE devices(id TEXT PRIMARY KEY, revoked_at INTEGER);
+sqlite.exec(`CREATE TABLE devices(id TEXT PRIMARY KEY, revoked_at INTEGER, user_id TEXT);
   CREATE TABLE sessions(id TEXT PRIMARY KEY,user_id TEXT,device_id TEXT,expires_at INTEGER,
     revoked_at INTEGER,session_token_hash TEXT,last_seen_at INTEGER);
   ALTER TABLE users ADD COLUMN password_hash TEXT;
@@ -337,6 +337,7 @@ const login = load('src/routes/login/+page.server.ts', {
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location), fail: (status, data) => ({ status, data }) },
   '$app/env': { dev: false }, '#lib/server/auth.ts': {}, '#lib/server/authCookies.ts': {},
   '#lib/server/activeBusiness.ts': {}, '#lib/server/dbSchema.ts': {}, '#lib/server/business.ts': {},
+  '#lib/server/authLifecycle.ts': {},
   '#lib/invitations.ts': load('src/lib/invitations.ts', {}),
   '#lib/server/permissions.ts': {}, '#lib/server/security.ts': {}, '#lib/server/turnstile.ts': { getTurnstileSiteKey: () => 'test-site-key' },
   '#lib/server/platformStaff.ts': staff, '#lib/server/platformStaffEmail.ts': {}
@@ -750,16 +751,16 @@ sqlite.exec(`DELETE FROM business_users WHERE business_id IN ('a','b') AND user_
   INSERT INTO business_users VALUES('cleanup','owner',1),('cleanup','manager',1),('cleanup','ordinary',1);
   INSERT INTO platform_staff_audit(id,actor_user_id,action,business_id,reason,created_at)
     VALUES('cleanup-proof','owner','test-cleanup','cleanup','Preserve platform history',1);`);
-const trial = load('src/lib/server/trial.ts', { '$app/env': { dev: false }, '#lib/server/auth.ts': auth }, '\nexport { purgeBusinessWorkspaceData };');
-await trial.purgeBusinessWorkspaceData(db, 'cleanup');
+const trialSource = readFileSync('src/lib/server/trial.ts', 'utf8');
+assert.equal(/purgeBusinessWorkspaceData|DELETE FROM users|DELETE FROM businesses/.test(trialSource), false);
 assert.ok(sqlite.prepare("SELECT id FROM users WHERE id='owner'").get());
 assert.ok(sqlite.prepare("SELECT id FROM users WHERE id='manager'").get(), 'Revoked staff identity is still platform-owned');
-assert.equal(sqlite.prepare("SELECT id FROM users WHERE id='ordinary'").get(), undefined);
+assert.ok(sqlite.prepare("SELECT id FROM users WHERE id='ordinary'").get());
 assert.ok(sqlite.prepare("SELECT id FROM platform_staff_audit WHERE id='cleanup-proof'").get());
 assert.ok(await staff.loadStaffStepUp(db, 'owner', 'owner-session'));
-assert.equal(sqlite.prepare("SELECT id FROM businesses WHERE id='cleanup'").get(), undefined);
+assert.ok(sqlite.prepare("SELECT id FROM businesses WHERE id='cleanup'").get());
 assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
-console.log('PASS actual tenant purge preserves platform identities, verification, and audit without retaining ordinary tenant identities');
+console.log('PASS trial module contains no tenant/account purge; cancellation retention is exercised against the full schema in auth lifecycle tests');
 
 sqlite.exec(`INSERT INTO users(id,email,is_active,role) VALUES('backup-owner','backup@example.invalid',1,'user');
   INSERT INTO platform_staff_members(user_id,staff_role,is_active,granted_by,created_at,updated_at)

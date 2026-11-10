@@ -17,11 +17,7 @@ import {
 	getActiveBusinessCookieDeleteOptions,
 	getActiveBusinessCookieOptions
 } from '#lib/server/activeBusiness.ts';
-import {
-	cancelTrialAndPurgeBusiness,
-	getBusinessTrialAccess,
-	getRequestIpAddress
-} from '#lib/server/trial.ts';
+import { getBusinessTrialAccess } from '#lib/server/trial.ts';
 import {
 	getSessionCookieDeleteOptions,
 	getSessionCookieName,
@@ -280,6 +276,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				s.session_token_hash,
 				s.last_seen_at,
 				d.id AS found_device_id,
+				d.user_id AS device_user_id,
 				d.revoked_at AS device_revoked_at,
 				u.id AS found_user_id,
 				u.role AS user_role,
@@ -288,12 +285,11 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			LEFT JOIN devices d ON d.id = s.device_id
 			LEFT JOIN users u ON u.id = s.user_id
 			WHERE s.session_token_hash = ?
-			   OR s.session_token_hash = ?
-			   OR s.id = ?
+			   OR (s.session_token_hash = ? AND length(s.session_token_hash) <> 64)
 			LIMIT 1
 		`
 			)
-			.bind(sessionTokenHash, sessionToken, sessionToken)
+			.bind(sessionTokenHash, sessionToken)
 			.first<{
 				id: string;
 				user_id: string;
@@ -303,13 +299,14 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				session_token_hash: string;
 				last_seen_at: number;
 				found_device_id: string | null;
+				device_user_id: string | null;
 				device_revoked_at: number | null;
 				found_user_id: string | null;
 				user_role: string | null;
 				user_is_active: number;
 			}>();
 
-		if (!session || session.revoked_at !== null || session.expires_at < now) {
+		if (!session || session.revoked_at !== null || session.expires_at <= now) {
 			logOperationalEvent({
 				level: 'warn',
 				event: 'session_rejected',
@@ -323,7 +320,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			return resolvePublicOrAuthRoute();
 		}
 
-		if (session.device_id && (!session.found_device_id || session.device_revoked_at !== null)) {
+		if (session.device_id && (!session.found_device_id || session.device_revoked_at !== null || session.device_user_id !== session.user_id)) {
 			logOperationalEvent({
 				level: 'warn',
 				event: 'session_device_rejected',
@@ -370,16 +367,21 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		if (session.session_token_hash === sessionToken) {
 			const replacementToken = crypto.randomUUID();
 			const replacementHash = await hashSessionToken(replacementToken);
-			await db
+			const upgraded = await db
 				.prepare(
 					`
 				UPDATE sessions
 				SET session_token_hash = ?, last_seen_at = ?
-				WHERE id = ?
+				WHERE id = ? AND session_token_hash = ? AND revoked_at IS NULL AND expires_at > ?
 			`
 				)
-				.bind(replacementHash, now, session.id)
+				.bind(replacementHash, now, session.id, sessionToken, now)
 				.run();
+			if (upgraded.meta.changes !== 1) {
+				clearSessionCookies(event);
+				if (isPrivateRoute) throw redirect(303, expiredLoginPath);
+				return resolvePublicOrAuthRoute();
+			}
 			setSessionCookies(event, replacementToken);
 		} else {
 			// Throttle session touch writes so high page traffic does not write on every request.
@@ -514,46 +516,6 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 			? await getBusinessTrialAccess(db, businessContext.businessId, now)
 			: null;
 		if (trialAccess && !trialAccess.allowApp) {
-			if (trialAccess.shouldPurge && !isWorkspaceSelectionRoute) {
-				logOperationalEvent({
-					level: 'warn',
-					event: 'trial_expired_purge_started',
-					request: event.request,
-					businessId: businessContext.businessId,
-					userId: session.found_user_id,
-					sessionId: session.id,
-					route: pathname,
-					status: 403,
-					metadata: { reason: trialAccess.denialReason ?? 'trial_expired' }
-				});
-				const user = await db
-					.prepare(
-						`
-						SELECT email
-						FROM users
-						WHERE id = ?
-						LIMIT 1
-					`
-					)
-					.bind(session.found_user_id)
-					.first<{ email: string }>();
-
-				await cancelTrialAndPurgeBusiness(db, {
-					businessId: businessContext.businessId,
-					source: 'expired',
-					reason: 'trial_expired_without_conversion',
-					now,
-					identity: {
-						emailNormalized: user?.email ?? '',
-						businessName: businessContext.businessName,
-						ipAddress: getRequestIpAddress(event.request),
-						userAgent: event.request.headers.get('user-agent') ?? ''
-					}
-				});
-				clearSessionCookies(event);
-				throw redirect(303, '/login?trial=expired');
-			}
-
 			if (!isAccessRecoveryRoute) {
 				logOperationalEvent({
 					level: 'warn',

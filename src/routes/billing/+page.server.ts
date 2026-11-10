@@ -1,7 +1,7 @@
 import { fail, isRedirect, redirect, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/env';
 import {
-	cancelTrialAndPurgeBusiness,
+	cancelBusinessAccess,
 	convertBusinessToPaid,
 	ensureTrialSchema,
 	getBusinessTrialAccess,
@@ -292,30 +292,9 @@ export const actions: Actions = {
 				return fail(403, { error: 'Only owner or manager can cancel this workspace.' });
 			}
 
-			const now = Math.floor(Date.now() / 1000);
-			const user = await locals.DB
-				.prepare(
-					`
-          SELECT email
-          FROM users
-          WHERE id = ?
-          LIMIT 1
-        `
-				)
-				.bind(locals.userId)
-				.first<{ email: string }>();
-			const business = await locals.DB
-				.prepare(
-					`
-          SELECT name
-          FROM businesses
-          WHERE id = ?
-          LIMIT 1
-        `
-				)
-				.bind(locals.businessId)
-				.first<{ name: string }>();
-
+			if (!locals.sessionId || !await cancelBusinessAccess(locals.DB, {
+				businessId: locals.businessId, requestedByUserId: locals.userId, sessionId: locals.sessionId, request
+			})) return fail(409, { error: 'Your workspace access changed. Refresh and try again.' });
 			await recordOperationalEventBestEffort(
 				locals.DB,
 				{
@@ -330,20 +309,6 @@ export const actions: Actions = {
 				},
 				request
 			);
-			await cancelTrialAndPurgeBusiness(locals.DB, {
-				businessId: locals.businessId,
-				source: 'canceled',
-				reason: 'manual_workspace_cancel',
-				requestedByUserId: locals.userId,
-				now,
-				identity: {
-					emailNormalized: user?.email ?? '',
-					businessName: business?.name ?? '',
-					clientFingerprint: String((await request.formData()).get('client_fingerprint') ?? ''),
-					ipAddress: getRequestIpAddress(request),
-					userAgent: request.headers.get('user-agent') ?? ''
-				}
-			});
 			logOperationalEvent({
 				level: 'warn',
 				event: 'billing_workspace_canceled',
@@ -368,7 +333,7 @@ export const actions: Actions = {
 				error,
 				message
 			});
-			return fail(500, { error: 'Could not cancel and close workspace right now.' });
+			return fail(500, { error: 'Could not cancel workspace setup right now.' });
 		}
 	}
 };

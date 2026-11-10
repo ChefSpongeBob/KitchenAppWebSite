@@ -3,10 +3,10 @@ import { fail, isRedirect, redirect } from '@sveltejs/kit';
 import { hashPassword, sha256Hex } from '#lib/server/auth.ts';
 import {
   ensurePasswordResetSchema,
+  completePasswordReset,
   findValidPasswordResetByTokenHash,
   validateNewPassword
 } from '#lib/server/passwordReset.ts';
-import { revokeUserSessions, writeAuditLogSafe } from '#lib/server/security.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       email: reset?.user_email ?? null
     };
   } catch (error) {
-    console.error('Password reset load failed:', error instanceof Error ? error.message : String(error));
+    console.error('Password reset load failed.');
     return { valid: false };
   }
 };
@@ -56,40 +56,14 @@ export const actions: Actions = {
         return passwordError;
       }
 
-      const now = Math.floor(Date.now() / 1000);
       const passwordHash = await hashPassword(password, locals.env);
-
-      await db.batch([
-        db
-          .prepare(
-            `
-          UPDATE users
-          SET password_hash = ?, updated_at = ?
-          WHERE id = ?
-        `
-          )
-          .bind(passwordHash, now, reset.user_id),
-        db
-          .prepare(`UPDATE password_resets SET used_at = ? WHERE id = ?`)
-          .bind(now, reset.id),
-        db
-          .prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL`)
-          .bind(now, reset.user_id)
-      ]);
-
-      await revokeUserSessions(db, reset.user_id, { revokeDevices: true });
-      await writeAuditLogSafe(db, {
-        action: 'password_reset_completed',
-        request,
-        getClientAddress,
-        targetUserId: reset.user_id,
-        email: reset.user_email
-      });
+      const completed = await completePasswordReset({ db, reset, tokenHash, passwordHash, request, getClientAddress });
+      if (!completed) return fail(400, { error: 'This reset link is invalid or expired.' });
 
       throw redirect(303, '/login?reset=success');
     } catch (error) {
       if (isRedirect(error)) throw error;
-      console.error('Password reset submit failed:', error instanceof Error ? error.message : String(error));
+      console.error('Password reset submit failed.');
       return fail(503, {
         error: dev ? 'Local password reset failed. Check the dev server log.' : 'Password reset is temporarily unavailable. Please try again.'
       });

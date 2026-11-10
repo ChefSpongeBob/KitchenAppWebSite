@@ -111,7 +111,7 @@ expect('src/routes/login/+page.server.ts', 'login abuse is rate limited by IP an
   source.includes("action: 'login_ip'") &&
   source.includes("action: 'login_email'") &&
   source.includes("action: 'login_failed_bad_password'") &&
-  source.includes("action: 'login_success'")
+  source.includes('commitPasswordSignIn') && read('src/lib/server/authLifecycle.ts').includes("action: 'login_success'")
 );
 
 expect('src/lib/server/turnstile.ts', 'Turnstile validation is server-side and fail-closed when configured', (source) =>
@@ -125,7 +125,7 @@ expect('src/lib/server/turnstile.ts', 'Turnstile validation is server-side and f
 expect('src/routes/login/+page.server.ts', 'login validates Turnstile before account lookup and session creation', (source) => {
   const turnstileIndex = source.indexOf('validateTurnstileSubmission');
   const accountLookupIndex = source.indexOf('SELECT id, email, display_name, password_hash');
-  const sessionCreateIndex = source.indexOf('INSERT INTO sessions');
+  const sessionCreateIndex = source.indexOf('await commitPasswordSignIn');
   return (
     turnstileIndex !== -1 &&
     accountLookupIndex !== -1 &&
@@ -207,7 +207,7 @@ for (const path of [
 
 expect('src/lib/server/trial.ts', 'free-trial reuse is blocked by identity claims and denials', (source) =>
   source.includes('trial_identity_claims') &&
-  source.includes('createTrialDenialRecord') &&
+  source.includes('FROM trial_denials') &&
   source.includes("reason: 'email_reuse'") &&
   source.includes("reason: 'device_reuse'") &&
   source.includes("reason: 'business_ip_reuse'")

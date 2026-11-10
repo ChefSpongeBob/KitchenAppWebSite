@@ -12,12 +12,13 @@ import {
 	restaurantLandingPath
 } from '#lib/server/activeBusiness.ts';
 import { hasColumn } from '#lib/server/dbSchema.ts';
+import { commitPasswordSignIn } from '#lib/server/authLifecycle.ts';
 import { bootstrapBusinessForUser, getUserBusinessContext, loadUserBusinessMemberships } from '#lib/server/business.ts';
 import { normalizeInvitationCode, invitationRegistrationPath, invitationLoginPath } from '#lib/invitations.ts';
 import { effectiveAppRoleFromBusinessRole } from '#lib/server/permissions.ts';
 import {
 	checkRateLimit,
-	clearRateLimit,
+	readRateLimitBlock,
 	getRequestIpAddress,
 	rateLimitFailure,
 	writeAuditLogSafe
@@ -119,11 +120,10 @@ async function revokeActiveSession(
 				UPDATE sessions
 				SET revoked_at = ?
 				WHERE session_token_hash = ?
-				   OR session_token_hash = ?
-				   OR id = ?
+				   OR (session_token_hash = ? AND length(session_token_hash) <> 64)
 			`
 			)
-			.bind(now, sessionTokenHash, sessionToken, sessionToken)
+			.bind(now, sessionTokenHash, sessionToken)
 			.run();
 	}
 
@@ -224,6 +224,10 @@ export const actions: Actions = {
 				}
 			}
 
+			const ipAddress = getRequestIpAddress(request, getClientAddress);
+			const requestLimit = await checkRateLimit(db, { action: 'login_ip', identifier: ipAddress,
+				limit: 200, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
+			if (!requestLimit.allowed) return rateLimitFailure();
 			const turnstile = await validateTurnstileSubmission({
 				env: locals.env,
 				formData,
@@ -239,17 +243,10 @@ export const actions: Actions = {
 				return fail(400, { error: 'Security check failed. Refresh and try again.', email });
 			}
 
-			const ipAddress = getRequestIpAddress(request, getClientAddress);
 			let ipLimit = { allowed: true, retryAfterSeconds: 0 };
 			let emailLimit = { allowed: true, retryAfterSeconds: 0 };
 			try {
-				ipLimit = await checkRateLimit(db, {
-					action: 'login_ip',
-					identifier: ipAddress,
-					limit: 20,
-					windowSeconds: 15 * 60,
-					blockSeconds: 15 * 60
-				});
+				ipLimit = await readRateLimitBlock(db, 'login_failed_ip', ipAddress);
 				emailLimit = await checkRateLimit(db, {
 					action: 'login_email',
 					identifier: email,
@@ -314,6 +311,8 @@ export const actions: Actions = {
 						}>();
 
 			if (!user || !user.password_hash) {
+				await checkRateLimit(db, { action: 'login_failed_ip', identifier: ipAddress,
+					limit: 20, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
 				await writeAuditLogSafe(db, {
 					action: 'login_failed_unknown_user',
 					request,
@@ -323,6 +322,8 @@ export const actions: Actions = {
 				return fail(400, { error: GENERIC_LOGIN_ERROR, email });
 			}
 			if (hasIsActive && user.is_active !== 1) {
+				await checkRateLimit(db, { action: 'login_failed_ip', identifier: ipAddress,
+					limit: 20, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
 				const auditBusinessId = await resolvePrimaryBusinessIdForUser(db, user.id);
 				await writeAuditLogSafe(db, {
 					action: 'login_blocked_inactive_user',
@@ -337,6 +338,8 @@ export const actions: Actions = {
 
 			const passwordCheck = await verifyPassword(password, user.password_hash, locals.env);
 			if (!passwordCheck.valid) {
+				await checkRateLimit(db, { action: 'login_failed_ip', identifier: ipAddress,
+					limit: 20, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
 				const auditBusinessId = await resolvePrimaryBusinessIdForUser(db, user.id);
 				await writeAuditLogSafe(db, {
 					action: 'login_failed_bad_password',
@@ -349,105 +352,13 @@ export const actions: Actions = {
 				return fail(400, { error: GENERIC_LOGIN_ERROR, email });
 			}
 
-			const now = Math.floor(Date.now() / 1000);
-			const expires = now + 60 * 60 * 24 * 30;
 			if (staffLogin && !await findPlatformStaff(db, user.id)) {
 				return fail(403, { error: 'Staff access required.', email });
-			}
-
-			// A fresh sign-in should replace this browser's previous account context.
-			await revokeActiveSession(db, cookies, request);
-
-			const sessionId = crypto.randomUUID();
-			const sessionToken = crypto.randomUUID();
-			const sessionTokenHash = await hashSessionToken(sessionToken);
-
-			let device = await db
-				.prepare(
-					`
-					SELECT id
-					FROM devices
-					WHERE user_id = ?
-					AND revoked_at IS NULL
-					LIMIT 1
-				`
-				)
-				.bind(user.id)
-				.first<{ id: string }>();
-
-			let deviceId = device?.id;
-
-			if (!deviceId) {
-				deviceId = crypto.randomUUID();
-
-				await db
-					.prepare(
-						`
-						INSERT INTO devices (
-							id,
-							user_id,
-							pin_hash,
-							user_agent,
-							last_ip,
-							created_at,
-							updated_at
-						)
-						VALUES (?, ?, ?, ?, ?, ?, ?)
-					`
-					)
-					.bind(deviceId, user.id, '', request.headers.get('user-agent') ?? null, ipAddress, now, now)
-					.run();
-			} else {
-				await db
-					.prepare(`UPDATE devices SET user_agent = ?, last_ip = ?, last_seen_at = ?, updated_at = ? WHERE id = ?`)
-					.bind(request.headers.get('user-agent') ?? null, ipAddress, now, now, deviceId)
-					.run();
-			}
-
-			await db
-				.prepare(
-					`
-					INSERT INTO sessions (
-						id,
-						user_id,
-						device_id,
-						session_token_hash,
-						created_at,
-						last_seen_at,
-						expires_at
-					)
-					VALUES (?, ?, ?, ?, ?, ?, ?)
-				`
-				)
-				.bind(sessionId, user.id, deviceId, sessionTokenHash, now, now, expires)
-				.run();
-
-			if (passwordCheck.needsRehash && passwordCheck.upgradedHash) {
-				await db
-					.prepare(
-						`
-						UPDATE users
-						SET password_hash = ?, updated_at = ?
-						WHERE id = ?
-					`
-					)
-					.bind(passwordCheck.upgradedHash, now, user.id)
-					.run();
 			}
 
 			let businessContext = staffLogin ? null : await getUserBusinessContext(db, user.id);
 			if (!businessContext && !staffLogin && !normalizeInvitationCode(url.searchParams.get('invite'))) {
 				if (!dev) {
-					await db
-						.prepare(
-							`
-							UPDATE sessions
-							SET revoked_at = ?
-							WHERE id = ?
-							`
-						)
-						.bind(now, sessionId)
-						.run();
 					await writeAuditLogSafe(db, {
 						action: 'login_workspace_missing',
 						request,
@@ -468,18 +379,18 @@ export const actions: Actions = {
 				);
 			}
 
-			await Promise.all([
-				clearRateLimit(db, 'login_email', email),
-				writeAuditLogSafe(db, {
-					action: 'login_success',
-					request,
-					getClientAddress,
-					businessId: businessContext?.businessId ?? null,
-					targetUserId: user.id,
-					email
-				})
-			]);
-
+			const destination = await resolvePostLoginPath(db, user.id, businessContext?.businessId, url);
+			const sessionId = crypto.randomUUID();
+			const sessionToken = crypto.randomUUID();
+			const sessionTokenHash = await hashSessionToken(sessionToken);
+			const committed = await commitPasswordSignIn(db, {
+				userId: user.id, email, verifiedPasswordHash: user.password_hash,
+				upgradedHash: passwordCheck.needsRehash ? passwordCheck.upgradedHash : undefined,
+				businessId: businessContext?.businessId, staffLogin, sessionId, sessionTokenHash,
+				previousToken: resolveSessionToken(cookies), request, getClientAddress
+			});
+			if (!committed) return fail(400, { error: GENERIC_LOGIN_ERROR, email });
+			cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(request));
 			setSessionCookies(cookies, request, sessionToken);
 			if (staffLogin) {
 				try {
@@ -489,20 +400,17 @@ export const actions: Actions = {
 					throw redirect(303, '/staff/security?delivery=retry');
 				}
 			}
-			throw redirect(
-				303,
-				await resolvePostLoginPath(db, user.id, businessContext?.businessId, url)
-			);
+			throw redirect(303, destination);
 		} catch (err) {
 			if (isRedirect(err)) {
 				throw err;
 			}
 			const message = err instanceof Error ? err.message : String(err ?? '');
-			console.error('Login action failed:', message);
+			console.error('Login action failed.');
 			if (message.includes('D1_ERROR: no such table')) {
 				return fail(503, { error: 'Sign in is temporarily unavailable while the workspace finishes setup.', email: '' });
 			}
-			return fail(500, { error: dev ? `Local sign in failed: ${message}` : 'Sign in failed. Please try again.', email });
+			return fail(500, { error: 'Sign in failed. Please try again.', email });
 		}
 	}
 };

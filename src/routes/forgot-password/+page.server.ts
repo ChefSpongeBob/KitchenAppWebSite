@@ -13,6 +13,7 @@ import { sha256Hex } from '#lib/server/auth.ts';
 import {
 	checkRateLimit,
 	getRequestIpAddress,
+	hashedAuditValue,
 	rateLimitFailure,
 	writeAuditLogSafe
 } from '#lib/server/security.ts';
@@ -96,14 +97,7 @@ export const actions: Actions = {
 
 			const token = generatePasswordResetToken();
 			const tokenHash = await sha256Hex(token);
-			const requestedIp = (() => {
-				try {
-					return getClientAddress?.() ?? null;
-				} catch {
-					return request.headers.get('cf-connecting-ip') ?? null;
-				}
-			})();
-
+			const requestedIp = await hashedAuditValue(ipAddress);
 			const resetRecord = await createPasswordResetRecord({
 				db,
 				userId: user.id,
@@ -118,7 +112,7 @@ export const actions: Actions = {
 				userEmail: user.email,
 				displayName: user.display_name,
 				resetToken: token
-			});
+			}).catch(() => ({ sent: false }));
 
 			if (!emailResult.sent) {
 				await deletePasswordResetRecordById(db, resetRecord.id);
@@ -129,10 +123,7 @@ export const actions: Actions = {
 					targetUserId: user.id,
 					email
 				});
-				return fail(503, {
-					error: emailResult.reason ?? 'Reset instructions could not be sent right now. Please try again.',
-					email
-				});
+				return finishResetRequest(startedAt, email);
 			}
 
 			await writeAuditLogSafe(db, {
@@ -145,7 +136,7 @@ export const actions: Actions = {
 
 			return finishResetRequest(startedAt, email);
 		} catch (error) {
-			console.error('Password reset request failed:', error instanceof Error ? error.message : String(error));
+      console.error('Password reset request failed.');
 			return fail(503, {
 				error: dev ? 'Local reset request failed. Check the dev server log.' : 'Password reset is temporarily unavailable. Please try again.',
 				email

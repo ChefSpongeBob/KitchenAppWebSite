@@ -28,7 +28,8 @@ export async function staffEmailIdentity(db: DB, userId: string, sessionId: stri
       u.password_hash, m.revision, s.session_token_hash, s.expires_at
     FROM platform_staff_members m JOIN users u ON u.id = m.user_id JOIN sessions s ON s.user_id = u.id
     WHERE m.user_id = ? AND s.id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
-      AND s.revoked_at IS NULL AND s.expires_at > ? LIMIT 1`)
+      AND s.revoked_at IS NULL AND s.expires_at > ?
+      AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL)) LIMIT 1`)
     .bind(userId, sessionId, now).first<Identity>();
 }
 
@@ -55,6 +56,7 @@ const LIVE_CHALLENGE_SQL = `EXISTS (SELECT 1 FROM platform_staff_members m JOIN 
     AND s.id = platform_staff_email_challenges.session_id AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
     AND m.revision = platform_staff_email_challenges.membership_revision AND s.revoked_at IS NULL
     AND s.expires_at > ? AND s.session_token_hash = platform_staff_email_challenges.session_token_hash
+    AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL))
     AND lower(trim(COALESCE(m.otp_email, u.email))) = platform_staff_email_challenges.source_email)`;
 
 export async function beginStaffEmailChallenge(locals: App.Locals, password: string, purpose: Purpose, newEmail?: string) {
@@ -94,6 +96,7 @@ export async function beginStaffEmailChallenge(locals: App.Locals, password: str
       FROM platform_staff_members m JOIN users u ON u.id = m.user_id JOIN sessions s ON s.user_id = u.id
       WHERE m.user_id = ? AND s.id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
         AND m.revision = ? AND u.password_hash = ? AND s.session_token_hash = ? AND s.revoked_at IS NULL
+        AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL))
         AND s.expires_at > ? AND lower(trim(COALESCE(m.otp_email, u.email))) = ?
         AND NOT EXISTS (SELECT 1 FROM platform_staff_email_challenges WHERE user_id = m.user_id AND created_at > ?)
         AND (? = 'sign_in' OR EXISTS (SELECT 1 FROM platform_staff_step_up p WHERE p.session_id = s.id

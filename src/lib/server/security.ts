@@ -129,64 +129,40 @@ export async function checkRateLimit(
 
   const now = Math.floor(Date.now() / 1000);
   const keyHash = await sha256Hex(`${action}:${identifier.trim().toLowerCase()}`);
-  const existing = await db
-    .prepare(
-      `
-      SELECT window_start, count, blocked_until
-      FROM security_rate_limits
-      WHERE key_hash = ?
-      LIMIT 1
-      `
-    )
-    .bind(keyHash)
-    .first<{ window_start: number; count: number; blocked_until: number | null }>();
-
-  if (existing?.blocked_until && existing.blocked_until > now) {
-    return { allowed: false, retryAfterSeconds: existing.blocked_until - now };
-  }
-
-  if (!existing || now - existing.window_start >= windowSeconds) {
-    await db
-      .prepare(
-        `
-        INSERT INTO security_rate_limits (key_hash, action, window_start, count, blocked_until, last_seen_at)
-        VALUES (?, ?, ?, 1, NULL, ?)
-        ON CONFLICT(key_hash) DO UPDATE SET
-          action = excluded.action,
-          window_start = excluded.window_start,
-          count = excluded.count,
-          blocked_until = NULL,
-          last_seen_at = excluded.last_seen_at
-        `
-      )
-      .bind(keyHash, action, now, now)
-      .run();
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-
-  const nextCount = existing.count + 1;
-  const blockedUntil = nextCount > limit ? now + blockSeconds : null;
-  await db
-    .prepare(
-      `
-      UPDATE security_rate_limits
-      SET count = ?, blocked_until = ?, last_seen_at = ?
-      WHERE key_hash = ?
-      `
-    )
-    .bind(nextCount, blockedUntil, now, keyHash)
-    .run();
-
-  return {
-    allowed: nextCount <= limit,
-    retryAfterSeconds: blockedUntil ? blockedUntil - now : 0
-  };
+  // Increment and decide in one statement; parallel requests must not lose attempts.
+  const row = await db.prepare(`INSERT INTO security_rate_limits
+    (key_hash, action, window_start, count, blocked_until, last_seen_at)
+    VALUES (?, ?, ?, 1, NULL, ?)
+    ON CONFLICT(key_hash) DO UPDATE SET
+      window_start = CASE WHEN blocked_until > ? THEN window_start
+        WHEN ? - window_start >= ? THEN excluded.window_start ELSE window_start END,
+      count = CASE WHEN blocked_until > ? THEN count
+        WHEN ? - window_start >= ? THEN 1 ELSE count + 1 END,
+      blocked_until = CASE WHEN blocked_until > ? THEN blocked_until
+        WHEN ? - window_start >= ? THEN NULL
+        WHEN count + 1 > ? THEN ? ELSE NULL END,
+      last_seen_at = excluded.last_seen_at
+    RETURNING count, blocked_until`)
+    .bind(keyHash, action, now, now, now, now, windowSeconds, now, now, windowSeconds,
+      now, now, windowSeconds, limit, now + blockSeconds)
+    .first<{ count: number; blocked_until: number | null }>();
+  if (!row) throw new Error('Rate limit could not be checked.');
+  return { allowed: row.count <= limit && !(row.blocked_until && row.blocked_until > now),
+    retryAfterSeconds: Math.max(0, (row.blocked_until ?? now) - now) };
 }
 
 export async function clearRateLimit(db: D1, action: string, identifier: string) {
   await ensureSecuritySchema(db);
   const keyHash = await sha256Hex(`${action}:${identifier.trim().toLowerCase()}`);
   await db.prepare(`DELETE FROM security_rate_limits WHERE key_hash = ?`).bind(keyHash).run();
+}
+
+export async function readRateLimitBlock(db: D1, action: string, identifier: string): Promise<RateLimitResult> {
+  const keyHash = await sha256Hex(`${action}:${identifier.trim().toLowerCase()}`);
+  const row = await db.prepare('SELECT blocked_until FROM security_rate_limits WHERE key_hash = ?')
+    .bind(keyHash).first<{ blocked_until: number | null }>();
+  const retryAfterSeconds = Math.max(0, (row?.blocked_until ?? 0) - Math.floor(Date.now() / 1000));
+  return { allowed: retryAfterSeconds === 0, retryAfterSeconds };
 }
 
 export function rateLimitFailure(message = 'Too many attempts. Try again shortly.') {

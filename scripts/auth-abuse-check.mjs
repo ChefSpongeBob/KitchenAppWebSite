@@ -43,7 +43,7 @@ expect('src/routes/login/+page.server.ts', 'login is rate limited and audited', 
   source.includes("action: 'login_ip'") &&
   source.includes("action: 'login_email'") &&
   source.includes("action: 'login_failed_bad_password'") &&
-  source.includes("action: 'login_success'")
+  source.includes('commitPasswordSignIn') && read('src/lib/server/authLifecycle.ts').includes("action: 'login_success'")
 );
 
 expect('src/routes/login/+page.server.ts', 'login supports server-validated Turnstile when configured', (source) =>
@@ -109,13 +109,15 @@ expect('src/routes/account-deletion/+page.server.ts', 'account deletion requests
 expect('src/routes/reset-password/[token]/+page.server.ts', 'password reset completion revokes existing sessions and devices', (source) =>
   source.includes('findValidPasswordResetByTokenHash') &&
   source.includes('validateNewPassword') &&
-  source.includes('revokeUserSessions(db, reset.user_id, { revokeDevices: true })') &&
-  source.includes("action: 'password_reset_completed'")
+  source.includes('completePasswordReset') &&
+  read('src/lib/server/passwordReset.ts').includes("action: 'password_reset_completed'") &&
+  read('src/lib/server/passwordReset.ts').includes('UPDATE sessions SET revoked_at') &&
+  read('src/lib/server/passwordReset.ts').includes('UPDATE devices SET revoked_at')
 );
 
 expect('src/hooks.server.ts', 'request guard rejects revoked sessions devices inactive users and gated features', (source) =>
   source.includes('session.revoked_at !== null') &&
-  source.includes('session.device_id && (!session.found_device_id || session.device_revoked_at !== null)') &&
+  source.includes('session.device_id && (!session.found_device_id || session.device_revoked_at !== null || session.device_user_id !== session.user_id)') &&
   source.includes('session.user_is_active !== 1') &&
   source.includes('resolveBusinessCapabilityForPath(pathname)') &&
   source.includes('resolveFeatureKeyForUrl(event.url)') &&

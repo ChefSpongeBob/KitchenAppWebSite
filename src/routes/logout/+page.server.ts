@@ -22,10 +22,9 @@ export const actions: Actions = {
 				UPDATE sessions
 				SET revoked_at = ?
 				WHERE session_token_hash = ?
-				   OR session_token_hash = ?
-				   OR id = ?
+				   OR (session_token_hash = ? AND length(session_token_hash) <> 64)
 			`)
-			.bind(now, sessionTokenHash, sessionToken, sessionToken)
+			.bind(now, sessionTokenHash, sessionToken)
 			.run();
 		}
 

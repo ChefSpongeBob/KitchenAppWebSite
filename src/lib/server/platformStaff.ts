@@ -22,6 +22,7 @@ export async function loadStaffStepUp(db: DB, userId: string, sessionId: string,
     WHERE p.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
       AND p.email_verified_at = p.verified_at
       AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
+      AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL))
     LIMIT 1`).bind(userId, sessionId, now, now - maxAge, now)
     .first<{ verified_at: number }>();
 }
@@ -77,6 +78,7 @@ export const STAFF_CHANGE_AUTHORITY_SQL = `EXISTS (
   WHERE m.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
     AND p.email_verified_at = p.verified_at
     AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
+    AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL))
     AND m.staff_role IN (?, ?)
 )`;
 
