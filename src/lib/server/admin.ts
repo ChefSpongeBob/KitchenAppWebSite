@@ -72,6 +72,7 @@ import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.
 import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSanitizer.ts';
 import { hasPlatformStaffMembership } from '#lib/server/platformStaff.ts';
 import { logOperationalError } from '#lib/server/observability.ts';
+import { readHrFileAuthority, commitHrFileWrite, hrFileWriteGuard } from '#lib/server/hrFileWrites.ts';
 
 type D1 = App.RuntimeEnv['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -563,12 +564,13 @@ async function uploadEmployeeOnboardingMedia(
   bucket: NonNullable<App.Locals['MEDIA_BUCKET']>,
   businessId: string,
   userId: string,
-  file: File
+  file: File,
+  stagedUrls?: string[]
 ) {
   const contentType = file.type || 'application/octet-stream';
   const filenameExtension = extensionFromFilename(file.name);
   const typeExtension = extensionFromContentType(contentType);
-  const extension = filenameExtension || typeExtension || 'bin';
+  const extension = typeExtension || filenameExtension || 'bin';
 
   if (!isAllowedDocumentUpload(contentType, extension)) {
     throw new Error('Unsupported onboarding document type.');
@@ -576,22 +578,19 @@ async function uploadEmployeeOnboardingMedia(
 
   const normalizedUserId = normalizeSlug(userId) || 'employee';
   const key = `businesses/${businessId}/employee-onboarding/${normalizedUserId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+  const url = `/api/documents/media/${key.split('/').map(encodeURIComponent).join('/')}`;
+  // Track the unique object before put: a failed response can follow a successful R2 write.
+  stagedUrls?.push(url);
   await bucket.put(key, file.stream() as unknown as WorkerReadableStream, {
     httpMetadata: {
-      contentType,
+      contentType: extensionFromContentType(contentType) ? contentType :
+        ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+          webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[extension],
       cacheControl: 'private, max-age=0'
     }
   });
 
-  const encodedKey = key
-    .split('/')
-    .map((part) => encodeURIComponent(part))
-    .join('/');
-
-  return {
-    key,
-    url: `/api/documents/media/${encodedKey}`
-  };
+  return { key, url };
 }
 
 export async function tableExists(db: D1, tableName: string) {
@@ -2960,52 +2959,83 @@ async function applyOnboardingFormPayloadToProfile(
     .run();
 }
 
-async function resolveOnboardingTemplateSourceFile(
-  formData: FormData,
-  locals: App.Locals,
-  sourceName: string,
-  existingUrl = ''
-) {
-  let sourceFileUrl = String(formData.get('source_file_url') ?? existingUrl).trim();
-  let sourceFileName = String(formData.get('existing_source_file_name') ?? '').trim();
-  const upload = formData.get(sourceName);
+const templateFileSnapshotSql = `SELECT json_array(id, item_type, form_key, title, description,
+  source_file_url, source_file_name, sort_order, is_active, created_at, updated_at, created_by) AS proof
+  FROM employee_onboarding_template_items WHERE business_id = ? AND id = ?`;
 
-  if (upload instanceof File && upload.size > 0) {
-    if (upload.size > 15 * 1024 * 1024) {
-      return { error: 'Onboarding source documents must be 15MB or smaller.' };
-    }
-
-    const contentType = upload.type || 'application/octet-stream';
-    const extension = extensionFromFilename(upload.name);
-    if (!isAllowedDocumentUpload(contentType, extension)) {
-      return { error: 'Only PDF or image documents can be uploaded.' };
-    }
-
-    if (!locals.MEDIA_BUCKET) {
-      return { error: 'Document storage is not configured.' };
-    }
-
-    try {
-      const uploaded = await uploadEmployeeOnboardingMedia(
-        locals.MEDIA_BUCKET,
-        requireBusinessId(locals),
-        `template-${locals.businessId ?? 'business'}`,
-        upload
-      );
-      const previousKey = documentMediaKeyFromUrl(existingUrl);
-      if (previousKey && previousKey !== uploaded.key) {
-        await locals.MEDIA_BUCKET.delete(previousKey);
-      }
-      sourceFileUrl = uploaded.url;
-      sourceFileName = upload.name;
-    } catch {
-      return { error: 'Only PDF or image documents can be uploaded.' };
-    }
-  } else if (!sourceFileUrl) {
-    sourceFileName = '';
+async function saveEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals, editing: boolean) {
+  requireAdmin(locals.userRole);
+  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
+  const db = locals.DB;
+  if (!db) return fail(503, { error: 'Database not configured.' });
+  const businessId = requireBusinessId(locals);
+  await ensureEmployeeOnboardingTables(db);
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'template');
+  if (!authority) return fail(403, { error: 'HR setup access required.' });
+  const formData = await request.formData();
+  const id = editing ? String(formData.get('id') ?? '').trim() : crypto.randomUUID();
+  if (!id) return fail(400, { error: 'Missing onboarding item id.' });
+  const existing = editing ? await db.prepare(`SELECT *, (${templateFileSnapshotSql}) AS proof
+    FROM employee_onboarding_template_items WHERE business_id = ? AND id = ?`)
+    .bind(businessId, id, businessId, id).first<EmployeeOnboardingTemplateItem & { proof: string }>() : null;
+  if (editing && !existing) return fail(404, { error: 'Onboarding item not found.' });
+  const kind = editing ? '' : String(formData.get('item_kind') ?? '').trim().toLowerCase();
+  const requestedKey = kind === 'state_withholding' ? kind : String(formData.get('form_key') ?? '').trim().toLowerCase();
+  const requestedType = kind === 'acknowledgement' ? kind : ['document', 'state_withholding'].includes(kind)
+    ? 'document' : String(formData.get('item_type') ?? '').trim();
+  const itemType = ['federal_i9', 'federal_w4', 'state_withholding'].includes(requestedKey)
+    ? 'document' : normalizeOnboardingItemType(requestedType);
+  const formKey = normalizeOnboardingFormKey(requestedKey, itemType ?? 'acknowledgement');
+  const title = formString(formData, 'title', 160), description = formMultilineString(formData, 'description', 1000);
+  const order = Number(formData.get('sort_order') ?? 0);
+  const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
+  if (!itemType) return fail(400, { error: 'Choose a valid onboarding item type.' });
+  if (!title) return fail(400, { error: 'Title is required.' });
+  const duplicate = formKey && await db.prepare(`SELECT 1 FROM employee_onboarding_template_items
+    WHERE business_id = ? AND form_key = ? AND id <> ?`).bind(businessId, formKey, id).first();
+  if (duplicate) return fail(400, { error: 'That packet form already exists.' });
+  const upload = formData.get('source_file'), hasUpload = upload instanceof File && upload.size > 0;
+  if (hasUpload) {
+    if (upload.size > 15 * 1024 * 1024) return fail(400, { error: 'Onboarding source documents must be 15MB or smaller.' });
+    if (!isAllowedDocumentUpload(upload.type, extensionFromFilename(upload.name))) return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
+    if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
   }
-
-  return { sourceFileUrl, sourceFileName };
+  if (!hasUpload && !existing?.source_file_url) {
+    if (itemType === 'acknowledgement') return fail(400, { error: 'Upload the policy or handbook employees will acknowledge.' });
+    if (formKey === 'state_withholding') return fail(400, { error: 'Upload the current state withholding form.' });
+  }
+  const staged: string[] = [];
+  let outcome: string;
+  try {
+    const fileUrl = hasUpload ? (await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET!, businessId,
+      `template-${businessId}`, upload, staged)).url : existing?.source_file_url ?? '';
+    const fileName = hasUpload ? upload.name : existing?.source_file_name ?? '';
+    const now = Math.floor(Date.now() / 1000);
+    outcome = await commitHrFileWrite(db, request, authority, {
+      action: editing ? 'employee_onboarding_template_updated' : 'employee_onboarding_template_created',
+      metadata: { templateId: id },
+      condition: `(${templateFileSnapshotSql}) IS ? AND (? = '' OR NOT EXISTS
+        (SELECT 1 FROM employee_onboarding_template_items WHERE business_id = ? AND form_key = ? AND id <> ?))`,
+      values: [businessId, id, existing?.proof ?? null, formKey, businessId, formKey, id],
+      writes: auditId => [editing ? db.prepare(`UPDATE employee_onboarding_template_items SET
+        item_type = ?, form_key = ?, title = ?, description = ?, source_file_url = ?, source_file_name = ?,
+        sort_order = ?, is_active = ?, updated_at = ? WHERE business_id = ? AND id = ? AND ${hrFileWriteGuard}`)
+        .bind(itemType, formKey, title, description, fileUrl, fileName, Number.isFinite(order) ? order : 0,
+          isActive, now, businessId, id, auditId) : db.prepare(`INSERT INTO employee_onboarding_template_items
+        (id, business_id, item_type, form_key, title, description, source_file_url, source_file_name,
+          sort_order, is_active, created_at, updated_at, created_by)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${hrFileWriteGuard}`)
+        .bind(id, businessId, itemType, formKey, title, description, fileUrl, fileName,
+          Number.isFinite(order) ? order : 0, isActive, now, now, authority.actor, auditId)]
+    });
+  } catch {
+    outcome = 'unavailable';
+    logOperationalError({ event: 'hr_file_write_failed', businessId, metadata: { phase: 'upload', action: 'template' } });
+  }
+  await cleanUpOnboardingMedia(db, locals, businessId, outcome === 'saved' ? existing?.source_file_url ?? '' : staged);
+  if (outcome === 'changed') return fail(409, { error: 'This packet form or your access changed. Refresh before saving again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The packet form could not be saved. Please try again.' });
+  return { success: true, message: editing ? 'Onboarding item saved.' : 'Onboarding item added.' };
 }
 
 export async function loadEmployeeOnboardingTemplate(db: D1, businessId: string) {
@@ -3042,103 +3072,7 @@ export async function loadEmployeeOnboardingTemplate(db: D1, businessId: string)
 }
 
 export async function createEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  await ensureEmployeeOnboardingTables(db);
-
-  const formData = await request.formData();
-  const itemKind = String(formData.get('item_kind') ?? '').trim().toLowerCase();
-  const requestedFormKey =
-    itemKind === 'state_withholding'
-      ? 'state_withholding'
-      : String(formData.get('form_key') ?? '').trim().toLowerCase();
-  const requestedItemType = normalizeOnboardingItemType(
-    itemKind === 'acknowledgement'
-      ? 'acknowledgement'
-      : itemKind === 'document' || itemKind === 'state_withholding'
-        ? 'document'
-        : String(formData.get('item_type') ?? '').trim()
-  );
-  const itemType = ['federal_i9', 'federal_w4', 'state_withholding'].includes(requestedFormKey)
-    ? 'document'
-    : requestedItemType;
-  const formKey = normalizeOnboardingFormKey(requestedFormKey, itemType ?? 'acknowledgement');
-  const title = formString(formData, 'title', 160);
-  const description = formMultilineString(formData, 'description', 1000);
-  const sortOrder = Number(formData.get('sort_order') ?? 0);
-  const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
-
-  if (!itemType) return fail(400, { error: 'Choose a valid onboarding item type.' });
-  if (!title) return fail(400, { error: 'Title is required.' });
-
-  if (formKey) {
-    const existingForm = await db
-      .prepare(
-        `
-        SELECT id
-        FROM employee_onboarding_template_items
-        WHERE business_id = ? AND form_key = ?
-        LIMIT 1
-        `
-      )
-      .bind(businessId, formKey)
-      .first<{ id: string }>();
-    if (existingForm) return fail(400, { error: 'That packet form already exists.' });
-  }
-
-  const sourceResult = await resolveOnboardingTemplateSourceFile(formData, locals, 'source_file');
-  if ('error' in sourceResult) return fail(400, { error: sourceResult.error });
-  if (itemType === 'acknowledgement' && !sourceResult.sourceFileUrl) {
-    return fail(400, { error: 'Upload the policy or handbook employees will acknowledge.' });
-  }
-  if (formKey === 'state_withholding' && !sourceResult.sourceFileUrl) {
-    return fail(400, { error: 'Upload the current state withholding form.' });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_onboarding_template_items (
-        id,
-        business_id,
-        item_type,
-        form_key,
-        title,
-        description,
-        source_file_url,
-        source_file_name,
-        sort_order,
-        is_active,
-        created_at,
-        updated_at,
-        created_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    )
-    .bind(
-      crypto.randomUUID(),
-      businessId,
-      itemType,
-      formKey,
-      title,
-      description,
-      sourceResult.sourceFileUrl,
-      sourceResult.sourceFileName,
-      Number.isFinite(sortOrder) ? sortOrder : 0,
-      isActive,
-      now,
-      now,
-      locals.userId ?? null
-    )
-    .run();
-
-  return { success: true, message: 'Onboarding item added.' };
+  return saveEmployeeOnboardingTemplateItem(request, locals, false);
 }
 
 export async function installStandardEmployeeOnboardingTemplate(_request: Request, locals: App.Locals) {
@@ -3244,73 +3178,7 @@ export async function installStandardEmployeeOnboardingTemplate(_request: Reques
 }
 
 export async function updateEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
-  requireAdmin(locals.userRole);
-  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
-  const db = locals.DB;
-  if (!db) return fail(503, { error: 'Database not configured.' });
-  const businessId = requireBusinessId(locals);
-
-  await ensureEmployeeOnboardingTables(db);
-
-  const formData = await request.formData();
-  const id = String(formData.get('id') ?? '').trim();
-  const requestedFormKey = String(formData.get('form_key') ?? '').trim().toLowerCase();
-  const requestedItemType = normalizeOnboardingItemType(String(formData.get('item_type') ?? '').trim());
-  const itemType = ['federal_i9', 'federal_w4', 'state_withholding'].includes(requestedFormKey)
-    ? 'document'
-    : requestedItemType;
-  const formKey = normalizeOnboardingFormKey(requestedFormKey, itemType ?? 'acknowledgement');
-  const title = formString(formData, 'title', 160);
-  const description = formMultilineString(formData, 'description', 1000);
-  const sortOrder = Number(formData.get('sort_order') ?? 0);
-  const isActive = Number(formData.get('is_active') ?? 1) === 1 ? 1 : 0;
-  const existingUrl = String(formData.get('existing_source_file_url') ?? '').trim();
-
-  if (!id) return fail(400, { error: 'Missing onboarding item id.' });
-  if (!itemType) return fail(400, { error: 'Choose a valid onboarding item type.' });
-  if (!title) return fail(400, { error: 'Title is required.' });
-
-  const sourceResult = await resolveOnboardingTemplateSourceFile(formData, locals, 'source_file', existingUrl);
-  if ('error' in sourceResult) return fail(400, { error: sourceResult.error });
-  if (itemType === 'acknowledgement' && !sourceResult.sourceFileUrl) {
-    return fail(400, { error: 'Upload the policy or handbook employees will acknowledge.' });
-  }
-  if (formKey === 'state_withholding' && !sourceResult.sourceFileUrl) {
-    return fail(400, { error: 'Upload the current state withholding form.' });
-  }
-
-  await db
-    .prepare(
-      `
-      UPDATE employee_onboarding_template_items
-      SET item_type = ?,
-        form_key = ?,
-        title = ?,
-        description = ?,
-        source_file_url = ?,
-        source_file_name = ?,
-        sort_order = ?,
-        is_active = ?,
-        updated_at = ?
-      WHERE id = ? AND business_id = ?
-      `
-    )
-    .bind(
-      itemType,
-      formKey,
-      title,
-      description,
-      sourceResult.sourceFileUrl,
-      sourceResult.sourceFileName,
-      Number.isFinite(sortOrder) ? sortOrder : 0,
-      isActive,
-      Math.floor(Date.now() / 1000),
-      id,
-      businessId
-    )
-    .run();
-
-  return { success: true, message: 'Onboarding item saved.' };
+  return saveEmployeeOnboardingTemplateItem(request, locals, true);
 }
 
 export async function deleteEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
@@ -3321,6 +3189,8 @@ export async function deleteEmployeeOnboardingTemplateItem(request: Request, loc
   const businessId = requireBusinessId(locals);
 
   await ensureEmployeeOnboardingTables(db);
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'template');
+  if (!authority) return fail(403, { error: 'HR setup access required.' });
 
   const formData = await request.formData();
   const id = String(formData.get('id') ?? '').trim();
@@ -3329,24 +3199,24 @@ export async function deleteEmployeeOnboardingTemplateItem(request: Request, loc
   const existing = await db
     .prepare(
       `
-      SELECT source_file_url
+      SELECT source_file_url, (${templateFileSnapshotSql}) AS proof
       FROM employee_onboarding_template_items
       WHERE id = ? AND business_id = ?
       LIMIT 1
       `
     )
-    .bind(id, businessId)
-    .first<{ source_file_url: string }>();
-
-  await db
-    .prepare(`DELETE FROM employee_onboarding_template_items WHERE id = ? AND business_id = ?`)
-    .bind(id, businessId)
-    .run();
-
-  const mediaKey = documentMediaKeyFromUrl(existing?.source_file_url ?? '');
-  if (mediaKey && locals.MEDIA_BUCKET) {
-    await locals.MEDIA_BUCKET.delete(mediaKey);
-  }
+    .bind(businessId, id, id, businessId)
+    .first<{ source_file_url: string; proof: string }>();
+  if (!existing) return fail(404, { error: 'Onboarding item not found.' });
+  const outcome = await commitHrFileWrite(db, request, authority, {
+    action: 'employee_onboarding_template_deleted', metadata: { templateId: id },
+    condition: `(${templateFileSnapshotSql}) IS ?`, values: [businessId, id, existing.proof],
+    writes: auditId => [db.prepare(`DELETE FROM employee_onboarding_template_items
+      WHERE id = ? AND business_id = ? AND ${hrFileWriteGuard}`).bind(id, businessId, auditId)]
+  });
+  if (outcome === 'changed') return fail(409, { error: 'This packet form or your access changed. Refresh before deleting.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The packet form could not be deleted. Please try again.' });
+  await cleanUpOnboardingMedia(db, locals, businessId, existing.source_file_url);
 
   return { success: true, message: 'Onboarding item deleted.' };
 }
@@ -6800,7 +6670,7 @@ export async function sendEmployeeOnboardingPackage(
   };
 }
 
-async function cleanUpOnboardingMedia(db: D1, locals: App.Locals, businessId: string, fileUrl: string) {
+async function cleanUpOnboardingMedia(db: D1, locals: App.Locals, businessId: string, fileUrl: string | string[]) {
   try {
     await deleteUnreferencedDocumentMedia(db, locals, businessId, fileUrl);
   } catch {
@@ -7254,15 +7124,37 @@ async function requireSensitiveOnboardingReviewer(
 }
 
 function isPdfUpload(file: File) {
-  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  return file.type === 'application/pdf' ||
+    (['', 'application/octet-stream'].includes(file.type) && extensionFromFilename(file.name) === 'pdf');
 }
+
+const i9FileSnapshotSql = `SELECT p.user_id, p.status, p.locked_at,
+  v.id AS verification_id, v.user_id AS verification_user_id, v.completed_i9_file_url, v.completed_i9_file_name,
+  (SELECT COUNT(*) FROM employee_i9_document_copies c WHERE c.business_id = p.business_id
+    AND c.verification_id = v.id AND c.user_id = p.user_id) AS copy_count,
+  (SELECT COUNT(*) FROM employee_onboarding_items i WHERE i.business_id = p.business_id
+    AND i.package_id = p.id AND i.user_id = p.user_id AND i.form_key = 'federal_i9' AND i.status = 'submitted') AS i9_submitted,
+  json_array(p.user_id, p.status, p.locked_at, p.updated_at, p.version, p.submitted_at,
+    v.id, v.user_id, v.status, v.examination_method, v.document_selection, v.photo_matching_document_present,
+    v.employee_first_day, v.examined_at, v.verifier_user_id, v.verifier_name, v.verifier_title,
+    v.attested_at, v.completed_i9_file_url, v.completed_i9_file_name, v.created_at, v.updated_at,
+    (SELECT json_group_array(json_array(id, status, item_type, form_key, file_url, file_name,
+       submitted_at, reviewed_at, reviewed_by, signed_name)) FROM
+      (SELECT * FROM employee_onboarding_items WHERE business_id = p.business_id
+        AND package_id = p.id AND user_id = p.user_id AND form_key = 'federal_i9' ORDER BY id)),
+    (SELECT json_group_array(json_array(id, user_id, file_url, file_name, uploaded_at, uploaded_by)) FROM
+      (SELECT * FROM employee_i9_document_copies WHERE business_id = p.business_id AND verification_id = v.id ORDER BY id)),
+    (SELECT json_array(retain_i9_document_copies, everify_participant, updated_at, updated_by)
+      FROM business_hr_settings WHERE business_id = p.business_id)) AS proof
+  FROM employee_onboarding_packages p
+  LEFT JOIN employee_i9_verifications v ON v.business_id = p.business_id AND v.package_id = p.id
+  WHERE p.id = ? AND p.business_id = ?`;
 
 export async function verifyEmployeeI9(request: Request, locals: App.Locals) {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
   await ensureEmployeeOnboardingTables(db);
-
   const formData = await request.formData();
   const packageId = String(formData.get('package_id') ?? '').trim();
   const documentSelection = String(formData.get('document_selection') ?? '').trim();
@@ -7270,184 +7162,96 @@ export async function verifyEmployeeI9(request: Request, locals: App.Locals) {
   const examinedAt = formString(formData, 'examined_at', 10);
   const verifierName = formString(formData, 'verifier_name', 120);
   const verifierTitle = formString(formData, 'verifier_title', 120);
-  const attested = String(formData.get('attested') ?? '0') === '1';
   const photoMatchingDocumentPresent = String(formData.get('photo_matching_document_present') ?? '0') === '1';
-  const completedI9Upload = formData.get('completed_i9');
-  const documentCopyUploads = formData
-    .getAll('document_copies')
-    .filter((value): value is File => value instanceof File && value.size > 0);
-
+  const completed = formData.get('completed_i9');
+  const hasCompleted = completed instanceof File && completed.size > 0;
+  const copies = formData.getAll('document_copies').filter((value): value is File => value instanceof File && value.size > 0);
   if (!packageId) return fail(400, { error: 'Missing onboarding packet.' });
-  if (!['list_a', 'list_b_and_c'].includes(documentSelection)) {
-    return fail(400, { error: 'Record whether the employee presented List A or List B and List C documents.' });
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(employeeFirstDay) || !/^\d{4}-\d{2}-\d{2}$/.test(examinedAt)) {
-    return fail(400, { error: 'Add the employee start date and physical examination date.' });
-  }
-  if (!verifierName || !verifierTitle || !attested) {
+  if (!['list_a', 'list_b_and_c'].includes(documentSelection)) return fail(400, { error: 'Record whether the employee presented List A or List B and List C documents.' });
+  const dateValid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  if (!dateValid(employeeFirstDay) || !dateValid(examinedAt)) return fail(400, { error: 'Add the employee start date and physical examination date.' });
+  if (!verifierName || !verifierTitle || String(formData.get('attested') ?? '0') !== '1') {
     return fail(400, { error: 'The authorized verifier must complete and attest to the examination.' });
   }
-
-  const packet = await db
-    .prepare(
-      `
-      SELECT p.id, p.user_id, p.status,
-        SUM(CASE WHEN i.form_key = 'federal_i9' AND i.status = 'submitted' THEN 1 ELSE 0 END) AS i9_submitted
-      FROM employee_onboarding_packages p
-      LEFT JOIN employee_onboarding_items i
-        ON i.package_id = p.id AND i.business_id = p.business_id
-      WHERE p.id = ? AND p.business_id = ?
-      GROUP BY p.id, p.user_id, p.status
-      LIMIT 1
-      `
-    )
-    .bind(packageId, businessId)
-    .first<{ id: string; user_id: string; status: string; i9_submitted: number | null }>();
+  const packet = await db.prepare(i9FileSnapshotSql).bind(packageId, businessId).first<{
+    user_id: string; status: string; locked_at: number | null; verification_id: string | null;
+    verification_user_id: string | null; completed_i9_file_url: string | null;
+    completed_i9_file_name: string | null; copy_count: number; i9_submitted: number; proof: string;
+  }>();
   if (!packet) return fail(404, { error: 'Onboarding packet not found.' });
-  if (packet.status !== 'submitted') {
-    return fail(400, { error: 'The employee must submit the complete packet before I-9 verification.' });
-  }
-  if ((packet.i9_submitted ?? 0) < 1) {
-    return fail(400, { error: 'The employee has not submitted Form I-9 Section 1.' });
-  }
-  if (!(await requireSensitiveOnboardingReviewer(db, businessId, packet.user_id, locals))) {
-    return fail(403, { error: 'Sensitive employee data access is required for I-9 verification.' });
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'i9', packet.user_id);
+  if (!authority) return fail(403, { error: 'Sensitive employee data access is required for I-9 verification.' });
+  if (packet.status !== 'submitted' || packet.locked_at !== null) return fail(400, { error: 'The employee must submit the complete packet before I-9 verification.' });
+  if (packet.i9_submitted < 1) return fail(400, { error: 'The employee has not submitted Form I-9 Section 1.' });
+  if (packet.verification_user_id && packet.verification_user_id !== packet.user_id) {
+    return fail(409, { error: 'This onboarding packet changed. Refresh before verifying.' });
   }
   if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
-
-  const existing = await db
-    .prepare(
-      `
-      SELECT v.id, v.completed_i9_file_url, v.completed_i9_file_name,
-        (
-          SELECT COUNT(*)
-          FROM employee_i9_document_copies c
-          WHERE c.business_id = v.business_id AND c.verification_id = v.id
-        ) AS document_copy_count
-      FROM employee_i9_verifications v
-      WHERE v.business_id = ? AND v.package_id = ? AND v.user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, packageId, packet.user_id)
-    .first<{
-      id: string;
-      completed_i9_file_url: string;
-      completed_i9_file_name: string;
-      document_copy_count: number;
-    }>();
-
-  let completedI9FileUrl = existing?.completed_i9_file_url ?? '';
-  let completedI9FileName = existing?.completed_i9_file_name ?? '';
-  if (completedI9Upload instanceof File && completedI9Upload.size > 0) {
-    if (completedI9Upload.size > 15 * 1024 * 1024 || !isPdfUpload(completedI9Upload)) {
-      return fail(400, { error: 'The completed Form I-9 must be a PDF no larger than 15MB.' });
-    }
-    const uploaded = await uploadEmployeeOnboardingMedia(
-      locals.MEDIA_BUCKET,
-      businessId,
-      packet.user_id,
-      completedI9Upload
-    );
-    const previousKey = documentMediaKeyFromUrl(completedI9FileUrl);
-    if (previousKey) await locals.MEDIA_BUCKET.delete(previousKey);
-    completedI9FileUrl = uploaded.url;
-    completedI9FileName = completedI9Upload.name;
+  if (hasCompleted && (completed.size > 15 * 1024 * 1024 || !isPdfUpload(completed))) {
+    return fail(400, { error: 'The completed Form I-9 must be a PDF no larger than 15MB.' });
   }
-  if (!completedI9FileUrl) {
-    return fail(400, { error: 'Upload the completed Form I-9 with Section 2 before verifying.' });
+  if (!hasCompleted && !packet.completed_i9_file_url) return fail(400, { error: 'Upload the completed Form I-9 with Section 2 before verifying.' });
+  if (copies.length > 6) return fail(400, { error: 'Upload no more than six document copies at a time.' });
+  for (const copy of copies) {
+    if (copy.size > 15 * 1024 * 1024) return fail(400, { error: 'Each retained document copy must be 15MB or smaller.' });
+    if (!isAllowedDocumentUpload(copy.type, extensionFromFilename(copy.name))) return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
   }
-
   const hrSettings = await loadBusinessHrSettings(db, businessId);
   const copiesRequired = hrSettings.retain_i9_document_copies === 1 ||
     (hrSettings.everify_participant === 1 && photoMatchingDocumentPresent);
-  if (copiesRequired && documentCopyUploads.length === 0 && (existing?.document_copy_count ?? 0) === 0) {
-    return fail(400, { error: 'This business policy requires retained copies of the examined documents.' });
-  }
-  if (hrSettings.retain_i9_document_copies !== 1 && !copiesRequired && documentCopyUploads.length > 0) {
+  if (copiesRequired && !copies.length && !packet.copy_count) return fail(400, { error: 'This business policy requires retained copies of the examined documents.' });
+  if (hrSettings.retain_i9_document_copies !== 1 && !copiesRequired && copies.length) {
     return fail(400, { error: 'Document-copy retention is disabled in the business I-9 policy.' });
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const verificationId = existing?.id ?? crypto.randomUUID();
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_i9_verifications (
+  const staged: string[] = [], uploadedCopies: { url: string; name: string }[] = [];
+  let outcome: string;
+  try {
+    const fileUrl = hasCompleted ? (await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET, businessId,
+      packet.user_id, completed, staged)).url : packet.completed_i9_file_url!;
+    const fileName = hasCompleted ? completed.name : packet.completed_i9_file_name ?? '';
+    for (const copy of copies) uploadedCopies.push({
+      url: (await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET, businessId, packet.user_id, copy, staged)).url, name: copy.name
+    });
+    const now = Math.floor(Date.now() / 1000), verificationId = packet.verification_id ?? crypto.randomUUID();
+    const metadata = { packageId, documentSelection, copiesRetained: copies.length,
+      everifyPhotoMatch: hrSettings.everify_participant === 1 && photoMatchingDocumentPresent };
+    outcome = await commitHrFileWrite(db, request, authority, {
+      action: 'employee_i9_physically_verified', targetUserId: packet.user_id, metadata,
+      condition: `(SELECT proof FROM (${i9FileSnapshotSql})) IS ?`, values: [packageId, businessId, packet.proof],
+      writes: auditId => [db.prepare(`INSERT INTO employee_i9_verifications (
         id, business_id, user_id, package_id, status, examination_method,
-        document_selection, photo_matching_document_present, employee_first_day,
-        examined_at, verifier_user_id, verifier_name, verifier_title, attested_at,
+        document_selection, photo_matching_document_present, employee_first_day, examined_at,
+        verifier_user_id, verifier_name, verifier_title, attested_at,
         completed_i9_file_url, completed_i9_file_name, created_at, updated_at
-      )
-      VALUES (?, ?, ?, ?, 'verified', 'physical', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(business_id, package_id) DO UPDATE SET
-        status = 'verified',
-        examination_method = 'physical',
-        document_selection = excluded.document_selection,
-        photo_matching_document_present = excluded.photo_matching_document_present,
-        employee_first_day = excluded.employee_first_day,
-        examined_at = excluded.examined_at,
-        verifier_user_id = excluded.verifier_user_id,
-        verifier_name = excluded.verifier_name,
-        verifier_title = excluded.verifier_title,
-        attested_at = excluded.attested_at,
-        completed_i9_file_url = excluded.completed_i9_file_url,
-        completed_i9_file_name = excluded.completed_i9_file_name,
-        updated_at = excluded.updated_at
-      `
-    )
-    .bind(
-      verificationId,
-      businessId,
-      packet.user_id,
-      packageId,
-      documentSelection,
-      photoMatchingDocumentPresent ? 1 : 0,
-      employeeFirstDay,
-      examinedAt,
-      locals.userId ?? null,
-      verifierName,
-      verifierTitle,
-      now,
-      completedI9FileUrl,
-      completedI9FileName,
-      now,
-      now
-    )
-    .run();
-
-  for (const copy of documentCopyUploads.slice(0, 6)) {
-    if (copy.size > 15 * 1024 * 1024) return fail(400, { error: 'Each retained document copy must be 15MB or smaller.' });
-    const uploaded = await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET, businessId, packet.user_id, copy);
-    await db
-      .prepare(
-        `
-        INSERT INTO employee_i9_document_copies (
-          id, business_id, user_id, verification_id, file_url, file_name, uploaded_at, uploaded_by
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        crypto.randomUUID(), businessId, packet.user_id, verificationId,
-        uploaded.url, copy.name, now, locals.userId ?? null
-      )
-      .run();
+      ) SELECT ?, ?, ?, ?, 'verified', 'physical', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${hrFileWriteGuard}
+      ON CONFLICT(business_id, package_id) DO UPDATE SET status = 'verified', examination_method = 'physical',
+        document_selection = excluded.document_selection, photo_matching_document_present = excluded.photo_matching_document_present,
+        employee_first_day = excluded.employee_first_day, examined_at = excluded.examined_at,
+        verifier_user_id = excluded.verifier_user_id, verifier_name = excluded.verifier_name,
+        verifier_title = excluded.verifier_title, attested_at = excluded.attested_at,
+        completed_i9_file_url = excluded.completed_i9_file_url, completed_i9_file_name = excluded.completed_i9_file_name,
+        updated_at = excluded.updated_at WHERE employee_i9_verifications.user_id = excluded.user_id`)
+        .bind(verificationId, businessId, packet.user_id, packageId, documentSelection,
+          photoMatchingDocumentPresent ? 1 : 0, employeeFirstDay, examinedAt, authority.actor, verifierName,
+          verifierTitle, now, fileUrl, fileName, now, now, auditId),
+        ...uploadedCopies.map(copy => db.prepare(`INSERT INTO employee_i9_document_copies
+          (id, business_id, user_id, verification_id, file_url, file_name, uploaded_at, uploaded_by)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${hrFileWriteGuard}`)
+          .bind(crypto.randomUUID(), businessId, packet.user_id, verificationId, copy.url, copy.name, now, authority.actor, auditId)),
+        db.prepare(`INSERT INTO employee_sensitive_record_audit
+          (id, business_id, user_id, actor_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at)
+          SELECT ?, business_id, target_user_id, actor_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at
+          FROM account_audit_logs WHERE id = ?`).bind(crypto.randomUUID(), auditId)]
+    });
+  } catch {
+    outcome = 'unavailable';
+    logOperationalError({ event: 'hr_file_write_failed', businessId, metadata: { phase: 'upload', action: 'i9' } });
   }
-
-  await writeSensitiveRecordAudit(db, {
-    businessId,
-    userId: packet.user_id,
-    actorUserId: locals.userId ?? null,
-    action: 'employee_i9_physically_verified',
-    request,
-    metadata: {
-      packageId,
-      documentSelection,
-      copiesRetained: documentCopyUploads.length,
-      everifyPhotoMatch: hrSettings.everify_participant === 1 && photoMatchingDocumentPresent
-    }
-  });
+  await cleanUpOnboardingMedia(db, locals, businessId, outcome === 'saved' ? packet.completed_i9_file_url ?? '' : staged);
+  if (outcome === 'changed') return fail(409, { error: 'This onboarding packet, policy or your access changed. Refresh before verifying.' });
+  if (outcome !== 'saved') return fail(503, { error: 'I-9 verification could not be saved. Please try again.' });
   return { success: true, message: 'Physical I-9 verification recorded.' };
 }
 
