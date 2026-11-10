@@ -30,7 +30,7 @@ const { outputFiles } = await build({
           statements.push(db.prepare('INSERT INTO users(id,email,email_normalized,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,id+'@example.invalid',id+'@example.invalid',now,now));
           statements.push(db.prepare('INSERT INTO business_users(business_id,user_id,role,permission_template,created_at,updated_at) VALUES(?,?,?,?,?,?)').bind(business,id,role,role==='manager'?'general_manager':role,now,now));
         }
-        statements.push(db.prepare("INSERT INTO employee_onboarding_packages(id,business_id,user_id,status,sent_at,updated_at) VALUES('packet','a','employee','in_progress',?,?)").bind(now,now));
+        statements.push(db.prepare("INSERT INTO employee_onboarding_packages(id,business_id,user_id,status,sent_at,updated_at,version) VALUES('packet','a','employee','in_progress',?,?,2)").bind(now,now));
         statements.push(db.prepare("INSERT INTO employee_onboarding_items(id,package_id,business_id,user_id,item_type,form_key,title,file_url,file_name,created_at) VALUES('document','packet','a','employee','document','federal_w4','Federal W-4',?,'old.pdf',?)").bind(oldUrl,now));
         statements.push(db.prepare("INSERT INTO employee_role_permissions(business_id,user_id,permission_key,is_enabled,updated_at) VALUES('a','manager','view_sensitive_employee_data',0,?)").bind(now));
         statements.push(db.prepare("INSERT INTO employee_role_permissions(business_id,user_id,permission_key,is_enabled,updated_at) VALUES('a','manager','hr_sensitive_access',1,?)").bind(now));

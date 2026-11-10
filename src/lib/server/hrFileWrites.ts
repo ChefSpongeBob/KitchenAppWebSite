@@ -23,7 +23,7 @@ WHERE bu.business_id = ? AND bu.user_id = ? AND COALESCE(bu.is_active, 1) = 1
   AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')`;
 
 export async function readHrFileAuthority(db: D1, businessId: string, actor: string | null | undefined,
-  purpose: 'template' | 'i9', targetUserId?: string) {
+  purpose: 'template' | 'i9' | 'self' | 'send', targetUserId?: string) {
   if (!actor) return null;
   const row = await db.prepare(authoritySql).bind(businessId, actor).first<{ proof: string }>();
   if (!row) return null;
@@ -37,19 +37,23 @@ export async function readHrFileAuthority(db: D1, businessId: string, actor: str
   const has = (capability: BusinessCapability) => capabilities.includes(capability);
   const sensitive = actor === targetUserId || has('view_sensitive_employee_data') ||
     (individual.view_sensitive_employee_data !== false && state.individual.some(([key, value]) => key === 'hr_sensitive_access' && value === 1));
-  return (purpose === 'template' ? has('admin_access') && has('manage_hr_setup') : has('review_onboarding') && sensitive)
-    ? { businessId, actor, proof: row.proof } : null;
+  const permitted = purpose === 'self' ? actor === targetUserId : purpose === 'send'
+    ? has('admin_access') && has('manage_onboarding') : purpose === 'template'
+      ? has('admin_access') && has('manage_hr_setup') : has('review_onboarding') && sensitive;
+  return permitted
+    ? { businessId, actor, proof: row.proof, role: state.role, template: state.template, capabilities } : null;
 }
 
 export async function commitHrFileWrite(db: D1, request: Request,
   authority: NonNullable<Awaited<ReturnType<typeof readHrFileAuthority>>>,
-  options: { action: string; targetUserId?: string; condition: string; values: (string | number | null)[];
+  options: { action: string; auditId?: string; targetUserId?: string; email?: string; condition: string; values: (string | number | null)[];
     metadata: Record<string, unknown>; writes: (auditId: string) => ReturnType<D1['prepare']>[] }) {
-  const id = crypto.randomUUID(), now = Math.floor(Date.now() / 1000);
+  const id = options.auditId ?? crypto.randomUUID(), now = Math.floor(Date.now() / 1000);
   const claim = db.prepare(`INSERT INTO account_audit_logs
-    (id, business_id, actor_user_id, target_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at)
-    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (${authoritySql}) IS ? AND (${options.condition})`)
+    (id, business_id, actor_user_id, target_user_id, action, email_hash, ip_hash, user_agent_hash, metadata_json, created_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (${authoritySql}) IS ? AND (${options.condition})`)
     .bind(id, authority.businessId, authority.actor, options.targetUserId ?? null, options.action,
+      await hashedAuditValue(options.email),
       await hashedAuditValue(getRequestIpAddress(request)), await hashedAuditValue(request.headers.get('user-agent')),
       JSON.stringify(options.metadata), now, authority.businessId, authority.actor, authority.proof, ...options.values);
   try {

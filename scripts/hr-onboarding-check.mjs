@@ -198,7 +198,8 @@ expect('src/lib/server/sensitive.ts', 'structured sensitive HR records are encry
 );
 
 expect('src/lib/server/admin.ts', 'sensitive onboarding submissions store redacted form payloads', (source) =>
-  source.includes('storeSensitiveOnboardingFormPayload') &&
+  source.includes('prepareSensitiveOnboardingFormPayload') &&
+  source.includes('commitHrFileWrite') &&
   source.includes('encryptSensitiveJsonPayload') &&
   source.includes('sanitizeSensitiveOnboardingPayload') &&
   source.includes('sensitiveConfigurationFailure')
@@ -215,7 +216,9 @@ expect('src/lib/server/admin.ts', 'legal forms use official document artifacts i
 
 expect('src/lib/server/admin.ts', 'custom packet forms supplement rather than replace standard onboarding forms', (source) =>
   source.includes('function composeEmployeeOnboardingPacket') &&
-  source.includes('const templateItems = await loadEmployeeOnboardingTemplate') &&
+  source.includes('const templateItems = setup.items') &&
+  source.includes('const setup = await readOnboardingSetup') &&
+  source.includes('condition: `(${onboardingSetupSql}) IS ? AND (${latestOnboardingSql}) IS ?`') &&
   source.includes('const onboardingItems = composeEmployeeOnboardingPacket(templateItems, businessState)') &&
   source.includes('(existingRows.results ?? []).map(onboardingTemplateIdentity)') &&
   source.includes("item.item_type === 'acknowledgement' && !item.source_file_url") &&
@@ -243,7 +246,8 @@ expect('src/lib/server/admin.ts', 'onboarding is reviewed and locked as one pack
   source.includes('approveEmployeeOnboardingPackage') &&
   source.includes('returnEmployeeOnboardingPackage') &&
   source.includes("SET status = 'approved', approved_at = ?, approved_by = ?, locked_at = ?") &&
-  source.includes('upsertComplianceDocumentForOnboardingItem') &&
+  source.includes('prepareComplianceDocumentForOnboardingItem') &&
+  source.includes('onboardingPacketCondition(packet)') &&
   source.includes('employee_onboarding_packet_approved') &&
   source.includes('employee_onboarding_packet_returned') &&
   !source.includes('approveEmployeeOnboardingItem') &&

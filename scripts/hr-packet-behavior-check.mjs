@@ -135,7 +135,8 @@ await check('a locked compliance document cannot be replaced',async t=>{
 await check('R2 upload failures preserve the existing record and report a retryable failure',async t=>{
   t.bucket.put=async()=>{throw Error('isolated storage outage');};
   assert.equal((await t.admin.submitEmployeeOnboardingItem(t.request(),t.locals,t.locals.env)).status,503);
-  assert.equal(t.sqlite.prepare("SELECT file_url FROM employee_onboarding_items WHERE id='document'").get().file_url,t.oldUrl);assert.equal(t.removed.length,0);
+  assert.equal(t.sqlite.prepare("SELECT file_url FROM employee_onboarding_items WHERE id='document'").get().file_url,t.oldUrl);
+  assert.equal(t.objects.size,2);assert.ok(!t.removed.includes(t.oldKey),'Cleanup must not delete the previous file');
 });
 await check('official forms cannot disguise a non-PDF MIME type with a PDF filename',async t=>{
   const request=t.request(),form=await request.formData();form.set('file',new File(['image'],'fake.pdf',{type:'image/png'}));

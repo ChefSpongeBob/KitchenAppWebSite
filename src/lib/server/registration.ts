@@ -38,6 +38,8 @@ export async function prepareNewAccountRegistration(db: DB, options: {
   const owner = invitation ? normalizeBusinessRole(invitation.role) === 'owner' : true;
   const packetRequired = Boolean(invitation?.onboarding_required === 1 && invitation.employment_type !== 'contractor');
   const auditId = crypto.randomUUID();
+  const packet = packetRequired ? await prepareEmployeeOnboardingPacket(db, { businessId, userId, ownerPacket: owner,
+    createdBy: userId, auditId, initialProfile: profile, env: options.env, now }) : null;
   const guard = 'EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)';
   const emailColumn = options.userColumns.normalized ? 'email_normalized' : 'lower(email)';
   const claimColumns = `id, business_id, action, email_hash, ip_hash, user_agent_hash, metadata_json, created_at`;
@@ -60,15 +62,15 @@ export async function prepareNewAccountRegistration(db: DB, options: {
       AND i.start_date IS ? AND i.pay_type IS ? AND i.manager_user_id IS ?
       AND (i.position_id IS NULL OR EXISTS (SELECT 1 FROM business_positions p
         WHERE p.id = i.position_id AND p.business_id = i.business_id AND p.is_active = 1 AND p.account_type = ?))
-      AND NOT EXISTS (SELECT 1 FROM users WHERE ${emailColumn} = ?)`)
+      AND NOT EXISTS (SELECT 1 FROM users WHERE ${emailColumn} = ?) AND (${packet?.condition ?? '1 = 1'})`)
     .bind(...claimValues, invitation.id, businessId, options.inviteCode, email,
       invitation.role, invitation.permission_template, invitation.position_id, invitation.employment_type,
       invitation.onboarding_required, invitation.job_title, invitation.department, invitation.primary_schedule_department,
       invitation.schedule_departments_json, invitation.start_date, invitation.pay_type, invitation.manager_user_id,
-      normalizeBusinessRole(invitation.role), email)
+      normalizeBusinessRole(invitation.role), email, ...(packet?.values ?? []))
     : db.prepare(`INSERT INTO account_audit_logs (${claimColumns}) SELECT ?, ?, ?, ?, ?, ?, ?, ?
-      WHERE NOT EXISTS (SELECT 1 FROM users WHERE ${emailColumn} = ?)`)
-      .bind(...claimValues, email);
+      WHERE NOT EXISTS (SELECT 1 FROM users WHERE ${emailColumn} = ?) AND (${packet?.condition ?? '1 = 1'})`)
+      .bind(...claimValues, email, ...(packet?.values ?? []));
   const userColumns = ['id', 'email', ...(options.userColumns.normalized ? ['email_normalized'] : []),
     'password_hash', 'display_name', ...(options.userColumns.role ? ['role'] : []),
     ...(options.userColumns.active ? ['is_active'] : []), 'created_at', 'updated_at'];
@@ -144,12 +146,8 @@ export async function prepareNewAccountRegistration(db: DB, options: {
       .bind(businessId, userId, now, businessId, JSON.stringify([...new Set(departments)]), auditId));
   }
 
-  let packageId: string | null = null;
-  if (packetRequired) {
-    const packet = await prepareEmployeeOnboardingPacket(db, { businessId, userId, ownerPacket: owner,
-      createdBy: userId, auditId, initialProfile: profile, env: options.env, now });
-    packageId = packet.packageId; statements.push(...packet.statements);
-  }
+  const packageId = packet?.packageId ?? null;
+  if (packet) statements.push(...packet.statements);
   if (business) {
     statements.push(...prepareDefaultBusinessPositions(db, businessId, userId, now, auditId));
     const departments = JSON.stringify(business.departments.map((department, index) => ({

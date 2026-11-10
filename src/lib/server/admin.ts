@@ -72,6 +72,7 @@ import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.
 import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSanitizer.ts';
 import { hasPlatformStaffMembership } from '#lib/server/platformStaff.ts';
 import { logOperationalError } from '#lib/server/observability.ts';
+import { isCalendarDate } from '#lib/timeZones.ts';
 import { readHrFileAuthority, commitHrFileWrite, hrFileWriteGuard } from '#lib/server/hrFileWrites.ts';
 
 type D1 = App.RuntimeEnv['DB'];
@@ -1628,10 +1629,11 @@ async function validatePositionAssignmentAuthority(
   db: D1,
   businessId: string,
   position: Omit<BusinessPosition, 'capability_overrides' | 'effective_capabilities'>,
-  locals: App.Locals
+  locals: App.Locals,
+  capturedOverrides?: BusinessCapabilityOverrides
 ) {
   if (isOwnerRole(locals.businessRole)) return null;
-  const positionOverrides = await loadPositionCapabilityOverrides(db, businessId, position.id);
+  const positionOverrides = capturedOverrides ?? await loadPositionCapabilityOverrides(db, businessId, position.id);
   const effectiveCapabilities = resolveBusinessCapabilities(
     position.account_type,
     position.base_template,
@@ -2460,103 +2462,35 @@ function sanitizeSensitiveOnboardingPayload(formKey: string, payload: Record<str
   };
 }
 
-async function storeSensitiveOnboardingFormPayload(
-  db: D1,
-  env: Partial<App.RuntimeEnv> | undefined,
-  item: Pick<
-    EmployeeOnboardingItem,
-    'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'
-  >,
-  payload: Record<string, string>,
-  updatedBy: string | null,
-  now = Math.floor(Date.now() / 1000)
+async function prepareSensitiveOnboardingFormPayload(db: D1, env: Partial<App.RuntimeEnv> | undefined,
+  item: Pick<EmployeeOnboardingItem, 'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title'>,
+  payload: Record<string, string>, updatedBy: string | null, now: number, auditId: string
 ) {
-  if (!isSensitiveOnboardingFormKey(item.form_key)) return null;
+  if (!isSensitiveOnboardingFormKey(item.form_key)) return [];
   if (!isSensitiveEncryptionConfigured(env)) throw new Error('sensitive_encryption_missing');
-
   const classification = classifyOnboardingComplianceItem(item);
-  if (!classification.sensitiveScope || !classification.sensitiveRecordType) return null;
-
-  await ensureSensitiveVaultPlaceholder(db, item.business_id, item.user_id, classification, updatedBy, now);
-  const encrypted = await encryptSensitiveJsonPayload(env, payload, {
-    businessId: item.business_id,
-    userId: item.user_id,
-    recordScope: classification.sensitiveScope,
-    recordType: classification.sensitiveRecordType
-  });
-  const displayLastFour =
-    payload.ssn_last_four ||
-    payload.account_last_four ||
-    payload.routing_last_four ||
-    payload.postal_code?.slice(-4) ||
-    '';
-
-  const record = await db
-    .prepare(
-      `
-      SELECT id
-      FROM employee_sensitive_record_vault
-      WHERE business_id = ?
-        AND user_id = ?
-        AND record_scope = ?
-        AND record_type = ?
-      LIMIT 1
-      `
-    )
-    .bind(item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType)
-    .first<{ id: string }>();
-
-  await db
-    .prepare(
-      `
-      UPDATE employee_sensitive_record_vault
-      SET status = 'active',
-        encrypted_payload = ?,
-        payload_iv = ?,
-        payload_tag = ?,
-        key_version = ?,
-        encryption_algorithm = ?,
-        display_last_four = ?,
-        locked_at = NULL,
-        updated_at = ?,
-        updated_by = ?
-      WHERE business_id = ?
-        AND user_id = ?
-        AND record_scope = ?
-        AND record_type = ?
-      `
-    )
-    .bind(
-      encrypted.encryptedPayload,
-      encrypted.payloadIv,
-      encrypted.payloadTag,
-      encrypted.keyVersion,
-      encrypted.encryptionAlgorithm,
-      displayLastFour,
-      now,
-      updatedBy,
-      item.business_id,
-      item.user_id,
-      classification.sensitiveScope,
-      classification.sensitiveRecordType
-    )
-    .run();
-
-  if (record?.id) {
-    await writeSensitiveRecordAudit(db, {
-      businessId: item.business_id,
-      userId: item.user_id,
-      vaultRecordId: record.id,
-      actorUserId: updatedBy,
-      action: 'sensitive_record_encrypted_write',
-      metadata: {
-        recordScope: classification.sensitiveScope,
-        recordType: classification.sensitiveRecordType
-      }
-    });
-  }
-
-  return record?.id ?? null;
+  if (!classification.sensitiveScope || !classification.sensitiveRecordType) return [];
+  const encrypted = await encryptSensitiveJsonPayload(env, payload, { businessId: item.business_id, userId: item.user_id,
+    recordScope: classification.sensitiveScope, recordType: classification.sensitiveRecordType });
+  const displayLastFour = payload.ssn_last_four || payload.account_last_four || payload.routing_last_four || payload.postal_code?.slice(-4) || '';
+  return [db.prepare(`INSERT INTO employee_sensitive_record_vault
+    (id, business_id, user_id, record_scope, record_type, status, encrypted_payload, payload_iv, payload_tag,
+      key_version, encryption_algorithm, display_last_four, created_at, updated_at, updated_by)
+    SELECT ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${hrFileWriteGuard}
+    ON CONFLICT(business_id, user_id, record_scope, record_type) DO UPDATE SET status = 'active',
+      encrypted_payload = excluded.encrypted_payload, payload_iv = excluded.payload_iv, payload_tag = excluded.payload_tag,
+      key_version = excluded.key_version, encryption_algorithm = excluded.encryption_algorithm,
+      display_last_four = excluded.display_last_four, locked_at = NULL, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+    .bind(crypto.randomUUID(), item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType,
+      encrypted.encryptedPayload, encrypted.payloadIv, encrypted.payloadTag, encrypted.keyVersion, encrypted.encryptionAlgorithm,
+      displayLastFour, now, now, updatedBy, auditId),
+    db.prepare(`INSERT INTO employee_sensitive_record_audit
+      (id, business_id, user_id, vault_record_id, actor_user_id, action, metadata_json, created_at)
+      SELECT ?, business_id, user_id, id, ?, 'sensitive_record_encrypted_write', ?, ? FROM employee_sensitive_record_vault
+      WHERE business_id = ? AND user_id = ? AND record_scope = ? AND record_type = ? AND ${hrFileWriteGuard}`)
+      .bind(crypto.randomUUID(), updatedBy, JSON.stringify({ recordScope: classification.sensitiveScope,
+        recordType: classification.sensitiveRecordType }), now, item.business_id, item.user_id,
+        classification.sensitiveScope, classification.sensitiveRecordType, auditId)];
 }
 
 async function decryptSensitiveOnboardingFormPayload(
@@ -2620,10 +2554,16 @@ async function decryptSensitiveOnboardingFormPayload(
         AND record_scope = ?
         AND record_type = ?
         AND status IN ('active', 'accepted')
+        AND EXISTS (SELECT 1 FROM employee_onboarding_packages p
+          WHERE p.id = ? AND p.business_id = employee_sensitive_record_vault.business_id
+            AND p.user_id = employee_sensitive_record_vault.user_id AND p.status <> 'approved'
+            AND p.id = (SELECT id FROM employee_onboarding_packages
+              WHERE business_id = p.business_id AND user_id = p.user_id
+              ORDER BY COALESCE(version, 1) DESC, updated_at DESC, id DESC LIMIT 1))
       LIMIT 1
       `
     )
-    .bind(item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType)
+    .bind(item.business_id, item.user_id, classification.sensitiveScope, classification.sensitiveRecordType, item.package_id)
     .first<EncryptedOnboardingRecord>();
   }
 
@@ -2656,9 +2596,7 @@ async function decryptSensitiveOnboardingFormPayload(
   return payload;
 }
 
-async function upsertComplianceDocumentForOnboardingItem(
-  db: D1,
-  item: Pick<
+type OnboardingComplianceItem = Pick<
     EmployeeOnboardingItem,
     | 'id'
     | 'business_id'
@@ -2673,16 +2611,11 @@ async function upsertComplianceDocumentForOnboardingItem(
     | 'submitted_at'
     | 'reviewed_at'
     | 'reviewed_by'
-  >,
-  updatedBy: string | null,
-  now = Math.floor(Date.now() / 1000)
-) {
-  await db.batch(prepareComplianceDocumentForOnboardingItem(db, item, updatedBy, now));
-}
+  >;
 
 function prepareComplianceDocumentForOnboardingItem(
   db: D1,
-  item: Parameters<typeof upsertComplianceDocumentForOnboardingItem>[1],
+  item: OnboardingComplianceItem,
   updatedBy: string | null,
   now: number,
   auditId: string | null = null
@@ -2819,7 +2752,7 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
     if (!requireFormFields(fields, ['legal_name', 'birthday', 'phone', 'address_line_1', 'city', 'state', 'postal_code'])) {
       return { error: 'Complete every required personal information field.' };
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.birthday)) {
+    if (!isCalendarDate(fields.birthday)) {
       return { error: 'Birthday must use a valid date.' };
     }
     return { payload: fields };
@@ -2852,7 +2785,7 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
     if (!requireFormFields(fields, ['worker_classification', 'start_date', 'pay_type'])) {
       return { error: 'Complete every required payroll setup field.' };
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.start_date)) {
+    if (!isCalendarDate(fields.start_date)) {
       return { error: 'Start date must use a valid date.' };
     }
     if (directDepositAuthorized && !requireFormFields(fields, ['bank_name', 'routing_last_four', 'account_last_four'])) {
@@ -2870,93 +2803,22 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
   return { error: 'This onboarding form is not configured correctly.' };
 }
 
-async function applyOnboardingFormPayloadToProfile(
-  db: D1,
-  businessId: string,
-  userId: string,
-  formKey: string,
-  payload: Record<string, string>,
-  updatedBy: string | null
+function prepareOnboardingFormProfile(db: D1, businessId: string, userId: string, formKey: string,
+  payload: Record<string, string>, updatedBy: string | null, now: number, auditId: string
 ) {
-  if (formKey !== 'personal_information' && formKey !== 'emergency_contact') return;
-
-  await ensureEmployeeProfilesTable(db);
-  const current = await loadAdminEmployeeProfile(db, userId, businessId);
-  const now = Math.floor(Date.now() / 1000);
-  const next = {
-    real_name: formKey === 'personal_information' ? payload.legal_name : current.real_name,
-    phone: formKey === 'personal_information' ? payload.phone : current.phone,
-    birthday: formKey === 'personal_information' ? payload.birthday : current.birthday,
-    address_line_1: formKey === 'personal_information' ? payload.address_line_1 : current.address_line_1,
-    address_line_2: formKey === 'personal_information' ? payload.address_line_2 : current.address_line_2,
-    city: formKey === 'personal_information' ? payload.city : current.city,
-    state: formKey === 'personal_information' ? payload.state : current.state,
-    postal_code: formKey === 'personal_information' ? payload.postal_code : current.postal_code,
-    emergency_contact_name:
-      formKey === 'emergency_contact' ? payload.emergency_contact_name : current.emergency_contact_name,
-    emergency_contact_phone:
-      formKey === 'emergency_contact' ? payload.emergency_contact_phone : current.emergency_contact_phone,
-    emergency_contact_relationship:
-      formKey === 'emergency_contact'
-        ? payload.emergency_contact_relationship
-        : current.emergency_contact_relationship
-  };
-
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_profiles (
-        business_id,
-        user_id,
-        real_name,
-        phone,
-        birthday,
-        address_line_1,
-        address_line_2,
-        city,
-        state,
-        postal_code,
-        emergency_contact_name,
-        emergency_contact_phone,
-        emergency_contact_relationship,
-        updated_at,
-        updated_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(business_id, user_id) DO UPDATE SET
-        real_name = excluded.real_name,
-        phone = excluded.phone,
-        birthday = excluded.birthday,
-        address_line_1 = excluded.address_line_1,
-        address_line_2 = excluded.address_line_2,
-        city = excluded.city,
-        state = excluded.state,
-        postal_code = excluded.postal_code,
-        emergency_contact_name = excluded.emergency_contact_name,
-        emergency_contact_phone = excluded.emergency_contact_phone,
-        emergency_contact_relationship = excluded.emergency_contact_relationship,
-        updated_at = excluded.updated_at,
-        updated_by = excluded.updated_by
-      `
-    )
-    .bind(
-      businessId,
-      userId,
-      next.real_name,
-      next.phone,
-      next.birthday,
-      next.address_line_1,
-      next.address_line_2,
-      next.city,
-      next.state,
-      next.postal_code,
-      next.emergency_contact_name,
-      next.emergency_contact_phone,
-      next.emergency_contact_relationship,
-      now,
-      updatedBy
-    )
-    .run();
+  const fields: Record<string, string> = formKey === 'personal_information' ? {
+    real_name: payload.legal_name, phone: payload.phone, birthday: payload.birthday, address_line_1: payload.address_line_1,
+    address_line_2: payload.address_line_2, city: payload.city, state: payload.state, postal_code: payload.postal_code
+  } : formKey === 'emergency_contact' ? { emergency_contact_name: payload.emergency_contact_name,
+    emergency_contact_phone: payload.emergency_contact_phone, emergency_contact_relationship: payload.emergency_contact_relationship } : {};
+  const keys = Object.keys(fields);
+  if (!keys.length) return [];
+  // Each form updates only its own columns, so a concurrent emergency-contact save is not erased.
+  return [db.prepare(`INSERT INTO employee_profiles (business_id, user_id, ${keys.join(',')}, updated_at, updated_by)
+    SELECT ?, ?, ${keys.map(() => '?').join(',')}, ?, ? WHERE ${hrFileWriteGuard}
+    ON CONFLICT(business_id, user_id) DO UPDATE SET ${keys.map(key => `${key} = excluded.${key}`).join(',')},
+      updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+    .bind(businessId, userId, ...Object.values(fields), now, updatedBy, auditId)];
 }
 
 const templateFileSnapshotSql = `SELECT json_array(id, item_type, form_key, title, description,
@@ -3038,143 +2900,75 @@ async function saveEmployeeOnboardingTemplateItem(request: Request, locals: App.
   return { success: true, message: editing ? 'Onboarding item saved.' : 'Onboarding item added.' };
 }
 
+const onboardingSetupSql = `SELECT json_object('state', (SELECT address_state FROM businesses WHERE id = ?),
+  'forms', (SELECT json_group_array(json_object('id', id, 'business_id', business_id, 'item_type', item_type,
+    'form_key', form_key, 'title', title, 'description', description, 'source_file_url', source_file_url,
+    'source_file_name', source_file_name, 'sort_order', sort_order, 'is_active', is_active,
+    'created_at', created_at, 'updated_at', updated_at, 'created_by', created_by))
+    FROM (SELECT * FROM employee_onboarding_template_items WHERE business_id = ? ORDER BY sort_order, created_at, id))) AS proof`;
+const latestOnboardingSql = `SELECT json_array(id, COALESCE(version, 1), status, updated_at) AS proof
+  FROM employee_onboarding_packages WHERE business_id = ? AND user_id = ?
+  ORDER BY COALESCE(version, 1) DESC, updated_at DESC, id DESC LIMIT 1`;
+
+async function readOnboardingSetup(db: D1, businessId: string) {
+  const row = await db.prepare(onboardingSetupSql).bind(businessId, businessId).first<{ proof: string }>();
+  const setup = JSON.parse(row!.proof) as { state: string | null; forms: EmployeeOnboardingTemplateItem[] };
+  return { proof: row!.proof, state: normalizeStateLabel(setup.state), items: setup.forms.map(item => ({ ...item,
+    item_type: (item.item_type as string) === 'profile' ? 'form' as const : item.item_type,
+    form_key: (item.item_type as string) === 'profile' && !item.form_key ? 'personal_information' : item.form_key
+  })) };
+}
+
 export async function loadEmployeeOnboardingTemplate(db: D1, businessId: string) {
   await ensureEmployeeOnboardingTables(db);
-  const template = await db
-    .prepare(
-      `
-      SELECT
-        id,
-        business_id,
-        CASE WHEN item_type = 'profile' THEN 'form' ELSE item_type END AS item_type,
-        CASE
-          WHEN item_type = 'profile' AND COALESCE(form_key, '') = '' THEN 'personal_information'
-          ELSE form_key
-        END AS form_key,
-        title,
-        description,
-        source_file_url,
-        source_file_name,
-        sort_order,
-        is_active,
-        created_at,
-        updated_at,
-        created_by
-      FROM employee_onboarding_template_items
-      WHERE business_id = ?
-      ORDER BY sort_order ASC, created_at ASC
-      `
-    )
-    .bind(businessId)
-    .all<EmployeeOnboardingTemplateItem>();
-
-  return template.results ?? [];
+  return (await readOnboardingSetup(db, businessId)).items;
 }
 
 export async function createEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
   return saveEmployeeOnboardingTemplateItem(request, locals, false);
 }
 
-export async function installStandardEmployeeOnboardingTemplate(_request: Request, locals: App.Locals) {
+export async function installStandardEmployeeOnboardingTemplate(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
   if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
-
   await ensureEmployeeOnboardingTables(db);
-
-  const state = await loadBusinessRegisteredState(db, businessId);
-  await db
-    .prepare(
-      `
-      UPDATE employee_onboarding_template_items
-      SET item_type = 'document',
-        form_key = CASE
-          WHEN LOWER(title) LIKE '%i-9%' OR LOWER(title) LIKE '%employment eligibility%' THEN 'federal_i9'
-          WHEN LOWER(title) LIKE '%w-4%' OR LOWER(title) LIKE '%federal withholding%' THEN 'federal_w4'
-          WHEN LOWER(title) LIKE '%withholding%' THEN 'state_withholding'
-          ELSE form_key
-        END,
-        updated_at = ?
-      WHERE business_id = ?
-        AND item_type = 'document'
-        AND COALESCE(form_key, '') = ''
-        AND (
-          LOWER(title) LIKE '%i-9%'
-          OR LOWER(title) LIKE '%employment eligibility%'
-          OR LOWER(title) LIKE '%w-4%'
-          OR LOWER(title) LIKE '%federal withholding%'
-          OR LOWER(title) LIKE '%withholding%'
-        )
-      `
-    )
-    .bind(Math.floor(Date.now() / 1000), businessId)
-    .run();
-
-  const defaults = defaultEmployeeOnboardingItems(state);
-  const existingRows = await db
-    .prepare(
-      `
-      SELECT LOWER(title) AS title, item_type, COALESCE(form_key, '') AS form_key
-      FROM employee_onboarding_template_items
-      WHERE business_id = ?
-      `
-    )
-    .bind(businessId)
-    .all<{ title: string; item_type: string; form_key: string }>();
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'template');
+  if (!authority) return fail(403, { error: 'HR setup access required.' });
+  const setup = await readOnboardingSetup(db, businessId);
+  const claimedFormKeys = new Set(setup.items.map(item => item.form_key).filter(Boolean));
+  const normalized = setup.items.map(item => {
+    if (item.item_type !== 'document' || item.form_key) return item;
+    const title = item.title.toLowerCase();
+    const key = title.includes('i-9') || title.includes('employment eligibility') ? 'federal_i9' :
+      title.includes('w-4') || title.includes('federal withholding') ? 'federal_w4' : title.includes('withholding') ? 'state_withholding' : '';
+    if (!key || claimedFormKeys.has(key)) return item;
+    claimedFormKeys.add(key);
+    return { ...item, form_key: key };
+  });
+  const existingRows = { results: normalized };
   const existingKeys = new Set((existingRows.results ?? []).map(onboardingTemplateIdentity));
-
+  const additions = defaultEmployeeOnboardingItems(setup.state).filter(item => !existingKeys.has(onboardingTemplateIdentity(item)));
   const now = Math.floor(Date.now() / 1000);
-  let created = 0;
-
-  for (const item of defaults) {
-    const key = onboardingTemplateIdentity(item);
-    if (existingKeys.has(key)) continue;
-
-    await db
-      .prepare(
-        `
-        INSERT INTO employee_onboarding_template_items (
-          id,
-          business_id,
-          item_type,
-          form_key,
-          title,
-          description,
-          source_file_url,
-          source_file_name,
-          sort_order,
-          is_active,
-          created_at,
-          updated_at,
-          created_by
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-        `
-      )
-      .bind(
-        crypto.randomUUID(),
-        businessId,
-        item.item_type,
-        item.form_key,
-        item.title,
-        item.description,
-        item.source_file_url,
-        item.source_file_name,
-        item.sort_order,
-        now,
-        now,
-        locals.userId ?? null
-      )
-      .run();
-    created += 1;
-  }
-
-  return {
-    success: true,
-    message: created ? 'Standard packet added.' : 'Standard packet already exists.'
-  };
+  const outcome = await commitHrFileWrite(db, request, authority, {
+    action: 'employee_onboarding_standard_forms_installed', metadata: { formsAdded: additions.length },
+    condition: `(${onboardingSetupSql}) IS ?`, values: [businessId, businessId, setup.proof],
+    writes: auditId => [
+      ...normalized.filter((item, index) => item.form_key !== setup.items[index].form_key).map(item =>
+        db.prepare(`UPDATE employee_onboarding_template_items SET form_key = ?, updated_at = ?
+          WHERE business_id = ? AND id = ? AND ${hrFileWriteGuard}`).bind(item.form_key, now, businessId, item.id, auditId)),
+      ...additions.map(item => db.prepare(`INSERT INTO employee_onboarding_template_items
+        (id, business_id, item_type, form_key, title, description, source_file_url, source_file_name,
+          sort_order, is_active, created_at, updated_at, created_by)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ? WHERE ${hrFileWriteGuard}`)
+        .bind(crypto.randomUUID(), businessId, item.item_type, item.form_key, item.title, item.description,
+          item.source_file_url, item.source_file_name, item.sort_order, now, now, authority.actor, auditId))]
+  });
+  if (outcome === 'changed') return fail(409, { error: 'The packet setup or your access changed. Refresh before trying again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'Standard forms could not be saved. Please try again.' });
+  return { success: true, message: additions.length ? 'Standard packet added.' : 'Standard packet already exists.' };
 }
 
 export async function updateEmployeeOnboardingTemplateItem(request: Request, locals: App.Locals) {
@@ -3221,91 +3015,13 @@ export async function deleteEmployeeOnboardingTemplateItem(request: Request, loc
   return { success: true, message: 'Onboarding item deleted.' };
 }
 
-async function refreshEmployeeOnboardingPackageStatus(
-  db: D1,
-  packageId: string,
-  businessId: string
-) {
-  const [existingPackage, counts] = await Promise.all([
-    db
-      .prepare(
-        `
-        SELECT user_id, status
-        FROM employee_onboarding_packages
-        WHERE id = ? AND business_id = ?
-        LIMIT 1
-        `
-      )
-      .bind(packageId, businessId)
-      .first<{ user_id: string; status: EmployeeOnboardingPackage['status'] }>(),
-    db
-      .prepare(
-        `
-        SELECT
-          COUNT(*) AS total,
-          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-          SUM(CASE WHEN status = 'needs_changes' THEN 1 ELSE 0 END) AS needs_changes_count,
-          SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted_count,
-          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count
-        FROM employee_onboarding_items
-        WHERE package_id = ? AND business_id = ?
-        `
-      )
-      .bind(packageId, businessId)
-      .first<{
-        total: number;
-        pending_count: number | null;
-        needs_changes_count: number | null;
-        submitted_count: number | null;
-        approved_count: number | null;
-      }>()
-  ]);
-
-  const total = counts?.total ?? 0;
-  const pendingCount = counts?.pending_count ?? 0;
-  const needsChangesCount = counts?.needs_changes_count ?? 0;
-  const submittedCount = counts?.submitted_count ?? 0;
-  const approvedCount = counts?.approved_count ?? 0;
-  const now = Math.floor(Date.now() / 1000);
-
-  if (existingPackage?.status === 'approved' || existingPackage?.status === 'submitted') {
-    return {
-      status: existingPackage.status,
-      userId: existingPackage.user_id,
-      changedToApproved: false
-    };
-  }
-
-  let status: EmployeeOnboardingPackage['status'] = existingPackage?.status === 'returned' ? 'returned' : 'sent';
-  if (submittedCount > 0 || approvedCount > 0 || needsChangesCount > 0) status = 'in_progress';
-
-  await db
-    .prepare(
-      `
-      UPDATE employee_onboarding_packages
-      SET status = ?,
-        updated_at = ?
-      WHERE id = ? AND business_id = ?
-      `
-    )
-    .bind(status, now, packageId, businessId)
-    .run();
-
-  return {
-    status,
-    userId: existingPackage?.user_id ?? null,
-    changedToApproved: false
-  };
-}
-
 function profilePayloadForCompletedOnboardingItem(
   profile: AdminEmployeeProfile,
-  formKey: string,
-  fallbackLegalName = ''
+  formKey: string
 ) {
   if (formKey === 'personal_information') {
     const payload = {
-      legal_name: profile.real_name || fallbackLegalName,
+      legal_name: profile.real_name,
       preferred_name: '',
       birthday: profile.birthday,
       phone: profile.phone,
@@ -3338,98 +3054,102 @@ function profilePayloadForCompletedOnboardingItem(
   return null;
 }
 
-async function hydrateProfileBackedOnboardingItems(
-  db: D1,
-  userId: string,
-  businessId: string,
-  packageSentAt: number,
-  items: EmployeeOnboardingItem[],
-  packageId?: string,
-  env?: Partial<App.RuntimeEnv>
+const onboardingPacketSql = `SELECT p.*, json_object(
+  'packet', json_array(p.user_id, p.status, p.payroll_classification, p.sent_at, p.completed_at, p.approved_at,
+    p.approved_by, p.created_by, p.updated_at, p.manager_note, p.submitted_at, p.returned_at,
+    p.returned_by, p.locked_at, p.version, p.supersedes_package_id),
+  'items', (SELECT json_group_array(json_object('id', id, 'package_id', package_id, 'business_id', business_id,
+    'user_id', user_id, 'item_type', item_type, 'form_key', form_key, 'title', title, 'description', description,
+    'status', status, 'file_url', file_url, 'file_name', file_name, 'form_payload', form_payload,
+    'source_file_url', source_file_url, 'source_file_name', source_file_name, 'signed_name', signed_name,
+    'manager_note', manager_note, 'sort_order', sort_order, 'created_at', created_at,
+    'submitted_at', submitted_at, 'reviewed_at', reviewed_at, 'reviewed_by', reviewed_by)) FROM
+    (SELECT * FROM employee_onboarding_items WHERE business_id = p.business_id AND package_id = p.id AND user_id = p.user_id ORDER BY sort_order, created_at, id)),
+  'vaults', (SELECT json_group_array(json_object('id', id, 'record_scope', record_scope, 'record_type', record_type,
+    'status', status, 'encrypted_payload', encrypted_payload, 'payload_iv', payload_iv, 'payload_tag', payload_tag,
+    'key_version', key_version, 'encryption_algorithm', encryption_algorithm, 'display_last_four', display_last_four,
+    'updated_at', updated_at, 'locked_at', locked_at)) FROM
+    (SELECT * FROM employee_sensitive_record_vault WHERE business_id = p.business_id AND user_id = p.user_id ORDER BY id)),
+  'verifications', (SELECT json_group_array(json_object('id', id, 'status', status, 'user_id', user_id,
+    'file_url', completed_i9_file_url, 'file_name', completed_i9_file_name, 'attested_at', attested_at,
+    'examined_at', examined_at, 'document_selection', document_selection, 'verifier_user_id', verifier_user_id,
+    'updated_at', updated_at)) FROM
+    (SELECT * FROM employee_i9_verifications WHERE business_id = p.business_id AND package_id = p.id ORDER BY id)),
+  'compliance', (SELECT json_group_array(json_array(c.id, c.user_id, c.status, c.file_url, c.file_name,
+    c.signed_name, c.submitted_at, c.reviewed_at, c.reviewed_by, c.locked_at, c.updated_at))
+    FROM employee_compliance_documents c WHERE c.business_id = p.business_id AND c.user_id = p.user_id
+      AND c.onboarding_item_id IN (SELECT id FROM employee_onboarding_items WHERE business_id = p.business_id AND package_id = p.id AND user_id = p.user_id)),
+  'snapshots', (SELECT json_group_array(id) FROM employee_onboarding_sensitive_snapshots
+    WHERE business_id = p.business_id AND package_id = p.id AND user_id = p.user_id)
+) AS proof FROM employee_onboarding_packages p WHERE p.id = ? AND p.business_id = ?`;
+
+type OnboardingVaultState = { id: string; record_scope: string; record_type: string; status: string;
+  encrypted_payload: string; payload_iv: string; payload_tag: string; key_version: string;
+  encryption_algorithm: string; display_last_four: string };
+type OnboardingPacketState = EmployeeOnboardingPackage & { proof: string; items: EmployeeOnboardingItem[];
+  vaults: OnboardingVaultState[]; verifications: { status: string; user_id: string }[]; snapshots: string[] };
+
+async function readOnboardingPacket(db: D1, businessId: string, packageId: string) {
+  const row = await db.prepare(onboardingPacketSql).bind(packageId, businessId).first<EmployeeOnboardingPackage & { proof: string }>();
+  if (!row) return null;
+  const state = JSON.parse(row.proof) as Pick<OnboardingPacketState, 'items' | 'vaults' | 'verifications' | 'snapshots'>;
+  return { ...row, ...state, items: state.items.map(item => ({ ...item,
+    item_type: (item.item_type as string) === 'profile' ? 'form' as const : item.item_type,
+    form_key: (item.item_type as string) === 'profile' && !item.form_key ? 'personal_information' : item.form_key
+  })) };
+}
+
+function onboardingPacketCondition(packet: OnboardingPacketState) {
+  return { condition: `(SELECT proof FROM (${onboardingPacketSql})) IS ? AND ? =
+    (SELECT id FROM employee_onboarding_packages WHERE business_id = ? AND user_id = ?
+      ORDER BY COALESCE(version, 1) DESC, updated_at DESC, id DESC LIMIT 1)`,
+    values: [packet.id, packet.business_id, packet.proof, packet.id, packet.business_id, packet.user_id] };
+}
+
+const onboardingProfileSql = `SELECT json_array(real_name, phone, birthday, address_line_1, address_line_2, city,
+  state, postal_code, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship, updated_at, updated_by)
+  FROM employee_profiles WHERE business_id = ? AND user_id = ?`;
+
+async function hydrateProfileBackedOnboardingItems(db: D1, userId: string, businessId: string,
+  items: EmployeeOnboardingItem[], packageId: string, env: Partial<App.RuntimeEnv> | undefined, actorUserId: string | null | undefined
 ) {
-  if (!items.some((item) => item.status === 'pending' && (item.form_key === 'personal_information' || item.form_key === 'emergency_contact'))) {
-    return items;
-  }
-
-  const profile = await loadAdminEmployeeProfile(db, userId, businessId);
-  const user = await db
-    .prepare(
-      `
-      SELECT display_name, email
-      FROM users
-      WHERE id = ?
-      LIMIT 1
-      `
-    )
-    .bind(userId)
-    .first<{ display_name: string | null; email: string | null }>();
-  const fallbackLegalName = String(user?.display_name || user?.email || '').trim();
-  const now = Math.floor(Date.now() / 1000);
-  const completedItems: EmployeeOnboardingItem[] = [];
-
-  const hydrated = items.map((item) => {
-    if (item.status !== 'pending') return item;
-    const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key, fallbackLegalName);
-    if (!payload) return item;
-    const updated = {
-      ...item,
-      status: 'submitted' as const,
-      form_payload: item.form_payload || JSON.stringify({ protected_record: 'Profile record' }),
-      submitted_at: item.submitted_at ?? packageSentAt
-    };
-    completedItems.push(updated);
-    return updated;
-  });
-
-  if (packageId && completedItems.length > 0) {
-    for (const item of completedItems) {
-      const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key, fallbackLegalName);
-      if (payload && isSensitiveOnboardingFormKey(item.form_key)) {
-        await storeSensitiveOnboardingFormPayload(db, env, item, payload, userId, now);
-      }
+  if (!items.some(item => item.status === 'pending' && ['personal_information', 'emergency_contact'].includes(item.form_key)) ||
+    !isSensitiveEncryptionConfigured(env)) return items;
+  const packet = await readOnboardingPacket(db, businessId, packageId);
+  if (!packet || packet.user_id !== userId || !['sent', 'in_progress', 'returned'].includes(packet.status) || packet.locked_at !== null) return items;
+  const authority = await readHrFileAuthority(db, businessId, actorUserId, actorUserId === userId ? 'self' : 'i9', userId);
+  if (!authority) return items;
+  const profile = await db.prepare(`SELECT *, (${onboardingProfileSql}) AS proof FROM employee_profiles
+    WHERE business_id = ? AND user_id = ?`).bind(businessId, userId, businessId, userId).first<AdminEmployeeProfile & { proof: string }>();
+  if (!profile) return items;
+  const completed: { item: EmployeeOnboardingItem; payload: Record<string, string> }[] = packet.items
+    .filter(item => item.status === 'pending').flatMap(item => {
+      const payload = profilePayloadForCompletedOnboardingItem(profile, item.form_key);
+      return payload ? [{ item, payload }] : [];
+    });
+  if (!completed.length) return items;
+  const now = Math.floor(Date.now() / 1000), auditId = crypto.randomUUID();
+  try {
+    const writes: ReturnType<D1['prepare']>[] = [];
+    for (const { item, payload } of completed) {
+      writes.push(...await prepareSensitiveOnboardingFormPayload(db, env, item, payload, authority.actor, now, auditId),
+        ...prepareOnboardingItemSubmission(db, { ...item,
+          form_payload: JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, payload)) }, now, auditId));
     }
-
-    await db.batch(
-      completedItems.map((item) =>
-        db
-          .prepare(
-            `
-            UPDATE employee_onboarding_items
-            SET status = 'submitted',
-              form_payload = CASE WHEN COALESCE(form_payload, '') = '' THEN ? ELSE form_payload END,
-              submitted_at = COALESCE(submitted_at, ?),
-              reviewed_at = NULL,
-              reviewed_by = NULL,
-              manager_note = ''
-            WHERE id = ? AND package_id = ? AND business_id = ? AND status = 'pending'
-            `
-          )
-          .bind(item.form_payload || JSON.stringify({ protected_record: 'Profile record' }), item.submitted_at ?? now, item.id, packageId, businessId)
-      )
-    );
-
-    for (const item of completedItems) {
-      await upsertComplianceDocumentForOnboardingItem(
-        db,
-        {
-          ...item,
-          status: 'submitted',
-          file_url: item.file_url ?? '',
-          file_name: item.file_name ?? '',
-          signed_name: item.signed_name ?? '',
-          submitted_at: item.submitted_at ?? now,
-          reviewed_at: null,
-          reviewed_by: null
-        },
-        userId,
-        now
-      );
-    }
-
-    await refreshEmployeeOnboardingPackageStatus(db, packageId, businessId);
+    const guard = onboardingPacketCondition(packet);
+    const outcome = await commitHrFileWrite(db, new Request('https://criminiops.com/onboarding'), authority, {
+      auditId, action: 'employee_onboarding_profile_hydrated', targetUserId: userId,
+      metadata: { packageId, formCount: completed.length },
+      condition: `(${guard.condition}) AND (${onboardingProfileSql}) IS ?`,
+      values: [...guard.values, businessId, userId, profile.proof], writes: () => writes
+    });
+    if (outcome === 'saved') return packet.items.map(item => completed.some(entry => entry.item.id === item.id)
+      ? { ...item, status: 'submitted' as const, submitted_at: now,
+        form_payload: JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})) } : item);
+  } catch {
+    logOperationalError({ event: 'onboarding_profile_hydration_failed', businessId, metadata: { phase: 'hydrate' } });
   }
-
-  return hydrated;
+  return items;
 }
 
 export async function loadEmployeeOnboarding(
@@ -3472,7 +3192,7 @@ export async function loadEmployeeOnboarding(
         supersedes_package_id
       FROM employee_onboarding_packages
       WHERE user_id = ? AND business_id = ?
-      ORDER BY updated_at DESC
+      ORDER BY COALESCE(version, 1) DESC, updated_at DESC, id DESC
       LIMIT 1
       `
     )
@@ -3512,22 +3232,13 @@ export async function loadEmployeeOnboarding(
         reviewed_at,
         reviewed_by
       FROM employee_onboarding_items
-      WHERE package_id = ? AND business_id = ?
+      WHERE package_id = ? AND business_id = ? AND user_id = ?
       ORDER BY sort_order ASC, created_at ASC
       `
     )
-    .bind(onboardingPackage.id, businessId)
+    .bind(onboardingPackage.id, businessId, userId)
     .all<EmployeeOnboardingItem>();
 
-  const rawItems = await hydrateProfileBackedOnboardingItems(
-    db,
-    userId,
-    businessId,
-    onboardingPackage.sent_at,
-    items.results ?? [],
-    onboardingPackage.id,
-    options.env
-  );
   const canReadSensitive = await canAccessEmployeeSensitiveData(
     db,
     businessId,
@@ -3537,6 +3248,9 @@ export async function loadEmployeeOnboarding(
     options.actorPermissionTemplate ?? null,
     options.actorCapabilities ?? null
   );
+  const rawItems = canReadSensitive ? await hydrateProfileBackedOnboardingItems(
+    db, userId, businessId, items.results ?? [], onboardingPackage.id, options.env, options.actorUserId
+  ) : items.results ?? [];
 
   const hydratedItems = await Promise.all(
     rawItems.map(async (item) => {
@@ -3545,6 +3259,9 @@ export async function loadEmployeeOnboarding(
           ...item,
           file_url: '',
           file_name: '',
+          source_file_url: '',
+          source_file_name: '',
+          manager_note: '',
           signed_name: '',
           form_payload: JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})),
           sensitive_redacted: true
@@ -3619,12 +3336,12 @@ export async function loadEmployeeOnboarding(
     : null;
 
   return {
-    package: onboardingPackage,
+    package: canReadSensitive ? onboardingPackage : { ...onboardingPackage, manager_note: '' },
     items: hydratedItems,
     i9Verification: i9Row
       ? { ...i9Row, document_copies: i9Copies?.results ?? [] }
       : null,
-    history: historyRows.results ?? []
+    history: (historyRows.results ?? []).map(packet => canReadSensitive ? packet : { ...packet, manager_note: '' })
   };
 }
 
@@ -3637,11 +3354,11 @@ export async function prepareEmployeeOnboardingPacket(
   await ensureEmployeeOnboardingTables(db);
   const now = options.now ?? Math.floor(Date.now() / 1000);
   const packageId = crypto.randomUUID();
-  const previous = await db.prepare(`SELECT id, COALESCE(version, 1) AS version FROM employee_onboarding_packages
-    WHERE business_id = ? AND user_id = ? ORDER BY COALESCE(version, 1) DESC, updated_at DESC LIMIT 1`)
-    .bind(options.businessId, options.userId).first<{ id: string; version: number }>();
-  const templateItems = await loadEmployeeOnboardingTemplate(db, options.businessId);
-  const businessState = await loadBusinessRegisteredState(db, options.businessId);
+  const previousRow = await db.prepare(latestOnboardingSql).bind(options.businessId, options.userId).first<{ proof: string }>();
+  const previous = previousRow ? JSON.parse(previousRow.proof) as [string, number, string, number] : null;
+  const setup = await readOnboardingSetup(db, options.businessId);
+  const templateItems = setup.items;
+  const businessState = setup.state;
   const onboardingItems = composeEmployeeOnboardingPacket(templateItems, businessState);
   if (onboardingItems.length > 200) throw new Error('Onboarding packets are limited to 200 forms.');
   const guard = options.auditId ? 'EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)' : '1 = 1';
@@ -3654,7 +3371,7 @@ export async function prepareEmployeeOnboardingPacket(
     created_by, updated_at, manager_note, submitted_at, returned_at, returned_by, locked_at, version, supersedes_package_id
   ) SELECT ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, '', NULL, NULL, NULL, NULL, ?, ? WHERE ${guard}`)
     .bind(packageId, options.businessId, options.userId, initialPayloads.some(Boolean) ? 'in_progress' : 'sent', options.payrollClassification ?? 'employee', now,
-      actor, now, Math.max(1, Number(previous?.version ?? 0) + 1), previous?.id ?? null, ...guardValues)];
+      actor, now, Math.max(1, Number(previous?.[1] ?? 0) + 1), previous?.[0] ?? null, ...guardValues)];
   for (const [index, item] of onboardingItems.entries()) {
     const itemId = crypto.randomUUID();
     const classification = classifyOnboardingComplianceItem(item);
@@ -3724,188 +3441,56 @@ export async function prepareEmployeeOnboardingPacket(
       onboarding_package_id = excluded.onboarding_package_id, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
     .bind(options.businessId, options.userId, options.ownerPacket ? 'active' : 'onboarding',
       options.ownerPacket ? 'owner' : options.payrollClassification ?? 'employee', packageId, now, now, actor, ...guardValues));
-  return { packageId, statements };
-}
-
-async function createEmployeeOnboardingPackageForUser(
-  db: D1,
-  options: {
-    businessId: string;
-    userId: string;
-    payrollClassification?: EmployeeOnboardingPackage['payroll_classification'];
-    createdBy?: string | null;
-    allowOwnerPacket?: boolean;
-  }
-) {
-  await ensureEmployeeOnboardingTables(db);
-  await ensureBusinessSchema(db);
-
-  const membership = await db
-    .prepare(
-      `
-      SELECT role, COALESCE(is_active, 1) AS is_active
-      FROM business_users
-      WHERE business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(options.businessId, options.userId)
-    .first<{ role: string | null; is_active: number }>();
-
-  if (membership && normalizeBusinessRole(membership.role) === 'owner' && !options.allowOwnerPacket) {
-    const now = Math.floor(Date.now() / 1000);
-    await db
-      .prepare(
-        `
-        UPDATE employee_employment_records
-        SET employment_status = CASE
-            WHEN employment_status = 'terminated' THEN employment_status
-            ELSE 'active'
-          END,
-          employment_type = 'owner',
-          onboarding_package_id = NULL,
-          updated_at = ?,
-          updated_by = COALESCE(?, updated_by)
-        WHERE business_id = ? AND user_id = ?
-        `
-      )
-      .bind(now, options.createdBy ?? null, options.businessId, options.userId)
-      .run();
-    return { created: false, packageId: null, status: 'not_required' as const };
-  }
-
-  const existingActive = await db
-    .prepare(
-      `
-      SELECT id, status
-      FROM employee_onboarding_packages
-      WHERE user_id = ? AND business_id = ? AND status != 'approved'
-      ORDER BY updated_at DESC
-      LIMIT 1
-      `
-    )
-    .bind(options.userId, options.businessId)
-    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
-
-  if (existingActive) {
-    return { created: false, packageId: existingActive.id, status: existingActive.status };
-  }
-
-  const plan = await prepareEmployeeOnboardingPacket(db, {
-    businessId: options.businessId, userId: options.userId, createdBy: options.createdBy,
-    payrollClassification: options.payrollClassification,
-    ownerPacket: normalizeBusinessRole(membership?.role) === 'owner' && options.allowOwnerPacket
-  });
-  await db.batch(plan.statements);
-  return { created: true, packageId: plan.packageId, status: 'sent' as const };
-}
-
-export async function ensureEmployeeOnboardingRequirement(
-  db: D1,
-  businessId: string,
-  userId: string,
-  createdBy?: string | null,
-  options: { allowOwnerPacket?: boolean } = {}
-) {
-  if (!businessId || !userId) return { required: false, approved: true, status: 'not_required' as const };
-
-  await ensureBusinessSchema(db);
-  const membership = await db
-    .prepare(
-      `
-      SELECT role, COALESCE(is_active, 1) AS is_active
-      FROM business_users
-      WHERE business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ role: string | null; is_active: number }>();
-
-  if (!membership || membership.is_active !== 1) {
-    return { required: false, approved: true, status: 'not_required' as const };
-  }
-
-  await ensureEmployeeOnboardingTables(db);
-  const employment = await db
-    .prepare(
-      `
-      SELECT employment_type
-      FROM employee_employment_records
-      WHERE business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ employment_type: string | null }>();
-  const employmentType = String(employment?.employment_type ?? '').trim().toLowerCase();
-  const businessRole = normalizeBusinessRole(membership.role);
-  const latest = await db
-    .prepare(
-      `
-      SELECT id, status
-      FROM employee_onboarding_packages
-      WHERE business_id = ? AND user_id = ?
-      ORDER BY updated_at DESC
-      LIMIT 1
-      `
-    )
-    .bind(businessId, userId)
-    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
-
-  if (latest?.status === 'approved') {
-    return { required: true, approved: true, status: latest.status, packageId: latest.id };
-  }
-
-  if (latest) {
-    return { required: true, approved: false, status: latest.status, packageId: latest.id };
-  }
-
-  if (employmentType === 'contractor' || ((employmentType === 'owner' || businessRole === 'owner') && !options.allowOwnerPacket)) {
-    if (businessRole === 'owner' && employmentType !== 'owner') {
-      const now = Math.floor(Date.now() / 1000);
-      await db
-        .prepare(
-          `
-          UPDATE employee_employment_records
-          SET employment_status = CASE
-              WHEN employment_status = 'terminated' THEN employment_status
-              ELSE 'active'
-            END,
-            employment_type = 'owner',
-            onboarding_package_id = NULL,
-            updated_at = ?,
-            updated_by = COALESCE(?, updated_by)
-          WHERE business_id = ? AND user_id = ?
-          `
-        )
-        .bind(now, createdBy ?? null, businessId, userId)
-        .run();
-    }
-    return { required: false, approved: true, status: 'not_required' as const };
-  }
-
-  if (isBusinessAdminRole(membership.role) && !employmentType) {
-    return { required: false, approved: true, status: 'not_required' as const };
-  }
-
-  const created = await createEmployeeOnboardingPackageForUser(db, {
-    businessId,
-    userId,
-    createdBy: createdBy ?? null,
-    allowOwnerPacket: options.allowOwnerPacket
-  });
-
-  return {
-    required: true,
-    approved: false,
-    status: created.status,
-    packageId: created.packageId
+  return { packageId, statements,
+    condition: `(${onboardingSetupSql}) IS ? AND (${latestOnboardingSql}) IS ?`,
+    values: [options.businessId, options.businessId, setup.proof, options.businessId, options.userId, previousRow?.proof ?? null]
   };
 }
 
-export async function loadEmployeeOnboardingAccessStatus(db: D1, businessId: string, userId: string) {
-  return ensureEmployeeOnboardingRequirement(db, businessId, userId, null);
+const onboardingEmployeeSql = `SELECT json_array(bu.role, COALESCE(bu.is_active, 1), u.is_active,
+  e.employment_type, e.employment_status, e.onboarding_package_id) AS proof
+  FROM business_users bu JOIN users u ON u.id = bu.user_id
+  LEFT JOIN employee_employment_records e ON e.business_id = bu.business_id AND e.user_id = bu.user_id
+  WHERE bu.business_id = ? AND bu.user_id = ?`;
+
+class OnboardingWriteError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+async function createEmployeeOnboardingPackageForUser(db: D1, options: {
+  businessId: string; userId: string; payrollClassification?: EmployeeOnboardingPackage['payroll_classification'];
+  createdBy?: string | null; allowOwnerPacket?: boolean; request?: Request;
+}) {
+  await ensureEmployeeOnboardingTables(db);
+  const row = await db.prepare(onboardingEmployeeSql).bind(options.businessId, options.userId).first<{ proof: string }>();
+  const member = row ? JSON.parse(row.proof) as [string, number, number, string | null, string | null, string | null] : null;
+  if (!member || member[1] !== 1 || member[2] !== 1) throw new OnboardingWriteError(400, 'Employee must be active before onboarding.');
+  if (member[3] === 'contractor' || options.payrollClassification === 'contractor') {
+    throw new OnboardingWriteError(400, 'Contractors do not receive employee onboarding packets.');
+  }
+  const owner = normalizeBusinessRole(member[0]) === 'owner';
+  if (owner && !options.allowOwnerPacket) return { created: false, packageId: null, status: 'not_required' as const };
+  const existing = await db.prepare(`SELECT id, status FROM employee_onboarding_packages
+    WHERE business_id = ? AND user_id = ? AND status <> 'approved'
+    ORDER BY COALESCE(version, 1) DESC, updated_at DESC, id DESC LIMIT 1`)
+    .bind(options.businessId, options.userId).first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
+  if (existing) return { created: false, packageId: existing.id, status: existing.status };
+  const authority = await readHrFileAuthority(db, options.businessId, options.createdBy ?? options.userId,
+    options.request ? 'send' : 'self', options.userId);
+  if (!authority) throw new OnboardingWriteError(403, 'Employee onboarding access required.');
+  const auditId = crypto.randomUUID();
+  const plan = await prepareEmployeeOnboardingPacket(db, { ...options, ownerPacket: owner, auditId });
+  const outcome = await commitHrFileWrite(db, options.request ?? new Request('https://criminiops.com/onboarding'), authority, {
+    auditId, action: options.request ? 'employee_onboarding_package_sent' : 'employee_onboarding_package_created',
+    targetUserId: options.userId, metadata: { packageId: plan.packageId, payrollClassification: options.payrollClassification ?? 'employee' },
+    condition: `(${plan.condition}) AND (${onboardingEmployeeSql}) IS ? AND NOT EXISTS
+      (SELECT 1 FROM employee_onboarding_packages WHERE business_id = ? AND user_id = ? AND status <> 'approved')`,
+    values: [...plan.values, options.businessId, options.userId, row!.proof, options.businessId, options.userId],
+    writes: () => plan.statements
+  });
+  if (outcome === 'changed') throw new OnboardingWriteError(409, 'The employee or packet setup changed. Refresh before sending again.');
+  if (outcome !== 'saved') throw new OnboardingWriteError(503, 'The onboarding packet could not be saved. Please try again.');
+  return { created: true, packageId: plan.packageId, status: 'sent' as const };
 }
 
 export async function loadEmployeeOnboardingDashboard(
@@ -3931,9 +3516,14 @@ export async function loadEmployeeOnboardingDashboard(
         created_by,
         updated_at,
         manager_note
-      FROM employee_onboarding_packages
-      WHERE business_id = ?
-      ORDER BY updated_at DESC
+      FROM employee_onboarding_packages p
+      WHERE p.business_id = ? AND p.id IN (
+        SELECT (SELECT recent.id FROM employee_onboarding_packages recent
+          WHERE recent.business_id = bu.business_id AND recent.user_id = bu.user_id
+          ORDER BY COALESCE(recent.version, 1) DESC, recent.updated_at DESC, recent.id DESC LIMIT 1)
+        FROM business_users bu WHERE bu.business_id = p.business_id
+      )
+      ORDER BY COALESCE(p.version, 1) DESC, p.updated_at DESC, p.id DESC
       `
     )
     .bind(businessId)
@@ -3950,11 +3540,11 @@ export async function loadEmployeeOnboardingDashboard(
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_items,
         SUM(CASE WHEN status = 'needs_changes' THEN 1 ELSE 0 END) AS needs_changes_items
       FROM employee_onboarding_items
-      WHERE business_id = ?
+      WHERE business_id = ? AND package_id IN (SELECT value FROM json_each(?))
       GROUP BY package_id
       `
     )
-    .bind(businessId)
+    .bind(businessId, JSON.stringify((packages.results ?? []).map(packet => packet.id)))
     .all<{
       package_id: string;
       total_items: number;
@@ -4002,7 +3592,7 @@ export async function loadEmployeeOnboardingDashboard(
 
   return users
     .filter((user) => {
-      if (normalizeBusinessRole(user.role) === 'owner') return false;
+      if (normalizeBusinessRole(user.role) === 'owner' && !latestPackageByUser.has(user.id)) return false;
       const employmentType = employmentTypeByUser.get(user.id) ?? '';
       if (employmentType === 'contractor') return false;
       if (latestPackageByUser.has(user.id)) return true;
@@ -6610,13 +6200,16 @@ export async function sendEmployeeOnboardingPackage(
     return fail(400, { error: 'Contractors do not receive employee onboarding packets.' });
   }
 
-  const created = await createEmployeeOnboardingPackageForUser(db, {
-    businessId,
-    userId,
-    payrollClassification,
-    createdBy: locals.userId ?? null,
-    allowOwnerPacket: true
-  });
+  let created: Awaited<ReturnType<typeof createEmployeeOnboardingPackageForUser>>;
+  try {
+    created = await createEmployeeOnboardingPackageForUser(db, {
+      businessId, userId, payrollClassification, createdBy: locals.userId ?? null, allowOwnerPacket: true, request
+    });
+  } catch (error) {
+    if (error instanceof OnboardingWriteError) return fail(error.status, { error: error.message });
+    logOperationalError({ event: 'onboarding_packet_send_failed', businessId, metadata: { phase: 'save' } });
+    return fail(503, { error: 'The onboarding packet could not be saved. Please try again.' });
+  }
 
   if (!created.created) {
     return fail(400, { error: 'This employee already has an active onboarding package.' });
@@ -6625,25 +6218,18 @@ export async function sendEmployeeOnboardingPackage(
     return fail(500, { error: 'Onboarding package could not be created.' });
   }
 
-  await writeAuditLog(db, {
-    action: 'employee_onboarding_package_sent',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: userId,
-    metadata: {
-      packageId: created.packageId,
-      payrollClassification
-    }
-  });
-  const emailResult = await sendEmployeeOnboardingPackageEmail({
+  let emailResult: { sent: boolean; reason?: string };
+  try { emailResult = await sendEmployeeOnboardingPackageEmail({
     env,
     origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
     employeeEmail: membership.email,
     employeeName: membership.display_name,
     businessName: locals.businessName,
     packageId: created.packageId
-  });
+  }); } catch {
+    emailResult = { sent: false, reason: 'Email could not be sent.' };
+    logOperationalError({ event: 'onboarding_packet_email_failed', businessId, metadata: { phase: 'notification' } });
+  }
 
   await recordOperationalEventBestEffort(
     db,
@@ -6679,287 +6265,111 @@ async function cleanUpOnboardingMedia(db: D1, locals: App.Locals, businessId: st
   }
 }
 
-async function submitEmployeeOnboardingDocument(
-  request: Request,
-  locals: App.Locals,
-  item: EmployeeOnboardingItem & { package_status: EmployeeOnboardingPackage['status'] },
-  formData: FormData,
-  signedName: string
-) {
-  const db = locals.DB!;
-  const businessId = item.business_id;
-  const upload = formData.get('file');
-  const hasUpload = upload instanceof File && upload.size > 0;
-  const official = ['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key);
-  if (!item.file_url && !hasUpload) return fail(400, { error: 'Upload the requested document before submitting.' });
-  if (official && String(formData.get('official_form_confirmed') ?? '0') !== '1') {
-    return fail(400, { error: 'Confirm that the current official form is complete and signed.' });
-  }
-  if (official && !signedName) return fail(400, { error: 'Type your name to certify this submission.' });
-  if (hasUpload) {
-    if (upload.size > 15 * 1024 * 1024) return fail(400, { error: 'Document uploads must be 15MB or smaller.' });
-    if (!isAllowedDocumentUpload(upload.type, extensionFromFilename(upload.name))) {
-      return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
-    }
-    if (official && upload.type !== 'application/pdf' &&
-      !(['', 'application/octet-stream'].includes(upload.type) && extensionFromFilename(upload.name) === 'pdf')) {
-      return fail(400, { error: 'Official employment and tax forms must be uploaded as PDF files.' });
-    }
-    if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
-  }
+const onboardingItemSql = `SELECT i.*, p.status AS package_status, p.locked_at AS package_locked_at,
+  json_array(i.item_type, i.form_key, i.title, i.description, i.status, i.file_url, i.file_name, i.form_payload,
+    i.source_file_url, i.source_file_name, i.signed_name, i.manager_note, i.sort_order, i.submitted_at,
+    i.reviewed_at, i.reviewed_by, p.status, p.locked_at, p.updated_at, p.version) AS proof
+  FROM employee_onboarding_items i JOIN employee_onboarding_packages p
+    ON p.id = i.package_id AND p.business_id = i.business_id AND p.user_id = i.user_id
+  WHERE i.id = ? AND i.business_id = ? AND i.user_id = ?`;
+type EditableOnboardingItem = EmployeeOnboardingItem & { package_status: EmployeeOnboardingPackage['status'];
+  package_locked_at: number | null; proof: string };
 
-  let uploadedUrl = '';
-  const now = Math.floor(Date.now() / 1000);
-  try {
-    if (hasUpload) {
-      uploadedUrl = (await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET!, businessId, item.user_id, upload)).url;
-    }
-    const auditId = crypto.randomUUID();
-    const fileUrl = uploadedUrl || item.file_url;
-    const fileName = hasUpload ? upload.name : item.file_name;
-    // The audit claim and every dependent write share one transaction. Comparing values as
-    // well as status catches competing uploads even when both happen in the same second.
-    const statements = [db.prepare(`
-      INSERT INTO account_audit_logs (
-        id, business_id, actor_user_id, target_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at
-      ) SELECT ?, i.business_id, i.user_id, i.user_id, 'employee_onboarding_item_submitted', ?, ?, ?, ?
-      FROM employee_onboarding_items i
-      JOIN employee_onboarding_packages p ON p.id = i.package_id AND p.business_id = i.business_id AND p.user_id = i.user_id
-      JOIN business_users bu ON bu.business_id = i.business_id AND bu.user_id = i.user_id AND bu.is_active = 1
-      JOIN users u ON u.id = i.user_id AND u.is_active = 1
-      WHERE i.id = ? AND i.business_id = ? AND i.user_id = ? AND i.package_id = ?
-        AND p.status = ? AND p.status IN ('sent', 'in_progress', 'returned') AND p.locked_at IS NULL
-        AND i.status IS ? AND i.file_url IS ? AND i.file_name IS ? AND i.form_payload IS ?
-        AND i.signed_name IS ? AND i.submitted_at IS ? AND i.reviewed_at IS ? AND i.reviewed_by IS ?
-        AND NOT EXISTS (SELECT 1 FROM employee_compliance_documents c
-          WHERE c.business_id = i.business_id AND c.onboarding_item_id = i.id AND (c.locked_at IS NOT NULL OR c.status = 'approved'))
-    `).bind(auditId, await hashedAuditValue(getRequestIpAddress(request)),
-      await hashedAuditValue(request.headers.get('user-agent')),
-      JSON.stringify({ packageId: item.package_id, itemId: item.id, itemType: item.item_type,
-        formKey: item.form_key, sensitive: isSensitiveOnboardingFormKey(item.form_key) }), now,
-      item.id, businessId, item.user_id, item.package_id, item.package_status, item.status,
-      item.file_url, item.file_name, item.form_payload, item.signed_name, item.submitted_at, item.reviewed_at, item.reviewed_by),
-    db.prepare(`
-      UPDATE employee_onboarding_items SET status = 'submitted', file_url = ?, file_name = ?, signed_name = ?,
-        manager_note = '', submitted_at = ?, reviewed_at = NULL, reviewed_by = NULL
-      WHERE id = ? AND user_id = ? AND business_id = ? AND EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
-    `).bind(fileUrl, fileName, signedName, now, item.id, item.user_id, businessId, auditId),
-    ...prepareComplianceDocumentForOnboardingItem(db, {
-      ...item, status: 'submitted', file_url: fileUrl, file_name: fileName, signed_name: signedName,
-      submitted_at: now, reviewed_at: null, reviewed_by: null
-    }, item.user_id, now, auditId),
-    db.prepare(`
-      UPDATE employee_onboarding_packages SET status = 'in_progress', submitted_at = NULL, completed_at = NULL,
-        returned_at = NULL, returned_by = NULL, manager_note = '', updated_at = ?
-      WHERE id = ? AND business_id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
-    `).bind(now, item.package_id, businessId, item.user_id, auditId)];
-    if (item.form_key === 'federal_i9') {
-      statements.push(db.prepare(`
-        UPDATE employee_i9_verifications SET status = 'pending', attested_at = NULL, verifier_user_id = NULL,
-          verifier_name = '', verifier_title = '', updated_at = ?
-        WHERE business_id = ? AND package_id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
-      `).bind(now, businessId, item.package_id, item.user_id, auditId));
-    }
-    const result = await db.batch(statements);
-    if (!result[0]?.meta?.changes) {
-      if (uploadedUrl) await cleanUpOnboardingMedia(db, locals, businessId, uploadedUrl);
-      return fail(409, { error: 'This onboarding packet changed. Refresh before submitting again.' });
-    }
-    if (uploadedUrl && item.file_url) await cleanUpOnboardingMedia(db, locals, businessId, item.file_url);
-    return { success: true, message: 'Onboarding item submitted.' };
-  } catch {
-    if (uploadedUrl) await cleanUpOnboardingMedia(db, locals, businessId, uploadedUrl);
-    logOperationalError({ event: 'onboarding_document_save_failed', businessId, metadata: { phase: 'save' } });
-    return fail(503, { error: 'The document could not be saved. Please try again.' });
-  }
+function onboardingItemCondition(item: EditableOnboardingItem) {
+  return {
+    condition: `(SELECT proof FROM (${onboardingItemSql})) IS ?
+      AND EXISTS (SELECT 1 FROM employee_onboarding_packages p WHERE p.id = ? AND p.business_id = ? AND p.user_id = ?
+        AND p.status IN ('sent', 'in_progress', 'returned') AND p.locked_at IS NULL
+        AND p.id = (SELECT id FROM employee_onboarding_packages WHERE business_id = p.business_id AND user_id = p.user_id
+          ORDER BY COALESCE(version, 1) DESC, updated_at DESC, id DESC LIMIT 1))
+      AND NOT EXISTS (SELECT 1 FROM employee_compliance_documents WHERE business_id = ? AND user_id = ?
+        AND onboarding_item_id = ? AND (locked_at IS NOT NULL OR status = 'approved'))`,
+    values: [item.id, item.business_id, item.user_id, item.proof, item.package_id, item.business_id,
+      item.user_id, item.business_id, item.user_id, item.id]
+  };
 }
 
-export async function submitEmployeeOnboardingItem(
-  request: Request,
-  locals: App.Locals,
-  env?: Partial<App.RuntimeEnv>
-) {
+function prepareOnboardingItemSubmission(db: D1, item: EmployeeOnboardingItem, now: number, auditId: string) {
+  return [db.prepare(`UPDATE employee_onboarding_items SET status = 'submitted', file_url = ?, file_name = ?,
+      form_payload = ?, signed_name = ?, manager_note = '', submitted_at = ?, reviewed_at = NULL, reviewed_by = NULL
+    WHERE id = ? AND business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`)
+    .bind(item.file_url, item.file_name, item.form_payload, item.signed_name, now, item.id, item.business_id, item.user_id, auditId),
+    ...prepareComplianceDocumentForOnboardingItem(db, { ...item, status: 'submitted', submitted_at: now,
+      reviewed_at: null, reviewed_by: null }, item.user_id, now, auditId),
+    db.prepare(`UPDATE employee_onboarding_packages SET status = 'in_progress', submitted_at = NULL, completed_at = NULL,
+      returned_at = NULL, returned_by = NULL, manager_note = '', updated_at = ?
+      WHERE id = ? AND business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`)
+      .bind(now, item.package_id, item.business_id, item.user_id, auditId),
+    ...(item.form_key !== 'federal_i9' ? [] : [db.prepare(`UPDATE employee_i9_verifications SET status = 'pending',
+      attested_at = NULL, verifier_user_id = NULL, verifier_name = '', verifier_title = '', updated_at = ?
+      WHERE business_id = ? AND user_id = ? AND package_id = ? AND ${hrFileWriteGuard}`)
+      .bind(now, item.business_id, item.user_id, item.package_id, auditId)])];
+}
+
+export async function submitEmployeeOnboardingItem(request: Request, locals: App.Locals, env?: Partial<App.RuntimeEnv>) {
   if (!locals.userId) throw redirect(303, '/login');
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
-
   await ensureEmployeeOnboardingTables(db);
-
-  const formData = await request.formData();
-  const itemId = String(formData.get('item_id') ?? '').trim();
-  const signedName = String(formData.get('signed_name') ?? '').trim();
-
+  const formData = await request.formData(), itemId = String(formData.get('item_id') ?? '').trim();
+  const signedName = formString(formData, 'signed_name', 120);
   if (!itemId) return fail(400, { error: 'Missing onboarding item.' });
-
-  const item = await db
-    .prepare(
-      `
-      SELECT
-        i.id,
-        i.package_id,
-        i.business_id,
-        i.user_id,
-        CASE WHEN i.item_type = 'profile' THEN 'form' ELSE i.item_type END AS item_type,
-        CASE
-          WHEN i.item_type = 'profile' AND COALESCE(i.form_key, '') = '' THEN 'personal_information'
-          ELSE i.form_key
-        END AS form_key,
-        i.title,
-        i.description,
-        i.status,
-        i.file_url,
-        i.file_name,
-        i.form_payload,
-        i.signed_name,
-        i.manager_note,
-        i.sort_order,
-        i.created_at,
-        i.submitted_at,
-        i.reviewed_at,
-        i.reviewed_by,
-        p.status AS package_status
-      FROM employee_onboarding_items i
-      JOIN employee_onboarding_packages p ON p.id = i.package_id AND p.business_id = i.business_id AND p.user_id = i.user_id
-      WHERE i.id = ? AND i.user_id = ? AND i.business_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(itemId, locals.userId, businessId)
-    .first<EmployeeOnboardingItem & { package_status: EmployeeOnboardingPackage['status'] }>();
-
-  if (!item) return fail(404, { error: 'Onboarding item not found.' });
-  if (item.package_status === 'approved') {
-    return fail(400, { error: 'This onboarding package is already approved.' });
-  }
-  if (item.package_status === 'submitted') {
-    return fail(400, { error: 'This onboarding package is under review. It must be returned before it can be changed.' });
-  }
+  const raw = await db.prepare(onboardingItemSql).bind(itemId, businessId, locals.userId).first<EditableOnboardingItem>();
+  if (!raw) return fail(404, { error: 'Onboarding item not found.' });
+  const item = { ...raw, item_type: (raw.item_type as string) === 'profile' ? 'form' as const : raw.item_type,
+    form_key: (raw.item_type as string) === 'profile' && !raw.form_key ? 'personal_information' : raw.form_key };
+  if (item.package_status === 'approved' || item.package_locked_at !== null) return fail(400, { error: 'This onboarding package is already approved.' });
+  if (item.package_status === 'submitted') return fail(400, { error: 'This onboarding package is under review. It must be returned before it can be changed.' });
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'self', item.user_id);
+  if (!authority) return fail(403, { error: 'Employee onboarding access required.' });
+  const upload = formData.get('file'), hasUpload = upload instanceof File && upload.size > 0;
+  let payload: Record<string, string> | null = null;
   if (item.item_type === 'document') {
-    return submitEmployeeOnboardingDocument(request, locals, item, formData, signedName);
-  }
-
-  let fileUrl = item.file_url;
-  let fileName = item.file_name;
-  let formPayload = item.form_payload;
-  const now = Math.floor(Date.now() / 1000);
-
-  if (item.item_type === 'form') {
-    const formResult = buildOnboardingFormPayload(formData, item.form_key);
-    if ('error' in formResult) return fail(400, { error: formResult.error });
+    const official = ['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key);
+    if (!item.file_url && !hasUpload) return fail(400, { error: 'Upload the requested document before submitting.' });
+    if (official && String(formData.get('official_form_confirmed') ?? '0') !== '1') return fail(400, { error: 'Confirm that the current official form is complete and signed.' });
+    if (official && !signedName) return fail(400, { error: 'Type your name to certify this submission.' });
+    if (hasUpload) {
+      if (upload.size > 15 * 1024 * 1024) return fail(400, { error: 'Document uploads must be 15MB or smaller.' });
+      if (!isAllowedDocumentUpload(upload.type, extensionFromFilename(upload.name))) return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
+      if (official && !isPdfUpload(upload)) return fail(400, { error: 'Official employment and tax forms must be uploaded as PDF files.' });
+      if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
+    }
+  } else if (item.item_type === 'form') {
+    const result = buildOnboardingFormPayload(formData, item.form_key);
+    if ('error' in result) return fail(400, { error: result.error });
+    payload = result.payload;
     if (!signedName) return fail(400, { error: 'Typed name is required.' });
-    await applyOnboardingFormPayloadToProfile(
-      db,
-      businessId,
-      locals.userId,
-      item.form_key,
-      formResult.payload,
-      locals.userId
-    );
-    if (isSensitiveOnboardingFormKey(item.form_key)) {
-      try {
-        await storeSensitiveOnboardingFormPayload(db, env, item, formResult.payload, locals.userId, now);
-      } catch (error) {
-        if (error instanceof Error && error.message === 'sensitive_encryption_missing') {
-          return sensitiveConfigurationFailure();
-        }
-        throw error;
-      }
-      formPayload = JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, formResult.payload));
-    } else {
-      formPayload = JSON.stringify(formResult.payload);
-    }
-  } else if (String(formData.get('acknowledged') ?? '0') !== '1') {
-    return fail(400, { error: 'Confirm the acknowledgement before submitting.' });
-  } else if (!signedName) {
-    return fail(400, { error: 'Typed name is required.' });
+    if (isSensitiveOnboardingFormKey(item.form_key) && !isSensitiveEncryptionConfigured(env)) return sensitiveConfigurationFailure();
+  } else {
+    if (String(formData.get('acknowledged') ?? '0') !== '1') return fail(400, { error: 'Confirm the acknowledgement before submitting.' });
+    if (!signedName) return fail(400, { error: 'Typed name is required.' });
   }
-
-  await db
-    .prepare(
-      `
-      UPDATE employee_onboarding_items
-      SET status = 'submitted',
-        file_url = ?,
-        file_name = ?,
-        form_payload = ?,
-        signed_name = ?,
-        manager_note = '',
-        submitted_at = ?,
-        reviewed_at = NULL,
-        reviewed_by = NULL
-      WHERE id = ? AND user_id = ? AND business_id = ?
-      `
-    )
-    .bind(fileUrl, fileName, formPayload, signedName, now, item.id, locals.userId, businessId)
-    .run();
-
-  await upsertComplianceDocumentForOnboardingItem(
-    db,
-    {
-      ...item,
-      status: 'submitted',
-      file_url: fileUrl,
-      file_name: fileName,
-      signed_name: signedName,
-      submitted_at: now,
-      reviewed_at: null,
-      reviewed_by: null
-    },
-    locals.userId,
-    now
-  );
-
-  await refreshEmployeeOnboardingPackageStatus(db, item.package_id, businessId);
-  await db
-    .prepare(
-      `
-      UPDATE employee_onboarding_packages
-      SET status = 'in_progress',
-        submitted_at = NULL,
-        completed_at = NULL,
-        returned_at = NULL,
-        returned_by = NULL,
-        manager_note = '',
-        updated_at = ?
-      WHERE id = ? AND business_id = ? AND status <> 'approved'
-      `
-    )
-    .bind(now, item.package_id, businessId)
-    .run();
-
-  if (item.form_key === 'federal_i9') {
-    await db
-      .prepare(
-        `
-        UPDATE employee_i9_verifications
-        SET status = 'pending',
-          attested_at = NULL,
-          verifier_user_id = NULL,
-          verifier_name = '',
-          verifier_title = '',
-          updated_at = ?
-        WHERE business_id = ? AND package_id = ? AND user_id = ?
-        `
-      )
-      .bind(now, businessId, item.package_id, locals.userId)
-      .run();
+  const staged: string[] = [], now = Math.floor(Date.now() / 1000), auditId = crypto.randomUUID();
+  let outcome: string;
+  try {
+    const uploaded = item.item_type === 'document' && hasUpload
+      ? await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET!, businessId, item.user_id, upload, staged) : null;
+    const next = { ...item, file_url: uploaded?.url ?? item.file_url, file_name: uploaded && hasUpload ? upload.name : item.file_name,
+      signed_name: signedName, form_payload: payload ? JSON.stringify(isSensitiveOnboardingFormKey(item.form_key)
+        ? sanitizeSensitiveOnboardingPayload(item.form_key, payload) : payload) : item.form_payload };
+    const sensitive = payload ? await prepareSensitiveOnboardingFormPayload(db, env, item, payload, locals.userId, now, auditId) : [];
+    outcome = await commitHrFileWrite(db, request, authority, {
+      auditId, action: 'employee_onboarding_item_submitted', targetUserId: item.user_id,
+      metadata: { packageId: item.package_id, itemId: item.id, itemType: item.item_type,
+        formKey: item.form_key, sensitive: isSensitiveOnboardingFormKey(item.form_key) },
+      ...onboardingItemCondition(item), writes: () => [
+        ...(payload ? prepareOnboardingFormProfile(db, businessId, item.user_id, item.form_key, payload, locals.userId!, now, auditId) : []),
+        ...sensitive, ...prepareOnboardingItemSubmission(db, next, now, auditId)]
+    });
+  } catch {
+    outcome = 'unavailable';
+    logOperationalError({ event: 'onboarding_item_save_failed', businessId, metadata: { phase: 'save' } });
   }
-
-  await writeAuditLog(db, {
-    action: 'employee_onboarding_item_submitted',
-    request,
-    businessId,
-    actorUserId: locals.userId,
-    targetUserId: locals.userId,
-    metadata: {
-      packageId: item.package_id,
-      itemId: item.id,
-      itemType: item.item_type,
-      formKey: item.form_key,
-      sensitive: isSensitiveOnboardingFormKey(item.form_key)
-    }
-  });
+  await cleanUpOnboardingMedia(db, locals, businessId, outcome === 'saved' && staged.length ? item.file_url : staged);
+  if (outcome === 'changed') return fail(409, { error: 'This onboarding packet or your access changed. Refresh before submitting again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The onboarding item could not be saved. Please try again.' });
   return { success: true, message: 'Onboarding item submitted.' };
 }
 
@@ -6969,83 +6379,30 @@ export async function submitEmployeeOnboardingPacket(request: Request, locals: A
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
   await ensureEmployeeOnboardingTables(db);
-
-  const formData = await request.formData();
-  const packageId = String(formData.get('package_id') ?? '').trim();
+  const formData = await request.formData(), packageId = String(formData.get('package_id') ?? '').trim();
   if (!packageId) return fail(400, { error: 'Missing onboarding packet.' });
-
-  const packet = await db
-    .prepare(
-      `
-      SELECT id, status
-      FROM employee_onboarding_packages
-      WHERE id = ? AND business_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(packageId, businessId, locals.userId)
-    .first<{ id: string; status: EmployeeOnboardingPackage['status'] }>();
-  if (!packet) return fail(404, { error: 'Onboarding packet not found.' });
-  if (packet.status === 'approved') return fail(400, { error: 'This onboarding packet is already accepted.' });
+  const packet = await readOnboardingPacket(db, businessId, packageId);
+  if (!packet || packet.user_id !== locals.userId) return fail(404, { error: 'Onboarding packet not found.' });
+  if (packet.status === 'approved' || packet.locked_at !== null) return fail(400, { error: 'This onboarding packet is already accepted.' });
   if (packet.status === 'submitted') return fail(400, { error: 'This onboarding packet is already under review.' });
-
-  const counts = await db
-    .prepare(
-      `
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) AS submitted
-      FROM employee_onboarding_items
-      WHERE package_id = ? AND business_id = ? AND user_id = ?
-      `
-    )
-    .bind(packageId, businessId, locals.userId)
-    .first<{ total: number; submitted: number | null }>();
-  if (!counts?.total || (counts.submitted ?? 0) !== counts.total) {
+  if (!packet.items.length || packet.items.some(item => item.status !== 'submitted')) {
     return fail(400, { error: 'Complete every packet item before submitting the packet.' });
   }
-
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'self', packet.user_id);
+  if (!authority) return fail(403, { error: 'Employee onboarding access required.' });
   const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(
-      `
-      UPDATE employee_onboarding_packages
-      SET status = 'submitted',
-        submitted_at = ?,
-        completed_at = ?,
-        returned_at = NULL,
-        returned_by = NULL,
-        manager_note = '',
-        updated_at = ?
-      WHERE id = ? AND business_id = ? AND user_id = ? AND status <> 'approved'
-      `
-    )
-    .bind(now, now, now, packageId, businessId, locals.userId)
-    .run();
-
-  await writeAuditLog(db, {
-    action: 'employee_onboarding_packet_submitted',
-    request,
-    businessId,
-    actorUserId: locals.userId,
-    targetUserId: locals.userId,
-    metadata: { packageId }
+  const outcome = await commitHrFileWrite(db, request, authority, {
+    action: 'employee_onboarding_packet_submitted', targetUserId: packet.user_id, metadata: { packageId },
+    ...onboardingPacketCondition(packet), writes: auditId => [db.prepare(`UPDATE employee_onboarding_packages
+      SET status = 'submitted', submitted_at = ?, completed_at = ?, returned_at = NULL, returned_by = NULL,
+        manager_note = '', updated_at = ? WHERE id = ? AND business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`)
+      .bind(now, now, now, packageId, businessId, packet.user_id, auditId)]
   });
-  await recordOperationalEventBestEffort(
-    db,
-    {
-      businessId,
-      eventType: 'onboarding.package.submitted',
-      category: 'onboarding',
-      actorUserId: locals.userId,
-      targetUserId: locals.userId,
-      subjectType: 'employee_onboarding_package',
-      subjectId: packageId,
-      title: 'Onboarding packet submitted'
-    },
-    request
-  );
-
+  if (outcome === 'changed') return fail(409, { error: 'This onboarding packet or your access changed. Refresh before submitting again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The onboarding packet could not be submitted. Please try again.' });
+  await recordOperationalEventBestEffort(db, { businessId, eventType: 'onboarding.package.submitted', category: 'onboarding',
+    actorUserId: locals.userId, targetUserId: packet.user_id, subjectType: 'employee_onboarding_package',
+    subjectId: packageId, title: 'Onboarding packet submitted' }, request);
   return { success: true, message: 'Onboarding packet submitted for review.' };
 }
 
@@ -7067,60 +6424,33 @@ export async function loadBusinessHrSettings(db: D1, businessId: string): Promis
 
 export async function saveBusinessHrSettings(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
-  if (!canManageHrSetup(locals)) {
-    return fail(403, { error: 'HR setup access required.' });
-  }
+  if (!canManageHrSetup(locals)) return fail(403, { error: 'HR setup access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
   await ensureEmployeeOnboardingTables(db);
-
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'template');
+  if (!authority) return fail(403, { error: 'HR setup access required.' });
+  const snapshotSql = `SELECT json_array(retain_i9_document_copies, everify_participant, updated_at, updated_by) AS proof
+    FROM business_hr_settings WHERE business_id = ?`;
+  const previous = await db.prepare(snapshotSql).bind(businessId).first<{ proof: string }>();
   const formData = await request.formData();
   const retainCopies = String(formData.get('retain_i9_document_copies') ?? '0') === '1' ? 1 : 0;
   const everifyParticipant = String(formData.get('everify_participant') ?? '0') === '1' ? 1 : 0;
   const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(
-      `
-      INSERT INTO business_hr_settings (
-        business_id, retain_i9_document_copies, everify_participant, updated_at, updated_by
-      )
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(business_id) DO UPDATE SET
-        retain_i9_document_copies = excluded.retain_i9_document_copies,
-        everify_participant = excluded.everify_participant,
-        updated_at = excluded.updated_at,
-        updated_by = excluded.updated_by
-      `
-    )
-    .bind(businessId, retainCopies, everifyParticipant, now, locals.userId ?? null)
-    .run();
-  await writeAuditLog(db, {
-    action: 'business_i9_policy_updated',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    metadata: { retainCopies: retainCopies === 1, everifyParticipant: everifyParticipant === 1 }
+  const outcome = await commitHrFileWrite(db, request, authority, {
+    action: 'business_i9_policy_updated', metadata: { retainCopies: retainCopies === 1, everifyParticipant: everifyParticipant === 1 },
+    condition: `(${snapshotSql}) IS ?`, values: [businessId, previous?.proof ?? null],
+    writes: auditId => [db.prepare(`INSERT INTO business_hr_settings
+      (business_id, retain_i9_document_copies, everify_participant, updated_at, updated_by)
+      SELECT ?, ?, ?, ?, ? WHERE ${hrFileWriteGuard}
+      ON CONFLICT(business_id) DO UPDATE SET retain_i9_document_copies = excluded.retain_i9_document_copies,
+        everify_participant = excluded.everify_participant, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+      .bind(businessId, retainCopies, everifyParticipant, now, authority.actor, auditId)]
   });
+  if (outcome === 'changed') return fail(409, { error: 'The I-9 policy or your access changed. Refresh before saving again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The I-9 policy could not be saved. Please try again.' });
   return { success: true, message: 'I-9 verification policy saved.' };
-}
-
-async function requireSensitiveOnboardingReviewer(
-  db: D1,
-  businessId: string,
-  targetUserId: string,
-  locals: App.Locals
-) {
-  if (!canReviewEmployeeOnboarding(locals)) return false;
-  return canAccessEmployeeSensitiveData(
-    db,
-    businessId,
-    locals.userId,
-    locals.businessRole,
-    targetUserId,
-    locals.businessPermissionTemplate,
-    locals.businessCapabilities
-  );
 }
 
 function isPdfUpload(file: File) {
@@ -7255,228 +6585,92 @@ export async function verifyEmployeeI9(request: Request, locals: App.Locals) {
   return { success: true, message: 'Physical I-9 verification recorded.' };
 }
 
-async function reviewEmployeeOnboardingPacket(
-  request: Request,
-  locals: App.Locals,
-  decision: 'approved' | 'returned'
-) {
+async function reviewEmployeeOnboardingPacket(request: Request, locals: App.Locals, decision: 'approved' | 'returned') {
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
   await ensureEmployeeOnboardingTables(db);
-
-  const formData = await request.formData();
-  const packageId = String(formData.get('package_id') ?? '').trim();
+  const formData = await request.formData(), packageId = String(formData.get('package_id') ?? '').trim();
   const managerNote = formMultilineString(formData, 'manager_note', 1000);
   if (!packageId) return fail(400, { error: 'Missing onboarding packet.' });
-  if (decision === 'returned' && !managerNote) {
-    return fail(400, { error: 'Explain what the employee needs to correct.' });
-  }
-
-  const packet = await db
-    .prepare(
-      `
-      SELECT id, user_id, status
-      FROM employee_onboarding_packages
-      WHERE id = ? AND business_id = ?
-      LIMIT 1
-      `
-    )
-    .bind(packageId, businessId)
-    .first<{ id: string; user_id: string; status: EmployeeOnboardingPackage['status'] }>();
+  if (decision === 'returned' && !managerNote) return fail(400, { error: 'Explain what the employee needs to correct.' });
+  const packet = await readOnboardingPacket(db, businessId, packageId);
   if (!packet) return fail(404, { error: 'Onboarding packet not found.' });
-  if (!(await requireSensitiveOnboardingReviewer(db, businessId, packet.user_id, locals))) {
-    return fail(403, { error: 'Sensitive employee data access is required to review onboarding packets.' });
-  }
-  if (packet.status !== 'submitted') {
-    return fail(400, { error: 'Only a submitted packet can be accepted or returned.' });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'i9', packet.user_id);
+  if (!authority) return fail(403, { error: 'Sensitive employee data access is required to review onboarding packets.' });
+  if (packet.status !== 'submitted' || packet.locked_at !== null) return fail(400, { error: 'Only a submitted packet can be accepted or returned.' });
+  const sensitiveItems = packet.items.filter(item => item.item_type === 'form' && isSensitiveOnboardingFormKey(item.form_key));
   if (decision === 'approved') {
-    const packetItemRows = await db
-      .prepare(
-        `
-        SELECT
-          id, package_id, business_id, user_id, item_type, form_key, title, status
-        FROM employee_onboarding_items
-        WHERE package_id = ? AND business_id = ? AND user_id = ?
-        `
-      )
-      .bind(packageId, businessId, packet.user_id)
-      .all<
-        Pick<
-          EmployeeOnboardingItem,
-          'id' | 'package_id' | 'business_id' | 'user_id' | 'item_type' | 'form_key' | 'title' | 'status'
-        >
-      >();
-    const packetItems = packetItemRows.results ?? [];
-    if (packetItems.length === 0 || packetItems.some((item) => item.status !== 'submitted')) {
-      return fail(400, { error: 'Every packet item must be submitted before acceptance.' });
+    if (!packet.items.length || packet.items.some(item => item.status !== 'submitted')) return fail(400, { error: 'Every packet item must be submitted before acceptance.' });
+    if (packet.items.some(item => item.form_key === 'federal_i9') &&
+      !packet.verifications.some(record => record.user_id === packet.user_id && record.status === 'verified')) {
+      return fail(400, { error: 'Complete the employer I-9 physical verification before accepting this packet.' });
     }
-    if (packetItems.some((item) => item.form_key === 'federal_i9')) {
-      const verification = await db
-        .prepare(
-          `
-          SELECT status
-          FROM employee_i9_verifications
-          WHERE business_id = ? AND package_id = ? AND user_id = ?
-          LIMIT 1
-          `
-        )
-        .bind(businessId, packageId, packet.user_id)
-        .first<{ status: string }>();
-      if (verification?.status !== 'verified') {
-        return fail(400, { error: 'Complete the employer I-9 physical verification before accepting this packet.' });
+    for (const item of sensitiveItems) {
+      const classification = classifyOnboardingComplianceItem(item);
+      const record = packet.vaults.find(v => v.record_scope === classification.sensitiveScope && v.record_type === classification.sensitiveRecordType);
+      if (!record?.encrypted_payload || !record.payload_iv || !record.key_version || record.status !== 'active') {
+        return fail(400, { error: 'A protected form is incomplete. Return the packet so the employee can submit it again.' });
       }
     }
-
-    const sensitiveRecordStatements = packetItems.flatMap((item) => {
-      const classification = classifyOnboardingComplianceItem(item);
-      if (!classification.sensitiveScope || !classification.sensitiveRecordType) return [];
-
-      return [
-        db
-          .prepare(
-            `
-            INSERT OR IGNORE INTO employee_onboarding_sensitive_snapshots (
-              id, business_id, user_id, package_id, onboarding_item_id, source_vault_id,
-              record_scope, record_type, encrypted_payload, payload_iv, payload_tag,
-              key_version, encryption_algorithm, display_last_four, accepted_at,
-              accepted_by, locked_at
-            )
-            SELECT
-              ?, v.business_id, v.user_id, ?, ?, v.id,
-              v.record_scope, v.record_type, v.encrypted_payload, v.payload_iv, v.payload_tag,
-              v.key_version, v.encryption_algorithm, v.display_last_four, ?, ?, ?
-            FROM employee_sensitive_record_vault v
-            WHERE v.business_id = ?
-              AND v.user_id = ?
-              AND v.record_scope = ?
-              AND v.record_type = ?
-              AND COALESCE(v.encrypted_payload, '') <> ''
-            `
-          )
-          .bind(
-            crypto.randomUUID(),
-            packageId,
-            item.id,
-            now,
-            locals.userId ?? null,
-            now,
-            businessId,
-            packet.user_id,
-            classification.sensitiveScope,
-            classification.sensitiveRecordType
-          ),
-        db
-          .prepare(
-            `
-            UPDATE employee_sensitive_record_vault
-            SET locked_at = ?,
-              status = CASE WHEN status = 'empty' THEN status ELSE 'accepted' END,
-              updated_at = ?
-            WHERE business_id = ?
-              AND user_id = ?
-              AND record_scope = ?
-              AND record_type = ?
-            `
-          )
-          .bind(
-            now,
-            now,
-            businessId,
-            packet.user_id,
-            classification.sensitiveScope,
-            classification.sensitiveRecordType
-          )
-      ];
-    });
-
-    await db.batch([
-      db
-        .prepare(
-          `
-          UPDATE employee_onboarding_items
-          SET status = 'approved', reviewed_at = ?, reviewed_by = ?, manager_note = ''
-          WHERE package_id = ? AND business_id = ? AND user_id = ?
-          `
-        )
-        .bind(now, locals.userId ?? null, packageId, businessId, packet.user_id),
-      db
-        .prepare(
-          `
-          UPDATE employee_onboarding_packages
-          SET status = 'approved', approved_at = ?, approved_by = ?, locked_at = ?,
-            completed_at = COALESCE(completed_at, ?), manager_note = '', updated_at = ?
-          WHERE id = ? AND business_id = ?
-          `
-        )
-        .bind(now, locals.userId ?? null, now, now, now, packageId, businessId),
-      db
-        .prepare(
-          `
-          UPDATE employee_compliance_documents
-          SET status = 'approved', reviewed_at = ?, reviewed_by = ?, locked_at = ?, updated_at = ?
-          WHERE business_id = ? AND user_id = ?
-            AND onboarding_item_id IN (
-              SELECT id FROM employee_onboarding_items WHERE package_id = ? AND business_id = ?
-            )
-          `
-        )
-        .bind(now, locals.userId ?? null, now, now, businessId, packet.user_id, packageId, businessId),
-      ...sensitiveRecordStatements,
-      db
-        .prepare(
-          `
-          UPDATE employee_employment_records
-          SET employment_status = CASE WHEN employment_status = 'terminated' THEN employment_status ELSE 'active' END,
-            updated_at = ?, updated_by = ?
-          WHERE business_id = ? AND user_id = ? AND onboarding_package_id = ?
-          `
-        )
-        .bind(now, locals.userId ?? null, businessId, packet.user_id, packageId)
-    ]);
-  } else {
-    await db
-      .prepare(
-        `
-        UPDATE employee_onboarding_packages
-        SET status = 'returned', returned_at = ?, returned_by = ?, manager_note = ?, updated_at = ?
-        WHERE id = ? AND business_id = ?
-        `
-      )
-      .bind(now, locals.userId ?? null, managerNote, now, packageId, businessId)
-      .run();
+    if (packet.snapshots.length) return fail(409, { error: 'This packet already has accepted records. Refresh before reviewing.' });
   }
-
-  await writeAuditLog(db, {
+  const now = Math.floor(Date.now() / 1000);
+  const outcome = await commitHrFileWrite(db, request, authority, {
     action: decision === 'approved' ? 'employee_onboarding_packet_approved' : 'employee_onboarding_packet_returned',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: packet.user_id,
-    metadata: { packageId, managerNote: decision === 'returned' ? managerNote : undefined }
+    targetUserId: packet.user_id, metadata: { packageId, hasManagerNote: decision === 'returned' && Boolean(managerNote) },
+    ...onboardingPacketCondition(packet), writes: auditId => {
+      if (decision === 'returned') return [db.prepare(`UPDATE employee_onboarding_packages
+        SET status = 'returned', returned_at = ?, returned_by = ?, manager_note = ?, updated_at = ?
+        WHERE id = ? AND business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`)
+        .bind(now, authority.actor, managerNote, now, packageId, businessId, packet.user_id, auditId)];
+      const statements = packet.items.flatMap(item => prepareComplianceDocumentForOnboardingItem(db,
+        { ...item, status: 'approved', reviewed_at: now, reviewed_by: authority.actor }, authority.actor, now, auditId));
+      for (const item of sensitiveItems) {
+        const classification = classifyOnboardingComplianceItem(item);
+        statements.push(db.prepare(`INSERT OR IGNORE INTO employee_onboarding_sensitive_snapshots
+          (id, business_id, user_id, package_id, onboarding_item_id, source_vault_id, record_scope, record_type,
+            encrypted_payload, payload_iv, payload_tag, key_version, encryption_algorithm, display_last_four,
+            accepted_at, accepted_by, locked_at)
+          SELECT ?, business_id, user_id, ?, ?, id, record_scope, record_type, encrypted_payload, payload_iv, payload_tag,
+            key_version, encryption_algorithm, display_last_four, ?, ?, ? FROM employee_sensitive_record_vault
+          WHERE business_id = ? AND user_id = ? AND record_scope = ? AND record_type = ? AND ${hrFileWriteGuard}`)
+          .bind(crypto.randomUUID(), packageId, item.id, now, authority.actor, now, businessId, packet.user_id,
+            classification.sensitiveScope, classification.sensitiveRecordType, auditId),
+        db.prepare(`UPDATE employee_sensitive_record_vault SET locked_at = ?, status = 'accepted', updated_at = ?
+          WHERE business_id = ? AND user_id = ? AND record_scope = ? AND record_type = ? AND ${hrFileWriteGuard}`)
+          .bind(now, now, businessId, packet.user_id, classification.sensitiveScope, classification.sensitiveRecordType, auditId));
+      }
+      statements.push(db.prepare(`UPDATE employee_onboarding_items SET status = 'approved', reviewed_at = ?, reviewed_by = ?, manager_note = ''
+        WHERE package_id = ? AND business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`)
+        .bind(now, authority.actor, packageId, businessId, packet.user_id, auditId),
+      db.prepare(`UPDATE employee_onboarding_packages SET status = 'approved', approved_at = ?, approved_by = ?, locked_at = ?,
+        completed_at = COALESCE(completed_at, ?), manager_note = '', updated_at = ?
+        WHERE id = ? AND business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`)
+        .bind(now, authority.actor, now, now, now, packageId, businessId, packet.user_id, auditId),
+      db.prepare(`UPDATE employee_compliance_documents SET status = 'approved', reviewed_at = ?, reviewed_by = ?, locked_at = ?, updated_at = ?
+        WHERE business_id = ? AND user_id = ? AND onboarding_item_id IN
+          (SELECT id FROM employee_onboarding_items WHERE package_id = ? AND business_id = ? AND user_id = ?) AND ${hrFileWriteGuard}`)
+        .bind(now, authority.actor, now, now, businessId, packet.user_id, packageId, businessId, packet.user_id, auditId),
+      db.prepare(`UPDATE employee_employment_records
+        SET employment_status = CASE WHEN employment_status = 'terminated' THEN employment_status ELSE 'active' END,
+          updated_at = ?, updated_by = ? WHERE business_id = ? AND user_id = ? AND onboarding_package_id = ? AND ${hrFileWriteGuard}`)
+        .bind(now, authority.actor, businessId, packet.user_id, packageId, auditId),
+      db.prepare(`INSERT INTO employee_sensitive_record_audit
+        (id, business_id, user_id, actor_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at)
+        SELECT ?, business_id, target_user_id, actor_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at
+        FROM account_audit_logs WHERE id = ?`).bind(crypto.randomUUID(), auditId));
+      return statements;
+    }
   });
-  await recordOperationalEventBestEffort(
-    db,
-    {
-      businessId,
-      eventType: decision === 'approved' ? 'onboarding.package.approved' : 'onboarding.package.returned',
-      category: 'onboarding',
-      actorUserId: locals.userId ?? null,
-      targetUserId: packet.user_id,
-      subjectType: 'employee_onboarding_package',
-      subjectId: packageId,
-      title: decision === 'approved' ? 'Onboarding approved' : 'Onboarding returned',
-      payload: decision === 'returned' ? { managerNote } : {}
-    },
-    request
-  );
-  return {
-    success: true,
-    message: decision === 'approved' ? 'Onboarding packet accepted.' : 'Onboarding packet returned.'
-  };
+  if (outcome === 'changed') return fail(409, { error: 'This onboarding packet or your access changed. Refresh before reviewing again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The packet review could not be saved. Please try again.' });
+  await recordOperationalEventBestEffort(db, { businessId,
+    eventType: decision === 'approved' ? 'onboarding.package.approved' : 'onboarding.package.returned', category: 'onboarding',
+    actorUserId: authority.actor, targetUserId: packet.user_id, subjectType: 'employee_onboarding_package', subjectId: packageId,
+    title: decision === 'approved' ? 'Onboarding approved' : 'Onboarding returned',
+    payload: decision === 'returned' ? { managerNote } : {} }, request);
+  return { success: true, message: decision === 'approved' ? 'Onboarding packet accepted.' : 'Onboarding packet returned.' };
 }
 
 export const approveEmployeeOnboardingPackage = (request: Request, locals: App.Locals) =>
@@ -7484,6 +6678,17 @@ export const approveEmployeeOnboardingPackage = (request: Request, locals: App.L
 
 export const returnEmployeeOnboardingPackage = (request: Request, locals: App.Locals) =>
   reviewEmployeeOnboardingPacket(request, locals, 'returned');
+
+const invitePositionSql = `SELECT json_array(p.id, p.business_id, p.name, p.description, p.account_type,
+  p.base_template, p.is_active, p.sort_order,
+  (SELECT json_group_array(json_array(permission_key, is_enabled)) FROM
+    (SELECT permission_key, is_enabled FROM business_position_permissions WHERE business_id = p.business_id
+      AND position_id = p.id AND permission_key IN (SELECT value FROM json_each(?)) ORDER BY permission_key)))
+  FROM business_positions p WHERE p.business_id = ? AND p.id = ?`;
+const invitationWriteSql = `SELECT json_array(email_normalized, invite_code, role, permission_template, position_id,
+  invited_by, employment_type, job_title, department, primary_schedule_department, schedule_departments_json,
+  start_date, pay_type, onboarding_required, expires_at, used_at, used_by_user_id, revoked_at) AS proof
+  FROM business_invites WHERE business_id = ? AND id = ?`;
 
 export async function createUserInvite(
   request: Request,
@@ -7501,6 +6706,11 @@ export async function createUserInvite(
 
   await ensureBusinessSchema(db);
 
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'send');
+  if (!authority) return fail(403, { error: 'Employee onboarding access required.' });
+  locals = { ...locals, businessRole: authority.role, businessPermissionTemplate: authority.template,
+    businessCapabilities: authority.capabilities };
+
   const formData = await request.formData();
   const email = String(formData.get('email') ?? '').trim();
   const emailNormalized = email.toLowerCase();
@@ -7511,6 +6721,10 @@ export async function createUserInvite(
     return fail(403, { error: 'Only the owner can invite another owner.' });
   }
   const position = invitingOwner ? null : await loadTenantPosition(db, businessId, requestedPositionId);
+  const positionOverrides = position ? await loadPositionCapabilityOverrides(db, businessId, position.id) : {};
+  const positionProof = position ? JSON.stringify([position.id, position.business_id, position.name, position.description,
+    position.account_type, position.base_template, position.is_active, position.sort_order,
+    Object.entries(positionOverrides).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => [key, value ? 1 : 0])]) : null;
   if (!invitingOwner && (!position || position.is_active !== 1)) {
     return fail(400, { error: 'Choose an active position.' });
   }
@@ -7522,7 +6736,8 @@ export async function createUserInvite(
       db,
       businessId,
       position,
-      locals
+      locals,
+      positionOverrides
     );
     if (assignmentAuthorityError) return fail(403, { error: assignmentAuthorityError });
   }
@@ -7532,6 +6747,7 @@ export async function createUserInvite(
   const jobTitle = invitingOwner ? 'Owner' : position!.name;
   const primaryDepartment = formString(formData, 'primary_schedule_department', 120);
   const allowedDepartments = await loadScheduleDepartments(db, businessId);
+  if (primaryDepartment && !allowedDepartments.includes(primaryDepartment)) return fail(400, { error: 'Choose an active schedule department.' });
   const scheduleDepartments = Array.from(
     new Set(
       formData
@@ -7550,10 +6766,10 @@ export async function createUserInvite(
   const onboardingRequested = String(formData.get('onboarding_required') ?? '0') === '1';
   const onboardingRequired =
     onboardingRequested && employmentType !== 'contractor' ? 1 : 0;
-  if (!email || !email.includes('@')) {
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return fail(400, { error: 'A valid email is required.' });
   }
-  if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+  if (startDate && !isCalendarDate(startDate)) {
     return fail(400, { error: 'Start date must use a valid date.' });
   }
 
@@ -7597,78 +6813,29 @@ export async function createUserInvite(
   const inviteCode = generateInviteCode();
   const inviteId = crypto.randomUUID();
 
-  await db
-    .prepare(
-      `
-      INSERT INTO business_invites (
-        id,
-        business_id,
-        email,
-        email_normalized,
-        invite_code,
-        role,
-        invited_by,
-        permission_template,
-        position_id,
-        employment_type,
-        job_title,
-        department,
-        primary_schedule_department,
-        schedule_departments_json,
-        start_date,
-        pay_type,
-        onboarding_required,
-        created_at,
-        expires_at,
-        revoked_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-      `
-    )
-    .bind(
-      inviteId,
-      businessId,
-      email,
-      emailNormalized,
-      inviteCode,
-      accessType,
-      locals.userId ?? null,
-      permissionTemplate,
-      position?.id ?? null,
-      employmentType,
-      jobTitle,
-      department,
-      department,
-      JSON.stringify(scheduleDepartments),
-      startDate,
-      payType,
-      onboardingRequired,
-      now,
-      expiresAt
-    )
-    .run();
-
-  await writeAuditLog(db, {
-    action: 'invite_created',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    email,
-    metadata: {
-      inviteId,
-      accessType,
-      permissionTemplate,
-      positionId: position?.id ?? null,
-      employmentType,
-      jobTitle: Boolean(jobTitle),
-      department: Boolean(department),
-      departmentCount: scheduleDepartments.length,
-      startDate: Boolean(startDate),
-      onboardingRequired: onboardingRequired === 1
-    }
+  const outcome = await commitHrFileWrite(db, request, authority, {
+    action: 'invite_created', email: emailNormalized,
+    metadata: { inviteId, accessType, permissionTemplate, positionId: position?.id ?? null,
+      employmentType, jobTitle: Boolean(jobTitle), department: Boolean(department),
+      departmentCount: scheduleDepartments.length, startDate: Boolean(startDate), onboardingRequired: onboardingRequired === 1 },
+    condition: `(${invitePositionSql}) IS ? AND (SELECT COUNT(*) FROM schedule_departments
+      WHERE business_id = ? AND is_active = 1 AND name IN (SELECT value FROM json_each(?))) = ?`,
+    values: [JSON.stringify(ALL_BUSINESS_CAPABILITIES), businessId, requestedPositionId, positionProof,
+      businessId, JSON.stringify(scheduleDepartments), scheduleDepartments.length],
+    writes: auditId => [db.prepare(`INSERT INTO business_invites
+      (id, business_id, email, email_normalized, invite_code, role, invited_by, permission_template, position_id,
+        employment_type, job_title, department, primary_schedule_department, schedule_departments_json,
+        start_date, pay_type, onboarding_required, created_at, expires_at, revoked_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL WHERE ${hrFileWriteGuard}`)
+      .bind(inviteId, businessId, email, emailNormalized, inviteCode, accessType, authority.actor, permissionTemplate,
+        position?.id ?? null, employmentType, jobTitle, department, department, JSON.stringify(scheduleDepartments),
+        startDate, payType, onboardingRequired, now, expiresAt, auditId)]
   });
+  if (outcome === 'changed') return fail(409, { error: 'The position, departments or your access changed. Refresh before inviting again.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The invitation could not be saved. Please try again.' });
 
-  const emailResult = await sendInviteEmail({
+  let emailResult: { sent: boolean; reason?: string };
+  try { emailResult = await sendInviteEmail({
     env,
     origin: origin ?? env?.APP_BASE_URL ?? 'http://localhost:5173',
     inviteeEmail: email,
@@ -7676,7 +6843,10 @@ export async function createUserInvite(
     expiresAt,
     businessName: locals.businessName,
     onboardingRequired: onboardingRequired === 1
-  });
+  }); } catch {
+    emailResult = { sent: false, reason: 'Invite email was not sent.' };
+    logOperationalError({ event: 'invite_email_failed', businessId, metadata: { phase: 'notification' } });
+  }
 
   return {
     success: true,
@@ -7688,44 +6858,30 @@ export async function createUserInvite(
 
 export async function revokeUserInvite(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
-  if (!canManageEmployeeOnboarding(locals)) {
-    return fail(403, { error: 'Employee onboarding access required.' });
-  }
+  if (!canManageEmployeeOnboarding(locals)) return fail(403, { error: 'Employee onboarding access required.' });
   const db = locals.DB;
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
-
   await ensureBusinessSchema(db);
-
-  const formData = await request.formData();
-  const inviteId = String(formData.get('invite_id') ?? '').trim();
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'send');
+  if (!authority) return fail(403, { error: 'Employee onboarding access required.' });
+  const freshLocals = { ...locals, businessRole: authority.role, businessPermissionTemplate: authority.template,
+    businessCapabilities: authority.capabilities };
+  const formData = await request.formData(), inviteId = String(formData.get('invite_id') ?? '').trim();
   if (!inviteId) return fail(400, { error: 'Missing invite id.' });
-
-  const invite = await db
-    .prepare(`SELECT role FROM business_invites WHERE id = ? AND business_id = ? LIMIT 1`)
-    .bind(inviteId, businessId)
-    .first<{ role: string }>();
+  const invite = await db.prepare(`SELECT role, (${invitationWriteSql}) AS proof FROM business_invites
+    WHERE business_id = ? AND id = ?`).bind(businessId, inviteId, businessId, inviteId).first<{ role: string; proof: string }>();
   if (!invite) return fail(404, { error: 'Invite not found.' });
-  if (isOwnerRole(invite.role) && !isOwnerRole(locals.businessRole)) {
-    return fail(403, { error: 'Only the owner can revoke an owner invite.' });
-  }
-  if (isManagerRole(invite.role) && !canManageManagerAccounts(locals)) {
-    return fail(403, { error: 'Manage Managers access is required to revoke a manager invite.' });
-  }
-
-  await db
-    .prepare(`UPDATE business_invites SET revoked_at = ? WHERE id = ? AND business_id = ?`)
-    .bind(Math.floor(Date.now() / 1000), inviteId, businessId)
-    .run();
-
-  await writeAuditLog(db, {
-    action: 'invite_revoked',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    metadata: { inviteId }
+  if (isOwnerRole(invite.role) && !isOwnerRole(freshLocals.businessRole)) return fail(403, { error: 'Only the owner can revoke an owner invite.' });
+  if (isManagerRole(invite.role) && !canManageManagerAccounts(freshLocals)) return fail(403, { error: 'Manage Managers access is required to revoke a manager invite.' });
+  const outcome = await commitHrFileWrite(db, request, authority, {
+    action: 'invite_revoked', metadata: { inviteId }, condition: `(${invitationWriteSql}) IS ?`,
+    values: [businessId, inviteId, invite.proof], writes: auditId => [db.prepare(`UPDATE business_invites SET revoked_at = ?
+      WHERE id = ? AND business_id = ? AND ${hrFileWriteGuard}`)
+      .bind(Math.floor(Date.now() / 1000), inviteId, businessId, auditId)]
   });
-
+  if (outcome === 'changed') return fail(409, { error: 'The invitation or your access changed. Refresh before revoking it.' });
+  if (outcome !== 'saved') return fail(503, { error: 'The invitation could not be revoked. Please try again.' });
   return { success: true };
 }
 

@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { normalizeInvitationCode, invitationLoginPath } from '#lib/invitations.ts';
 import { ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieOptions } from '#lib/server/activeBusiness.ts';
-import { loadEmployeeOnboarding, prepareEmployeeOnboardingPacket } from '#lib/server/admin.ts';
+import { prepareEmployeeOnboardingPacket } from '#lib/server/admin.ts';
 import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { normalizeBusinessRole } from '#lib/server/permissions.ts';
 import { getBusinessTrialAccess } from '#lib/server/trial.ts';
@@ -72,6 +72,18 @@ export async function acceptExistingAccountInvitation(event: {
   const packetRequired = invite.onboarding_required === 1 && invite.employment_type !== 'contractor';
   if (packetRequired && !isSensitiveEncryptionConfigured(locals.env)) return fail(503, { error: 'Onboarding is temporarily unavailable.', values });
   const auditId = crypto.randomUUID();
+  let packet: Awaited<ReturnType<typeof prepareEmployeeOnboardingPacket>> | null = null;
+  try {
+    if (packetRequired) packet = await prepareEmployeeOnboardingPacket(db, {
+      businessId: invite.business_id, userId: locals.userId, createdBy: locals.userId, ownerPacket: owner, auditId, now,
+      env: locals.env, initialProfile: { user_id: locals.userId, real_name: values.realName, phone: values.userPhone, birthday: values.birthday,
+        address_line_1: values.userAddressLine1, address_line_2: values.userAddressLine2, city: values.userCity,
+        state: values.userState, postal_code: values.userPostalCode, emergency_contact_name: '',
+        emergency_contact_phone: '', emergency_contact_relationship: '' }
+    });
+  } catch {
+    return fail(503, { error: 'Your restaurant setup could not be saved. Please try again.', values });
+  }
   const guarded = 'EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)';
   // The audit row claims this exact invite inside the same transaction as every tenant write.
   const statements = [db.prepare(`INSERT INTO account_audit_logs (
@@ -86,11 +98,12 @@ export async function acceptExistingAccountInvitation(event: {
       AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = ? AND s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at >= ?)
       AND b.status IN ('active', 'trialing', 'past_due', 'pending_payment')
       AND (i.position_id IS NULL OR EXISTS (SELECT 1 FROM business_positions p WHERE p.id = i.position_id AND p.business_id = i.business_id AND p.is_active = 1 AND p.account_type = ?))
-      AND NOT EXISTS (SELECT 1 FROM business_users m WHERE m.business_id = i.business_id AND m.user_id = u.id)`)
+      AND NOT EXISTS (SELECT 1 FROM business_users m WHERE m.business_id = i.business_id AND m.user_id = u.id)
+      AND (${packet?.condition ?? '1 = 1'})`)
     .bind(auditId, await hashedAuditValue(user.email_normalized), await hashedAuditValue(getRequestIpAddress(request)),
       await hashedAuditValue(request.headers.get('user-agent')), JSON.stringify({ inviteId: invite.id }), now, locals.userId, invite.id, code, now,
       invite.role, invite.permission_template, invite.position_id, invite.onboarding_required, invite.employment_type,
-      locals.sessionId, now, normalizeBusinessRole(invite.role)),
+      locals.sessionId, now, normalizeBusinessRole(invite.role), ...(packet?.values ?? [])),
     db.prepare(`INSERT INTO business_users (business_id, user_id, role, permission_template, position_id, created_at, updated_at)
       SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${guarded}`)
       .bind(invite.business_id, locals.userId, normalizeBusinessRole(invite.role), invite.permission_template, invite.position_id, now, now, auditId),
@@ -118,12 +131,8 @@ export async function acceptExistingAccountInvitation(event: {
         AND d.name IN (SELECT value FROM json_each(?)) AND ${guarded}`)
       .bind(invite.business_id, locals.userId, now, invite.business_id, JSON.stringify([...new Set(departments)]), auditId));
   }
-  let packet: Awaited<ReturnType<typeof prepareEmployeeOnboardingPacket>> | null = null;
   let committed;
   try {
-    if (packetRequired) packet = await prepareEmployeeOnboardingPacket(db, {
-      businessId: invite.business_id, userId: locals.userId, createdBy: locals.userId, ownerPacket: owner, auditId, now
-    });
     if (packet) statements.push(...packet.statements);
     committed = await db.batch(statements);
   } catch (error) {
@@ -132,8 +141,6 @@ export async function acceptExistingAccountInvitation(event: {
   }
   if (committed[0].meta.changes !== 1) return fail(409, { error: 'This invitation changed. Refresh and try again.', values });
   if (packet) {
-    try { await loadEmployeeOnboarding(db, locals.userId, invite.business_id, { env: locals.env, actorUserId: locals.userId }); }
-    catch (error) { logOperationalError({ event: 'onboarding_profile_hydration_failed', request, businessId: invite.business_id, userId: locals.userId, error }); }
     await recordOperationalEventBestEffort(db, { businessId: invite.business_id, eventType: 'onboarding.package.sent',
       category: 'onboarding', targetUserId: locals.userId, subjectType: 'employee_onboarding_package', subjectId: packet.packageId,
       title: 'Onboarding package ready' }, request);
