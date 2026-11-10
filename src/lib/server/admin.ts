@@ -38,6 +38,8 @@ import {
   checkRateLimit,
   rateLimitFailure,
   revokeUserSessions,
+  hashedAuditValue,
+  getRequestIpAddress,
   writeAuditLog,
   writeAuditLogSafe
 } from '#lib/server/security.ts';
@@ -69,6 +71,7 @@ import {
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSanitizer.ts';
 import { hasPlatformStaffMembership } from '#lib/server/platformStaff.ts';
+import { logOperationalError } from '#lib/server/observability.ts';
 
 type D1 = App.RuntimeEnv['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -458,7 +461,7 @@ async function deleteUnreferencedDocumentMedia(db: D1, locals: App.Locals, busin
   for (const url of typeof fileUrl === 'string' ? [fileUrl] : fileUrl) {
     try {
       const key = documentMediaKeyFromUrl(url);
-      if (key?.startsWith(`businesses/${businessId}/documents/`)) candidates.set(url, key);
+      if (key?.startsWith(`businesses/${businessId}/documents/`) || key?.startsWith(`businesses/${businessId}/employee-onboarding/`)) candidates.set(url, key);
     } catch { /* Malformed legacy URLs do not authorize object deletion. */ }
   }
   const urls = Array.from(candidates.keys());
@@ -470,6 +473,7 @@ async function deleteUnreferencedDocumentMedia(db: D1, locals: App.Locals, busin
         AND NOT EXISTS (SELECT 1 FROM businesses WHERE id = ?1 AND sidebar_logo_url = candidate.value)
         AND NOT EXISTS (SELECT 1 FROM employee_onboarding_template_items WHERE business_id = ?1 AND source_file_url = candidate.value)
         AND NOT EXISTS (SELECT 1 FROM employee_onboarding_items WHERE business_id = ?1 AND (file_url = candidate.value OR source_file_url = candidate.value))
+        AND NOT EXISTS (SELECT 1 FROM employee_compliance_documents WHERE business_id = ?1 AND file_url = candidate.value)
         AND NOT EXISTS (SELECT 1 FROM employee_i9_verifications WHERE business_id = ?1 AND completed_i9_file_url = candidate.value)
         AND NOT EXISTS (SELECT 1 FROM employee_i9_document_copies WHERE business_id = ?1 AND file_url = candidate.value)
     `).bind(businessId, JSON.stringify(urls.slice(offset, offset + 1000))).all<{ url: string }>();
@@ -2370,68 +2374,6 @@ function complianceStatusFromOnboardingStatus(status: EmployeeOnboardingItem['st
   return status;
 }
 
-async function ensureEmployeeComplianceRequirement(
-  db: D1,
-  businessId: string,
-  classification: ComplianceClassification,
-  updatedBy: string | null,
-  now: number
-) {
-  const existing = await db
-    .prepare(
-      `
-      SELECT id
-      FROM employee_compliance_requirements
-      WHERE business_id = ? AND requirement_key = ?
-      LIMIT 1
-      `
-    )
-    .bind(businessId, classification.requirementKey)
-    .first<{ id: string }>();
-  if (existing?.id) return existing.id;
-
-  const id = crypto.randomUUID();
-  await db
-    .prepare(
-      `
-      INSERT INTO employee_compliance_requirements (
-        id,
-        business_id,
-        requirement_key,
-        title,
-        category,
-        applies_to_type,
-        is_required,
-        requires_document,
-        requires_signature,
-        default_due_days,
-        renewal_interval_days,
-        retention_years,
-        is_active,
-        created_at,
-        updated_at,
-        updated_by
-      )
-      VALUES (?, ?, ?, ?, ?, 'employee', 1, ?, ?, NULL, NULL, ?, 1, ?, ?, ?)
-      `
-    )
-    .bind(
-      id,
-      businessId,
-      classification.requirementKey,
-      classification.title,
-      classification.category,
-      classification.requiresDocument ? 1 : 0,
-      classification.requiresSignature ? 1 : 0,
-      classification.retentionYears,
-      now,
-      now,
-      updatedBy
-    )
-    .run();
-  return id;
-}
-
 async function ensureSensitiveVaultPlaceholder(
   db: D1,
   businessId: string,
@@ -2736,11 +2678,38 @@ async function upsertComplianceDocumentForOnboardingItem(
   updatedBy: string | null,
   now = Math.floor(Date.now() / 1000)
 ) {
-  const classification = classifyOnboardingComplianceItem(item);
-  const requirementId = await ensureEmployeeComplianceRequirement(db, item.business_id, classification, updatedBy, now);
-  await ensureSensitiveVaultPlaceholder(db, item.business_id, item.user_id, classification, updatedBy, now);
+  await db.batch(prepareComplianceDocumentForOnboardingItem(db, item, updatedBy, now));
+}
 
-  await db
+function prepareComplianceDocumentForOnboardingItem(
+  db: D1,
+  item: Parameters<typeof upsertComplianceDocumentForOnboardingItem>[1],
+  updatedBy: string | null,
+  now: number,
+  auditId: string | null = null
+) {
+  const classification = classifyOnboardingComplianceItem(item);
+  const guard = '(? IS NULL OR EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?))';
+  const statements = [db.prepare(`
+    INSERT INTO employee_compliance_requirements (
+      id, business_id, requirement_key, title, category, applies_to_type, is_required,
+      requires_document, requires_signature, retention_years, is_active, created_at, updated_at, updated_by
+    ) SELECT ?, ?, ?, ?, ?, 'employee', 1, ?, ?, ?, 1, ?, ?, ? WHERE ${guard}
+    ON CONFLICT(business_id, requirement_key) DO NOTHING
+  `).bind(crypto.randomUUID(), item.business_id, classification.requirementKey, classification.title,
+    classification.category, classification.requiresDocument ? 1 : 0, classification.requiresSignature ? 1 : 0,
+    classification.retentionYears, now, now, updatedBy, auditId, auditId)];
+  if (classification.sensitiveScope && classification.sensitiveRecordType) {
+    statements.push(db.prepare(`
+      INSERT INTO employee_sensitive_record_vault (
+        id, business_id, user_id, record_scope, record_type, status, created_at, updated_at, updated_by
+      ) SELECT ?, ?, ?, ?, ?, 'empty', ?, ?, ? WHERE ${guard}
+      ON CONFLICT(business_id, user_id, record_scope, record_type) DO NOTHING
+    `).bind(crypto.randomUUID(), item.business_id, item.user_id, classification.sensitiveScope,
+      classification.sensitiveRecordType, now, now, updatedBy, auditId, auditId));
+  }
+
+  statements.push(db
     .prepare(
       `
       INSERT INTO employee_compliance_documents (
@@ -2760,7 +2729,8 @@ async function upsertComplianceDocumentForOnboardingItem(
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      SELECT ?, ?, ?, (SELECT id FROM employee_compliance_requirements WHERE business_id = ? AND requirement_key = ?),
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard}
       ON CONFLICT(business_id, onboarding_item_id) DO UPDATE SET
         requirement_id = excluded.requirement_id,
         document_type = excluded.document_type,
@@ -2778,7 +2748,8 @@ async function upsertComplianceDocumentForOnboardingItem(
       crypto.randomUUID(),
       item.business_id,
       item.user_id,
-      requirementId,
+      item.business_id,
+      classification.requirementKey,
       item.id,
       classification.documentType,
       complianceStatusFromOnboardingStatus(item.status),
@@ -2789,9 +2760,11 @@ async function upsertComplianceDocumentForOnboardingItem(
       item.reviewed_at,
       item.reviewed_by,
       now,
-      now
-    )
-    .run();
+      now,
+      auditId,
+      auditId
+    ));
+  return statements;
 }
 
 function normalizeOnboardingItemType(value: string): EmployeeOnboardingItem['item_type'] | null {
@@ -3697,18 +3670,17 @@ export async function loadEmployeeOnboarding(
 
   const hydratedItems = await Promise.all(
     rawItems.map(async (item) => {
-      if (!isSensitiveOnboardingFormKey(item.form_key)) return item;
-
       if (!canReadSensitive) {
         return {
           ...item,
           file_url: '',
           file_name: '',
           signed_name: '',
-          form_payload: item.form_payload || JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})),
+          form_payload: JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})),
           sensitive_redacted: true
         };
       }
+      if (!isSensitiveOnboardingFormKey(item.form_key)) return item;
 
       const decrypted = await decryptSensitiveOnboardingFormPayload(
         db,
@@ -3717,7 +3689,10 @@ export async function loadEmployeeOnboarding(
         options.actorUserId ?? null,
         Boolean(options.auditSensitiveRead && options.actorUserId && options.actorUserId !== userId)
       );
-      if (!decrypted) return item;
+      if (!decrypted) return { ...item,
+        form_payload: JSON.stringify(sanitizeSensitiveOnboardingPayload(item.form_key, {})),
+        sensitive_redacted: item.item_type === 'form'
+      };
       return {
         ...item,
         form_payload: JSON.stringify(decrypted),
@@ -6797,6 +6772,110 @@ export async function sendEmployeeOnboardingPackage(
   };
 }
 
+async function cleanUpOnboardingMedia(db: D1, locals: App.Locals, businessId: string, fileUrl: string) {
+  try {
+    await deleteUnreferencedDocumentMedia(db, locals, businessId, fileUrl);
+  } catch {
+    // An R2 cleanup outage must not undo, or misreport, a committed HR record.
+    logOperationalError({ event: 'onboarding_media_cleanup_failed', businessId, metadata: { phase: 'cleanup' } });
+  }
+}
+
+async function submitEmployeeOnboardingDocument(
+  request: Request,
+  locals: App.Locals,
+  item: EmployeeOnboardingItem & { package_status: EmployeeOnboardingPackage['status'] },
+  formData: FormData,
+  signedName: string
+) {
+  const db = locals.DB!;
+  const businessId = item.business_id;
+  const upload = formData.get('file');
+  const hasUpload = upload instanceof File && upload.size > 0;
+  const official = ['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key);
+  if (!item.file_url && !hasUpload) return fail(400, { error: 'Upload the requested document before submitting.' });
+  if (official && String(formData.get('official_form_confirmed') ?? '0') !== '1') {
+    return fail(400, { error: 'Confirm that the current official form is complete and signed.' });
+  }
+  if (official && !signedName) return fail(400, { error: 'Type your name to certify this submission.' });
+  if (hasUpload) {
+    if (upload.size > 15 * 1024 * 1024) return fail(400, { error: 'Document uploads must be 15MB or smaller.' });
+    if (!isAllowedDocumentUpload(upload.type, extensionFromFilename(upload.name))) {
+      return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
+    }
+    if (official && upload.type !== 'application/pdf' &&
+      !(['', 'application/octet-stream'].includes(upload.type) && extensionFromFilename(upload.name) === 'pdf')) {
+      return fail(400, { error: 'Official employment and tax forms must be uploaded as PDF files.' });
+    }
+    if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
+  }
+
+  let uploadedUrl = '';
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    if (hasUpload) {
+      uploadedUrl = (await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET!, businessId, item.user_id, upload)).url;
+    }
+    const auditId = crypto.randomUUID();
+    const fileUrl = uploadedUrl || item.file_url;
+    const fileName = hasUpload ? upload.name : item.file_name;
+    // The audit claim and every dependent write share one transaction. Comparing values as
+    // well as status catches competing uploads even when both happen in the same second.
+    const statements = [db.prepare(`
+      INSERT INTO account_audit_logs (
+        id, business_id, actor_user_id, target_user_id, action, ip_hash, user_agent_hash, metadata_json, created_at
+      ) SELECT ?, i.business_id, i.user_id, i.user_id, 'employee_onboarding_item_submitted', ?, ?, ?, ?
+      FROM employee_onboarding_items i
+      JOIN employee_onboarding_packages p ON p.id = i.package_id AND p.business_id = i.business_id AND p.user_id = i.user_id
+      JOIN business_users bu ON bu.business_id = i.business_id AND bu.user_id = i.user_id AND bu.is_active = 1
+      JOIN users u ON u.id = i.user_id AND u.is_active = 1
+      WHERE i.id = ? AND i.business_id = ? AND i.user_id = ? AND i.package_id = ?
+        AND p.status = ? AND p.status IN ('sent', 'in_progress', 'returned') AND p.locked_at IS NULL
+        AND i.status IS ? AND i.file_url IS ? AND i.file_name IS ? AND i.form_payload IS ?
+        AND i.signed_name IS ? AND i.submitted_at IS ? AND i.reviewed_at IS ? AND i.reviewed_by IS ?
+        AND NOT EXISTS (SELECT 1 FROM employee_compliance_documents c
+          WHERE c.business_id = i.business_id AND c.onboarding_item_id = i.id AND (c.locked_at IS NOT NULL OR c.status = 'approved'))
+    `).bind(auditId, await hashedAuditValue(getRequestIpAddress(request)),
+      await hashedAuditValue(request.headers.get('user-agent')),
+      JSON.stringify({ packageId: item.package_id, itemId: item.id, itemType: item.item_type,
+        formKey: item.form_key, sensitive: isSensitiveOnboardingFormKey(item.form_key) }), now,
+      item.id, businessId, item.user_id, item.package_id, item.package_status, item.status,
+      item.file_url, item.file_name, item.form_payload, item.signed_name, item.submitted_at, item.reviewed_at, item.reviewed_by),
+    db.prepare(`
+      UPDATE employee_onboarding_items SET status = 'submitted', file_url = ?, file_name = ?, signed_name = ?,
+        manager_note = '', submitted_at = ?, reviewed_at = NULL, reviewed_by = NULL
+      WHERE id = ? AND user_id = ? AND business_id = ? AND EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
+    `).bind(fileUrl, fileName, signedName, now, item.id, item.user_id, businessId, auditId),
+    ...prepareComplianceDocumentForOnboardingItem(db, {
+      ...item, status: 'submitted', file_url: fileUrl, file_name: fileName, signed_name: signedName,
+      submitted_at: now, reviewed_at: null, reviewed_by: null
+    }, item.user_id, now, auditId),
+    db.prepare(`
+      UPDATE employee_onboarding_packages SET status = 'in_progress', submitted_at = NULL, completed_at = NULL,
+        returned_at = NULL, returned_by = NULL, manager_note = '', updated_at = ?
+      WHERE id = ? AND business_id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
+    `).bind(now, item.package_id, businessId, item.user_id, auditId)];
+    if (item.form_key === 'federal_i9') {
+      statements.push(db.prepare(`
+        UPDATE employee_i9_verifications SET status = 'pending', attested_at = NULL, verifier_user_id = NULL,
+          verifier_name = '', verifier_title = '', updated_at = ?
+        WHERE business_id = ? AND package_id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM account_audit_logs WHERE id = ?)
+      `).bind(now, businessId, item.package_id, item.user_id, auditId));
+    }
+    const result = await db.batch(statements);
+    if (!result[0]?.meta?.changes) {
+      if (uploadedUrl) await cleanUpOnboardingMedia(db, locals, businessId, uploadedUrl);
+      return fail(409, { error: 'This onboarding packet changed. Refresh before submitting again.' });
+    }
+    if (uploadedUrl && item.file_url) await cleanUpOnboardingMedia(db, locals, businessId, item.file_url);
+    return { success: true, message: 'Onboarding item submitted.' };
+  } catch {
+    if (uploadedUrl) await cleanUpOnboardingMedia(db, locals, businessId, uploadedUrl);
+    logOperationalError({ event: 'onboarding_document_save_failed', businessId, metadata: { phase: 'save' } });
+    return fail(503, { error: 'The document could not be saved. Please try again.' });
+  }
+}
+
 export async function submitEmployeeOnboardingItem(
   request: Request,
   locals: App.Locals,
@@ -6812,7 +6891,6 @@ export async function submitEmployeeOnboardingItem(
   const formData = await request.formData();
   const itemId = String(formData.get('item_id') ?? '').trim();
   const signedName = String(formData.get('signed_name') ?? '').trim();
-  const upload = formData.get('file');
 
   if (!itemId) return fail(400, { error: 'Missing onboarding item.' });
 
@@ -6844,7 +6922,7 @@ export async function submitEmployeeOnboardingItem(
         i.reviewed_by,
         p.status AS package_status
       FROM employee_onboarding_items i
-      JOIN employee_onboarding_packages p ON p.id = i.package_id
+      JOIN employee_onboarding_packages p ON p.id = i.package_id AND p.business_id = i.business_id AND p.user_id = i.user_id
       WHERE i.id = ? AND i.user_id = ? AND i.business_id = ?
       LIMIT 1
       `
@@ -6859,51 +6937,16 @@ export async function submitEmployeeOnboardingItem(
   if (item.package_status === 'submitted') {
     return fail(400, { error: 'This onboarding package is under review. It must be returned before it can be changed.' });
   }
+  if (item.item_type === 'document') {
+    return submitEmployeeOnboardingDocument(request, locals, item, formData, signedName);
+  }
 
   let fileUrl = item.file_url;
   let fileName = item.file_name;
   let formPayload = item.form_payload;
   const now = Math.floor(Date.now() / 1000);
 
-  if (item.item_type === 'document') {
-    if (upload instanceof File && upload.size > 0) {
-      if (upload.size > 15 * 1024 * 1024) {
-        return fail(400, { error: 'Document uploads must be 15MB or smaller.' });
-      }
-      if (!locals.MEDIA_BUCKET) {
-        return fail(503, { error: 'Document storage is not configured.' });
-      }
-      if (
-        ['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key) &&
-        upload.type !== 'application/pdf' &&
-        !upload.name.toLowerCase().endsWith('.pdf')
-      ) {
-        return fail(400, { error: 'Official employment and tax forms must be uploaded as PDF files.' });
-      }
-
-      try {
-        const uploaded = await uploadEmployeeOnboardingMedia(locals.MEDIA_BUCKET, businessId, locals.userId, upload);
-        const previousKey = documentMediaKeyFromUrl(item.file_url);
-        if (previousKey) {
-          await locals.MEDIA_BUCKET.delete(previousKey);
-        }
-        fileUrl = uploaded.url;
-        fileName = upload.name;
-      } catch {
-        return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
-      }
-    }
-
-    if (!fileUrl) {
-      return fail(400, { error: 'Upload the requested document before submitting.' });
-    }
-    if (['federal_i9', 'federal_w4', 'state_withholding'].includes(item.form_key)) {
-      if (String(formData.get('official_form_confirmed') ?? '0') !== '1') {
-        return fail(400, { error: 'Confirm that the current official form is complete and signed.' });
-      }
-      if (!signedName) return fail(400, { error: 'Type your name to certify this submission.' });
-    }
-  } else if (item.item_type === 'form') {
+  if (item.item_type === 'form') {
     const formResult = buildOnboardingFormPayload(formData, item.form_key);
     if ('error' in formResult) return fail(400, { error: formResult.error });
     if (!signedName) return fail(400, { error: 'Typed name is required.' });

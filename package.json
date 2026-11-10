@@ -70,7 +70,7 @@
 		"test:report-exports": "node ./scripts/report-export-check.mjs && node ./scripts/report-behavior-check.mjs && node ./scripts/temperature-history-behavior-check.mjs && node ./scripts/temperature-history-runtime-check.mjs",
 		"test:scale-performance": "node ./scripts/scale-performance-check.mjs && node ./scripts/schedule-read-resource-check.mjs && node ./scripts/route-resource-behavior-check.mjs && node ./scripts/workspace-intent-behavior-check.mjs",
 		"test:auth-abuse": "node ./scripts/auth-abuse-check.mjs",
-		"test:hr-onboarding": "node ./scripts/hr-onboarding-check.mjs && node ./scripts/multi-restaurant-behavior-check.mjs && node ./scripts/multi-restaurant-runtime-check.mjs",
+		"test:hr-onboarding": "node ./scripts/hr-onboarding-check.mjs && node ./scripts/hr-packet-behavior-check.mjs && node ./scripts/hr-packet-runtime-check.mjs && node ./scripts/multi-restaurant-behavior-check.mjs && node ./scripts/multi-restaurant-runtime-check.mjs",
 		"test:admin-consolidation": "node ./scripts/admin-consolidation-check.mjs",
 		"test:core-feature-actions": "node ./scripts/core-feature-actions-check.mjs",
 		"test:billing-lifecycle": "node ./scripts/billing-lifecycle-check.mjs",

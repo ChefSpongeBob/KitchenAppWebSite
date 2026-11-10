@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { hashedAuditValue } from '#lib/server/security.ts';
 
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
+import { getUserBusinessContext } from '#lib/server/business.ts';
 
 type D1 = App.RuntimeEnv['DB'];
 
@@ -181,18 +182,23 @@ export async function canAccessEmployeeSensitiveData(
   actorCapabilities?: readonly import('#lib/server/permissions.ts').BusinessCapability[] | null
 ) {
   if (!actorUserId || !businessId) return false;
+  const actor = await db.prepare('SELECT 1 FROM users WHERE id = ? AND is_active = 1').bind(actorUserId).first();
+  if (!actor) return false;
+  const context = await getUserBusinessContext(db, actorUserId, businessId);
+  if (!context || context.businessId !== businessId) return false;
   if (targetUserId && actorUserId === targetUserId) return true;
 
   if (
     hasBusinessCapability(
-      actorBusinessRole,
-      actorPermissionTemplate,
+      context.businessRole,
+      context.businessPermissionTemplate,
       'view_sensitive_employee_data',
-      actorCapabilities
+      context.businessCapabilities
     )
   ) {
     return true;
   }
+  if (context.businessCapabilityOverrides.view_sensitive_employee_data === false) return false;
 
   const permission = await db
     .prepare(
