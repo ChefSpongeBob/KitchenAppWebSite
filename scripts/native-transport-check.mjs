@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
 
 const source = [...readFileSync('src/app.html', 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .find(([, script]) => script.includes('__CRIMINI_NATIVE__'))?.[1];
 assert.ok(source, 'The actual native fetch bridge must be tested');
 
-function bridge({ native = true, origin = 'https://localhost' } = {}) {
+function bridge({ native = true, origin = 'https://localhost', path = '/login' } = {}) {
   const calls = [];
+  const startupPaths = [];
   let response;
   const originalFetch = async (input, init) => {
     calls.push(new Request(input instanceof Request ? input : new URL(input, origin + '/login'), init));
@@ -15,13 +17,36 @@ function bridge({ native = true, origin = 'https://localhost' } = {}) {
   };
   const window = {
     Capacitor: { isNativePlatform: () => native },
-    location: { origin: new URL(origin).origin, href: origin + '/login', pathname: '/login' },
+    location: { origin: new URL(origin).origin, href: origin + path, pathname: new URL(origin + path).pathname },
     fetch: originalFetch,
-    history: { replaceState() { throw Error('Non-root startup must not change navigation'); } }
+    history: { replaceState(state, title, destination) {
+      assert.equal(window.location.pathname, '/', 'Non-root startup must not change navigation');
+      const url = new URL(destination, origin + '/');
+      startupPaths.push(destination); window.location.href = url.href; window.location.pathname = url.pathname;
+    } }
   };
   runInNewContext(source, { window, URL, Request, Response, Headers });
-  return { calls, window, originalFetch, reply(value) { response = value; } };
+  return { calls, startupPaths, window, originalFetch, reply(value) { response = value; } };
 }
+
+for (const origin of ['https://localhost', 'capacitor://localhost']) {
+  const startup = bridge({ origin, path: '/' });
+  assert.deepEqual(startup.startupPaths, ['/app']);
+  assert.equal(startup.window.location.pathname, '/app');
+  assert.equal(startup.calls.length, 0, 'Startup must rely on the existing server load, not add a second session probe');
+  for (const path of ['/login', '/register?invite=FIXTURE-INVITE', '/workspace', '/onboarding', '/app', '/admin/schedule']) {
+    const deepLink = bridge({ origin, path });
+    assert.deepEqual(deepLink.startupPaths, []);
+    assert.equal(deepLink.window.location.href, origin + path);
+  }
+}
+for (const path of ['/', '/login']) {
+  const website = bridge({ native: false, origin: 'https://criminiops.com', path });
+  assert.deepEqual(website.startupPaths, []);
+  assert.equal(website.window.location.href, 'https://criminiops.com' + path);
+  assert.equal(website.window.fetch, website.originalFetch);
+}
+console.log('PASS native-only startup targets the authenticated dashboard; web startup and explicit auth/invite/restaurant/deep links remain unchanged');
 
 for (const origin of ['https://localhost', 'capacitor://localhost']) {
   const transport = bridge({ origin });
@@ -107,3 +132,48 @@ const web = bridge({ native: false });
 assert.equal(web.window.fetch, web.originalFetch, 'Browser version detection must remain untouched');
 assert.equal(web.window.__CRIMINI_NATIVE__, undefined);
 console.log('PASS native transport: independent web versions, status/body/headers/metadata, actions, cookies, abort, offline/retry, web and static request isolation');
+
+const fixture = createTestD1();
+try {
+  const { sqlite, db } = fixture, now = Math.floor(Date.now() / 1000), token = 'isolated-native-resume-session';
+  sqlite.prepare("INSERT INTO users(id,email,email_normalized,created_at,updated_at) VALUES('person','person@example.invalid','person@example.invalid',?,?)").run(now, now);
+  for (const id of ['a', 'b']) {
+    sqlite.prepare("INSERT INTO businesses(id,name,slug,status,created_at,updated_at) VALUES(?,?,?,'active',?,?)").run(id, id, id, now, now);
+    sqlite.prepare("INSERT INTO business_trials(business_id,owner_user_id,status,trial_started_at,trial_ends_at,created_at,updated_at) VALUES(?,'person','active',?,?,?,?)").run(id, now, now, now, now);
+    sqlite.prepare('INSERT INTO business_users(business_id,user_id,role,permission_template,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(id, 'person', id === 'a' ? 'owner' : 'staff', id === 'a' ? 'owner' : 'staff', now, now);
+  }
+  const load = loadServerModules();
+  const hashed = await load('src/lib/server/auth.ts').hashSessionToken(token);
+  sqlite.prepare("INSERT INTO sessions(id,user_id,session_token_hash,created_at,last_seen_at,expires_at) VALUES('session','person',?,?,?,?)").run(hashed, now, now, now + 3600);
+  const hooks = loadServerModules({
+    'cloudflare:workers': { env: { DB: db }, waitUntil() {} },
+    '#lib/server/observability.ts': { logOperationalEvent() {}, logOperationalError() {} },
+    '#lib/server/platformDiagnostics.ts': { async recordRequestDiagnostic() {} },
+    '#lib/server/operationalEvents.ts': { async processOperationalEvents() {} }
+  })('src/hooks.server.ts');
+  async function resume(sessionToken, business = 'b') {
+    const cookies = new Map([['kitchen_active_business', business]]);
+    if (sessionToken) cookies.set('__Host-kitchen_session', sessionToken);
+    const url = new URL(bridge({ path: '/' }).window.location.pathname, 'https://criminiops.com');
+    const event = { url, request: new Request(url, { headers: { 'x-crimini-native': '1', origin: 'https://localhost' } }), locals: {},
+      cookies: { get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
+    try {
+      await hooks.handle({ event, resolve: async () => new Response('Dashboard authorized') });
+      return { location: '/app', businessId: event.locals.businessId, role: event.locals.businessRole };
+    } catch (error) {
+      if (error.location) return { location: error.location };
+      throw error;
+    }
+  }
+  assert.deepEqual(await resume(token), { location: '/app', businessId: 'b', role: 'staff' });
+  assert.deepEqual(await resume(token, 'a'), { location: '/app', businessId: 'a', role: 'owner' });
+  assert.equal((await resume()).location, '/login');
+  assert.equal((await resume('invalid-session')).location, '/login?error=session');
+  sqlite.exec('UPDATE sessions SET expires_at=1');
+  assert.equal((await resume(token)).location, '/login?error=session');
+  sqlite.prepare('UPDATE sessions SET expires_at=?,revoked_at=1').run(now + 3600);
+  assert.equal((await resume(token)).location, '/login?error=session');
+  sqlite.exec("UPDATE sessions SET revoked_at=NULL; UPDATE business_trials SET status='pending_payment' WHERE business_id='b'");
+  assert.equal((await resume(token)).location, '/billing?access=required');
+  console.log('PASS native startup uses the actual session/tenant/billing guards: selected restaurant resumes with its own role; absent, invalid, expired and revoked sessions require sign-in');
+} finally { fixture.close(); }
