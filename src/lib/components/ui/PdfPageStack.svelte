@@ -121,7 +121,12 @@
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
-      const loadingTask = pdfjs.getDocument({ url: nativeServerUrl(src) });
+      const sourceUrl = nativeServerUrl(src);
+      const loadingTask = pdfjs.getDocument({
+        url: sourceUrl,
+        withCredentials: sourceUrl.startsWith('/api/documents/media/') ||
+          sourceUrl.startsWith('https://criminiops.com/api/documents/media/')
+      });
       const pdf = await loadingTask.promise;
 
       const nextPages: string[] = [];

@@ -399,6 +399,15 @@
   onMount(() => {
     workspaceIntent = installWorkspaceIntent(() => data.user?.businessId,
       () => pushToast(WORKSPACE_CHANGED_MESSAGE, 'error', 0));
+    let disposeNativeDownloads: (() => void) | undefined;
+    let mounted = true;
+    if ((window as typeof window & { __CRIMINI_NATIVE__?: boolean }).__CRIMINI_NATIVE__) {
+      void import('#lib/client/nativeDownloads.ts').then(({ installNativeDownloads }) => {
+        if (mounted) disposeNativeDownloads = installNativeDownloads(
+          () => data.user?.businessId, message => pushToast(message, 'error')
+        );
+      }).catch(() => pushToast('File downloads are unavailable. Restart the app and try again.', 'error'));
+    }
     document.documentElement.classList.add("reveal-ready");
     narrowViewportQuery = window.matchMedia("(max-width: 900px)");
     coarsePointerQuery = window.matchMedia("(pointer: coarse)");
@@ -431,6 +440,8 @@
     }
 
     return () => {
+      mounted = false;
+      disposeNativeDownloads?.();
       workspaceIntent?.();
       revealObserver?.disconnect();
       window.clearTimeout(revealFailSafeTimer);

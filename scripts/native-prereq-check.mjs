@@ -107,7 +107,7 @@ if (!xcodeProject) {
 }
 
 const java = spawnSync('java', ['-version'], { encoding: 'utf8' });
-java.status === 0 || java.stderr
+java.status === 0
 	? pass('Java/JDK command is available')
 	: warn('Java/JDK command is not available', 'Set JAVA_HOME before building Android release bundles.');
 

@@ -13,7 +13,7 @@
 				if (!capacitor?.isNativePlatform?.()) return;
 
 				const apiOrigin = 'https://criminiops.com';
-				const localOrigin = window.location.origin;
+				const localAddress = new URL(window.location.href);
 				const nativeFetch = window.fetch.bind(window);
 				const backendFetch = async (input, init) => {
 					const response = await nativeFetch(input, init);
@@ -44,7 +44,8 @@
 					const isApi = url.pathname.startsWith('/api/');
 					const isAction = method !== 'GET' && method !== 'HEAD';
 
-					if (url.origin !== localOrigin || (!isServerData && !isApi && !isAction)) {
+					if (url.protocol !== localAddress.protocol || url.host !== localAddress.host ||
+						url.username || url.password || (!isServerData && !isApi && !isAction)) {
 						return nativeFetch(input, init);
 					}
 

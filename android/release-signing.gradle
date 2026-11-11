@@ -1,0 +1,41 @@
+// Release keys stay in the environment or ignored android/key.properties.
+def signingProperties = new Properties()
+def signingFile = rootProject.file('key.properties')
+if (signingFile.exists()) {
+    signingFile.withInputStream { signingProperties.load(it) }
+}
+def setting = { environmentName, propertyName ->
+    System.getenv(environmentName) ?: signingProperties.getProperty(propertyName)
+}
+def storePath = setting('ANDROID_KEYSTORE_PATH', 'storeFile')
+def storePasswordValue = setting('ANDROID_KEYSTORE_PASSWORD', 'storePassword')
+def aliasValue = setting('ANDROID_KEYSTORE_ALIAS', 'keyAlias')
+def keyPasswordValue = setting('ANDROID_KEY_PASSWORD', 'keyPassword') ?: storePasswordValue
+def configured = [storePath, storePasswordValue, aliasValue].count { it != null && !it.isEmpty() }
+if (configured != 0 && configured != 3) {
+    throw new GradleException('Release signing is incomplete. Configure storeFile, storePassword and keyAlias together.')
+}
+if (configured == 3) {
+    def keyFile = rootProject.file(storePath)
+    if (!keyFile.isFile() || aliasValue == 'androiddebugkey' || keyFile.name == 'debug.keystore') {
+        throw new GradleException('Release signing requires an existing private release keystore, not the Android debug key.')
+    }
+    android.signingConfigs.create('release') {
+        storeFile = keyFile
+        storePassword = storePasswordValue
+        keyAlias = aliasValue
+        keyPassword = keyPasswordValue
+    }
+    android.buildTypes.release.signingConfig = android.signingConfigs.release
+}
+
+def verifyReleaseSigning = tasks.register('verifyReleaseSigning') {
+    doLast {
+        if (configured != 3) {
+            throw new GradleException('Store bundle blocked: configure your existing release signing key first. assembleRelease can build an unsigned inspection APK.')
+        }
+    }
+}
+tasks.matching { it.name == 'bundleRelease' }.configureEach {
+    dependsOn verifyReleaseSigning
+}

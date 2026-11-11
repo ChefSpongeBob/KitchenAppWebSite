@@ -120,12 +120,14 @@ for (const origin of ['https://localhost', 'capacitor://localhost']) {
   transport.reply(new Response('retry'));
   assert.equal(await (await transport.window.fetch('/login/__data.json')).text(), 'retry');
 
-  for (const path of ['/assets/image.svg', '/_app/version.json', 'https://example.invalid/external']) {
+  for (const path of ['/assets/image.svg', '/_app/version.json', 'https://example.invalid/external',
+    'capacitor://other-host/api/documents/media/a.pdf', 'file:///api/temps']) {
     const untouched = new Response('asset', { headers: { 'x-sveltekit-version': 'unchanged' } });
     transport.reply(untouched);
     assert.equal(await transport.window.fetch(new URL(path, origin).href), untouched);
     assert.equal(transport.calls.at(-1).headers.has('x-crimini-native'), false);
   }
+  await assert.rejects(transport.window.fetch('https://user:password@localhost/api/temps'), TypeError);
 }
 
 const web = bridge({ native: false });

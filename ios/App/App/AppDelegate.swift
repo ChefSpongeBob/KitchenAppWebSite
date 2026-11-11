@@ -1,5 +1,12 @@
 import UIKit
 import Capacitor
+import CapApp_SPM
+
+class CriminiViewController: CAPBridgeViewController {
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(CriminiBillingPlugin())
+    }
+}
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {

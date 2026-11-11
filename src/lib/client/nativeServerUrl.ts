@@ -7,8 +7,9 @@ export function nativeServerUrl(value: string | null | undefined) {
 	if (!value || !browser || !Capacitor.isNativePlatform()) return value ?? '';
 
 	try {
-		const url = new URL(value, window.location.origin);
-		if (url.origin !== window.location.origin) return value;
+		const local = new URL(window.location.href);
+		const url = new URL(value, local);
+		if (url.protocol !== local.protocol || url.host !== local.host || url.username || url.password) return value;
 
 		const isProtectedMedia = url.pathname.startsWith('/api/');
 		const isReportExport = /^\/reports\/[^/]+\.csv$/.test(url.pathname);

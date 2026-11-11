@@ -14,8 +14,10 @@ export function installWorkspaceIntent(getBusinessId: () => string | null | unde
   };
   const localUrl = (input: string) => {
     const url = new URL(input, window.location.href);
+    const local = new URL(window.location.href);
     const native = (window as typeof window & { __CRIMINI_NATIVE__?: boolean }).__CRIMINI_NATIVE__;
-    return (url.origin === window.location.origin || (native && url.origin === 'https://criminiops.com')) &&
+    return !url.username && !url.password &&
+      (url.protocol === local.protocol && url.host === local.host || (native && url.origin === 'https://criminiops.com')) &&
       isWorkspaceRequest(url.pathname) ? url : null;
   };
   const guardedFetch: typeof fetch = async (input, init) => {

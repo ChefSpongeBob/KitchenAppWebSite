@@ -104,7 +104,7 @@
 		"test:email-delivery-behavior": "node ./scripts/email-delivery-behavior-check.mjs && node ./scripts/email-worker-check.mjs && node ./scripts/email-lifecycle-behavior-check.mjs",
 		"test:schema-namespaces": "node ./scripts/schema-namespace-behavior-check.mjs",
 		"test:pdf-runtime": "node ./scripts/pdf-runtime-check.mjs",
-		"test:native-transport": "node ./scripts/native-transport-check.mjs",
+		"test:native-transport": "node ./scripts/native-transport-check.mjs && node ./scripts/native-release-behavior-check.mjs",
 		"test:staff-dashboard": "node ./scripts/staff-dashboard-check.mjs",
 		"test:staff-support": "node ./scripts/staff-support-check.mjs",
 		"test:dependency-security": "node ./scripts/dependency-security-check.mjs"
@@ -127,8 +127,10 @@
 		"@capacitor/android": "8.4.3",
 		"@capacitor/cli": "8.4.3",
 		"@capacitor/core": "8.4.3",
+		"@capacitor/filesystem": "8.1.5",
 		"@capacitor/ios": "8.4.3",
 		"@capacitor/push-notifications": "^8.1.1",
+		"@capacitor/share": "8.0.3",
 		"devalue": "5.9.4",
 		"pdfjs-dist": "6.4.299",
 		"tesseract.js": "^6.0.1"
