@@ -70,7 +70,6 @@ import {
 } from '#lib/server/itemAttachments.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSanitizer.ts';
-import { hasPlatformStaffMembership } from '#lib/server/platformStaff.ts';
 import { logOperationalError } from '#lib/server/observability.ts';
 import { isCalendarDate } from '#lib/timeZones.ts';
 import { readHrFileAuthority, commitHrFileWrite, hrFileWriteGuard } from '#lib/server/hrFileWrites.ts';
@@ -5603,10 +5602,11 @@ async function countAdmins(db: D1, businessId: string) {
     .prepare(
       `
       SELECT COUNT(*) AS count
-      FROM business_users
-      WHERE business_id = ?
-        AND COALESCE(is_active, 1) = 1
-        AND role IN ('owner', 'admin', 'manager', 'general_manager', 'foh_manager', 'boh_manager', 'hourly_manager')
+      FROM business_users bu
+      JOIN users u ON u.id = bu.user_id AND COALESCE(u.is_active, 1) = 1
+      WHERE bu.business_id = ?
+        AND COALESCE(bu.is_active, 1) = 1
+        AND bu.role IN ('owner', 'admin', 'manager', 'general_manager', 'foh_manager', 'boh_manager', 'hourly_manager')
       `
     )
     .bind(businessId)
@@ -5614,21 +5614,8 @@ async function countAdmins(db: D1, businessId: string) {
   return result?.count ?? 0;
 }
 
-async function hasOtherBusinessMembership(db: D1, userId: string, businessId: string) {
-  await ensureBusinessSchema(db);
-  const row = await db
-    .prepare(
-      `
-      SELECT business_id
-      FROM business_users
-      WHERE user_id = ? AND business_id != ?
-      LIMIT 1
-      `
-    )
-    .bind(userId, businessId)
-    .first<{ business_id: string }>();
-  return Boolean(row?.business_id);
-}
+const employeeMembershipSnapshotSql = `SELECT json_array(role, permission_template, position_id,
+  COALESCE(is_active, 1), updated_at) AS proof FROM business_users WHERE business_id = ? AND user_id = ?`;
 
 export async function deleteUser(request: Request, locals: App.Locals) {
   requireAdmin(locals.userRole);
@@ -5637,69 +5624,71 @@ export async function deleteUser(request: Request, locals: App.Locals) {
   if (!db) return fail(503, { error: 'Database not configured.' });
   const businessId = requireBusinessId(locals);
 
+  const authority = await readHrFileAuthority(db, businessId, locals.userId, 'people');
+  if (!authority || !locals.sessionId) return fail(403, { error: 'Employee profile access required.' });
+
   const formData = await request.formData();
   const userId = String(formData.get('user_id') ?? '').trim();
   if (!userId) return fail(400, { error: 'Missing user id.' });
   if (userId === locals.userId) {
-    return fail(400, { error: 'You cannot delete your own account.' });
+    return fail(400, { error: 'You cannot remove your own access.' });
   }
 
   const target = await getUserById(db, userId);
   if (!target) return fail(404, { error: 'User not found.' });
-  if (!(await userBelongsToBusiness(db, userId, businessId))) {
+  const membership = await db.prepare(employeeMembershipSnapshotSql).bind(businessId, userId)
+    .first<{ proof: string }>();
+  if (!membership) {
     return fail(404, { error: 'User not found in this business.' });
   }
-  const businessUser = await db
-    .prepare(`SELECT role FROM business_users WHERE business_id = ? AND user_id = ? LIMIT 1`)
-    .bind(businessId, userId)
-    .first<{ role: string }>();
-  if (isOwnerRole(businessUser?.role)) {
+  const [role, , , isActive] = JSON.parse(membership.proof) as [string, string | null, string | null, number, number];
+  if (isOwnerRole(role)) {
     return fail(403, { error: 'The owner account cannot be removed.' });
   }
-  if (isManagerRole(businessUser?.role) && !canManageManagerAccounts(locals)) {
+  if (isManagerRole(role) && !isOwnerRole(authority.role) && !authority.capabilities.includes('manage_managers')) {
     return fail(403, { error: 'Manage Managers access is required to remove a manager.' });
   }
+  if (isActive !== 1) throw redirect(303, '/admin/users');
   if ((await countAdmins(db, businessId)) <= 1) {
-    if (isBusinessAdminRole(businessUser?.role)) {
+    if (isBusinessAdminRole(role)) {
       return fail(400, { error: 'At least one management account must remain.' });
     }
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const hasOtherMembership = await hasOtherBusinessMembership(db, userId, businessId);
-  const retainIdentity = hasOtherMembership || await hasPlatformStaffMembership(db, userId);
-  const statements = [
-    db
-      .prepare(`DELETE FROM business_users WHERE business_id = ? AND user_id = ?`)
-      .bind(businessId, userId)
-  ];
-
-  if (!retainIdentity) {
-    statements.push(
-      db.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`).bind(now, userId),
-      db
-        .prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
-        .bind(now, now, userId),
-      db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId)
-    );
-  }
-
-  await db.batch(statements);
-
-  if (retainIdentity) await syncUserAppRoleFromMemberships(db, userId);
-
-  await writeAuditLogSafe(db, {
-    action: 'user_deleted_from_business',
-    request,
-    businessId,
-    actorUserId: locals.userId ?? null,
-    targetUserId: retainIdentity ? userId : null,
-    email: target.email,
-    metadata: {
-      removedUserId: userId,
-      accountDeleted: !retainIdentity
-    }
+  // Global sessions serve every restaurant and Staff: revoke them only if no other active access remains.
+  const noOtherAccess = `NOT EXISTS (SELECT 1 FROM business_users WHERE user_id = ?
+    AND business_id != ? AND COALESCE(is_active, 1) = 1)
+    AND NOT EXISTS (SELECT 1 FROM platform_staff_members WHERE user_id = ? AND is_active = 1)`;
+  const result = await commitHrFileWrite(db, request, authority, {
+    action: 'user_deleted_from_business', targetUserId: userId, email: target.email ?? undefined,
+    metadata: { removedUserId: userId, accountDeleted: false, membershipDeactivated: true },
+    condition: `(${employeeMembershipSnapshotSql}) IS ?
+      AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = ? AND s.user_id = ?
+        AND s.revoked_at IS NULL AND s.expires_at > MAX(?, unixepoch())
+        AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d
+          WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL)))
+      AND (? = 0 OR (SELECT COUNT(*) FROM business_users bu
+        JOIN users u ON u.id = bu.user_id AND COALESCE(u.is_active, 1) = 1
+        WHERE bu.business_id = ? AND COALESCE(bu.is_active, 1) = 1
+        AND bu.role IN ('owner', 'admin', 'manager', 'general_manager', 'foh_manager', 'boh_manager', 'hourly_manager')) > 1)`,
+    values: [businessId, userId, membership.proof, locals.sessionId, authority.actor, now,
+      isBusinessAdminRole(role) ? 1 : 0, businessId],
+    writes: auditId => [
+      db.prepare(`UPDATE business_users SET is_active = 0, updated_at = ?
+        WHERE business_id = ? AND user_id = ? AND ${hrFileWriteGuard}`).bind(now, businessId, userId, auditId),
+      db.prepare(`UPDATE business_invites SET revoked_at = ? WHERE business_id = ?
+        AND email_normalized = (SELECT email_normalized FROM users WHERE id = ?)
+        AND used_at IS NULL AND revoked_at IS NULL AND ${hrFileWriteGuard}`)
+        .bind(now, businessId, userId, auditId),
+      db.prepare(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL
+        AND ${noOtherAccess} AND ${hrFileWriteGuard}`).bind(now, userId, userId, businessId, userId, auditId),
+      db.prepare(`UPDATE devices SET revoked_at = ?, updated_at = ? WHERE user_id = ? AND revoked_at IS NULL
+        AND ${noOtherAccess} AND ${hrFileWriteGuard}`).bind(now, now, userId, userId, businessId, userId, auditId)
+    ]
   });
+  if (result === 'changed') return fail(409, { error: 'Employee access changed. Refresh and try again.' });
+  if (result !== 'saved') return fail(503, { error: 'Employee access could not be removed. Please try again.' });
 
   throw redirect(303, '/admin/users');
 }

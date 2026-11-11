@@ -252,20 +252,20 @@
 		};
 
 	const deleteEmployee: SubmitFunction = ({ cancel }) => {
-		if (!window.confirm(`Delete ${displayName(data.employee)} from this business?`)) {
+		if (!window.confirm(`Remove ${displayName(data.employee)} from this business? Their records will be retained.`)) {
 			cancel();
 			return;
 		}
 		return async ({ result }) => {
 			if (result.type === 'redirect') {
-				pushToast('Employee deleted.', 'success');
+				pushToast('Employee removed.', 'success');
 				await goto(result.location, { refreshAll: true });
 			} else {
 				await applyAction(result);
 				pushToast(
 					result.type === 'failure'
-						? (result.data?.error ?? 'That employee could not be deleted.')
-						: 'That employee could not be deleted.',
+						? (result.data?.error ?? 'That employee could not be removed.')
+						: 'That employee could not be removed.',
 					'error'
 				);
 			}
@@ -500,7 +500,7 @@
 					<form method="POST" action="?/delete_user" use:enhance={deleteEmployee}>
 						<input type="hidden" name="user_id" value={data.employee.id} /><button
 							type="submit"
-							class="danger-link">Delete Employee</button
+							class="danger-link">Remove Employee</button
 						>
 					</form>
 				</section>

@@ -126,6 +126,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		(targetRole !== 'manager' || canManageManagers);
 	const canDeleteEmployee =
 		canManagePeople &&
+		employee.is_active === 1 &&
 		targetRole !== 'owner' &&
 		employee.id !== locals.userId &&
 		(targetRole !== 'manager' || canManageManagers);

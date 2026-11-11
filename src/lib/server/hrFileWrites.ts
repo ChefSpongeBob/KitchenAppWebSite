@@ -23,7 +23,7 @@ WHERE bu.business_id = ? AND bu.user_id = ? AND COALESCE(bu.is_active, 1) = 1
   AND COALESCE(b.status, 'active') IN ('active', 'trialing', 'past_due', 'pending_payment')`;
 
 export async function readHrFileAuthority(db: D1, businessId: string, actor: string | null | undefined,
-  purpose: 'template' | 'i9' | 'self' | 'send', targetUserId?: string) {
+  purpose: 'template' | 'i9' | 'self' | 'send' | 'people', targetUserId?: string) {
   if (!actor) return null;
   const row = await db.prepare(authoritySql).bind(businessId, actor).first<{ proof: string }>();
   if (!row) return null;
@@ -37,7 +37,8 @@ export async function readHrFileAuthority(db: D1, businessId: string, actor: str
   const has = (capability: BusinessCapability) => capabilities.includes(capability);
   const sensitive = actor === targetUserId || has('view_sensitive_employee_data') ||
     (individual.view_sensitive_employee_data !== false && state.individual.some(([key, value]) => key === 'hr_sensitive_access' && value === 1));
-  const permitted = purpose === 'self' ? actor === targetUserId : purpose === 'send'
+  const permitted = purpose === 'people' ? has('admin_access') && has('manage_people')
+    : purpose === 'self' ? actor === targetUserId : purpose === 'send'
     ? has('admin_access') && has('manage_onboarding') : purpose === 'template'
       ? has('admin_access') && has('manage_hr_setup') : has('review_onboarding') && sensitive;
   return permitted

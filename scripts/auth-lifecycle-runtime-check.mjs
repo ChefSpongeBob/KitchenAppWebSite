@@ -16,6 +16,7 @@ const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), source
   import {hashPassword,hashSessionToken,verifyPassword} from './src/lib/server/auth.ts';
   import {checkRateLimit} from './src/lib/server/security.ts';
   import {cancelBusinessAccess,getBusinessTrialAccess} from './src/lib/server/trial.ts';
+  import {deleteUser} from './src/lib/server/admin.ts';
   let pauseNext=false,waiting=false,originalHash='';
   const jar=new Map(),cookieOptions=[];
   export default {async fetch(request,bindings){
@@ -55,6 +56,42 @@ const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), source
     if(path==='/fail-login'){await raw.exec("CREATE TRIGGER fixture_login_failure BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT,'isolated session failure');END");return Response.json({ok:true});}
     if(path==='/clear'){await raw.exec('DROP TRIGGER IF EXISTS fixture_reset_failure;DROP TRIGGER IF EXISTS fixture_login_failure;');return Response.json({ok:true});}
     if(path==='/limit')return Response.json(await checkRateLimit(raw,{action:'parallel',identifier:'same-ip',limit:8,windowSeconds:900,blockSeconds:900}));
+    if(path==='/removal-setup'){
+      await raw.batch([
+        raw.prepare("UPDATE businesses SET status='active' WHERE id IN ('alice-business','bob-business')"),
+        raw.prepare("UPDATE business_users SET role='owner',permission_template='owner',is_active=1 WHERE user_id='alice'"),
+        raw.prepare("UPDATE business_users SET is_active=? WHERE business_id='bob-business' AND user_id='bob'").bind(url.searchParams.has('single')?0:1),
+        raw.prepare("INSERT INTO business_users(business_id,user_id,role,permission_template,created_at,updated_at) VALUES('alice-business','bob','staff','staff',?,?) ON CONFLICT(business_id,user_id) DO UPDATE SET is_active=1").bind(now,now),
+        raw.prepare("INSERT OR IGNORE INTO employee_profiles(business_id,user_id,real_name,updated_at) VALUES('alice-business','bob','Retained employee',?)").bind(now),
+        raw.prepare("INSERT OR IGNORE INTO employee_sensitive_record_vault(id,business_id,user_id,record_scope,record_type,status,encrypted_payload,created_at,updated_at) VALUES('retained-vault','alice-business','bob','tax','withholding','accepted','unchanged-encrypted-record',?,?)").bind(now,now),
+        raw.prepare('UPDATE sessions SET revoked_at=NULL'),raw.prepare('UPDATE devices SET revoked_at=NULL'),raw.prepare('DELETE FROM account_audit_logs')
+      ]);return Response.json({ok:true});
+    }
+    if(path==='/removal-revoke-authority'){
+      await raw.prepare("UPDATE business_users SET role='staff',permission_template='staff' WHERE user_id='alice'").run();return Response.json({ok:true});
+    }
+    if(path==='/removal-failure'){
+      await raw.exec("CREATE TRIGGER fixture_removal_failure BEFORE UPDATE ON devices BEGIN SELECT RAISE(ABORT,'isolated removal failure');END");return Response.json({ok:true});
+    }
+    if(path==='/removal-clear'){await raw.exec('DROP TRIGGER IF EXISTS fixture_removal_failure;');return Response.json({ok:true});}
+    if(path==='/removal-inspect')return Response.json({
+      membership:await raw.prepare("SELECT is_active FROM business_users WHERE business_id='alice-business' AND user_id='bob'").first(),
+      otherMembership:await raw.prepare("SELECT role,is_active FROM business_users WHERE business_id='bob-business' AND user_id='bob'").first(),
+      identity:await raw.prepare("SELECT id,password_hash FROM users WHERE id='bob'").first(),
+      profile:await raw.prepare("SELECT real_name FROM employee_profiles WHERE business_id='alice-business' AND user_id='bob'").first(),
+      vault:await raw.prepare("SELECT encrypted_payload FROM employee_sensitive_record_vault WHERE id='retained-vault'").first(),
+      session:await raw.prepare("SELECT revoked_at FROM sessions WHERE id='bob-session'").first(),
+      device:await raw.prepare("SELECT revoked_at FROM devices WHERE id='bob-device'").first(),
+      audit:await raw.prepare("SELECT count(*) AS n FROM account_audit_logs WHERE action='user_deleted_from_business'").first()
+    });
+    if(path==='/remove'){
+      const form=new URLSearchParams({user_id:'bob'});
+      try{const result=await deleteUser(new Request('https://criminiops.com/admin/users/bob?/delete_user',
+        {method:'POST',body:form,headers:{origin:'https://criminiops.com'}}),
+        {DB:db,userId:'alice',sessionId:'alice-session',userRole:'admin',businessId:'alice-business',businessRole:'owner',businessPermissionTemplate:'owner'});
+        return Response.json({status:result.status,data:result.data});
+      }catch(error){if(error.location)return Response.json({status:error.status,location:error.location});throw error;}
+    }
     if(path==='/missing-pepper'){
       try{await hashPassword('Isolated-password-123!',{});return Response.json({blocked:false});}
       catch{return Response.json({blocked:true});}
@@ -127,6 +164,21 @@ try {
   assert.deepEqual(afterCancel.alice, beforeCancel.alice); assert.deepEqual(afterCancel.reset, beforeCancel.reset);
   assert.equal((await request('/cancel')).success, false);
   const expiry = await request('/expire'); assert.equal(expiry.allowApp, false); assert.equal(expiry.shouldPurge, false);
+  await request('/removal-setup'); const beforeRemoval=await request('/removal-inspect');
+  const removalResult=await request('/remove');assert.equal(removalResult.location,'/admin/users',JSON.stringify(removalResult));
+  const removed=await request('/removal-inspect'); assert.equal(removed.membership.is_active,0);assert.equal(removed.audit.n,1);
+  for(const key of ['identity','profile','vault','session','device','otherMembership'])assert.deepEqual(removed[key],beforeRemoval[key]);
+  assert.equal((await request('/remove')).status,303);assert.deepEqual(await request('/removal-inspect'),removed);
+  await request('/removal-setup?single=1');const beforeFailedRemoval=await request('/removal-inspect');
+  await request('/removal-failure');assert.equal((await request('/remove')).status,503);
+  assert.deepEqual(await request('/removal-inspect'),beforeFailedRemoval);await request('/removal-clear');
+  assert.equal((await paused('/remove',async()=>{await request('/removal-revoke-authority');})).status,409);
+  assert.deepEqual(await request('/removal-inspect'),beforeFailedRemoval);
+  await request('/removal-setup?single=1');assert.equal((await request('/remove')).status,303);
+  const lastRestaurantRemoval=await request('/removal-inspect');assert.equal(lastRestaurantRemoval.membership.is_active,0);
+  assert.ok(lastRestaurantRemoval.session.revoked_at);assert.ok(lastRestaurantRemoval.device.revoked_at);
+  for(const key of ['identity','profile','vault'])assert.deepEqual(lastRestaurantRemoval[key],beforeFailedRemoval[key]);
   assert.deepEqual((await request('/inspect')).foreignKeys, []);
   console.log('PASS actual Workers/D1: reset rollback/replay/concurrency, stale-password login rejection, account-switch preservation, native/browser cookies, atomic parallel abuse limits and non-destructive cancellation/expiry');
+  console.log('PASS actual Workers/D1 employee removal: retained identity/HR, other-restaurant access, replay, transaction rollback, commit-time revocation and last-restaurant session/device revocation');
 } finally { await runtime.dispose(); }

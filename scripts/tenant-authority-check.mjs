@@ -48,15 +48,14 @@ assertCheck(
 );
 
 assertCheck(
-  'employee deletion is tenant-safe and leaves the deleted profile route',
-  admin.includes('const hasOtherMembership = await hasOtherBusinessMembership(db, userId, businessId);') &&
-    admin.includes('const retainIdentity = hasOtherMembership || await hasPlatformStaffMembership(db, userId);') &&
-    admin.includes('if (!retainIdentity) {') &&
-    admin.includes('await db.batch(statements);') &&
-    admin.includes('targetUserId: retainIdentity ? userId : null') &&
+  'employee removal deactivates tenant access without deleting global identity or HR',
+  admin.includes('UPDATE business_users SET is_active = 0, updated_at = ?') &&
+    admin.includes('accountDeleted: false, membershipDeactivated: true') &&
+    admin.includes('const noOtherAccess = `NOT EXISTS') &&
+    !admin.includes('DELETE FROM users WHERE id = ?') &&
     admin.includes("throw redirect(303, '/admin/users');") &&
     employeeDetail.includes('use:enhance={deleteEmployee}'),
-  'Employee deletion must atomically remove only the current membership, preserve other-business and platform identities, avoid dangling audit references, and redirect to the staff roster.'
+  'Employee removal must retain the account, membership history and HR, revoke only its access, preserve other active restaurant/Staff sessions, and redirect to the staff roster.'
 );
 
 assertCheck(

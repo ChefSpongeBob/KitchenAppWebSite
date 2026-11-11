@@ -1,4 +1,5 @@
 import { sha256Hex } from '#lib/server/auth.ts';
+import { safeLogPath } from '#lib/server/observability.ts';
 
 type DB = App.RuntimeEnv['DB'];
 export const DIAGNOSTIC_ISSUE_DAYS = 14;
@@ -31,7 +32,7 @@ export type DiagnosticRequest = { locals: App.Locals; request: Request; url: URL
 export async function recordRequestDiagnostic(event: DiagnosticRequest, status: number, durationMs: number,
   options: { now?: number; random?: number } = {}) {
   const db = event.locals.DB;
-  const route = event.route?.id;
+  const route = safeLogPath(event.route?.id);
   if (!db || !route || !route.startsWith('/') || route.startsWith('/staff') || route.startsWith('/api/internal/') || route.startsWith('/_app/')) return;
   const businessId = event.locals.businessId ?? null; // Only established server-side membership supplies tenant context.
   const elapsed = Math.max(0, Math.min(300_000, Math.round(Number.isFinite(durationMs) ? durationMs : 0)));

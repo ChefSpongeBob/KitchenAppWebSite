@@ -166,9 +166,10 @@ await check('reopening an accepted invitation offers only its own still-active m
 
 await check('actual employee removal from B preserves the shared identity, sessions, owner membership and retained records in A', async t => {
   await assert.rejects(t.accept(),{location:'/register/welcome?onboarding=1'});
+  t.insert('sessions', {id:'other-session',user_id:'other',session_token_hash:'other-fixture-hash',created_at:now,last_seen_at:now,expires_at:now+3600});
   await assert.rejects(t.load('src/lib/server/admin.ts').deleteUser(formRequest({user_id:'shared'},'/admin/users'),
-    {...t.locals,userId:'other',userRole:'admin',businessId:'b',businessRole:'owner',businessPermissionTemplate:'owner'}),{location:'/admin/users'});
-  assert.equal(t.sqlite.prepare("SELECT COUNT(*) n FROM business_users WHERE business_id='b' AND user_id='shared'").get().n,0);
+    {...t.locals,userId:'other',sessionId:'other-session',userRole:'admin',businessId:'b',businessRole:'owner',businessPermissionTemplate:'owner'}),{location:'/admin/users'});
+  assert.equal(t.sqlite.prepare("SELECT is_active FROM business_users WHERE business_id='b' AND user_id='shared'").get().is_active,0);
   assert.equal(t.sqlite.prepare("SELECT role FROM business_users WHERE business_id='a' AND user_id='shared'").get().role,'owner');
   assert.equal(t.sqlite.prepare("SELECT password_hash FROM users WHERE id='shared'").get().password_hash,'unchanged-fixture-hash');
   assert.equal(t.sqlite.prepare("SELECT revoked_at FROM sessions WHERE id='shared-session'").get().revoked_at,null);
