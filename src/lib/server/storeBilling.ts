@@ -395,6 +395,7 @@ export async function upsertPendingStoreEntitlement(
         status = 'pending_verification',
         raw_payload_json = excluded.raw_payload_json,
         updated_at = excluded.updated_at
+      WHERE business_store_entitlements.verified_at IS NULL
     `
 		)
 		.bind(

@@ -4,7 +4,7 @@ import { ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieOptions } from '#lib/ser
 import { prepareEmployeeOnboardingPacket } from '#lib/server/admin.ts';
 import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { normalizeBusinessRole } from '#lib/server/permissions.ts';
-import { getBusinessTrialAccess } from '#lib/server/trial.ts';
+import { getBusinessTrialAccess, CURRENT_STORE_PLAN_ACCESS_SQL } from '#lib/server/trial.ts';
 import { hashedAuditValue, getRequestIpAddress } from '#lib/server/security.ts';
 import { recordOperationalEventBestEffort } from '#lib/server/operationalEvents.ts';
 import { isCalendarDate } from '#lib/timeZones.ts';
@@ -93,6 +93,7 @@ export async function acceptExistingAccountInvitation(event: {
     JOIN businesses b ON b.id = i.business_id
     JOIN business_trials billing ON billing.business_id = i.business_id AND billing.status IN ('paid', 'active')
     WHERE i.id = ? AND i.invite_code = ? AND i.used_at IS NULL AND i.revoked_at IS NULL
+      AND ${CURRENT_STORE_PLAN_ACCESS_SQL}
       AND (i.expires_at IS NULL OR i.expires_at >= ?)
       AND i.role = ? AND i.permission_template = ? AND i.position_id IS ? AND i.onboarding_required = ? AND i.employment_type = ?
       AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = ? AND s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at >= ?)

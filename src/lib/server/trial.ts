@@ -7,6 +7,17 @@ type D1 = App.RuntimeEnv['DB'];
 
 const SEVEN_DAYS_SECONDS = 60 * 60 * 24 * 7;
 
+// Administrative grants (including the pilot) have no verified store plan. Once
+// store-managed, access needs a current verified plan, even if a webhook is late.
+const currentStorePlanAtTimeSql = `(NOT EXISTS (SELECT 1 FROM business_store_entitlements e
+  WHERE e.business_id = billing.business_id AND e.plan_tier IS NOT NULL AND e.verified_at IS NOT NULL)
+  OR EXISTS (SELECT 1 FROM business_store_entitlements e
+    WHERE e.business_id = billing.business_id AND e.plan_tier IN ('starter', 'growth', 'enterprise')
+      AND e.verified_at > 0 AND e.status IN ('active', 'grace_period')
+      AND typeof(COALESCE(e.expires_at, e.current_period_end)) = 'integer'
+      AND COALESCE(e.expires_at, e.current_period_end) > ?))`;
+export const CURRENT_STORE_PLAN_ACCESS_SQL = currentStorePlanAtTimeSql.replace('?', 'unixepoch()');
+
 
 let trialSchemaEnsured = false;
 let trialSchemaPromise: Promise<void> | null = null;
@@ -513,17 +524,19 @@ export async function getBusinessTrialAccess(
 	const trial = await db
 		.prepare(
 			`
-      SELECT status, trial_ends_at, denial_reason
-      FROM business_trials
-      WHERE business_id = ?
+      SELECT billing.status, billing.trial_ends_at, billing.denial_reason,
+        ${currentStorePlanAtTimeSql} AS store_access
+      FROM business_trials billing
+      WHERE billing.business_id = ?
       LIMIT 1
     `
 		)
-		.bind(businessId)
+		.bind(now, businessId)
 		.first<{
 			status: TrialStatus;
 			trial_ends_at: number;
 			denial_reason: string | null;
+			store_access: number;
 		}>();
 
 	if (!trial) {
@@ -538,6 +551,11 @@ export async function getBusinessTrialAccess(
 	}
 
 	if (trial.status === 'paid' || trial.status === 'active') {
+		if (!trial.store_access) return {
+			mode: 'past_due', allowApp: false, shouldPurge: false,
+			trialEndsAt: trial.trial_ends_at, secondsRemaining: 0,
+			denialReason: 'billing_entitlement_inactive'
+		};
 		return {
 			mode: 'active',
 			allowApp: true,

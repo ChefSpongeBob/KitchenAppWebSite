@@ -97,6 +97,12 @@ await check('an invite revoked during hashing cannot create an account or member
 await check('a restaurant losing paid access during hashing cannot accept a new account', async t => {
   assert.equal((await t.act()).status, 409); t.unchanged();
 }, { afterHash: ({ sqlite }) => sqlite.exec("UPDATE business_trials SET status='expired' WHERE business_id='a'") });
+await check('a verified store plan revoked during hashing cannot create an invited account against cached active billing', async t => {
+  t.insert('business_store_entitlements',{id:'verified-plan',business_id:'a',owner_user_id:'owner-a',store:'google_play',
+    product_id:'isolated.plan',entitlement_key:'plan.fixture',plan_tier:'growth',status:'active',verified_at:now-10,
+    expires_at:now+3600,created_at:now,updated_at:now});
+  assert.equal((await t.act()).status,409);t.unchanged();
+}, {afterHash:({sqlite})=>sqlite.exec("UPDATE business_store_entitlements SET status='refunded' WHERE id='verified-plan'")});
 await check('missing HR encryption fails before committing an invited employee account', async t => {
   delete t.env.SENSITIVE_DATA_KEY;
   assert.equal((await t.act()).status, 503); t.unchanged();

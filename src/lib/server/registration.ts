@@ -2,7 +2,7 @@ import { prepareEmployeeOnboardingPacket, type AdminEmployeeProfile } from '#lib
 import { prepareDefaultBusinessPositions } from '#lib/server/business.ts';
 import { hashSessionToken } from '#lib/server/auth.ts';
 import { hashedAuditValue, getRequestIpAddress } from '#lib/server/security.ts';
-import { prepareBusinessTrial } from '#lib/server/trial.ts';
+import { prepareBusinessTrial, CURRENT_STORE_PLAN_ACCESS_SQL } from '#lib/server/trial.ts';
 import { prepareStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
 import { prepareLegalAgreementAcceptance, LIABILITY_AGREEMENT_KEY, LIABILITY_AGREEMENT_VERSION } from '#lib/server/legal.ts';
 import { normalizeBusinessRole } from '#lib/server/permissions.ts';
@@ -54,6 +54,7 @@ export async function prepareNewAccountRegistration(db: DB, options: {
     JOIN businesses b ON b.id = i.business_id
     JOIN business_trials billing ON billing.business_id = i.business_id AND billing.status IN ('paid', 'active')
     WHERE i.id = ? AND i.business_id = ? AND i.invite_code = ? AND i.email_normalized = ?
+      AND ${CURRENT_STORE_PLAN_ACCESS_SQL}
       AND i.used_at IS NULL AND i.revoked_at IS NULL AND (i.expires_at IS NULL OR i.expires_at >= unixepoch())
       AND b.status IN ('active', 'trialing', 'past_due', 'pending_payment')
       AND i.role IS ? AND i.permission_template IS ? AND i.position_id IS ?

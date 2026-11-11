@@ -126,6 +126,16 @@ await check('anonymous and wrong identities cannot accept, and an existing membe
   assert.equal(t.sqlite.prepare("SELECT is_active FROM business_users WHERE business_id='b' AND user_id='shared'").get().is_active, 0);
 });
 
+await check('a store-plan revocation at invitation commit cannot be bypassed by cached active billing', async t => {
+  t.insert('business_store_entitlements',{id:'verified-plan',business_id:'b',owner_user_id:'other',store:'google_play',
+    product_id:'isolated.plan',entitlement_key:'plan.fixture',plan_tier:'growth',status:'active',verified_at:now-10,
+    expires_at:now+3600,created_at:now,updated_at:now});
+  const raced={...t.db,async batch(statements){t.sqlite.exec("UPDATE business_store_entitlements SET status='refunded' WHERE id='verified-plan'");return t.db.batch(statements);}};
+  assert.equal((await t.accept({DB:raced,env:{...t.env,DB:raced}})).status,409);
+  assert.equal(t.sqlite.prepare("SELECT COUNT(*) n FROM business_users WHERE business_id='b' AND user_id='shared'").get().n,0);
+  assert.equal(t.sqlite.prepare("SELECT used_at FROM business_invites WHERE id='invite-b'").get().used_at,null);
+});
+
 for (const [role, required, employment] of [['owner',0,'employee'],['owner',1,'employee'],['external',1,'contractor'],['manager',1,'employee']]) {
   await check(`${role} / ${employment} preserves optional-owner and contractor packet choices`, async t => {
     await assert.rejects(t.accept(), { location: `/register/welcome?onboarding=${required && employment!=='contractor'?'1':'0'}` });

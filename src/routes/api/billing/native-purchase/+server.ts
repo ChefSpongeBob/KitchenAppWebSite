@@ -9,7 +9,7 @@ import {
 	upsertPendingStoreEntitlement
 } from '#lib/server/storeBilling.ts';
 import { upsertStoreBillingPlaceholder } from '#lib/server/storeBilling.ts';
-import { verifyStorePurchase } from '#lib/server/storeVerification.ts';
+import { isStoreVerificationConfigured, verifyStorePurchase } from '#lib/server/storeVerification.ts';
 import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
 import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
 
@@ -35,7 +35,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	let body: Record<string, unknown>;
 	try {
-		body = (await request.json()) as Record<string, unknown>;
+		const parsed: unknown = await request.json();
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			return json({ ok: false, error: 'Invalid purchase payload.' }, { status: 400 });
+		}
+		body = parsed as Record<string, unknown>;
 	} catch {
 		return json({ ok: false, error: 'Invalid purchase payload.' }, { status: 400 });
 	}
@@ -57,6 +61,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		const product = await readStoreProduct(locals.DB, store, productId);
 		if (!product) {
 			return json({ ok: false, error: 'Unknown store product.' }, { status: 400 });
+		}
+		const env = locals.env ?? ({ DB: locals.DB } as App.RuntimeEnv);
+		if (!isStoreVerificationConfigured(env, store)) {
+			return json({ ok: false, status: 'pending_verification', message: 'Store verification is not configured yet.' },
+				{ status: 202, headers: { 'cache-control': 'no-store' } });
 		}
 		const sensitiveToken = purchaseToken || originalTransactionId || transactionId;
 		const tokenHash = sensitiveToken ? await sha256Hex(sensitiveToken) : null;
@@ -91,7 +100,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			rawPayload: eventPayload
 		});
 
-		const env = locals.env ?? ({ DB: locals.DB } as App.RuntimeEnv);
 		const verification = await verifyStorePurchase(env, {
 			store,
 			productId,

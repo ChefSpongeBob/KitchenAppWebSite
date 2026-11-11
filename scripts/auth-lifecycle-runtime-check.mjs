@@ -101,6 +101,13 @@ const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), source
       await raw.prepare("UPDATE business_trials SET status='trialing',trial_ends_at=? WHERE business_id='bob-business'").bind(now-1).run();
       return Response.json(await getBusinessTrialAccess(db,'bob-business'));
     }
+    if(path==='/billing-window'){
+      await raw.prepare("UPDATE business_trials SET status='active' WHERE business_id='bob-business'").run();
+      await raw.prepare("INSERT INTO business_store_entitlements(id,business_id,owner_user_id,store,product_id,entitlement_key,plan_tier,status,verified_at,expires_at,created_at,updated_at) VALUES('billing-fixture','bob-business','bob','google_play','fixture.plan','plan.fixture','growth','active',?,?,?,?) ON CONFLICT(id) DO UPDATE SET expires_at=excluded.expires_at")
+        .bind(now-10,url.searchParams.has('expired')?now-1:now+3600,now,now).run();
+      return Response.json({access:await getBusinessTrialAccess(db,'bob-business'),
+        cached:await raw.prepare("SELECT status FROM business_trials WHERE business_id='bob-business'").first()});
+    }
     if(path==='/reset'||path==='/login'){
       const fields=path==='/reset'?{password,confirm_password:password}:{email:'alice@example.invalid',password:'Isolated-password-123!'};
       const body=new URLSearchParams(fields),headers={origin:'https://criminiops.com',...(url.searchParams.has('native')?{'x-crimini-native':'1'}:{})};
@@ -178,7 +185,12 @@ try {
   const lastRestaurantRemoval=await request('/removal-inspect');assert.equal(lastRestaurantRemoval.membership.is_active,0);
   assert.ok(lastRestaurantRemoval.session.revoked_at);assert.ok(lastRestaurantRemoval.device.revoked_at);
   for(const key of ['identity','profile','vault'])assert.deepEqual(lastRestaurantRemoval[key],beforeFailedRemoval[key]);
+  assert.equal((await request('/billing-window')).access.allowApp,true);
+  const expiredStore=await request('/billing-window?expired=1');assert.equal(expiredStore.access.allowApp,false);
+  assert.equal(expiredStore.access.shouldPurge,false);assert.equal(expiredStore.cached.status,'active');
+  assert.equal((await request('/billing-window')).access.allowApp,true);
   assert.deepEqual((await request('/inspect')).foreignKeys, []);
   console.log('PASS actual Workers/D1: reset rollback/replay/concurrency, stale-password login rejection, account-switch preservation, native/browser cookies, atomic parallel abuse limits and non-destructive cancellation/expiry');
   console.log('PASS actual Workers/D1 employee removal: retained identity/HR, other-restaurant access, replay, transaction rollback, commit-time revocation and last-restaurant session/device revocation');
+  console.log('PASS actual Workers/D1 store access: expired cached-active plans deny access without deletion; a current verified period permits it');
 } finally { await runtime.dispose(); }
