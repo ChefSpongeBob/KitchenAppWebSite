@@ -26,6 +26,7 @@ function load(path, deps, extraSource = '') {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText;
   new Function('require', 'exports', source)(name => {
+    if (name === '#lib/server/platformStaffForm.ts') return staffForm;
     if (!(name in deps)) throw Error(`Unexpected dependency ${name}`);
     return deps[name];
   }, exports);
@@ -84,6 +85,7 @@ assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM sessions').get().n, 2);
 sqlite.exec(`CREATE TABLE account_audit_logs(id TEXT PRIMARY KEY,business_id TEXT,action TEXT,actor_user_id TEXT,target_user_id TEXT,created_at INTEGER);
 CREATE TABLE announcement_history(id TEXT PRIMARY KEY,business_id TEXT,content TEXT,created_by TEXT,created_at INTEGER);`);
 sqlite.exec(readFileSync('migrations/0113_staff_diagnostics_dashboard.sql','utf8'));
+sqlite.exec(readFileSync('migrations/0117_staff_reservation_versions.sql','utf8'));
 sqlite.prepare('INSERT INTO platform_staff_step_up VALUES (?,?,1,?,?)').run('owner-session','owner',now,now);
 assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
 console.log('PASS cleanup removes old credentials/challenges, requires fresh confirmation, and preserves identities, sessions, memberships, and audit');
@@ -94,7 +96,12 @@ function statement(sql) {
     bind(...bindings) { values = bindings; return this; },
     async first() { return sqlite.prepare(sql).get(...values) ?? null; },
     async all() { return { results: sqlite.prepare(sql).all(...values), success: true }; },
-    async run() { return { success: true, meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }; }
+    async run() {
+      const statement = sqlite.prepare(sql), before = sqlite.prepare('SELECT total_changes() AS n').get().n;
+      const rows = statement.columns().length ? statement.all(...values) : null;
+      if (!rows) statement.run(...values);
+      return { success: true, results: rows ?? [], meta: { changes: Number(sqlite.prepare('SELECT total_changes() AS n').get().n - before) } };
+    }
   };
 }
 const db = { prepare: statement, async batch(statements) {
@@ -104,6 +111,8 @@ const db = { prepare: statement, async batch(statements) {
 } };
 const kit = { error: (status, message) => { throw Object.assign(Error(message), { status, body: { message } }); } };
 const actionKit = { ...kit, fail: (status, data) => ({ status, data }), isHttpError: err => Boolean(err.status) };
+const staffForm = load('src/lib/server/platformStaffForm.ts', { '@sveltejs/kit': actionKit });
+const reservationVersion = serial => sqlite.prepare('SELECT reservation_id FROM iot_device_reservations WHERE serial=?').get(serial).reservation_id;
 let maintenanceAllowed = true;
 const maintenanceSecurity = { checkRateLimit: async () => ({ allowed: maintenanceAllowed }),
   rateLimitFailure: message => actionKit.fail(429, { error: message }) };
@@ -140,7 +149,7 @@ const provisioning = load('src/lib/server/temperatureDeviceProvisioning.ts', {
 await assert.rejects(provisioning.claimTemperatureGateway(db, { businessId: 'b', serial: 'gateway-a', displayName: 'Wrong' }), /reserved for another business/);
 const gateway = await provisioning.claimTemperatureGateway(db, { businessId: 'a', serial: 'gateway-a', displayName: 'Walk-in Gateway', createdBy: 'owner' });
 assert.equal(sqlite.prepare('SELECT business_id FROM iot_devices WHERE id=?').get(gateway.id).business_id, 'a');
-await assert.rejects(staff.releaseGatewayReservation(db, owner, 'gateway-a', 'Already used', 'owner-session'), { status: 409 });
+await assert.rejects(staff.releaseGatewayReservation(db, owner, 'gateway-a', 'a', reservationVersion('gateway-a'), 'Already used', 'owner-session'), { status: 409 });
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM iot_device_reservations WHERE serial='gateway-a'").get().n, 1);
 console.log('PASS reserved gateway only registers to its intended tenant; claimed reservations cannot be released');
 
@@ -149,7 +158,7 @@ await assert.rejects(staff.reserveGateway(db, owner, 'gateway-b', 'b', 'Order B'
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM iot_device_reservations WHERE serial='gateway-b'").get().n, 0);
 sqlite.exec('DROP TRIGGER test_audit_failure');
 await staff.reserveGateway(db, owner, 'gateway-b', 'b', 'Order B', 'owner-session');
-await staff.releaseGatewayReservation(db, owner, 'gateway-b', 'Order cancelled', 'owner-session');
+await staff.releaseGatewayReservation(db, owner, 'gateway-b', 'b', reservationVersion('gateway-b'), 'Order cancelled', 'owner-session');
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM iot_device_reservations WHERE serial='gateway-b'").get().n, 0);
 assert.throws(() => sqlite.exec("UPDATE platform_staff_members SET is_active=0 WHERE user_id='owner'"), /active platform owner/);
 sqlite.exec("DELETE FROM platform_staff_step_up WHERE user_id='owner'");
@@ -456,7 +465,7 @@ maintenanceAllowed = true;
 assert.equal((await inventory.actions.reserve(maintenanceEvent('/staff/equipment', { ...reservationFields, confirmed: 'yes', reason: '' }))).status, 400);
 assert.equal((await inventory.actions.reserve(maintenanceEvent('/staff/equipment', { ...reservationFields, confirmed: 'yes' }))).success, true);
 assert.equal((await inventory.actions.release(maintenanceEvent('/staff/equipment', {
-  serial: 'gateway-b', reason: 'Shipment cancelled', confirmed: 'yes'
+  serial: 'gateway-b', business_id: 'b', reservation_id: reservationVersion('gateway-b'), reason: 'Shipment cancelled', confirmed: 'yes'
 }))).success, true);
 sqlite.exec("UPDATE users SET is_active=0 WHERE id='manager'");
 const revokeInactive = { user_id: 'manager', role: 'support', active: 0, revision: 2, reason: 'Offboard inactive identity', confirmed: 'yes' };
@@ -774,7 +783,7 @@ sqlite.exec(`UPDATE platform_staff_members SET staff_role='owner' WHERE user_id=
   UPDATE users SET is_active=0 WHERE id='backup-owner';`);
 assert.throws(() => sqlite.exec("UPDATE platform_staff_members SET staff_role='support' WHERE user_id='owner'"), /active platform owner/);
 sqlite.exec(`UPDATE users SET is_active=1 WHERE id='backup-owner';
-  INSERT INTO iot_device_reservations VALUES('gateway-b','b','backup-owner',1);
+  INSERT INTO iot_device_reservations(serial,business_id,reserved_by,created_at) VALUES('gateway-b','b','backup-owner',1);
   DELETE FROM users WHERE id='backup-owner';`);
 assert.equal(sqlite.prepare("SELECT reserved_by FROM iot_device_reservations WHERE serial='gateway-b'").get().reserved_by, null);
 assert.equal(sqlite.prepare("SELECT business_id FROM iot_device_reservations WHERE serial='gateway-b'").get().business_id, 'b');

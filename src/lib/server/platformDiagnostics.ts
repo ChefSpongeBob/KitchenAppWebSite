@@ -7,6 +7,7 @@ export const DIAGNOSTIC_METRIC_DAYS = 7;
 export const SLOW_REQUEST_MS = 2000;
 export const SUCCESS_SAMPLE_RATE = 0.01;
 const publicErrorTimes = new Map<string, number>();
+const requestMethods = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
 
 const creatorOperations = new Set(['add_list_item', 'update_list_item', 'delete_list_item', 'add_checklist_item',
   'update_checklist_item', 'delete_checklist_item', 'update_list_section', 'delete_list_section',
@@ -50,7 +51,10 @@ export async function recordRequestDiagnostic(event: DiagnosticRequest, status: 
     publicErrorTimes.set(route, now);
   }
   const bucket = Math.floor(now / 3600) * 3600;
-  const operation = [...event.url.searchParams.keys()].map(key => key.replace(/^\//, '')).find(key => creatorOperations.has(key)) ?? event.request.method;
+  const namedAction = event.request.method === 'POST' ? [...event.url.searchParams.keys()]
+    .map(key => key.replace(/^\//, '')).find(key => creatorOperations.has(key)) : null;
+  const operation = namedAction ??
+    (requestMethods.has(event.request.method) ? event.request.method : 'OTHER');
   const area = diagnosticArea(route, operation);
   const statements = [];
   if (kind) {

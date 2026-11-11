@@ -29,7 +29,8 @@
             <details><summary>{device.reserved_business_id ? 'Release Reservation' : 'Reserve Gateway'}</summary>
               <form method="POST" action={device.reserved_business_id ? '?/release' : '?/reserve'} use:enhance class="staff-toolbar">
                 <input type="hidden" name="serial" value={device.serial} />
-                {#if data.business}<input type="hidden" name="business_id" value={data.business.id} />{/if}
+                <input type="hidden" name="business_id" value={device.reserved_business_id ?? data.business?.id ?? ''} />
+                {#if device.reservation_id}<input type="hidden" name="reservation_id" value={device.reservation_id} />{/if}
                 <label>Reason<input name="reason" required maxlength="200" /></label>
                 <label class="staff-confirm"><input type="checkbox" name="confirmed" value="yes" required />Confirm equipment change</label>
                 <button type="submit" disabled={!data.changesUnlocked}>Confirm</button>

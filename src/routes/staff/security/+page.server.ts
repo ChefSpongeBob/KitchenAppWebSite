@@ -2,6 +2,7 @@ import { fail, isHttpError, isRedirect, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getSessionCookieName, getSessionCookieOptions } from '#lib/server/authCookies.ts';
 import { checkRateLimit, rateLimitFailure } from '#lib/server/security.ts';
+import { readStaffForm } from '#lib/server/platformStaffForm.ts';
 import { loadStaffStepUp, requirePlatformStaff, requireStaffStepUp, staffReturnPath } from '#lib/server/platformStaff.ts';
 import { beginStaffEmailChallenge, maskStaffEmail, pendingStaffEmailChallenge, staffEmailIdentity, verifyStaffEmailChallenge } from '#lib/server/platformStaffEmail.ts';
 
@@ -19,7 +20,7 @@ export const actions: Actions = {
   default: async ({ locals, request, cookies, url }) => {
     const staff = await requirePlatformStaff(locals, undefined, true);
     if (!locals.sessionId) return fail(401, { error: 'Sign in again.' });
-    const form = await request.formData();
+    const form = await readStaffForm(request);
     const intent = String(form.get('intent') ?? '');
     if (!['send', 'change_email', 'verify'].includes(intent)) return fail(400, { error: 'Choose a verification option.' });
     const verifying = intent === 'verify';

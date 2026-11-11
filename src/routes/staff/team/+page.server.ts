@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { loadStaffStepUp, requirePlatformStaff, requireStaffStepUp, staffPageNumber, type PlatformStaffRole } from '#lib/server/platformStaff.ts';
 import { changeStaffMembership } from '#lib/server/platformStaffAdministration.ts';
 import { checkRateLimit, rateLimitFailure } from '#lib/server/security.ts';
+import { readStaffForm } from '#lib/server/platformStaffForm.ts';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requirePlatformStaff(locals, ['owner']);
@@ -21,7 +22,7 @@ export const actions: Actions = {
     const limit = await checkRateLimit(locals.DB, { action: 'staff-membership-change', identifier: staff.userId,
       limit: 20, windowSeconds: 300, blockSeconds: 60 });
     if (!limit.allowed) return rateLimitFailure('Please wait before changing staff access.');
-    const form = await request.formData();
+    const form = await readStaffForm(request);
     if (form.get('confirmed') !== 'yes') return fail(400, { error: 'Confirm the staff access change.' });
     const revision = String(form.get('revision') ?? '');
     const active = String(form.get('active') ?? '');

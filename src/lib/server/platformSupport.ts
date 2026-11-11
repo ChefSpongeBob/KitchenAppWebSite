@@ -10,7 +10,8 @@ type RequestRow = { id: string; business_id: string; business_name: string; requ
 const requestColumns = 'r.id, r.business_id, b.name AS business_name, r.requester_user_id, r.subject, r.category, r.priority, r.status, r.revision, r.source, r.created_at, r.updated_at';
 const customerAuthority = `EXISTS (SELECT 1 FROM business_users bu JOIN users u ON u.id = bu.user_id
   JOIN sessions s ON s.user_id = u.id WHERE bu.business_id = ? AND bu.user_id = ? AND bu.is_active = 1
-    AND COALESCE(u.is_active, 1) = 1 AND s.id = ? AND s.revoked_at IS NULL AND s.expires_at > ?)`;
+    AND COALESCE(u.is_active, 1) = 1 AND s.id = ? AND s.revoked_at IS NULL AND s.expires_at > ?
+    AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL)))`;
 const text = (value: unknown, maxLength: number, multiline = false) => normalizePlainTextInput(String(value ?? ''), { maxLength, multiline });
 
 export async function readSupportForm(request: Request) {

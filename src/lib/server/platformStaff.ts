@@ -14,25 +14,38 @@ export function staffReturnPath(value: string | null) {
   } catch { return '/staff'; }
 }
 
-export async function loadStaffStepUp(db: DB, userId: string, sessionId: string, now = Math.floor(Date.now() / 1000), maxAge = STAFF_STEP_UP_SECONDS) {
-  return db.prepare(`SELECT p.verified_at FROM platform_staff_step_up p
+async function verifiedStaff(db: DB, userId: string, sessionId: string, now: number, maxAge: number) {
+  return db.prepare(`SELECT p.verified_at, m.user_id, m.staff_role FROM platform_staff_step_up p
     JOIN platform_staff_members m ON m.user_id = p.user_id AND m.revision = p.membership_revision
     JOIN sessions s ON s.id = p.session_id AND s.user_id = p.user_id
     JOIN users u ON u.id = p.user_id
     WHERE p.user_id = ? AND p.session_id = ? AND m.is_active = 1 AND COALESCE(u.is_active, 1) = 1
+      AND m.staff_role IN ('owner', 'support', 'equipment')
       AND p.email_verified_at = p.verified_at
       AND s.revoked_at IS NULL AND s.expires_at > ? AND p.verified_at > ? AND p.verified_at <= ?
       AND (s.device_id IS NULL OR EXISTS (SELECT 1 FROM devices d WHERE d.id = s.device_id AND d.user_id = s.user_id AND d.revoked_at IS NULL))
     LIMIT 1`).bind(userId, sessionId, now, now - maxAge, now)
-    .first<{ verified_at: number }>();
+    .first<{ verified_at: number; user_id: string; staff_role: PlatformStaffRole }>();
+}
+
+export async function loadStaffStepUp(db: DB, userId: string, sessionId: string, now = Math.floor(Date.now() / 1000), maxAge = STAFF_STEP_UP_SECONDS) {
+  const row = await verifiedStaff(db, userId, sessionId, now, maxAge);
+  return row ? { verified_at: row.verified_at } : null;
+}
+
+async function requireVerifiedStaff(locals: App.Locals, roles: PlatformStaffRole[] | undefined, maxAge: number) {
+  if (!locals.userId) error(401, 'Sign in required.');
+  if (!locals.DB) error(503, 'Staff console unavailable.');
+  if (!locals.sessionId) error(403, 'Staff verification required.');
+  // Role and email proof come from one snapshot, not independently changing reads.
+  const row = await verifiedStaff(locals.DB, locals.userId, locals.sessionId, Math.floor(Date.now() / 1000), maxAge);
+  if (!row) error(403, 'Staff verification required.');
+  if (roles && !roles.includes(row.staff_role)) error(403, 'Staff access required.');
+  return { userId: row.user_id, role: row.staff_role };
 }
 
 export async function requireStaffStepUp(locals: App.Locals, roles?: PlatformStaffRole[]) {
-  const staff = await requirePlatformStaff(locals, roles);
-  if (!locals.sessionId || !await loadStaffStepUp(locals.DB, staff.userId, locals.sessionId)) {
-    error(403, 'Verify your email in Security before making changes.');
-  }
-  return staff;
+  return requireVerifiedStaff(locals, roles, STAFF_STEP_UP_SECONDS);
 }
 
 export async function hasPlatformStaffMembership(db: DB, userId: string) {
@@ -60,13 +73,11 @@ export async function findPlatformStaff(db: DB, userId: string): Promise<Platfor
 }
 
 export async function requirePlatformStaff(locals: App.Locals, roles?: PlatformStaffRole[], allowUnverified = false) {
+  if (!allowUnverified) return requireVerifiedStaff(locals, roles, STAFF_SESSION_SECONDS);
   if (!locals.userId) error(401, 'Sign in required.');
   if (!locals.DB) error(503, 'Staff console unavailable.');
   const staff = await findPlatformStaff(locals.DB, locals.userId);
   if (!staff || (roles && !roles.includes(staff.role))) error(403, 'Staff access required.');
-  if (!allowUnverified && (!locals.sessionId || !await loadStaffStepUp(locals.DB, staff.userId, locals.sessionId, undefined, STAFF_SESSION_SECONDS))) {
-    error(403, 'Staff verification required.');
-  }
   return staff;
 }
 
@@ -107,12 +118,12 @@ export async function reserveGateway(db: DB, staff: PlatformStaff, serial: strin
   const now = Math.floor(Date.now() / 1000);
   // Both the authority and current equipment state are checked again in the mutation.
   await db.batch([
-    db.prepare(`INSERT INTO iot_device_reservations (serial, business_id, reserved_by, created_at)
-      SELECT i.serial, b.id, ?, ? FROM iot_device_inventory i JOIN businesses b ON b.id = ?
+    db.prepare(`INSERT INTO iot_device_reservations (serial, business_id, reserved_by, created_at, reservation_id)
+      SELECT i.serial, b.id, ?, ?, ? FROM iot_device_inventory i JOIN businesses b ON b.id = ?
       WHERE i.serial = ? AND i.device_type = 'sensor_gateway' AND i.claim_status = 'available'
         AND i.claimed_business_id IS NULL AND i.claimed_iot_device_id IS NULL AND b.status = 'active'
         AND ${STAFF_CHANGE_AUTHORITY_SQL}
-    `).bind(staff.userId, now, businessId, serial, ...staffChangeBindings(staff, sessionId, now, ['owner', 'equipment'])),
+    `).bind(staff.userId, now, crypto.randomUUID(), businessId, serial, ...staffChangeBindings(staff, sessionId, now, ['owner', 'equipment'])),
     db.prepare(`INSERT INTO platform_staff_audit (id, actor_user_id, action, business_id, device_serial, reason, created_at)
       SELECT ?, ?, 'gateway_reserved', ?, ?, ?, ? WHERE changes() = 1
     `).bind(crypto.randomUUID(), staff.userId, businessId, serial, reason, now)
@@ -121,22 +132,25 @@ export async function reserveGateway(db: DB, staff: PlatformStaff, serial: strin
   });
 }
 
-export async function releaseGatewayReservation(db: DB, staff: PlatformStaff, serial: string, reason: string, sessionId: string) {
+export async function releaseGatewayReservation(db: DB, staff: PlatformStaff, serial: string, businessId: string,
+  reservationId: string, reason: string, sessionId: string) {
   if (!['owner', 'equipment'].includes(staff.role)) error(403, 'Equipment access required.');
-  if (!/^[a-z0-9][a-z0-9_-]{0,30}$/.test(serial) || !reason || reason.length > 200) error(400, 'Enter a reason.');
+  if (!/^[a-z0-9][a-z0-9_-]{0,30}$/.test(serial) || !businessId || businessId.length > 80 ||
+      !/^[a-f0-9-]{32,36}$/.test(reservationId) || !reason || reason.length > 200) error(400, 'Refresh the reservation and enter a reason.');
   const now = Math.floor(Date.now() / 1000);
   const auditId = crypto.randomUUID();
   const results = await db.batch([
     db.prepare(`INSERT INTO platform_staff_audit (id, actor_user_id, action, business_id, device_serial, reason, created_at)
       SELECT ?, ?, 'gateway_reservation_released', r.business_id, r.serial, ?, ?
       FROM iot_device_reservations r JOIN iot_device_inventory i ON i.serial = r.serial
-      WHERE r.serial = ? AND i.claim_status = 'available' AND i.claimed_business_id IS NULL
+      WHERE r.serial = ? AND r.business_id = ? AND r.reservation_id = ?
+        AND i.claim_status = 'available' AND i.claimed_business_id IS NULL
         AND i.claimed_iot_device_id IS NULL AND NOT EXISTS (SELECT 1 FROM iot_devices d WHERE d.external_device_id = r.serial)
         AND ${STAFF_CHANGE_AUTHORITY_SQL}
-    `).bind(auditId, staff.userId, reason, now, serial, ...staffChangeBindings(staff, sessionId, now, ['owner', 'equipment'])),
-    db.prepare(`DELETE FROM iot_device_reservations WHERE serial = ?
+    `).bind(auditId, staff.userId, reason, now, serial, businessId, reservationId, ...staffChangeBindings(staff, sessionId, now, ['owner', 'equipment'])),
+    db.prepare(`DELETE FROM iot_device_reservations WHERE serial = ? AND business_id = ? AND reservation_id = ?
       AND EXISTS (SELECT 1 FROM platform_staff_audit WHERE id = ? AND action = 'gateway_reservation_released')
-    `).bind(serial, auditId)
+    `).bind(serial, businessId, reservationId, auditId)
   ]);
   if (results[1].meta.changes !== 1) error(409, 'Only an unused reservation can be released.');
 }

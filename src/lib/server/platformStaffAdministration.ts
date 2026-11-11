@@ -20,6 +20,7 @@ export async function changeStaffMembership(db: DB, actor: PlatformStaff, sessio
     error(400, 'Another platform owner must change your access.');
   }
   const now = Math.floor(Date.now() / 1000);
+  const auditId = crypto.randomUUID();
   const authority = staffChangeBindings(actor, sessionId, now, ['owner', 'owner']);
   const mutation = input.revision === 0
     ? db.prepare(`INSERT INTO platform_staff_members (user_id, staff_role, is_active, granted_by, created_at, updated_at)
@@ -31,13 +32,15 @@ export async function changeStaffMembership(db: DB, actor: PlatformStaff, sessio
         WHERE user_id = ? AND revision = ? AND ${STAFF_CHANGE_AUTHORITY_SQL}
           AND (? = 0 OR EXISTS (SELECT 1 FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1))`)
       .bind(input.role, input.active, now, userId, input.revision, ...authority, input.active, userId);
-  const results = await db.batch([
+  const results = await db.batch<{ id: string }>([
     mutation,
     db.prepare(`INSERT INTO platform_staff_audit (id, actor_user_id, target_user_id, action, reason, created_at)
       SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
-      .bind(crypto.randomUUID(), actor.userId, userId,
+      .bind(auditId, actor.userId, userId,
         input.revision === 0 ? 'staff_membership_added' : input.active === 0 ? 'staff_access_revoked' : 'staff_access_updated',
-        `${input.role}: ${input.reason}`, now)
+        `${input.role}: ${input.reason}`, now),
+    db.prepare('SELECT id FROM platform_staff_audit WHERE id = ?').bind(auditId)
   ]);
-  if (results[0].meta.changes !== 1) error(409, 'Access changed or verification expired. Refresh and try again.');
+  // D1 metadata includes trigger cleanup, so use the audit receipt from this batch.
+  if (results[2].results?.[0]?.id !== auditId) error(409, 'Access changed or verification expired. Refresh and try again.');
 }

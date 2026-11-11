@@ -100,6 +100,7 @@ const REQUIRED_CORE_INDEXES = [
 	'idx_staff_email_challenges_user_created',
 	'idx_staff_email_challenges_expiry',
 	'idx_iot_reservations_business',
+	'idx_iot_reservation_version',
 	'idx_businesses_staff_name',
 	'idx_business_users_business_active_role',
 	'idx_business_positions_business_active',
@@ -188,7 +189,7 @@ const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
 	platform_staff_email_challenges: ['session_id', 'user_id', 'challenge_id', 'membership_revision', 'session_token_hash',
 		'purpose', 'source_email', 'recipient_email', 'code_hash', 'created_at', 'expires_at', 'sent_at', 'attempts'],
 	platform_staff_audit: ['id', 'actor_user_id', 'target_user_id', 'action', 'business_id', 'device_serial', 'reason', 'created_at'],
-	iot_device_reservations: ['serial', 'business_id', 'reserved_by', 'created_at'],
+	iot_device_reservations: ['serial', 'business_id', 'reserved_by', 'created_at', 'reservation_id'],
 	schedule_weeks: [
 		'draft_initialized',
 		'draft_version',

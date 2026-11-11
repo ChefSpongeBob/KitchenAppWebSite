@@ -97,7 +97,7 @@
 		"db:tenant:ensure:remote": "node ./scripts/ensure-tenant-columns.mjs --remote",
 		"lint": "prettier --check .",
 		"format": "prettier --write .",
-		"test:platform-staff": "node ./scripts/platform-staff-check.mjs",
+		"test:platform-staff": "node ./scripts/platform-staff-check.mjs && node ./scripts/staff-operations-behavior-check.mjs && node ./scripts/staff-operations-runtime-check.mjs",
 		"ops:bootstrap-platform-owner": "node ./scripts/bootstrap-platform-owner.mjs",
 		"test:workflow-behavior": "node ./scripts/workflow-behavior-check.mjs",
 		"db:restore:drill": "node ./scripts/restore-drill.mjs",

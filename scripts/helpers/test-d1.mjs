@@ -27,6 +27,7 @@ export function createTestD1(source) {
       sqlite.exec(readFileSync('migrations/0114_staff_operations_support.sql', 'utf8'));
       sqlite.exec(readFileSync('migrations/0115_business_time_zone.sql', 'utf8'));
       sqlite.exec(readFileSync('migrations/0116_checklist_completed_runs.sql', 'utf8'));
+      sqlite.exec(readFileSync('migrations/0117_staff_reservation_versions.sql', 'utf8'));
       sqlite.exec('COMMIT');
     } catch (error) { sqlite.exec('ROLLBACK'); throw error; }
   }
@@ -50,8 +51,12 @@ export function createTestD1(source) {
       },
       async run() {
         queryCount++;
-        const result = sqlite.prepare(sql).run(...values);
-        return { success: true, results: [], meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) } };
+        const statement = sqlite.prepare(sql);
+        const before = sqlite.prepare('SELECT total_changes() AS n').get().n;
+        const rows = statement.columns().length ? statement.all(...values) : null;
+        const result = rows ? null : statement.run(...values);
+        const changes = Number(sqlite.prepare('SELECT total_changes() AS n').get().n - before);
+        return { success: true, results: rows ?? [], meta: { changes, last_row_id: Number(result?.lastInsertRowid ?? 0) } };
       }
     };
     return statement;
