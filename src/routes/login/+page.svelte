@@ -34,18 +34,23 @@
 	let lastSeededEmail = '';
 	let submitting = false;
 	let clientError = '';
+	let securityWidget: TurnstileWidget | undefined;
 
 	const enhanceLogin: SubmitFunction = () => {
 		submitting = true;
 		clientError = '';
 
 		return async ({ result, update }) => {
-			submitting = false;
-			if (result.type === 'error') {
-				clientError = 'Sign in could not be completed. Try again.';
-				return;
+			try {
+				if (result.type === 'error') {
+					clientError = 'Sign in could not be completed. Try again.';
+					return;
+				}
+				await update();
+			} finally {
+				submitting = false;
+				if (result.type !== 'redirect') securityWidget?.reset();
 			}
-			await update();
 		};
 	};
 
@@ -142,7 +147,9 @@
 				</div>
 			</div>
 
-			<TurnstileWidget siteKey={turnstileSiteKey} />
+			{#key turnstileSiteKey}
+				<TurnstileWidget siteKey={turnstileSiteKey} bind:this={securityWidget} />
+			{/key}
 
 			<button type="submit" class="auth-button" disabled={submitting}>
 				{submitting ? 'Signing in...' : 'Sign in'}
