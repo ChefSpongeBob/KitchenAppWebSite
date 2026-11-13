@@ -281,9 +281,10 @@ expect('src/routes/admin/+page.server.ts', 'manager temperature exceptions use c
 );
 
 expect('src/routes/app/+page.svelte', 'dashboard suppresses old temperatures after a sensor goes offline', (source) =>
-  source.includes("node.connectionStatus === 'online'") &&
-  source.includes('node.temperature !== null') &&
-  source.includes('class="offline-reading temperature-history-trigger"') && source.includes('>Offline</button>')
+  source.includes(".filter((row) => row.connection_status === 'online' && row.temperature !== null)") &&
+  source.includes('.slice(0, 3)') &&
+  source.includes('No current readings') &&
+  source.includes('class="temperature-history-trigger"')
 );
 
 expect('firmware/arduino/CriminiTempGateway/CriminiTempGateway.ino', 'gateway hosts protected Wi-Fi setup for desktop and phone browsers', (source) =>

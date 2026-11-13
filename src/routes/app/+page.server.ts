@@ -9,7 +9,6 @@ import { requireBusinessId } from '#lib/server/tenant.ts';
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '#lib/server/userPreferences.ts';
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { loadLatestTemperatureSnapshots } from '#lib/server/temperatureMonitoring.ts';
-import { TEMPERATURE_REPORT_INTERVAL_SECONDS } from '#lib/temperatureTiming.ts';
 
 type HomeTask = {
   id: string;
@@ -24,13 +23,6 @@ type IdeaRow = {
   id: string;
   content: string;
   votes: number;
-};
-
-type TempRow = {
-  sensor_id: number;
-  temperature: number;
-  humidity_pct: number | null;
-  ts: number;
 };
 
 type MenuDoc = {
@@ -82,7 +74,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     locals.businessPermissionTemplate,
     locals.businessCapabilities
   );
-  const HOMEPAGE_TEMP_LIMIT = 240;
   if (!db) {
     return {
       isAdmin,
@@ -100,7 +91,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       menuDocs: [],
       topIdeas: [],
       nodeTemps: [],
-      tempSeries: { avg: [] },
       refreshedAt: Math.floor(Date.now() / 1000)
     };
   }
@@ -179,23 +169,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
           'today schedule'
         )
       : Promise.resolve([] as TodayShift[]);
-  const tempsPromise = featureAccess.temps
-    ? safeRows(
-        db
-          .prepare(
-            `
-            SELECT sensor_id, temperature, humidity_pct, ts
-            FROM temps
-            WHERE business_id = ?
-            ORDER BY ts DESC
-            LIMIT ?
-            `
-          )
-          .bind(businessId, HOMEPAGE_TEMP_LIMIT)
-          .all<TempRow>(),
-        'temperature preview'
-      )
-    : Promise.resolve({ results: [] as TempRow[] });
   const menuDocsPromise = featureAccess.menus
     ? safeRows(
         db
@@ -249,7 +222,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     user,
     taskResult,
     todaySchedule,
-    tempsResult,
     menuDocsResult,
     topIdeasResult,
     latestTemperatures
@@ -261,7 +233,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     userPromise,
     todayTasksPromise,
     todaySchedulePromise,
-    tempsPromise,
     menuDocsPromise,
     topIdeasPromise,
     latestTemperaturesPromise
@@ -273,21 +244,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const assignedCount = todayTasks.filter((task) => task.assigned_to === locals.userId).length;
   const unassignedCount = todayTasks.filter((task) => task.assigned_to === null).length;
 
-  const rows = tempsResult.results ?? [];
-  const nodeTemps = latestTemperatures.slice(0, 3);
-
-  const bucketAverages = new Map<number, { sum: number; count: number }>();
-  for (const row of rows) {
-    const bucket = Math.floor(row.ts / TEMPERATURE_REPORT_INTERVAL_SECONDS) * TEMPERATURE_REPORT_INTERVAL_SECONDS;
-    const current = bucketAverages.get(bucket) ?? { sum: 0, count: 0 };
-    current.sum += row.temperature;
-    current.count += 1;
-    bucketAverages.set(bucket, current);
-  }
-  const avg = Array.from(bucketAverages.entries())
-    .sort((a, b) => a[0] - b[0])
-    .slice(-24)
-    .map(([, value]) => Number((value.sum / value.count).toFixed(2)));
+  const nodeTemps = latestTemperatures
+    .filter((node) => node.connection_status === 'online' && node.temperature !== null)
+    .slice(0, 3);
 
   return {
     isAdmin,
@@ -313,7 +272,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       ts: r.connection_status === 'online' ? r.ts : null,
       connectionStatus: r.connection_status
     })),
-    tempSeries: { avg },
     refreshedAt: Math.floor(Date.now() / 1000)
   };
 };

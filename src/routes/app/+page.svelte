@@ -2,9 +2,7 @@
   import { goto } from '$app/navigation';
   import Layout from '#lib/components/ui/Layout.svelte';
   import SchoolOfFish from '#lib/components/ui/SchoolOfFish.svelte';
-  import TempGraph from '#lib/components/ui/TempGraph.svelte';
   import TemperatureHistory from '#lib/components/ui/TemperatureHistory.svelte';
-  import { TEMPERATURE_REPORT_INTERVAL_SECONDS } from '#lib/temperatureTiming.ts';
   import GuidedSpotlightTour from '#lib/components/ui/GuidedSpotlightTour.svelte';
   import { startVisiblePolling } from '#lib/client/polling.ts';
   import { formatScheduleTimeLabel } from '#lib/assets/schedule.ts';
@@ -72,7 +70,6 @@
     menuDocs?: MenuDoc[];
     topIdeas?: Idea[];
     nodeTemps?: NodeTemp[];
-    tempSeries?: Record<string, number[]>;
     refreshedAt?: number;
     featureAccess?: AppFeatureAccess;
     businessName?: string;
@@ -85,7 +82,6 @@
     placement?: 'top' | 'bottom' | 'left' | 'right';
   };
 
-  let series: Record<string, number[]> = data.tempSeries ?? { avg: [] };
   let isAdmin = data.isAdmin ?? false;
   let guided = data.guided ?? false;
   let showGuidedTour = guided;
@@ -111,7 +107,6 @@
   let lastIdeasRefresh = data.refreshedAt ?? Math.floor(Date.now() / 1000);
   const SAFE_TEMP_LOW_F = 30;
   const SAFE_TEMP_HIGH_F = 41;
-  const HOMEPAGE_TEMP_LIMIT = 240;
 
   $: guidedSteps = [
     {
@@ -219,11 +214,9 @@
     return `${Math.floor(diff / 3600)}h ago`;
   }
 
-  function buildTempState(
-    rows: Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>,
-    latestRows: LatestTemperatureRow[]
-  ) {
+  function buildTempState(latestRows: LatestTemperatureRow[]) {
     nodeTemps = latestRows
+      .filter((row) => row.connection_status === 'online' && row.temperature !== null)
       .slice(0, 3)
       .map((row) => ({
         sensorId: row.sensor_id,
@@ -233,31 +226,13 @@
         ts: row.connection_status === 'online' ? row.ts : null,
         connectionStatus: row.connection_status
       }));
-
-    const buckets = new Map<number, { sum: number; count: number }>();
-    for (const row of rows) {
-      const bucket = Math.floor(row.ts / TEMPERATURE_REPORT_INTERVAL_SECONDS) * TEMPERATURE_REPORT_INTERVAL_SECONDS;
-      const current = buckets.get(bucket) ?? { sum: 0, count: 0 };
-      current.sum += row.temperature;
-      current.count += 1;
-      buckets.set(bucket, current);
-    }
-    series = {
-      avg: Array.from(buckets.entries())
-        .sort((a, b) => a[0] - b[0])
-        .slice(-24)
-        .map(([, value]) => Number((value.sum / value.count).toFixed(2)))
-    };
   }
 
   async function refreshTemps() {
-    const response = await fetch(`/api/temps?view=summary&limit=${HOMEPAGE_TEMP_LIMIT}`);
+    const response = await fetch('/api/temps?view=latest&limit=25');
     if (!response.ok) return;
-    const payload = (await response.json()) as {
-      latest?: LatestTemperatureRow[];
-      history?: Array<{ sensor_id: number; temperature: number; humidity_pct: number | null; ts: number }>;
-    };
-    buildTempState(payload.history ?? [], payload.latest ?? []);
+    const rows = (await response.json()) as LatestTemperatureRow[];
+    buildTempState(rows);
   }
 
   async function refreshIdeas() {
@@ -502,46 +477,33 @@
     >
       <div class="tile-head">
         <span class="tile-label">Kitchen Temps</span>
-        <small>updated {tempFreshText}</small>
+        {#if latestTempTs}<small>updated {tempFreshText}</small>{/if}
       </div>
-      <div class="node-strip">
+      <div class="temperature-readings">
         {#if nodeTemps.length === 0}
-          <small>No recent nodes</small>
+          <small class="temps-empty">No current readings</small>
         {:else}
-          {#each nodeTemps as node}
+          {#each nodeTemps as node (node.sensorId)}
+            {#if node.temperature !== null}
             <div
-              class="node-pill"
-              class:hot={node.temperature !== null && node.temperature > SAFE_TEMP_HIGH_F}
-              class:cold={node.temperature !== null && node.temperature < SAFE_TEMP_LOW_F}
+              class="temperature-row"
+              class:hot={node.temperature > SAFE_TEMP_HIGH_F}
+              class:cold={node.temperature < SAFE_TEMP_LOW_F}
             >
-              <strong>{node.nodeName ?? `N${node.sensorId}`}</strong>
-              {#if node.connectionStatus === 'online' && node.temperature !== null}
+              <strong>{node.nodeName ?? `Node ${node.sensorId}`}</strong>
+              <div class="temperature-values">
                 <button type="button" class="temperature-history-trigger" on:click={() => selectedTemperature = node}
                   aria-label={`View ${node.nodeName ?? `Node ${node.sensorId}`} temperature history`}>
                   {node.temperature.toFixed(1)}F
-                  {#if node.humidityPct !== null}
-                    / {node.humidityPct.toFixed(0)}%
-                  {/if}
                 </button>
-              {:else}
-                <button type="button" class="offline-reading temperature-history-trigger" on:click={() => selectedTemperature = node}>Offline</button>
-              {/if}
+                {#if node.humidityPct !== null}
+                  <small>{node.humidityPct.toFixed(0)}% RH</small>
+                {/if}
+              </div>
             </div>
+            {/if}
           {/each}
         {/if}
-      </div>
-      {#if highTempNodes.length > 0}
-        <div class="temp-warnings">
-          {#each highTempNodes as node}
-            <a href="/temper" class="temp-warning-line">
-              <strong>{node.nodeName ?? `Node ${node.sensorId}`}</strong>
-              <span>{node.temperature.toFixed(1)}F</span>
-            </a>
-          {/each}
-        </div>
-      {/if}
-      <div class="mini-graph">
-        <TempGraph {series} height={40} />
       </div>
     </div>
     {/if}
@@ -848,29 +810,29 @@
 
   .tile-head { display: flex; justify-content: space-between; align-items: center; gap: 0.35rem; }
   .tile-head small { color: var(--color-text-muted); font-size: 0.72rem; }
-  .node-strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
-  .node-pill { display: inline-flex; gap: 6px; align-items: center; font-size: 0.72rem; border: 1px solid var(--color-success); border-radius: 0; padding: 2px 7px; color: var(--color-success); }
-  .node-pill.hot { border-color: var(--color-error); color: var(--color-error); }
-  .node-pill.cold { border-color: #2563eb; color: #2563eb; }
-  .node-pill strong { color: var(--color-text); font-size: 0.7rem; }
-  .temp-warnings {
-    display: grid;
-    gap: 0.28rem;
+  .temperature-readings {
     margin-top: 0.35rem;
   }
-  .temp-warning-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    text-decoration: none;
-    color: var(--color-error);
-    font-size: 0.76rem;
-    line-height: 1.25;
+  .temperature-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-divider);
+    font-size: 0.85rem;
   }
-  .temp-warning-line strong {
+  .temperature-row:last-child { border-bottom: 0; }
+  .temperature-row strong { overflow-wrap: anywhere; font-weight: var(--weight-medium); }
+  .temperature-values { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; gap: 0.45rem; }
+  .temperature-values button {
+    color: var(--color-success);
     font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
   }
-  .mini-graph { width: 100%; height: 40px; margin-top: 4px; overflow: hidden; }
+  .temperature-row.hot button { color: var(--color-error); }
+  .temperature-row.cold button { color: #2563eb; }
+  .temperature-values small, .temps-empty { color: var(--color-text-muted); font-size: 0.72rem; }
   .tile-label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); }
   .menu-label {
     font-family: inherit;
@@ -1049,10 +1011,6 @@
     }
     .tile-head small {
       font-size: 0.68rem;
-    }
-    .node-pill {
-      font-size: 0.68rem;
-      padding: 2px 6px;
     }
     .today-area {
       margin: 0.9rem;

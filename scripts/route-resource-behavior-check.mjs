@@ -1,4 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+import { compile } from 'svelte/compiler';
+import { render } from 'svelte/server';
+import * as serverRuntime from 'svelte/internal/server';
 import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
 
 const test = createTestD1();
@@ -17,6 +22,31 @@ const db = { prepare(sql) {
   return statement;
 }, async batch(statements) { return test.db.batch(statements); } };
 const load = loadServerModules();
+function component(source, dependencies = {}) {
+  const exports = {};
+  const compiled = ts.transpileModule(compile(source, { generate: 'server' }).js.code,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const modules = { 'svelte/internal/server': serverRuntime, ...dependencies };
+  new Function('require', 'exports', compiled)(name => {
+    assert.ok(name in modules, 'Unexpected dashboard dependency: ' + name);
+    return modules[name];
+  }, exports);
+  return exports;
+}
+const homeSource = readFileSync('src/routes/app/+page.svelte', 'utf8');
+const emptyComponent = { __esModule: true, default() {} };
+const homeComponent = component(homeSource, {
+  svelte: { onMount() {} },
+  '$app/navigation': { goto() {} },
+  '#lib/components/ui/Layout.svelte': component('<slot />'),
+  '#lib/components/ui/SchoolOfFish.svelte': emptyComponent,
+  '#lib/components/ui/TemperatureHistory.svelte': emptyComponent,
+  '#lib/components/ui/GuidedSpotlightTour.svelte': emptyComponent,
+  '#lib/client/polling.ts': { startVisiblePolling() {} },
+  '#lib/assets/schedule.ts': load('src/lib/assets/schedule.ts'),
+  '#lib/features/appFeatures.ts': load('src/lib/features/appFeatures.ts')
+});
+const renderHome = data => render(homeComponent.default, { props: { data } }).body;
 function insert(table, row) {
   const keys = Object.keys(row);
   sqlite.prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(() => '?')})`).run(...Object.values(row));
@@ -100,6 +130,54 @@ try {
     return response.json();
   }, 2, 20000);
   assert.equal(summary.value.latest.length, 25); assert.equal(summary.value.history.length, 50);
+  const home = load('src/routes/app/+page.server.ts');
+  const homeEvent = { locals, url: new URL('https://criminiops.com/app') };
+  const dashboard = await measure('dashboard', () => home.load(homeEvent), 16, 12000);
+  assert.deepEqual(dashboard.value.nodeTemps.map(node => node.sensorId), [1, 2, 3]);
+  assert.equal('tempSeries' in dashboard.value, false);
+  assert.equal(dashboard.queries.filter(query => /FROM temps/.test(query.sql)).length, 1,
+    'Dashboard performs only the indexed latest-per-node query, not a second graph-history query');
+  const latest = await measure('dashboard-refresh', async () => {
+    const response = await load('src/routes/api/temps/+server.ts').GET({ locals, url: new URL('https://criminiops.com/api/temps?view=latest&limit=25') });
+    return response.json();
+  }, 1, 20000);
+  assert.equal(latest.value.length, 25);
+  assert.equal(homeSource.includes('/api/temps?view=latest&limit=25'), true);
+  assert.equal(/TempGraph|tempSeries|view=summary/.test(homeSource), false);
+  sqlite.prepare('UPDATE temperature_sensor_nodes SET last_seen_at=? WHERE business_id=? AND sensor_id<=3').run(now - 3600, 'target');
+  sqlite.prepare('UPDATE temps SET temperature=28 WHERE business_id=? AND sensor_id=4').run('target');
+  sqlite.prepare('UPDATE temps SET temperature=44 WHERE business_id=? AND sensor_id=5').run('target');
+  sqlite.prepare('UPDATE temps SET humidity_pct=NULL WHERE business_id=? AND sensor_id=6').run('target');
+  const available = await home.load(homeEvent);
+  assert.deepEqual(available.nodeTemps.map(node => node.sensorId), [4, 5, 6],
+    'Offline nodes must not occupy the three available-reading slots');
+  const screen = renderHome(available);
+  assert.match(screen, /target Sensor 4/);
+  assert.match(screen, /28\.0F/);
+  assert.match(screen, /44\.0F/);
+  assert.match(screen, /45% RH/);
+  assert.equal((screen.match(/% RH/g) ?? []).length, 2, 'Missing humidity must not become a zero reading');
+  assert.match(screen, /class="temperature-row[^\"]*\bcold\b/);
+  assert.match(screen, /class="temperature-row[^\"]*\bhot\b/);
+  assert.match(screen, /aria-label="View target Sensor 4 temperature history"/);
+  assert.doesNotMatch(screen, /target Sensor 1|target Sensor 7|mini-graph|node-pill/);
+  assert.match(renderHome({ ...available, nodeTemps: [{ ...available.nodeTemps[0], nodeName: '<script>alert(1)</script>' }] }),
+    /&lt;script(?:>|&gt;)alert\(1\)&lt;\/script(?:>|&gt;)/, 'Sensor labels remain escaped');
+  sqlite.prepare('UPDATE temperature_sensor_nodes SET last_seen_at=? WHERE business_id=?').run(now - 3600, 'target');
+  const offline = await home.load(homeEvent);
+  assert.deepEqual(offline.nodeTemps, []);
+  assert.match(renderHome(offline), /No current readings/);
+  assert.doesNotMatch(renderHome(offline), /temperature-history-trigger|37\.0F/);
+  const disabled = await measure('dashboard-temps-disabled', () => home.load({ ...homeEvent,
+    locals: { ...locals, featureModes: { ...load('src/lib/features/appFeatures.ts').defaultAppFeatureModes, temps: 'off' } }
+  }), 16, 12000);
+  assert.deepEqual(disabled.value.nodeTemps, []);
+  assert.equal(disabled.queries.some(query => /FROM temps|FROM temperature_sensor_nodes/.test(query.sql)), false);
+  assert.doesNotMatch(renderHome(disabled.value), /Kitchen Temps|temps-overview/);
+  const noBinding = await home.load({ ...homeEvent, locals: { ...locals, DB: undefined } });
+  assert.deepEqual(noBinding.nodeTemps, []);
+  assert.match(renderHome(noBinding), /No current readings/);
+  console.log('PASS actual dashboard render/query: three available readings, offline/empty/disabled states, escaped labels, humidity, range colors and latest-only refresh');
   const staff = await measure('staff-diagnostics', () => load('src/lib/server/platformStaffDashboard.ts').loadRequestDiagnostics(db, 'owner', new URL('https://criminiops.com/staff'), 'target', now), 2, 2000);
   assert.equal(staff.value.issues.length, 0);
   insert('temperature_sensor_nodes', { id: 'mismatched-gateway-child', business_id: 'target', gateway_device_id: 'gateway-other-0', node_serial: 'mismatched-gateway-child', sensor_id: 99,

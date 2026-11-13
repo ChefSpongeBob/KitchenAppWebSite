@@ -203,8 +203,11 @@ expect('src/routes/api/temps/+server.ts', 'temperature API payloads are capped f
   source.includes('Math.min(MAX_TEMP_QUERY_LIMIT')
 );
 
-expect('src/routes/app/+page.server.ts', 'homepage temperature sample stays bounded', (source) =>
-  source.includes('const HOMEPAGE_TEMP_LIMIT = 240')
+expect('src/routes/app/+page.server.ts', 'homepage loads bounded latest temperatures without graph history', (source) =>
+  source.includes('loadLatestTemperatureSnapshots(db, businessId, 25)') &&
+  source.includes('.slice(0, 3)') &&
+  !source.includes('FROM temps') &&
+  !source.includes('tempSeries')
 );
 
 expect('src/routes/app/+page.server.ts', 'homepage preview queries run in the initial parallel batch', (source) =>
