@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+import { compile } from 'svelte/compiler';
+import { render } from 'svelte/server';
+import * as serverRuntime from 'svelte/internal/server';
 
 const root = process.cwd();
 const checks = [];
@@ -17,6 +22,37 @@ function expect(path, label, predicate) {
 function expectExists(path, label) {
   checks.push({ ok: existsSync(resolve(root, path)), label, detail: path });
 }
+
+// Render the actual footer fragment without mounting the unrelated app shell.
+const footer = read('src/routes/+layout.svelte').match(/<nav class="footer-links"[\s\S]*?<\/nav>/)?.[0];
+assert.ok(footer, 'Shared footer navigation must exist');
+const compiled = compile(`<script>export let isMarketingRoute; export let data;</script>${footer}`, { generate: 'server' });
+const exports = {};
+new Function('require', 'exports', ts.transpileModule(compiled.js.code, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+}).outputText)(name => {
+  assert.equal(name, 'svelte/internal/server');
+  return serverRuntime;
+}, exports);
+function footerLinks(isMarketingRoute, user) {
+  const html = render(exports.default, { props: { isMarketingRoute, data: { user } } }).body;
+  return [...html.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map(([, href, label]) => [href, label]);
+}
+assert.deepEqual(footerLinks(false, { id: 'isolated-footer-user' }), [
+  ['/about', 'About App'], ['/support', 'Support'], ['/privacy', 'Privacy'], ['/terms', 'Terms'],
+  ['/billing-terms', 'Billing Terms'], ['/account-deletion', 'Account Deletion']
+]);
+const publicLinks = [
+  ['/', 'Overview'], ['/features', 'Features'], ['/how-it-works', 'How It Works'], ['/about', 'About'],
+  ['/pricing', 'Pricing'], ['/support', 'Support'], ['/privacy', 'Privacy'], ['/terms', 'Terms'],
+  ['/billing-terms', 'Billing Terms'], ['/account-deletion', 'Account Deletion'], ['/login', 'Sign In']
+];
+assert.deepEqual(footerLinks(true, null), publicLinks);
+assert.deepEqual(footerLinks(true, { id: 'isolated-footer-user' }), publicLinks);
+assert.deepEqual(footerLinks(false, null), [
+  ['/features', 'Features'], ['/how-it-works', 'How It Works'], ['/pricing', 'Pricing']
+]);
+console.log('PASS rendered footer: signed-in Crimini About/support/legal links, no operational Documents shortcut, unchanged public and logged-out links');
 
 expectExists('src/routes/privacy/+page.svelte', 'privacy policy route exists');
 expectExists('src/routes/terms/+page.svelte', 'terms route exists');

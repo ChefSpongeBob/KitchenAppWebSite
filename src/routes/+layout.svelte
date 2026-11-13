@@ -727,8 +727,7 @@
           <a href="/account-deletion">Account Deletion</a>
           <a href="/login">Sign In</a>
         {:else if data.user}
-          <a href="/app/about">About App</a>
-          <a href="/docs">Documents</a>
+          <a href="/about">About App</a>
           <a href="/support">Support</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
