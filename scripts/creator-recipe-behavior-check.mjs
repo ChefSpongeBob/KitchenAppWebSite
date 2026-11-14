@@ -65,6 +65,8 @@ try {
   const markup = screen(before);
   const composer = markup.match(/<details[^>]*id="recipe-create-editor"[^>]*>/)?.[0];
   assert.ok(composer);
+  assert.match(markup, /<strong[^>]*>Add Recipe<\/strong>/, 'Primary recipe action must have visible bold emphasis');
+  assert.match(markup, /class="recipe-add-icon[^\"]*" aria-hidden="true">\+<\/span>/, 'Primary recipe action has a simple plus indicator');
   assert.equal(/\bopen(?:[\s=>])/.test(composer), false, 'Recipe form remains collapsed by default');
   assert.equal((markup.match(/action="\?\/create_recipe"/g) ?? []).length, 1, 'One shared creation form, not a form per category');
   assert.ok(markup.indexOf('id="recipe-create-editor"') < markup.indexOf('class="entity '), 'Add Recipe appears before the category list');

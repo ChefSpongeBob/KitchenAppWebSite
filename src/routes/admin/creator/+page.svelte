@@ -783,7 +783,7 @@
             </p>
           {:else}
             <details class="create-editor recipe-composer" id="recipe-create-editor" bind:this={recipeComposer}>
-              <summary>Add Recipe</summary>
+              <summary><span class="recipe-add-icon" aria-hidden="true">+</span><strong>Add Recipe</strong></summary>
               <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
                 <label>
                   <span>Category</span>
@@ -1481,6 +1481,30 @@
 
   .create-editor > summary::-webkit-details-marker {
     display: none;
+  }
+
+  .recipe-composer {
+    border: 0;
+    padding: 0.4rem 0 0.85rem;
+  }
+
+  .recipe-composer > summary {
+    min-height: 3.25rem;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+    border-bottom: 2px solid currentColor;
+    font-size: 1.1rem;
+    line-height: 1.2;
+    font-weight: var(--weight-bold);
+  }
+
+  .recipe-composer > summary strong {
+    font-weight: var(--weight-bold);
+  }
+
+  .recipe-add-icon {
+    font-size: 1.6rem;
+    line-height: 1;
   }
 
   .recipe-composer .inline-form {
