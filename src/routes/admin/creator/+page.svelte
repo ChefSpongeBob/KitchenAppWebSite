@@ -6,6 +6,7 @@
   import { invalidateAll } from '$app/navigation';
   import { pushToast } from '#lib/client/toasts.ts';
   import type { SubmitFunction } from '$app/forms';
+  import { tick } from 'svelte';
 
   type CreatorCatalog = {
     preplists: string[];
@@ -113,6 +114,9 @@
   let categoryListDomain: CategoryListDomain = 'preplists';
   let feedbackMessage = '';
   let lastAppliedRouteSelection = '';
+  let recipeComposer: HTMLDetailsElement;
+  let recipeTitleInput: HTMLInputElement;
+  let newRecipeCategory = data.creatorCatalog.recipes.length === 1 ? data.creatorCatalog.recipes[0] : '';
   let attachmentDrafts: Record<string, { targetType: 'recipe' | 'document'; category: string; targetId: string }> = {};
   let reverseAttachmentDrafts: Record<string, { domain: ListDomain; category: string; sourceRef: string }> = {};
 
@@ -151,6 +155,13 @@
   function recipesByCategory(category: string) {
     const key = normalizeKey(category);
     return data.recipes.filter((recipe) => normalizeKey(recipe.category) === key);
+  }
+
+  async function addRecipeInCategory(category: string) {
+    newRecipeCategory = category;
+    recipeComposer.open = true;
+    await tick();
+    recipeTitleInput.focus();
   }
 
   function documentsByCategory(category: string) {
@@ -771,9 +782,36 @@
               <a href={categoryCreateHref('recipe')}>Create a category?</a>
             </p>
           {:else}
+            <details class="create-editor recipe-composer" id="recipe-create-editor" bind:this={recipeComposer}>
+              <summary>Add Recipe</summary>
+              <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
+                <label>
+                  <span>Category</span>
+                  <select name="category" bind:value={newRecipeCategory} required>
+                    <option value="" disabled>Choose a category</option>
+                    {#each data.creatorCatalog.recipes as category}
+                      <option value={category}>{category}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Recipe name</span>
+                  <input name="title" bind:this={recipeTitleInput} required />
+                </label>
+                <label>
+                  <span>Ingredients</span>
+                  <textarea name="ingredients" rows="4" required></textarea>
+                </label>
+                <label>
+                  <span>Instructions</span>
+                  <textarea name="instructions" rows="6" required></textarea>
+                </label>
+                <button type="submit">Save Recipe</button>
+              </form>
+            </details>
             <div class="stack">
               {#each data.creatorCatalog.recipes as category}
-                {@const items = recipesByCategory(category)}
+                {@const items = data.recipes.filter((recipe) => normalizeKey(recipe.category) === normalizeKey(category))}
                 <details class="entity">
                   <summary>
                     <span class="summary-title">
@@ -783,6 +821,7 @@
                     <small class="count-pill">{items.length} recipe{items.length === 1 ? '' : 's'}</small>
                   </summary>
                   <div class="entity-body">
+                    <button type="button" class="recipe-shortcut" aria-controls="recipe-create-editor" on:click={() => addRecipeInCategory(category)}>Add Recipe</button>
                     <div class="category-context">
                       <span class="material-icons" aria-hidden="true">restaurant_menu</span>
                       <span>Editing recipes in {category}</span>
@@ -806,17 +845,6 @@
                         <button type="submit" class="danger">Delete Category + Content</button>
                       </form>
                     </div>
-
-                    <details class="add-editor">
-                      <summary>Add Recipe</summary>
-                      <form method="POST" action="?/create_recipe" use:enhance={withResetFeedback} class="inline-form">
-                        <input type="hidden" name="category" value={category} />
-                        <input name="title" placeholder="Recipe title" required />
-                        <textarea name="ingredients" rows="4" placeholder="Ingredients" required></textarea>
-                        <textarea name="instructions" rows="6" placeholder="Instructions" required></textarea>
-                        <button type="submit">Save Recipe</button>
-                      </form>
-                    </details>
 
                     <div class="entity-items">
                       {#if items.length === 0}
@@ -1360,12 +1388,6 @@
     padding-top: 0.1rem;
   }
 
-  .add-editor {
-    border-top: 1px solid var(--color-divider);
-    padding-top: 0.45rem;
-  }
-
-  .add-editor > summary,
   .attach-editor > summary {
     width: fit-content;
     cursor: pointer;
@@ -1375,13 +1397,8 @@
     border-bottom: 1px solid var(--color-divider);
   }
 
-  .add-editor > summary::-webkit-details-marker,
   .attach-editor > summary::-webkit-details-marker {
     display: none;
-  }
-
-  .add-editor .inline-form {
-    margin-top: 0.5rem;
   }
 
   .attach-form {
@@ -1464,6 +1481,26 @@
 
   .create-editor > summary::-webkit-details-marker {
     display: none;
+  }
+
+  .recipe-composer .inline-form {
+    margin: 0.25rem 0 0.75rem;
+    gap: 0.65rem;
+  }
+
+  .recipe-composer label {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .recipe-composer label span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+  }
+
+  .recipe-composer button,
+  .recipe-shortcut {
+    justify-self: start;
   }
 
   .create-editor > summary .material-icons {

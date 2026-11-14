@@ -72,7 +72,7 @@
 		"test:auth-abuse": "node ./scripts/auth-abuse-check.mjs && node ./scripts/auth-lifecycle-behavior-check.mjs && node ./scripts/auth-lifecycle-runtime-check.mjs && node ./scripts/employee-removal-behavior-check.mjs && node ./scripts/turnstile-behavior-check.mjs",
 		"test:hr-onboarding": "node ./scripts/hr-onboarding-check.mjs && node ./scripts/registration-behavior-check.mjs && node ./scripts/registration-runtime-check.mjs && node ./scripts/hr-packet-behavior-check.mjs && node ./scripts/hr-packet-runtime-check.mjs && node ./scripts/hr-file-behavior-check.mjs && node ./scripts/hr-file-runtime-check.mjs && node ./scripts/hr-lifecycle-behavior-check.mjs && node ./scripts/hr-lifecycle-runtime-check.mjs && node ./scripts/multi-restaurant-behavior-check.mjs && node ./scripts/multi-restaurant-runtime-check.mjs",
 		"test:admin-consolidation": "node ./scripts/admin-consolidation-check.mjs",
-		"test:core-feature-actions": "node ./scripts/core-feature-actions-check.mjs",
+		"test:core-feature-actions": "node ./scripts/core-feature-actions-check.mjs && node ./scripts/creator-recipe-behavior-check.mjs",
 		"test:billing-lifecycle": "node ./scripts/billing-lifecycle-check.mjs && node ./scripts/billing-access-behavior-check.mjs",
 		"test:malicious-user-hardening": "node ./scripts/malicious-user-hardening-check.mjs",
 		"test:store-release": "node ./scripts/store-release-check.mjs",
