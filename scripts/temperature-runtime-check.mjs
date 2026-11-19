@@ -40,7 +40,7 @@ const { outputFiles } = await build({
       try { return await POST({request,url:new URL(request.url),locals:{env,DB:db}}); }
       catch { return Response.json({error:'isolated transaction failure'},{status:500}); }
     }};`, resolveDir: process.cwd(), sourcefile: 'temperature-runtime-fixture.ts' },
-  bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, external: ['cloudflare:workers'],
+  bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, external: ['cloudflare:workers', 'node:crypto'],
   plugins: [{ name: 'production-environment', setup(build) {
     build.onResolve({ filter: /^\$app\/env$/ }, () => ({ path: 'environment', namespace: 'fixture' }));
     build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const dev=false; export const building=false; export const browser=false;' }));

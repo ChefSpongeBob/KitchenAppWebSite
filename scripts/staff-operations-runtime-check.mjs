@@ -56,7 +56,7 @@ const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), source
       return Response.json(result, {status:result.status || 200});
     } catch (error) { return Response.json({error:'Isolated operation denied'}, {status:error.status || 409}); }
   }};` }, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false,
-  external: ['cloudflare:workers'], plugins: [{ name: 'fixture-kit-and-rate-budget', setup(build) {
+  external: ['cloudflare:workers', 'node:crypto'], plugins: [{ name: 'fixture-kit-and-rate-budget', setup(build) {
     build.onResolve({ filter: /^@sveltejs\/kit$/ }, () => ({ path: 'kit', namespace: 'fixture' }));
     build.onResolve({ filter: /^#lib\/server\/security\.ts$/ }, () => ({ path: 'rate', namespace: 'fixture' }));
     build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: args.path === 'kit'

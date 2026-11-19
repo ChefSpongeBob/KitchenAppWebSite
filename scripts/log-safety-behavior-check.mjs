@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie } from './helpers/test-d1.mjs';
 
 const load = loadServerModules();
 const logger = load('src/lib/server/observability.ts');
@@ -115,7 +115,7 @@ await check('actual reset request guard and denied private-media handler emit on
     const hooks = modules('src/hooks.server.ts'); const cookies = new Map([['__Host-kitchen_session', 'invalid-fixture-session']]);
     const url = new URL('https://criminiops.com/reset-password/' + token);
     const response = await hooks.handle({ event: { url, request: new Request(url), locals: {}, route: { id: '/reset-password/[token]' },
-      cookies: { get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } },
+      cookies: { serialize: serializeTestCookie, get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } },
       resolve: async () => new Response('Reset form') });
     assert.equal(response.status, 200); assert.equal(await response.text(), 'Reset form');
     assert.equal(cookies.has('__Host-kitchen_session'), false);

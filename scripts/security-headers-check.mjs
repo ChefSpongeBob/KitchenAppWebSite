@@ -13,7 +13,9 @@ const checks = [
 	['CSP blocks plugin/object content', source.includes("object-src 'none'")],
 	['CSP restricts form posts to this app', source.includes("form-action 'self'")],
 	['CSP denies embedded framing', source.includes("frame-ancestors 'none'")],
-	['CSP allows only Cloudflare Turnstile challenge resources externally', source.includes("script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com") && source.includes("connect-src 'self' https://challenges.cloudflare.com") && source.includes("frame-src https://challenges.cloudflare.com")],
+	['script CSP rejects arbitrary inline code and retains Turnstile resources', source.includes("script-src 'self' https://challenges.cloudflare.com") && !source.includes("script-src 'self' 'unsafe-inline'") && source.includes("connect-src 'self' https://challenges.cloudflare.com") && source.includes("frame-src https://challenges.cloudflare.com")],
+	['framework nonce/hash policy is preserved', source.includes("if (!response.headers.has('content-security-policy'))")],
+	['authentication redirects retain security and no-store headers', source.includes('event.isDataRequest || actionRequest') && source.includes("guardCookies.get(event)?.values()") && source.includes('return applySecurityHeaders(response)')],
 	['referrer policy is set globally', source.includes("referrer-policy', 'strict-origin-when-cross-origin")],
 	['permissions policy is set globally', source.includes('permissions-policy')],
 	['origin agent cluster is isolated', source.includes("origin-agent-cluster', '?1")],
@@ -43,3 +45,7 @@ for (const [label, ok] of checks) {
 }
 
 if (failed.length) process.exit(1);
+
+await import('./security-key-rotation-check.mjs');
+await import('./password-security-check.mjs');
+await import('./security-response-behavior-check.mjs');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie } from './helpers/test-d1.mjs';
 
 const source = [...readFileSync('src/app.html', 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .find(([, script]) => script.includes('__CRIMINI_NATIVE__'))?.[1];
@@ -158,9 +158,10 @@ try {
     if (sessionToken) cookies.set('__Host-kitchen_session', sessionToken);
     const url = new URL(bridge({ path: '/' }).window.location.pathname, 'https://criminiops.com');
     const event = { url, request: new Request(url, { headers: { 'x-crimini-native': '1', origin: 'https://localhost' } }), locals: {},
-      cookies: { get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
+      cookies: { serialize: serializeTestCookie, get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
     try {
-      await hooks.handle({ event, resolve: async () => new Response('Dashboard authorized') });
+      const response = await hooks.handle({ event, resolve: async () => new Response('Dashboard authorized') });
+      if (response.status === 303) return { location: response.headers.get('location') };
       return { location: '/app', businessId: event.locals.businessId, role: event.locals.businessRole };
     } catch (error) {
       if (error.location) return { location: error.location };

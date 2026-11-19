@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie, formRequest } from './helpers/test-d1.mjs';
 
 const now = Math.floor(Date.now() / 1000);
 const quiet = { logOperationalEvent() {}, logOperationalError() {} };
@@ -134,7 +134,7 @@ await check('actual request hook blocks unpaid pages/actions/files/APIs; paid em
     const cookies=new Map([['__Host-kitchen_session',token],['kitchen_active_business','a']]);
     const url=new URL(path,'https://criminiops.com');let resolved=false;
     try { const response=await hooks.handle({event:{url,request:new Request(url,{method,headers:{origin:url.origin}}),locals:{},
-      cookies:{get:k=>cookies.get(k),set:(k,v)=>cookies.set(k,v),delete:k=>cookies.delete(k)}},resolve:async()=>{resolved=true;return new Response('Allowed');}});
+      cookies:{serialize:serializeTestCookie,get:k=>cookies.get(k),set:(k,v)=>cookies.set(k,v),delete:k=>cookies.delete(k)}},resolve:async()=>{resolved=true;return new Response('Allowed');}});
       return {response,resolved};
     } catch(error){return {error,resolved};}
   };
@@ -144,7 +144,7 @@ await check('actual request hook blocks unpaid pages/actions/files/APIs; paid em
     for(const method of ['GET','POST']) {
       if(path==='/api/temps' && method==='POST')continue; // Machine uploads enforce billing in their authenticated handler.
       const result=await probe(path,method);assert.equal(result.resolved,false,path+' '+method);
-      if(path.startsWith('/api/'))assert.equal(result.response.status,402);else assert.equal(result.error.location,'/billing?access=required');
+      if(path.startsWith('/api/'))assert.equal(result.response.status,402);else assert.equal(result.response.headers.get('location'),'/billing?access=required');
     }
   }
   assert.equal((await probe('/workspace')).resolved,true);assert.equal((await probe('/privacy')).resolved,true);

@@ -6,7 +6,7 @@ import { compile } from 'svelte/compiler';
 import { render } from 'svelte/server';
 import * as serverRuntime from 'svelte/internal/server';
 import * as stores from 'svelte/store';
-import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie } from './helpers/test-d1.mjs';
 
 function component(path, deps = {}) {
   const exports = {};
@@ -302,8 +302,14 @@ const hooks = load('src/hooks.server.ts', {
 function hookEvent(path, token = 'owner-token', options = {}) {
   const url = new URL(`https://criminiops.com${path}`);
   return { url, request: new Request(url, options), locals: {},
-    cookies: { get: name => name === 'session' ? token : null, set: () => {}, delete: () => {} }
+    cookies: { serialize: serializeTestCookie, get: name => name === 'session' ? token : null, set: () => {}, delete: () => {} }
   };
+}
+async function assertHookRedirect(event, location) {
+  const response = await hooks.handle({ event, resolve: async () => { throw Error('Denied request must not resolve'); } });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), location);
+  assert.match(response.headers.get('cache-control'), /no-store/);
 }
 const ownerEvent = hookEvent('/staff/equipment');
 const ownerResponse = await hooks.handle({ event: ownerEvent, resolve: async () => new Response('Staff') });
@@ -314,12 +320,12 @@ assert.match(ownerResponse.headers.get('cache-control'), /no-store/);
 const managerResponse = await hooks.handle({ event: hookEvent('/staff/equipment', 'manager-token'), resolve: async () => { throw Error('Must not reach route'); } });
 assert.equal(managerResponse.status, 403);
 assert.equal(tenantCalls, 0);
-await assert.rejects(hooks.handle({ event: hookEvent('/staff', null), resolve: async () => new Response() }), { location: '/login?staff=1' });
+await assertHookRedirect(hookEvent('/staff', null), '/login?staff=1');
 const crossSite = await hooks.handle({ event: hookEvent('/staff/equipment', 'owner-token', {
   method: 'POST', headers: { origin: 'https://attacker.invalid' }
 }), resolve: async () => { throw Error('Cross-site mutation must not resolve'); } });
 assert.equal(crossSite.status, 403);
-await assert.rejects(hooks.handle({ event: hookEvent('/app'), resolve: async () => new Response() }), { location: '/billing?access=required' });
+await assertHookRedirect(hookEvent('/app'), '/billing?access=required');
 assert.equal(tenantCalls, 1);
 const supportCustomerEvent = hookEvent('/support', 'manager-token');
 assert.equal((await hooks.handle({ event: supportCustomerEvent, resolve: async () => new Response('Support') })).status, 200);
@@ -358,8 +364,7 @@ for (const locals of [{}, { DB: db, userId: 'manager' }]) {
 }
 for (const token of ['unknown-session', 'manager-token']) {
   if (token === 'manager-token') sqlite.prepare("UPDATE sessions SET revoked_at=? WHERE id='manager-session'").run(now);
-  await assert.rejects(hooks.handle({ event: hookEvent('/staff/equipment', token), resolve: async () => { throw Error('Invalid session resolved'); } }),
-    { location: '/login?staff=1&error=session' });
+  await assertHookRedirect(hookEvent('/staff/equipment', token), '/login?staff=1&error=session');
 }
 sqlite.exec("UPDATE sessions SET revoked_at=NULL WHERE id='manager-session'");
 console.log('PASS dedicated staff login excludes restaurant metadata, rejects nonstaff continuation, and handles invalid sessions');
@@ -395,8 +400,7 @@ sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_a
 await staff.requirePlatformStaff(ownerLocals);
 await assert.rejects(staff.requireStaffStepUp(ownerLocals), { status: 403 });
 sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=?').run(now - 8 * 3600,now - 8 * 3600);
-await assert.rejects(hooks.handle({ event: hookEvent('/staff/equipment'), resolve: async () => { throw Error('Unverified'); } }),
-  { location: '/staff/security?next=%2Fstaff%2Fequipment' });
+await assertHookRedirect(hookEvent('/staff/equipment'), '/staff/security?next=%2Fstaff%2Fequipment');
 assert.equal((await hooks.handle({ event: hookEvent('/staff/security'), resolve: async () => new Response('Confirm') })).status, 200);
 sqlite.prepare('UPDATE platform_staff_step_up SET verified_at=?,email_verified_at=?').run(now + 100,now + 100);
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session', now), null);
@@ -519,9 +523,8 @@ const gateDb = { ...db, prepare(sql) {
 assert.deepEqual(await staffLayout.load({ ...gateEvent, locals: { ...ownerLocals, DB: gateDb } }), { staff: null, hasWorkspace: false });
 for (const path of staffPaths.filter(path => path !== '/staff/security')) {
   for (const method of ['GET', 'POST']) {
-    await assert.rejects(hooks.handle({ event: hookEvent(path, 'owner-token', { method, headers: { origin: 'https://criminiops.com' } }),
-      resolve: async () => { throw Error('Unverified staff route/action resolved: ' + path); } }),
-      { location: '/staff/security?next=' + encodeURIComponent(path) });
+    await assertHookRedirect(hookEvent(path, 'owner-token', { method, headers: { origin: 'https://criminiops.com' } }),
+      '/staff/security?next=' + encodeURIComponent(path));
   }
 }
 sqlite.prepare('INSERT INTO platform_staff_step_up(session_id,user_id,membership_revision,verified_at,email_verified_at) VALUES(?,?,?,?,?)')
@@ -554,7 +557,7 @@ for (const path of staffPaths) {
   const event = hookEvent(path, 'manager-token');
   event.locals = { userRole: 'admin', businessRole: 'owner' };
   assert.equal((await hooks.handle({ event, resolve: async () => { throw Error(`Nonstaff route reached: ${path}`); } })).status, 403);
-  await assert.rejects(hooks.handle({ event: hookEvent(path, null), resolve: async () => new Response() }), { location: '/login?staff=1' });
+  await assertHookRedirect(hookEvent(path, null), '/login?staff=1');
   assert.equal((await hooks.handle({ event: hookEvent(path, 'owner-token', { method: 'POST', headers: { origin: 'https://attacker.invalid' } }),
     resolve: async () => { throw Error(`Cross-site staff route reached: ${path}`); } })).status, 403);
 }
@@ -599,7 +602,7 @@ for (const [loader, path, field] of [[directory,'businesses','businesses'],[inve
 }
 console.log('PASS all ten staff paths deny anonymous/nonstaff/forged-role/CSRF access; actual owner/support/equipment loads respect roles, tenant selection, secret exclusion, and pagination');
 
-const auth = load('src/lib/server/auth.ts', {});
+const auth = loadServerModules()('src/lib/server/auth.ts');
 const passwordEnv = { PASSWORD_PEPPER: 'test-only-platform-confirmation-pepper' };
 sqlite.prepare('UPDATE users SET password_hash=? WHERE id=?').run(await auth.hashPassword('Staff-test-password!', passwordEnv), 'owner');
 assert.equal(await staff.loadStaffStepUp(db, 'owner', 'owner-session'), null, 'Password changes invalidate staff verification');

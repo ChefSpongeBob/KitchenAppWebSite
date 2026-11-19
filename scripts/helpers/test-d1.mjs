@@ -3,6 +3,9 @@ import { resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { stringifySetCookie } from 'cookie';
+
+export const serializeTestCookie = (name, value, options) => stringifySetCookie({ name, value, httpOnly: true, sameSite: 'lax', secure: true, ...options });
 
 const require = createRequire(import.meta.url);
 export const kit = {

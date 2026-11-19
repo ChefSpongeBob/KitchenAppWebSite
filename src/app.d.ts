@@ -17,6 +17,7 @@ declare global {
 				ALLOW_RUNTIME_SCHEMA_MUTATION?: string;
 				SENSITIVE_DATA_KEY?: string;
 				SENSITIVE_DATA_KEY_VERSION?: string;
+				SENSITIVE_DATA_PREVIOUS_KEYS?: string;
 				APP_STORE_BUNDLE_ID?: string;
 				APP_STORE_ISSUER_ID?: string;
 				APP_STORE_KEY_ID?: string;
@@ -32,6 +33,8 @@ declare global {
 				PUBLIC_SIGNUP_ENABLED?: string;
 				OWNER_SIGNUP_ALLOWLIST?: string;
 				PASSWORD_PEPPER?: string;
+				PASSWORD_PEPPER_VERSION?: string;
+				PASSWORD_PREVIOUS_PEPPERS?: string;
 		}
 
 		interface Locals {

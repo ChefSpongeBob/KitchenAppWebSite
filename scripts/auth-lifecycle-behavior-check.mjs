@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie, formRequest } from './helpers/test-d1.mjs';
 
 const env = { PASSWORD_PEPPER: 'isolated-auth-lifecycle-pepper', APP_BASE_URL: 'https://criminiops.com' };
 const auth = loadServerModules()('src/lib/server/auth.ts');
@@ -30,7 +30,7 @@ async function check(label, run) {
   const load = overrides => loadServerModules({ '#lib/server/observability.ts': { logOperationalError() {}, logOperationalEvent() {} }, ...overrides });
   const event = (path, fields, locals = {}) => ({ request: formRequest(fields, path), url: new URL('https://criminiops.com' + path),
     params: { token }, locals: { DB: t.db, env: { ...env, DB: t.db }, ...locals }, getClientAddress: () => '192.0.2.10',
-    cookies: { get: key => cookies.get(key), delete: key => cookies.delete(key), set: (key, value, options) => { cookies.set(key, value); cookieOptions.push({ key, options }); } } });
+    cookies: { serialize: serializeTestCookie, get: key => cookies.get(key), delete: key => cookies.delete(key), set: (key, value, options) => { cookies.set(key, value); cookieOptions.push({ key, options }); } } });
   const outcome = async promise => { try { return await promise; } catch (error) { if (error.location) return error; throw error; } };
   const reset = (loader = load(), locals) => outcome(loader('src/routes/reset-password/[token]/+page.server.ts').actions.default(
     event('/reset-password/' + token, { password: 'New-password-789!', confirm_password: 'New-password-789!' }, locals)));
@@ -201,28 +201,28 @@ await check('individual-account limits remain enforced independently of the IP f
 });
 
 await check('a displayed session row ID is not an authentication bearer token', async t => {
-  assert.equal((await t.guard('alice-session')).location, '/login?error=session');
+  assert.equal((await t.guard('alice-session')).headers.get('location'), '/login?error=session');
 });
 
 await check('a stored SHA-256 session hash cannot be used as a bearer token', async t => {
-  assert.equal((await t.guard(await auth.hashSessionToken('alice-token'))).location, '/login?error=session');
+  assert.equal((await t.guard(await auth.hashSessionToken('alice-token'))).headers.get('location'), '/login?error=session');
 });
 
 await check('a session cannot inherit a device belonging to another account', async t => {
   t.sqlite.exec("UPDATE sessions SET device_id='bob-device' WHERE id='alice-session'");
-  assert.equal((await t.guard()).location, '/login?error=session');
+  assert.equal((await t.guard()).headers.get('location'), '/login?error=session');
 });
 
 await check('session expiry is exclusive at the exact expiry second', async t => {
   t.sqlite.prepare("UPDATE sessions SET expires_at=? WHERE id='alice-session'").run(t.now);
   const realNow = Date.now; Date.now = () => t.now * 1000;
-  try { assert.equal((await t.guard()).location, '/login?error=session'); } finally { Date.now = realNow; }
+  try { assert.equal((await t.guard()).headers.get('location'), '/login?error=session'); } finally { Date.now = realNow; }
 });
 
 await check('valid private responses prohibit browser caches and revoked sessions cannot re-enter', async t => {
   const response = await t.guard(); assert.equal(response.status, 200); assert.match(response.headers.get('cache-control'), /no-store/);
   t.sqlite.exec("UPDATE sessions SET revoked_at=1 WHERE id='alice-session'");
-  assert.equal((await t.guard()).location, '/login?error=session');
+  assert.equal((await t.guard()).headers.get('location'), '/login?error=session');
 });
 
 await check('expired trials block app access but retain the restaurant, all memberships and profiles', async t => {
@@ -230,7 +230,7 @@ await check('expired trials block app access but retain the restaurant, all memb
   const trial = t.load()('src/lib/server/trial.ts');
   const result = await trial.getBusinessTrialAccess(t.db, 'alice-business');
   assert.equal(result.allowApp, false); assert.equal(result.shouldPurge, false);
-  assert.equal((await t.guard()).location, '/billing?access=required');
+  assert.equal((await t.guard()).headers.get('location'), '/billing?access=required');
   assert.ok(t.row('businesses', 'alice-business')); assert.ok(t.row('users', 'alice'));
   assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM business_users').get().n, 2);
   assert.equal(t.row('sessions', 'alice-session').revoked_at, null);

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { parse } from 'devalue';
-import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie, formRequest } from './helpers/test-d1.mjs';
 
 const test = createTestD1();
 const { sqlite, db } = test;
@@ -36,7 +36,7 @@ try {
     if (referer) headers.referer = referer;
     const cookies = new Map([['__Host-kitchen_session', token], ['kitchen_active_business', cookie]]);
     let resolved = false;
-    const event = { url, request: new Request(url, { method, headers }), locals: {}, cookies: { get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
+    const event = { url, request: new Request(url, { method, headers }), locals: {}, cookies: { serialize: serializeTestCookie, get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
     const response = await hooks.handle({ event, resolve: async () => { resolved = true; return new Response('Saved'); } });
     return { response, resolved, cookies, event };
   }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, serializeTestCookie, formRequest } from './helpers/test-d1.mjs';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -40,7 +40,7 @@ function fixture(inviteOverrides = {}) {
   function event(overrides = {}, input = fields) {
     return { locals: { ...locals, ...overrides }, request: formRequest(input, '/register?invite=EXISTING-INVITE'),
       url: new URL('https://criminiops.com/register?invite=EXISTING-INVITE'),
-      cookies: { get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
+      cookies: { serialize: serializeTestCookie, get: key => cookies.get(key), set: (key, value) => cookies.set(key, value), delete: key => cookies.delete(key) } };
   }
   async function accept(overrides = {}, input = fields) {
     const current = event(overrides, input);
@@ -272,20 +272,20 @@ await check('actual hook enforces selected-restaurant roles, billing and stale-t
     const cookies=new Map([['__Host-kitchen_session',token],['kitchen_active_business',business]]);
     const url=new URL(path,'https://criminiops.com');let resolved=false;
     const headers={origin:url.origin};if(expected)headers['x-crimini-workspace']=expected;
-    const event={url,request:new Request(url,{method,headers}),locals:{},cookies:{get:key=>cookies.get(key),set:(key,value)=>cookies.set(key,value),delete:key=>cookies.delete(key)}};
+    const event={url,request:new Request(url,{method,headers}),locals:{},cookies:{serialize:serializeTestCookie,get:key=>cookies.get(key),set:(key,value)=>cookies.set(key,value),delete:key=>cookies.delete(key)}};
     try {
       const response=await hooks.handle({event,resolve:async()=>{resolved=true;return new Response('Authorized');}});
       return {response,resolved,event,cookies};
     }catch(error){return {error,resolved,event,cookies};}
   }
   const a=await probe('/admin','a');assert.equal(a.resolved,true);assert.equal(a.event.locals.businessRole,'owner');
-  const b=await probe('/admin');assert.equal(b.resolved,false);assert.equal(b.error.location,'/app');
+  const b=await probe('/admin');assert.equal(b.resolved,false);assert.equal(b.response.headers.get('location'),'/app');
   const dashboard=await probe('/app');assert.equal(dashboard.resolved,true);assert.equal(dashboard.event.locals.businessRole,'staff');assert.equal(dashboard.event.locals.userRole,'user');
   const before=t.sqlite.prepare('SELECT total_changes() n').get().n;
   const stale=await probe('/admin/creator?/create_recipe','b','POST','a');assert.equal(stale.response.status,409);assert.equal(stale.resolved,false);
   assert.equal(t.sqlite.prepare('SELECT total_changes() n').get().n,before);
   t.sqlite.exec("UPDATE business_trials SET status='pending_payment' WHERE business_id='b'");
-  const denied=await probe('/app');assert.equal(denied.resolved,false);assert.equal(denied.error.location,'/billing?access=required');
+  const denied=await probe('/app');assert.equal(denied.resolved,false);assert.equal(denied.response.headers.get('location'),'/billing?access=required');
   assert.equal((await probe('/workspace')).resolved,true);
   assert.equal((await probe('/workspace/switch','b','POST')).resolved,true);
   t.sqlite.exec("UPDATE business_trials SET status='trialing',trial_ends_at=1 WHERE business_id='b'");

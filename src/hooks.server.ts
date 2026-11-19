@@ -44,6 +44,13 @@ const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
 	'/tools/waste'
 ];
 
+const guardCookies = new WeakMap<object, Map<string, string>>();
+
+function rememberGuardCookie(event: Parameters<Handle>[0]['event'], name: string, value: string,
+  options: Parameters<typeof event.cookies.serialize>[2]) {
+  guardCookies.get(event)?.set(name, event.cookies.serialize(name, value, options));
+}
+
 function shouldDispatchOperationalEvents(pathname: string, method: string) {
 	if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) return false;
 	return OPERATIONAL_EVENT_MUTATION_PREFIXES.some(
@@ -54,8 +61,10 @@ function shouldDispatchOperationalEvents(pathname: string, method: string) {
 function setSessionCookies(event: Parameters<Handle>[0]['event'], sessionToken: string) {
 	const cookieName = getSessionCookieName();
 	event.cookies.set(cookieName, sessionToken, getSessionCookieOptions(event.request));
+	rememberGuardCookie(event, cookieName, sessionToken, getSessionCookieOptions(event.request));
 	event.cookies.delete('session_id', { path: '/' });
 	event.cookies.delete('session_id_pwa', { path: '/' });
+	for (const name of ['session_id', 'session_id_pwa']) rememberGuardCookie(event, name, '', { path: '/', maxAge: 0 });
 }
 
 function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
@@ -65,6 +74,9 @@ function clearSessionCookies(event: Parameters<Handle>[0]['event']) {
 	event.cookies.delete('session_id', { path: '/' });
 	event.cookies.delete('session_id_pwa', { path: '/' });
 	event.cookies.delete(ACTIVE_BUSINESS_COOKIE, getActiveBusinessCookieDeleteOptions(event.request));
+	rememberGuardCookie(event, cookieName, '', { ...deleteOptions, maxAge: 0 });
+	for (const name of ['session_id', 'session_id_pwa']) rememberGuardCookie(event, name, '', { path: '/', maxAge: 0 });
+	rememberGuardCookie(event, ACTIVE_BUSINESS_COOKIE, '', { ...getActiveBusinessCookieDeleteOptions(event.request), maxAge: 0 });
 }
 
 function isTrustedStateChangingRequest(request: Request, requestUrl: URL) {
@@ -102,7 +114,7 @@ function isTrustedStateChangingRequest(request: Request, requestUrl: URL) {
 function applySecurityHeaders(response: Response) {
 	response.headers.set('x-content-type-options', 'nosniff');
 	response.headers.set('x-frame-options', 'DENY');
-	response.headers.set(
+	if (!response.headers.has('content-security-policy')) response.headers.set(
 		'content-security-policy',
 		[
 			"default-src 'self'",
@@ -112,7 +124,7 @@ function applySecurityHeaders(response: Response) {
 			"img-src 'self' data: blob: https:",
 			"font-src 'self' data: https://fonts.gstatic.com",
 			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-			"script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+			"script-src 'self' https://challenges.cloudflare.com",
 			"connect-src 'self' https://challenges.cloudflare.com",
 			"frame-src https://challenges.cloudflare.com",
 			"media-src 'self' blob:",
@@ -485,6 +497,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				businessContext.businessId,
 				getActiveBusinessCookieOptions(event.request)
 			);
+			rememberGuardCookie(event, ACTIVE_BUSINESS_COOKIE, businessContext.businessId, getActiveBusinessCookieOptions(event.request));
 		}
 
 		event.locals.userId = session.found_user_id;
@@ -626,6 +639,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const started = performance.now();
+	guardCookies.set(event, new Map());
 	const capture = (status: number) => {
 		if (building) return;
 		const recording = recordRequestDiagnostic(event, event.locals.platformDiagnosticStatus ?? status, performance.now() - started)
@@ -640,6 +654,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	} catch (error) {
 		const status = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 500;
 		capture(Number.isInteger(status) && status >= 300 && status <= 599 ? status : 500);
+		if (isRedirect(error)) {
+			const actionRequest = event.request.method === 'POST' && event.request.headers.get('x-sveltekit-action') === 'true';
+			const response = event.isDataRequest || actionRequest
+				? Response.json({ type: 'redirect', status: error.status, location: error.location })
+				: new Response(null, { status: error.status, headers: { location: error.location } });
+			response.headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+			response.headers.set('pragma', 'no-cache');
+			response.headers.set('expires', '0');
+			for (const cookie of guardCookies.get(event)?.values() ?? []) response.headers.append('set-cookie', cookie);
+			return applySecurityHeaders(response);
+		}
 		throw error;
+	} finally {
+		guardCookies.delete(event);
 	}
 };

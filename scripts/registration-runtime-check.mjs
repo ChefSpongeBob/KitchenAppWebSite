@@ -85,7 +85,7 @@ const { outputFiles } = await build({
         foreignKeys:(await db.prepare('PRAGMA foreign_key_check').all()).results});
     }};` },
   bundle: true, format: 'esm', platform: 'neutral', conditions: ['workerd', 'node', 'production'], mainFields: ['module', 'main'],
-  target: 'es2022', write: false, external: ['cloudflare:workers'],
+  target: 'es2022', write: false, external: ['cloudflare:workers', 'node:crypto'],
   plugins: [{ name: 'fixture-env', setup(build) {
     build.onResolve({ filter: /^\$app\/env$/ }, () => ({ path: 'env', namespace: 'fixture' }));
     build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const dev=false;export const browser=false;export const building=false;' }));

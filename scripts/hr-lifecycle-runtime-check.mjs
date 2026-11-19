@@ -82,7 +82,7 @@ const {outputFiles}=await build({stdin:{resolveDir:process.cwd(),sourcefile:'hr-
       objects:(await bindings.DOC_MEDIA.list({limit:100})).objects.map(row=>row.key),
       audits:(await raw.prepare('SELECT action,metadata_json FROM account_audit_logs ORDER BY rowid').all()).results,
       foreignKeys:(await raw.prepare('PRAGMA foreign_key_check').all()).results});
-  }};`},bundle:true,format:'esm',platform:'neutral',conditions:['workerd','node','production'],mainFields:['module','main'],target:'es2022',write:false,external:['cloudflare:workers'],
+  }};`},bundle:true,format:'esm',platform:'neutral',conditions:['workerd','node','production'],mainFields:['module','main'],target:'es2022',write:false,external:['cloudflare:workers','node:crypto'],
   plugins:[{name:'fixture-env',setup(build){build.onResolve({filter:/^\$app\/env$/},()=>({path:'env',namespace:'fixture'}));build.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const dev=false;export const browser=false;export const building=false;'}));}}]});
 const runtime=new Miniflare({host:'127.0.0.1',port:0,cf:false,telemetry:{enabled:false},workers:[{
   config:{name:'hr-lifecycle-runtime',compatibilityDate:config.compatibility_date,compatibilityFlags:config.compatibility_flags,

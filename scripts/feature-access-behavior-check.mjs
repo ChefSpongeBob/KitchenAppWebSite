@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
-import { createTestD1, loadServerModules, formRequest } from './helpers/test-d1.mjs';
+import { createTestD1, loadServerModules, formRequest, serializeTestCookie } from './helpers/test-d1.mjs';
 
 const test = createTestD1();
 const { sqlite, db } = test;
@@ -112,10 +112,12 @@ try {
     if (options.anonymous) values.delete('__Host-kitchen_session');
     const url = new URL(path, 'https://criminiops.com');
     const event = { url, request: new Request(url, { method: options.method ?? 'GET', headers: { origin: url.origin } }), locals: {}, cookies: {
-      get: key => values.get(key), set: (key, value) => values.set(key, value), delete: key => values.delete(key)
+      serialize: serializeTestCookie, get: key => values.get(key), set: (key, value) => values.set(key, value), delete: key => values.delete(key)
     } };
-    try { await handle({ event, resolve: async () => { resolved = true; return new Response('Resolved'); } }); }
-    catch (error) { assert.ok(error.status >= 300 && error.status < 400); }
+    const response = await handle({ event, resolve: async () => { resolved = true; return new Response('Resolved'); } });
+    if (resolved) assert.equal(response.status, 200);
+    else assert.ok([303, 403].includes(response.status), `${path} must redirect or explicitly deny access, not fail`);
+    if (response.status === 303) assert.ok(response.headers.get('location'));
     return { resolved, event };
   };
   const gatedPaths = ['/schedule', '/my-schedule', '/admin/schedule', '/admin/schedule/settings', '/todo', '/todo/log', '/whiteboard', '/api/whiteboard', '/temper', '/api/temps', '/admin/sensors',

@@ -3,6 +3,7 @@ import { hashedAuditValue } from '#lib/server/security.ts';
 
 import { hasBusinessCapability } from '#lib/server/permissions.ts';
 import { getUserBusinessContext } from '#lib/server/business.ts';
+import { previousSecretVersions } from '#lib/server/secretVersions.ts';
 
 type D1 = App.RuntimeEnv['DB'];
 
@@ -77,15 +78,33 @@ function readSensitiveKey(env?: SensitiveEnv) {
 }
 
 export function isSensitiveEncryptionConfigured(env?: SensitiveEnv) {
-  return readSensitiveKey(env).length >= 32;
+  try {
+    const previous = previousSecretVersions(env?.SENSITIVE_DATA_PREVIOUS_KEYS);
+    const version = env?.SENSITIVE_DATA_KEY_VERSION?.trim();
+    return readSensitiveKey(env).length >= 32 && (!version || /^[a-zA-Z0-9._-]{1,64}$/.test(version)) &&
+      [...previous.values()].every(key => key.length >= 32) &&
+      (!version || !previous.has(version) || previous.get(version) === readSensitiveKey(env));
+  } catch { return false; }
 }
 
 export function isSensitiveOnboardingFormKey(formKey: string | null | undefined) {
   return sensitiveFormKeys.has(String(formKey ?? '').trim().toLowerCase());
 }
 
-async function importSensitiveKey(env?: SensitiveEnv) {
-  const secret = readSensitiveKey(env);
+async function importSensitiveKey(env?: SensitiveEnv, requestedVersion?: string) {
+  const currentSecret = readSensitiveKey(env);
+  const previous = previousSecretVersions(env?.SENSITIVE_DATA_PREVIOUS_KEYS);
+  const active = await deriveSensitiveKey(currentSecret, env?.SENSITIVE_DATA_KEY_VERSION?.trim());
+  if (previous.has(active.keyVersion) && previous.get(active.keyVersion) !== currentSecret) {
+    throw new Error('Sensitive key versions must be unique.');
+  }
+  if (requestedVersion === undefined || requestedVersion === active.keyVersion) return active;
+  const secret = previous.get(requestedVersion);
+  if (!secret) throw new Error('The encryption key version for this record is unavailable.');
+  return deriveSensitiveKey(secret, requestedVersion);
+}
+
+async function deriveSensitiveKey(secret: string, version?: string) {
   if (secret.length < 32) {
     throw new Error('SENSITIVE_DATA_KEY must be set before storing sensitive employee records.');
   }
@@ -100,7 +119,8 @@ async function importSensitiveKey(env?: SensitiveEnv) {
 
   const keyBytes = await sha256Bytes(sourceBytes);
   const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-  const keyVersion = env?.SENSITIVE_DATA_KEY_VERSION?.trim() || toHex(keyBytes).slice(0, 16);
+  const keyVersion = version || toHex(keyBytes).slice(0, 16);
+  if (!/^[a-zA-Z0-9._-]{1,64}$/.test(keyVersion)) throw new Error('Invalid sensitive key version.');
   return { key, keyVersion };
 }
 
@@ -153,7 +173,8 @@ export async function decryptSensitiveJsonPayload<T extends Record<string, unkno
   context: SensitivePayloadContext
 ): Promise<T | null> {
   if (!encrypted.encrypted_payload || !encrypted.payload_iv) return null;
-  const { key } = await importSensitiveKey(env);
+  if (encrypted.encryption_algorithm !== SENSITIVE_ENCRYPTION_ALGORITHM) throw new Error('Unsupported sensitive encryption algorithm.');
+  const { key } = await importSensitiveKey(env, encrypted.key_version);
   const decrypted = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
