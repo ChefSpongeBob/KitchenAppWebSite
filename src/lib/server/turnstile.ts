@@ -1,4 +1,5 @@
 import { isNativeAppRequest } from '#lib/server/authCookies.ts';
+import { LOGIN_CHALLENGE_ORIGIN } from '#lib/security/loginChallenge.ts';
 
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TURNSTILE_TIMEOUT_MS = 4500;
@@ -52,9 +53,8 @@ export async function validateTurnstileSubmission(args: {
 		if (!response.ok) return { ok: false, required: true, reason: 'verify_http_error' };
 		if (result?.success !== true) return { ok: false, required: true, reason: 'failed' };
 		if (result.action !== 'login') return { ok: false, required: true, reason: 'action_mismatch' };
-		const hostname = new URL(args.request.url).hostname;
-		// Local native assets may solve on localhost; a native marker never skips verification.
-		if (result.hostname !== hostname && !(isNativeAppRequest(args.request) && result.hostname === 'localhost')) {
+		const hostname = new URL(isNativeAppRequest(args.request) ? LOGIN_CHALLENGE_ORIGIN : args.request.url).hostname;
+		if (result.hostname !== hostname) {
 			return { ok: false, required: true, reason: 'hostname_mismatch' };
 		}
 		return { ok: true, required: true, reason: 'verified' };

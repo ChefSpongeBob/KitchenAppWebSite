@@ -16,7 +16,7 @@ const checks = [
 	['script CSP rejects arbitrary inline code and retains Turnstile resources', source.includes("script-src 'self' https://challenges.cloudflare.com") && !source.includes("script-src 'self' 'unsafe-inline'") && source.includes("connect-src 'self' https://challenges.cloudflare.com") && source.includes("frame-src https://challenges.cloudflare.com")],
 	['framework nonce/hash policy is preserved', source.includes("if (!response.headers.has('content-security-policy'))")],
 	['authentication redirects retain security and no-store headers', source.includes('event.isDataRequest || actionRequest') && source.includes("guardCookies.get(event)?.values()") && source.includes('return applySecurityHeaders(response)')],
-	['referrer policy is set globally', source.includes("referrer-policy', 'strict-origin-when-cross-origin")],
+	['referrer policy is set globally; hosted check sends no referrer', source.includes("nativeLoginChallenge ? 'no-referrer' : 'strict-origin-when-cross-origin'")],
 	['permissions policy is set globally', source.includes('permissions-policy')],
 	['origin agent cluster is isolated', source.includes("origin-agent-cluster', '?1")],
 	['cross-domain policy files are disabled', source.includes("x-permitted-cross-domain-policies', 'none")],

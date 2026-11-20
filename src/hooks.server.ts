@@ -32,6 +32,7 @@ import { logOperationalError, logOperationalEvent } from '#lib/server/observabil
 import { processOperationalEvents } from '#lib/server/operationalEvents.ts';
 import { findPlatformStaff, isPlatformStaffPath, isStaffSecurityPath, loadStaffStepUp, STAFF_SESSION_SECONDS } from '#lib/server/platformStaff.ts';
 import { recordRequestDiagnostic } from '#lib/server/platformDiagnostics.ts';
+import { LOGIN_CHALLENGE_PATH } from '#lib/security/loginChallenge.ts';
 
 const OPERATIONAL_EVENT_MUTATION_PREFIXES = [
 	'/register',
@@ -111,9 +112,10 @@ function isTrustedStateChangingRequest(request: Request, requestUrl: URL) {
 	return nativeRequest;
 }
 
-function applySecurityHeaders(response: Response) {
+function applySecurityHeaders(response: Response, nativeLoginChallenge = false) {
 	response.headers.set('x-content-type-options', 'nosniff');
-	response.headers.set('x-frame-options', 'DENY');
+	if (nativeLoginChallenge) response.headers.delete('x-frame-options');
+	else response.headers.set('x-frame-options', 'DENY');
 	if (!response.headers.has('content-security-policy')) response.headers.set(
 		'content-security-policy',
 		[
@@ -132,7 +134,7 @@ function applySecurityHeaders(response: Response) {
 			...(dev ? [] : ['upgrade-insecure-requests'])
 		].join('; ')
 	);
-	response.headers.set('referrer-policy', 'strict-origin-when-cross-origin');
+	response.headers.set('referrer-policy', nativeLoginChallenge ? 'no-referrer' : 'strict-origin-when-cross-origin');
 	response.headers.set(
 		'permissions-policy',
 		'camera=(), geolocation=(), microphone=(), payment=(self)'
@@ -157,6 +159,14 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 		return applySecurityHeaders(await resolve(event));
 	}
 	event.locals.env = env as App.RuntimeEnv;
+	if (pathname === LOGIN_CHALLENGE_PATH) {
+		if (!['GET', 'HEAD'].includes(event.request.method)) {
+			return applySecurityHeaders(new Response('Method not allowed.', {
+				status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' }
+			}));
+		}
+		return applySecurityHeaders(await resolve(event), true);
+	}
 	const rawDb = event.locals.env.DB;
 	event.locals.DB = rawDb
 		? wrapProductionSchemaGuard(

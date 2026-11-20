@@ -111,7 +111,10 @@ try {
     provider({ ...valid, hostname: 'localhost' });
     assert.equal((await server.validateTurnstileSubmission(submission())).ok, false);
     assert.equal((await server.validateTurnstileSubmission(submission({ request:
-      new Request('https://criminiops.com/login', { headers: { 'x-crimini-native': '1' } }) }))).ok, true);
+      new Request('https://criminiops.com/login', { headers: { 'x-crimini-native': '1' } }) }))).ok, false);
+    provider(valid);
+    assert.equal((await server.validateTurnstileSubmission(submission({ request:
+      new Request('https://criminikitchenappwebsite.pages.dev/login', { headers: { 'x-crimini-native': '1' } }) }))).ok, true);
   });
   await check('wrong host/action, missing fields, provider rejection and malformed responses fail closed', async () => {
     for (const response of [{ ...valid, action: 'other' }, { ...valid, hostname: 'attacker.invalid' },
@@ -154,3 +157,4 @@ const page = readFileSync('src/routes/login/+page.svelte', 'utf8');
 assert.match(page, /finally\s*\{\s*submitting = false;\s*if \(result.type !== 'redirect'\) securityWidget\?\.reset\(\)/);
 assert.ok(page.includes('{#key turnstileSiteKey}') && page.includes('bind:this={securityWidget}'));
 console.log(`PASS ${passed} isolated Turnstile groups; no live provider calls, email or production writes`);
+await import('./hosted-turnstile-behavior-check.mjs');

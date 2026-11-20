@@ -274,6 +274,7 @@ console.log('PASS health uses indexed bounded tenant reads, safe status metadata
 const redirect = (status, location) => { throw Object.assign(Error('Redirect'), { status, location }); };
 let tenantCalls = 0;
 const hooks = load('src/hooks.server.ts', {
+  '#lib/security/loginChallenge.ts': loadServerModules()('src/lib/security/loginChallenge.ts'),
   'cloudflare:workers': { env: { DB: db }, waitUntil: () => {} },
   '$app/env': { building: false, dev: false },
   '@sveltejs/kit': { redirect, isRedirect: err => Boolean(err.location) },

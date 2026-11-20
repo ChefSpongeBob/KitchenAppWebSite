@@ -26,7 +26,7 @@ export default defineConfig(({ command }) => ({
         'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
         'script-src': ['self', 'https://challenges.cloudflare.com', ...startupScriptHashes],
         'connect-src': ['self', 'https://challenges.cloudflare.com', ...(nativeBuild ? ['https://criminiops.com'] as const : [])],
-        'frame-src': ['https://challenges.cloudflare.com'],
+        'frame-src': ['https://challenges.cloudflare.com', ...(nativeBuild ? ['https://criminiops.com'] as const : [])],
         'media-src': ['self', 'blob:'],
         'form-action': ['self'],
         'upgrade-insecure-requests': command === 'build'
