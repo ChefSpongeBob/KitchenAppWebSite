@@ -67,7 +67,8 @@ const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), source
         :await whiteboard({locals,request:new Request('https://fixture.example.invalid/api/whiteboard',{method:'POST',body:JSON.stringify(body.fields)})});
       return result instanceof Response?result:Response.json(result);
     }catch{return Response.json({error:'isolated transaction failure'},{status:500});}
-  }};` }, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false,
+  }};` }, bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', write: false,
+  conditions: ['workerd', 'node', 'production'], external: ['cloudflare:workers', 'node:crypto'],
   plugins: [{ name: 'fixture-environment', setup(build) {
     build.onResolve({ filter: /^\$app\/env$/ }, () => ({ path: 'env', namespace: 'fixture' }));
     build.onResolve({ filter: /^#lib\/server\/operationalEvents\.ts$/ }, () => ({ path: 'events', namespace: 'fixture' }));

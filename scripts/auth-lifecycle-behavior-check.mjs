@@ -300,4 +300,77 @@ await check('a missing production pepper fails closed even when NODE_ENV is unse
   }
 });
 
+for (const email of ['not-an-email', 'alice @example.invalid', 'a'.repeat(243) + '@example.invalid']) {
+  await check('contact edits reject malformed or oversized email: ' + email.slice(0, 30), async t => {
+    const result = await t.load()('src/routes/settings/+page.server.ts').actions.save_contact_info(
+      t.event('/settings', { email, phone: 'changed' }, { userId: 'alice', businessId: 'alice-business' }));
+    assert.equal(result.status, 400);
+    assert.equal(t.row('users', 'alice').email, 'alice@example.invalid');
+    assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM employee_profiles').get().n, 0);
+  });
+}
+
+await check('contact edits preserve same-address verification and clear it only when the global email changes', async t => {
+  t.sqlite.prepare("UPDATE users SET email_verified_at=? WHERE id='alice'").run(t.now - 100);
+  const settings = t.load()('src/routes/settings/+page.server.ts');
+  const save = email => settings.actions.save_contact_info(t.event('/settings', { email, phone: '123' },
+    { userId: 'alice', businessId: 'alice-business' }));
+  assert.equal((await save('  ALICE@EXAMPLE.INVALID  ')).success, true);
+  assert.equal(t.row('users', 'alice').email_verified_at, t.now - 100);
+  assert.equal((await save('changed@example.invalid')).success, true);
+  assert.equal(t.row('users', 'alice').email, 'changed@example.invalid');
+  assert.equal(t.row('users', 'alice').email_normalized, 'changed@example.invalid');
+  assert.equal(t.row('users', 'alice').email_verified_at, null);
+  assert.equal(t.row('users', 'alice').password_hash, originalHash);
+  assert.equal(t.row('users', 'bob').email, 'bob@example.invalid');
+  assert.equal(t.row('sessions', 'alice-session').revoked_at, null);
+  assert.equal(await t.load()('src/lib/server/passwordReset.ts').findValidPasswordResetByTokenHash(t.db, t.tokenHash), null);
+});
+
+await check('duplicate email rejection leaves both the global identity and contact profile unchanged', async t => {
+  const result = await t.load()('src/routes/settings/+page.server.ts').actions.save_contact_info(
+    t.event('/settings', { email: 'bob@example.invalid', phone: 'changed' }, { userId: 'alice', businessId: 'alice-business' }));
+  assert.equal(result.status, 400);
+  assert.equal(t.row('users', 'alice').email, 'alice@example.invalid');
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM employee_profiles').get().n, 0);
+});
+
+for (const existingProfile of [false, true]) await check('contact failure rolls back email and verification with existing profile=' + existingProfile, async t => {
+  t.sqlite.prepare("UPDATE users SET email_verified_at=? WHERE id='alice'").run(t.now - 100);
+  if (existingProfile) t.insert('employee_profiles', { business_id: 'alice-business', user_id: 'alice', phone: 'original', updated_at: t.now });
+  t.sqlite.exec(`CREATE TRIGGER fixture_contact_failure BEFORE ${existingProfile ? 'UPDATE' : 'INSERT'} ON employee_profiles
+    BEGIN SELECT RAISE(ABORT,'isolated contact failure'); END`);
+  await assert.rejects(t.load()('src/routes/settings/+page.server.ts').actions.save_contact_info(
+    t.event('/settings', { email: 'changed@example.invalid', phone: 'changed' }, { userId: 'alice', businessId: 'alice-business' })), /isolated contact failure/);
+  assert.equal(t.row('users', 'alice').email, 'alice@example.invalid');
+  assert.equal(t.row('users', 'alice').email_normalized, 'alice@example.invalid');
+  assert.equal(t.row('users', 'alice').email_verified_at, t.now - 100);
+  const profile = t.sqlite.prepare("SELECT phone FROM employee_profiles WHERE user_id='alice'").get();
+  assert.equal(profile?.phone ?? null, existingProfile ? 'original' : null);
+});
+
+for (const existingPreferences of [false, true]) await check('failed consent-history write rolls back preferences with existing row=' + existingPreferences, async t => {
+  if (existingPreferences) t.insert('user_preferences', { user_id: 'alice', email_updates: 0, sms_updates: 0, updated_at: t.now });
+  const before = t.sqlite.prepare("SELECT * FROM user_preferences WHERE user_id='alice'").get();
+  t.sqlite.exec("CREATE TRIGGER fixture_consent_failure BEFORE INSERT ON communication_consent_events WHEN NEW.channel='sms' BEGIN SELECT RAISE(ABORT,'isolated consent failure'); END");
+  await assert.rejects(t.load()('src/routes/settings/+page.server.ts').actions.save_app_settings(
+    t.event('/settings', { email_updates: '1', sms_updates: '1', dark_mode: '1' }, { userId: 'alice', businessId: 'alice-business' })), /isolated consent failure/);
+  assert.deepEqual(t.sqlite.prepare("SELECT * FROM user_preferences WHERE user_id='alice'").get(), before);
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM communication_consent_events').get().n, 0);
+});
+
+await check('successful communication choices and withdrawal commit preferences and both channel histories together', async t => {
+  const settings = t.load()('src/routes/settings/+page.server.ts');
+  for (const granted of [1, 0]) {
+    assert.equal((await settings.actions.save_app_settings(t.event('/settings', {
+      email_updates: granted, sms_updates: granted, push_updates: '0', dark_mode: '1', language: 'en'
+    }, { userId: 'alice', businessId: 'alice-business' }))).success, true);
+    const preferences = t.sqlite.prepare("SELECT * FROM user_preferences WHERE user_id='alice'").get();
+    assert.equal(preferences.email_updates, granted); assert.equal(preferences.sms_updates, granted);
+    assert.equal(Boolean(preferences.email_updates_consented_at), Boolean(granted));
+    assert.equal(Boolean(preferences.sms_updates_consented_at), Boolean(granted));
+    assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM communication_consent_events WHERE granted=?').get(granted).n, 2);
+  }
+});
+
 if (failures) { console.error(`${failures} authentication lifecycle cases failed.`); process.exitCode = 1; }

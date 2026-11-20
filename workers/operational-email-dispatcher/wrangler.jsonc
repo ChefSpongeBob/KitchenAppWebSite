@@ -3,6 +3,7 @@
   "name": "crimini-operational-email-dispatcher",
   "main": "index.js",
   "compatibility_date": "2026-02-07",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "vars": {
     "APP_BASE_URL": "https://criminiops.com"

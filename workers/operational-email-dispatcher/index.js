@@ -30,6 +30,10 @@ async function dispatch(env) {
 
   const summary = await response.json();
   console.log('Operational email dispatch complete.', summary);
+  const failed = Number(summary.failed);
+  if (Number.isSafeInteger(failed) && failed > 0) {
+    console.error(JSON.stringify({ event: 'operational_email_delivery_failed', failed_count: failed }));
+  }
 }
 
 async function processTemperatureBatch(env, businessIds) {

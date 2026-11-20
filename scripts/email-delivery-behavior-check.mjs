@@ -97,7 +97,32 @@ try {
     assert.equal(JSON.stringify([failed,sensitiveLogs]).includes('123456'),false,'Provider error bodies must not leak a verification code');
   } finally { console.error = originalError; }
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM operational_events WHERE delivery_status='pending'").get().n, 1);
+  const privateFixture = 'https://criminiops.com/reset-password/fixture-private-token?invite=fixture-private-invite employee-private@example.invalid';
+  const failureLogs = [];
+  console.error = (...args) => failureLogs.push(args.join(' '));
+  try {
+    for (const mode of ['json', 'text', 'exception', 'invalid-success-json']) {
+      globalThis.fetch = async () => {
+        if (mode === 'exception') throw new Error(privateFixture);
+        if (mode === 'json') return Response.json({ message: privateFixture }, { status: 503 });
+        return new Response(privateFixture, { status: mode === 'text' ? 503 : 200 });
+      };
+      for (const sensitive of [false, true]) {
+        const failed = await email.sendTransactionalEmail({ env, to: 'employee-a@example.invalid', subject: 'Fixture', html: '', text: '', sensitive });
+        assert.equal(failed.sent, false);
+        assert.doesNotMatch(JSON.stringify([failed, failureLogs]), /fixture-private|employee-private/);
+      }
+      await email.sendInviteEmail({ env, origin: env.APP_BASE_URL, inviteeEmail: 'employee-a@example.invalid', inviteCode: 'fixture-private-invite', expiresAt: now + 3600 });
+      await email.sendPasswordResetEmail({ env, origin: env.APP_BASE_URL, userEmail: 'employee-a@example.invalid', resetToken: 'fixture-private-token' });
+      assert.doesNotMatch(JSON.stringify(failureLogs), /fixture-private|employee-private/);
+    }
+    globalThis.fetch = async () => Response.json({ message: privateFixture }, { status: 503 });
+    await events.recordOperationalEvent(db, { businessId: 'a', eventType: 'onboarding.package.approved', category: 'onboarding', targetUserId: 'employee-a', now });
+    await events.processOperationalEvents(db, { env, now, maxAttempts: 1 });
+    assert.doesNotMatch(JSON.stringify(sqlite.prepare('SELECT error_message FROM operational_event_delivery_attempts').all()), /fixture-private|employee-private/);
+  } finally { console.error = originalError; }
   assert.deepEqual(sqlite.prepare('PRAGMA foreign_key_check').all(), []);
+  console.log('PASS provider rejection/exception/parse errors stay out of logs, returned reasons and queue receipts, including invite/reset mail');
   console.log('PASS real email/queue behavior: tenant/department/consent routing, approval target, escaped invite/reset links, idempotency, rejected redirects, missing receipt, retry, and no temperature email');
   console.log('Provider requests were intercepted; no real messages or production writes occurred.');
 } finally { globalThis.fetch = originalFetch; test.close(); }

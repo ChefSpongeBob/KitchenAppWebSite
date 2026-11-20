@@ -279,7 +279,10 @@ expect('src/routes/settings/+page.server.ts', 'settings dynamic user updates use
   source.includes('const nameColumn = userColumns.has') &&
   source.includes("'display_name'") &&
   source.includes("'username'") &&
-  source.includes("const assignments: string[] = ['email = ?']") &&
+  source.includes('const assignments: string[] = []') &&
+  source.includes("assignments.push('email = ?')") &&
+  source.includes("if (userColumns.has('email_verified_at'))") &&
+  source.includes("assignments.push('email_verified_at = CASE WHEN lower(trim(email)) = ? THEN email_verified_at ELSE NULL END')") &&
   source.includes("assignments.push('email_normalized = ?')") &&
   source.includes("assignments.push('updated_at = ?')")
 );

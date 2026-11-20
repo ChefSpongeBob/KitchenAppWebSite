@@ -207,9 +207,13 @@ export const actions: Actions = {
     const userColumns = await getUsersColumns(db);
     const hasEmail = userColumns.has('email');
     const hasEmailNormalized = userColumns.has('email_normalized');
+    const statements = [];
 
     if (hasEmail) {
       if (!email) return fail(400, { error: 'Email is required.' });
+      if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return fail(400, { error: 'Enter a valid email address.' });
+      }
 
       const duplicate = hasEmailNormalized
         ? await db
@@ -235,8 +239,14 @@ export const actions: Actions = {
 
       if (duplicate) return fail(400, { error: 'Email already in use.' });
 
-      const assignments: string[] = ['email = ?'];
-      const params: Array<string | number> = [email];
+      const assignments: string[] = [];
+      const params: Array<string | number> = [];
+      if (userColumns.has('email_verified_at')) {
+        assignments.push('email_verified_at = CASE WHEN lower(trim(email)) = ? THEN email_verified_at ELSE NULL END');
+        params.push(email);
+      }
+      assignments.push('email = ?');
+      params.push(email);
       if (hasEmailNormalized) {
         assignments.push('email_normalized = ?');
         params.push(email);
@@ -247,13 +257,12 @@ export const actions: Actions = {
       }
       params.push(locals.userId);
 
-      await db
+      statements.push(db
         .prepare(`UPDATE users SET ${assignments.join(', ')} WHERE id = ?`)
-        .bind(...params)
-        .run();
+        .bind(...params));
     }
 
-    await db
+    statements.push(db
       .prepare(
         `
         INSERT INTO employee_profiles (
@@ -296,8 +305,9 @@ export const actions: Actions = {
         currentProfile.emergency_contact_relationship,
         now,
         locals.userId
-      )
-      .run();
+      ));
+
+    await db.batch(statements);
 
     return { success: true, message: 'Contact information updated.' };
   },
@@ -317,7 +327,7 @@ export const actions: Actions = {
     const language = String(formData.get('language') ?? 'en').trim() || 'en';
     const now = Math.floor(Date.now() / 1000);
 
-    await db
+    const preferences = db
       .prepare(
         `
 		INSERT INTO user_preferences (
@@ -358,10 +368,10 @@ export const actions: Actions = {
         darkMode ? 1 : 0,
         language,
         now
-      )
-      .run();
+      );
 
 	await db.batch([
+	  preferences,
 	  db
 		.prepare(
 		  `INSERT INTO communication_consent_events (

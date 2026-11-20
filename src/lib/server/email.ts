@@ -27,22 +27,6 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;');
 }
 
-function extractErrorMessage(body: string) {
-  if (!body) return '';
-
-  try {
-    const parsed = JSON.parse(body) as {
-      message?: string;
-      error?: { message?: string };
-      name?: string;
-    };
-
-    return parsed.message || parsed.error?.message || parsed.name || body;
-  } catch {
-    return body;
-  }
-}
-
 export function renderCriminiEmail({
   eyebrow = '',
   title,
@@ -180,14 +164,11 @@ export async function sendTransactionalEmail({
     }
 
     if (!response.ok) {
-      const body = await response.text();
-      const errorMessage = sensitive ? '' : extractErrorMessage(body);
-      console.error('Resend email send failed:', response.status, errorMessage || 'Provider rejected the request.');
+      // Provider errors can echo recipients, message contents or credential-bearing links.
+      console.error('Resend email send failed:', response.status, 'Provider rejected the request.');
       return {
         sent: false,
-        reason: errorMessage
-          ? `Email send failed (${response.status}): ${errorMessage}`
-          : `Email send failed (${response.status}).`
+        reason: `Email send failed (${response.status}).`
       };
     }
 
@@ -199,8 +180,8 @@ export async function sendTransactionalEmail({
       sent: true,
       id: data.id
     };
-  } catch (error) {
-    console.error('Resend request failed:', sensitive ? 'Sensitive email request failed.' : error);
+  } catch {
+    console.error('Resend request failed:', sensitive ? 'Sensitive email request failed.' : 'Email provider request failed.');
     return {
       sent: false,
       reason: 'Email provider request failed.'
@@ -263,7 +244,8 @@ export async function sendInviteEmail({
       '',
       'Crimini by NNS, LLC'
     ].join('\n'),
-    idempotencyKey: `invite/${inviteCode}`
+    idempotencyKey: `invite/${inviteCode}`,
+    sensitive: true
   });
 }
 
@@ -428,7 +410,8 @@ export async function sendPasswordResetEmail({
       '',
       'This link expires in 2 hours.'
     ].join('\n'),
-    idempotencyKey: `password-reset/${resetToken.slice(0, 24)}`
+    idempotencyKey: `password-reset/${resetToken.slice(0, 24)}`,
+    sensitive: true
   });
 }
 

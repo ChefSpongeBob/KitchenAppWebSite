@@ -53,6 +53,28 @@ try {
   await event('schedule.time_off.approved'); await events.processOperationalEvents(db, { env, now });
   assert.equal(sent.length, 0, 'Optional operational mail remains opted out');
   clear();
+  for (const missingEnv of [{}, { RESEND_API_KEY: 'isolated-provider-fixture' }, { RESEND_FROM_EMAIL: 'test@example.invalid' }]) {
+    const id = await event('onboarding.package.approved');
+    const initial = await events.processOperationalEvents(db, { env: missingEnv, now });
+    assert.equal(initial.retrying, 1); assert.equal(initial.skipped, 0); assert.equal(sent.length, 0);
+    const pending = sqlite.prepare('SELECT delivery_status,delivery_attempts,next_attempt_at FROM operational_events WHERE id=?').get(id);
+    assert.equal(pending.delivery_status, 'pending'); assert.equal(pending.delivery_attempts, 1); assert.equal(pending.next_attempt_at, now + 60);
+    assert.equal((await events.processOperationalEvents(db, { env, now: now + 59 })).checked, 0);
+    assert.equal((await events.processOperationalEvents(db, { env, now: now + 60 })).delivered, 1);
+    assert.equal(sent.length, 1);
+    clear();
+  }
+  await event('onboarding.package.approved');
+  assert.equal((await events.processOperationalEvents(db, { env: {}, now, maxAttempts: 1 })).failed, 1);
+  assert.equal((await events.processOperationalEvents(db, { env, now: now + 3600 })).checked, 0);
+  assert.equal(sent.length, 0, 'Missing configuration must obey the existing retry cap, not retry indefinitely');
+  clear();
+  await event('onboarding.package.approved');
+  sqlite.exec("UPDATE business_users SET is_active=0 WHERE user_id='employee'");
+  assert.equal((await events.processOperationalEvents(db, { env: {}, now })).skipped, 1);
+  assert.equal(sent.length, 0, 'A removed recipient remains ineligible even when the mail transport is unavailable');
+  sqlite.exec("UPDATE business_users SET is_active=1 WHERE user_id='employee'");
+  clear();
   const admin = load('src/lib/server/admin.ts');
   const result = await admin.sendEmployeeOnboardingPackage(formRequest({ user_id: 'employee' }), {
     DB: db, env, userId: 'owner', userRole: 'admin', businessId: 'a', businessName: 'a', businessRole: 'owner', businessPermissionTemplate: 'owner'
@@ -132,6 +154,23 @@ try {
   assert.ok(sent[0].html.includes('/register?invite=fixture') && sent[0].html.includes('Expires '));
   assert.ok(sent[1].html.includes('Account owner:') && sent[1].html.includes('Medium - $49/mo') && sent[1].html.includes('&lt;Owner&gt;'));
   assert.ok(sent[2].html.includes('/onboarding') && sent[3].html.includes('/reset-password/fixture-reset'));
+  const dispatcher = load('workers/operational-email-dispatcher/index.js').default;
+  const originalLog = console.log;
+  try {
+    console.log = () => {};
+    for (const failed of [0, 2]) {
+      const logs = [], jobs = [];
+      let calls = 0;
+      console.error = (...args) => logs.push(args.join(' '));
+      globalThis.fetch = async () => { calls++; return Response.json({ ok: true, failed, retrying: 1, checked: 2 }); };
+      await dispatcher.scheduled({ scheduledTime: 60000 }, { SMOKE_INTERNAL_TOKEN: 'isolated-internal-fixture' }, { waitUntil(promise) { jobs.push(promise); } });
+      await Promise.all(jobs);
+      assert.equal(calls, 1, 'Reporting a terminal delivery failure must not resend or rerun the processor');
+      assert.equal(logs.length, failed ? 1 : 0);
+      if (failed) assert.deepEqual(JSON.parse(logs[0]), { event: 'operational_email_delivery_failed', failed_count: 2 });
+    }
+  } finally { console.log = originalLog; console.error = () => {}; }
+  console.log('PASS unconfigured mail retries/recovery/cap and removed-recipient exclusion; dispatcher exposes terminal counts without extra sends');
   console.log('PASS actual email lifecycle: position/individual permissions, essential-vs-optional mail, expiry/cleanup, concurrent claims, stable deduplication and no duplicate packet email');
   console.log('PASS delivery receipt/status rollback, cross-tenant receipt rejection and capped exception retries; provider requests intercepted, no real messages');
   console.log('PASS shared app-styled email header/message/footer across invites, signup, packets, resets and deletion; escaped details/links, plain text, email-safe tables, no rounded marketing cards');

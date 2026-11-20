@@ -13,6 +13,7 @@ const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
 const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), sourcefile: 'auth-lifecycle-runtime.ts', contents: `
   import {actions as login} from './src/routes/login/+page.server.ts';
   import {actions as reset} from './src/routes/reset-password/[token]/+page.server.ts';
+  import {actions as settings} from './src/routes/settings/+page.server.ts';
   import {hashPassword,hashSessionToken,verifyPassword} from './src/lib/server/auth.ts';
   import {checkRateLimit} from './src/lib/server/security.ts';
   import {cancelBusinessAccess,getBusinessTrialAccess} from './src/lib/server/trial.ts';
@@ -48,6 +49,41 @@ const { outputFiles } = await build({ stdin: { resolveDir: process.cwd(), source
         raw.prepare('INSERT INTO password_resets(id,user_id,email,token_hash,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind('reset-alice','alice','alice@example.invalid',await hashSessionToken(token),now,now+3600)
       ]);jar.clear();jar.set('__Host-kitchen_session','bob-token');jar.set('kitchen_active_business','bob-business');cookieOptions.length=0;
       return Response.json({ok:true});
+    }
+    if(path==='/settings-setup'){
+      await raw.exec('DROP TRIGGER IF EXISTS fixture_contact_failure;DROP TRIGGER IF EXISTS fixture_consent_failure;');
+      await raw.batch([
+        raw.prepare("UPDATE users SET email='alice@example.invalid',email_normalized='alice@example.invalid',email_verified_at=? WHERE id='alice'").bind(now-100),
+        raw.prepare("DELETE FROM employee_profiles WHERE business_id='alice-business' AND user_id='alice'"),
+        raw.prepare("DELETE FROM user_preferences WHERE user_id='alice'"),
+        raw.prepare("DELETE FROM communication_consent_events WHERE user_id='alice'")
+      ]);
+      if(url.searchParams.has('existing'))await raw.batch([
+        raw.prepare("INSERT INTO employee_profiles(business_id,user_id,phone,updated_at) VALUES('alice-business','alice','Original',?)").bind(now),
+        raw.prepare("INSERT INTO user_preferences(user_id,email_updates,sms_updates,updated_at) VALUES('alice',0,0,?)").bind(now)
+      ]);
+      return Response.json({ok:true});
+    }
+    if(path==='/settings-inspect')return Response.json({
+      identity:await raw.prepare("SELECT email,email_normalized,email_verified_at,password_hash FROM users WHERE id='alice'").first(),
+      profile:await raw.prepare("SELECT * FROM employee_profiles WHERE business_id='alice-business' AND user_id='alice'").first(),
+      preferences:await raw.prepare("SELECT * FROM user_preferences WHERE user_id='alice'").first(),
+      consent:(await raw.prepare("SELECT channel,granted FROM communication_consent_events WHERE user_id='alice' ORDER BY channel,granted").all()).results,
+      other:await raw.prepare("SELECT email,password_hash FROM users WHERE id='bob'").first(),
+      sessions:(await raw.prepare('SELECT id,revoked_at FROM sessions ORDER BY id').all()).results
+    });
+    if(path==='/settings-fail'){
+      if(url.searchParams.has('consent'))await raw.exec("CREATE TRIGGER fixture_consent_failure BEFORE INSERT ON communication_consent_events WHEN NEW.channel='sms' BEGIN SELECT RAISE(ABORT,'isolated consent failure');END");
+      else await raw.exec("CREATE TRIGGER fixture_contact_failure BEFORE "+(url.searchParams.has('existing')?'UPDATE':'INSERT')+" ON employee_profiles BEGIN SELECT RAISE(ABORT,'isolated contact failure');END");
+      return Response.json({ok:true});
+    }
+    if(path==='/settings-contact'||path==='/settings-preferences'){
+      const consent=path==='/settings-preferences',granted=url.searchParams.get('granted')??'1';
+      const fields=consent?{email_updates:granted,sms_updates:granted,dark_mode:'1'}:{email:url.searchParams.get('email')??'changed@example.invalid',phone:'Changed'};
+      const event={request:new Request('https://criminiops.com/settings',{method:'POST',body:new URLSearchParams(fields)}),
+        locals:{DB:db,env,userId:'alice',businessId:'alice-business',userRole:'admin',businessRole:'owner'}};
+      try{const result=await (consent?settings.save_app_settings:settings.save_contact_info)(event);return Response.json(result);}
+      catch{return Response.json({threw:true});}
     }
     if(path==='/pause'){pauseNext=true;return Response.json({ok:true});}
     if(path==='/waiting')return Response.json({waiting});
@@ -189,7 +225,36 @@ try {
   const expiredStore=await request('/billing-window?expired=1');assert.equal(expiredStore.access.allowApp,false);
   assert.equal(expiredStore.access.shouldPurge,false);assert.equal(expiredStore.cached.status,'active');
   assert.equal((await request('/billing-window')).access.allowApp,true);
+  for(const existing of [false,true]){
+    await request('/settings-setup'+(existing?'?existing=1':''));
+    const before=await request('/settings-inspect');
+    await request('/settings-fail'+(existing?'?existing=1':''));
+    assert.equal((await request('/settings-contact')).threw,true);
+    assert.deepEqual(await request('/settings-inspect'),before,'D1 contact failure must roll email, verification and profile back together');
+    await request('/settings-setup'+(existing?'?existing=1':''));
+    const beforeConsent=await request('/settings-inspect');await request('/settings-fail?consent=1');
+    assert.equal((await request('/settings-preferences')).threw,true);
+    assert.deepEqual(await request('/settings-inspect'),beforeConsent,'D1 consent failure must roll preferences and both consent channels back together');
+  }
+  await request('/settings-setup?existing=1');const settingsBefore=await request('/settings-inspect');
+  for(const email of ['not-an-email','alice @example.invalid','a'.repeat(243)+'@example.invalid','bob@example.invalid']){
+    assert.equal((await request('/settings-contact?email='+encodeURIComponent(email))).status,400);
+    assert.deepEqual(await request('/settings-inspect'),settingsBefore);
+  }
+  assert.equal((await request('/settings-contact?email='+encodeURIComponent('  ALICE@EXAMPLE.INVALID  '))).success,true);
+  const sameEmail=await request('/settings-inspect');assert.equal(sameEmail.identity.email_verified_at,settingsBefore.identity.email_verified_at);
+  assert.equal((await request('/settings-contact')).success,true);
+  const changed=await request('/settings-inspect');assert.equal(changed.identity.email,'changed@example.invalid');
+  assert.equal(changed.identity.email_normalized,'changed@example.invalid');assert.equal(changed.identity.email_verified_at,null);
+  assert.equal(changed.profile.phone,'Changed');assert.equal(changed.identity.password_hash,settingsBefore.identity.password_hash);
+  assert.deepEqual(changed.sessions,settingsBefore.sessions);assert.deepEqual(changed.other,settingsBefore.other);
+  for(const granted of [1,0]){
+    assert.equal((await request('/settings-preferences?granted='+granted)).success,true);
+    const saved=await request('/settings-inspect');assert.equal(saved.preferences.email_updates,granted);assert.equal(saved.preferences.sms_updates,granted);
+    assert.equal(saved.consent.filter(row=>row.granted===granted).length,2);
+  }
   assert.deepEqual((await request('/inspect')).foreignKeys, []);
+  console.log('PASS actual Workers/D1 settings: contact/consent rollback for inserts and updates, valid email changes and verification state, duplicate rejection, consent withdrawal and unchanged passwords/sessions/other identity');
   console.log('PASS actual Workers/D1: reset rollback/replay/concurrency, stale-password login rejection, account-switch preservation, native/browser cookies, atomic parallel abuse limits and non-destructive cancellation/expiry');
   console.log('PASS actual Workers/D1 employee removal: retained identity/HR, other-restaurant access, replay, transaction rollback, commit-time revocation and last-restaurant session/device revocation');
   console.log('PASS actual Workers/D1 store access: expired cached-active plans deny access without deletion; a current verified period permits it');

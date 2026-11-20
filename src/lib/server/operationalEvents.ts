@@ -875,7 +875,6 @@ async function deliverEventByEmail(
 
   const providerIds: string[] = [];
   const failures: string[] = [];
-  const skipped: string[] = [];
   for (const recipient of recipients) {
     const name = recipient.display_name?.trim() || 'there';
     const result = await sendTransactionalEmail({
@@ -900,9 +899,8 @@ async function deliverEventByEmail(
 
     if (result.sent) {
       if (result.id) providerIds.push(result.id);
-    } else if (result.skipped) {
-      skipped.push(result.reason ?? 'Email skipped.');
     } else {
+      // Eligible recipients must retain bounded retries when the mail transport is unconfigured.
       failures.push(result.reason ?? 'Email delivery failed.');
     }
   }
@@ -913,7 +911,7 @@ async function deliverEventByEmail(
   if (providerIds.length > 0) {
     return { status: 'sent' as const, providerMessageId: providerIds.slice(0, 10).join(',') };
   }
-  return { status: 'skipped' as const, reason: skipped[0] ?? 'Email skipped.' };
+  return { status: 'failed' as const, reason: 'Email provider did not confirm acceptance.' };
 }
 
 type ProcessOperationalEventsArgs = {

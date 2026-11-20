@@ -1,6 +1,6 @@
 # Crimini DB And Route Inventory
 
-Updated: 2026-11-02 (staff email verification and operations dashboard; restaurant authority unchanged)
+Updated: 2026-11-20 (schema reference through 0117; completed-checklist snapshots and reservation versions)
 
 This file is the working map for DB table names, column names, and the code paths that reference them. It is intentionally schema-first so future DB calls use actual column names instead of guessed names.
 
@@ -23,15 +23,17 @@ This file is the working map for DB table names, column names, and the code path
 - The creator and document routes already check names within the active business. The old global constraints contradicted those queries and blocked different restaurants from using the same titles; this is not a routing or authorization change.
 - Rebuild preserves every existing column, ID, timestamp, child item, and file reference. Only `checklist_items` and `list_items` have cascade dependencies on these parent tables; migration staging restores those rows within the transaction. No final new table, tenant, redirect, or seeded content.
 - `test:schema-namespaces` executes rollback, preservation, cross-tenant/same-tenant uniqueness, every tenant table's unique-index review, and actual schema-readiness checks. Globally unique invite codes, factory device/node serials, and global shift-reference keys remain intentional; tenant names and content are not shared.
-- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies 0111-0114. It contains no exported account/business/HR rows. Live execution status is recorded only in `PROJECT_HANDOFF.md`.
+- `scripts/fixtures/current-schema.sql` is schema-only through 0110; the isolated test helper applies subsequent migrations through 0117. It contains no exported account/business/HR rows. Isolated test results alone do not prove live migration status; deployment and live readiness evidence stay in the local `PROJECT_HANDOFF.md`.
 
 ## Summary
 
-- Tables inventoried: 117, including D1 migration bookkeeping (0113 adds two diagnostics tables; 0114 adds two support tables)
-- Tables with `business_id`: 98
+- Tables inventoried: 119, including D1 migration bookkeeping (0116 adds two completed-checklist snapshot tables)
+- Tables with `business_id`: 100
 - Tables with approved alternate tenant columns: 2
 - Approved global/system/root classifications: 22 (includes optional-context tables also counted under `business_id`; these are not disjoint totals)
 - Tables with `user_id`: 45
+
+**Applied extension, 2026-11-08:** Migration `0116_checklist_completed_runs.sql` is applied locally/remotely. Both restored pre-migration backups had 117 tables and passed value-preservation, rollback and foreign-key rehearsal. Post-migration governance classifies 119 tables and production readiness reports no missing tables/indexes/columns or tenant issues. New completion fields and the two tenant-scoped snapshot tables are catalogued below. Index `idx_schedule_availability_requests_business_updated` supports the existing requests report's tenant/time predicate. Temperature history keeps using `temps`; private archives use `temperature-reports/v1/YYYY-MM-DD/{encoded-business-id}.csv` in `DOC_MEDIA`, with no temperature aggregate table. Task status remains only in `PROJECT_HANDOFF.md`.
 
 ## Inventory Caveats
 
@@ -39,9 +41,9 @@ This file is the working map for DB table names, column names, and the code path
 - The authoritative table/column list is from the current migrated local D1 schema, which should match remote after migrations are applied.
 - Cloudflare internal local metadata tables such as `_cf_METADATA` are intentionally excluded.
 
-## Schema Assumption Mismatches To Fix Carefully
+## Recorded Schema Corrections
 
-These are not runtime failures by themselves, but they are exactly the kind of mismatch that can cause bad assumptions later.
+This is a schema reference, not a separate repair queue. Remaining schema/routing work belongs only to `PROJECT_HANDOFF.md`, item 2; the namespace correction below is already implemented.
 
 - Migration 0111 corrects the three global content-namespace constraints listed above. No guessed column names or application workflow rewrite is part of that correction.
 
@@ -690,6 +692,10 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/itemAttachments.ts` [reference]
   - `src/lib/server/tenant.ts` [reference]
 
+- `completed_by` Added by migration 0116; immutable history attribution/current completion metadata.
+
+- `completed_at` Added by migration 0116; immutable history attribution/current completion metadata.
+
 ### checklist_sections
 
 **Columns**
@@ -708,6 +714,8 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/checklists.ts` [select]
   - `src/lib/server/history.ts` [select]
   - `src/lib/server/tenant.ts` [reference]
+
+- `last_completed_run_id` Added by migration 0116; immutable history attribution/current completion metadata.
 
 ### creator_category_registry
 
@@ -1439,6 +1447,10 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/preplist.ts` [insert, select, update]
   - `src/lib/server/tenant.ts` [reference]
 
+- `completed_by` Added by migration 0116; immutable history attribution/current completion metadata.
+
+- `completed_at` Added by migration 0116; immutable history attribution/current completion metadata.
+
 ### list_sections
 
 **Columns**
@@ -1478,6 +1490,8 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `src/lib/server/history.ts` [ddl, insert, select]
   - `src/lib/server/tenant.ts` [reference]
 
+- `submitted_by_name_snapshot` Added by migration 0116; immutable history attribution/current completion metadata.
+
 ### list_submission_items
 
 **Columns**
@@ -1494,6 +1508,10 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
 **Code Usage**
   - `src/lib/server/history.ts` [ddl, insert, select]
   - `src/lib/server/tenant.ts` [reference]
+
+- `completed_by_name_snapshot` Added by migration 0116; immutable history attribution/current completion metadata.
+
+- `completed_at` Added by migration 0116; immutable history attribution/current completion metadata.
 
 ### operational_event_delivery_attempts
 
@@ -2757,12 +2775,14 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `business_id` TEXT (businesses.id, ON DELETE CASCADE)
   - `reserved_by` TEXT (users.id, ON DELETE SET NULL)
   - `created_at` INTEGER
+  - `reservation_id` TEXT (unique immutable record version; not a credential; migration 0117 backfills existing rows and defaults legacy inserts through a trigger)
 
 **Code Usage**
   - `src/lib/server/platformStaff.ts` [platform-authorized reservation/release]
   - `/staff/equipment` `src/routes/staff/equipment/+page.server.ts` [bounded select]
   - `src/lib/server/temperatureDeviceProvisioning.ts` [tenant gateway claim restriction]
   - Migration 0107 [reservation/claim concurrency triggers]
+  - Migration 0117 [record-version index/backfill/immutability; release requires exact business, serial and reservation version]
 
 ### platform_support_requests
 
@@ -2805,3 +2825,27 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - Staff updates [recent email proof and authority rechecked inside transaction; metadata-only platform audit]
   - Migration 0114 [business/request/time and business/request/visibility/time indexes]
   - Customer account removal [author reference removed by FK; business deletion removes request and messages]
+
+### checklist_completed_runs
+
+Migration: `0116_checklist_completed_runs.sql` (applied locally/remotely). Tenant-scoped completed checklist snapshots; 60-day report retention.
+
+- `id` TEXT PRIMARY KEY
+- `business_id` TEXT NOT NULL
+- `section_id` TEXT NOT NULL
+- `section_title_snapshot` TEXT NOT NULL
+- `submitted_by_name_snapshot` TEXT NOT NULL
+- `submitted_at` INTEGER NOT NULL
+
+### checklist_completed_run_items
+
+Migration: `0116_checklist_completed_runs.sql` (applied locally/remotely). Tenant-scoped completed checklist snapshots; 60-day report retention.
+
+- `run_id` TEXT NOT NULL (composite PK part)
+- `business_id` TEXT NOT NULL (composite PK part)
+- `item_id` TEXT NOT NULL (composite PK part)
+- `item_name_snapshot` TEXT NOT NULL
+- `completed_by_name_snapshot` TEXT NOT NULL
+- `completed_at` INTEGER
+
+The composite primary key is `(run_id, business_id, item_id)`. The `(run_id, business_id)` foreign key references `checklist_completed_runs(id, business_id)` with cascade deletion; `business_id` also references `businesses(id)`.
