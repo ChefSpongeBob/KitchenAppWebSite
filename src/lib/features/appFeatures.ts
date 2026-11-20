@@ -76,7 +76,7 @@ export const appFeatureDefinitions: AppFeatureDefinition[] = [
     label: 'Announcements',
     description: 'Homepage announcement content block.',
     userRoutePrefixes: [],
-    adminRoutePrefixes: []
+    adminRoutePrefixes: ['/admin/announcements']
   },
   {
     key: 'employee_spotlight',

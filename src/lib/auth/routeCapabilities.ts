@@ -13,6 +13,7 @@ const ROUTE_CAPABILITIES: ReadonlyArray<{
   { prefix: '/admin/business-registry', capability: 'manage_workspace' },
   { prefix: '/admin/feature-matrix', capability: 'manage_workspace' },
   { prefix: '/admin/creator', capability: 'manage_content' },
+  { prefix: '/admin/announcements', capability: 'manage_announcements' },
   { prefix: '/reports', capability: 'view_reports' },
   { prefix: '/vendors', capability: 'view_vendors' },
   { prefix: '/billing', capability: 'manage_billing' },

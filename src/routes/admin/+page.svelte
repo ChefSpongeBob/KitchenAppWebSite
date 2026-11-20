@@ -43,17 +43,10 @@
     users: UserOption[];
     whiteboardIdeas: WhiteboardIdea[];
     announcement: { content: string; updatedAt: number };
-    announcementHistory: Array<{
-      id: string;
-      content: string;
-      createdBy: string | null;
-      createdByName: string | null;
-      createdByEmail: string | null;
-      createdAt: number;
-    }>;
     employeeSpotlight: { employeeName: string; shoutout: string; updatedAt: number };
     featureAccess: AppFeatureAccess;
     workspaceAccess: {
+      announcements: boolean;
       vendors: boolean;
       reports: boolean;
     };
@@ -411,10 +404,10 @@
 
     <section class:single-panel={!data.featureAccess.announcements} class="communications-grid">
       {#if data.featureAccess.announcements}
-        <article class="saas-panel announcement-preview">
+        <article class="saas-panel announcement-preview" data-guide="admin-announcements">
           <header class="panel-heading">
             <div class="heading-copy"><span class="eyebrow">Live Update</span><h2>Announcement</h2></div>
-            <a href="#announcement-manager" class="text-action">Manage</a>
+            {#if data.workspaceAccess.announcements}<a href="/admin/announcements" class="text-action">Manage</a>{/if}
           </header>
           <div class="announcement-copy" class:empty-copy={!data.announcement.content}>
             <span class="material-icons" aria-hidden="true">campaign</span>
@@ -558,61 +551,15 @@
       </section>
     {/if}
 
-    {#if data.featureAccess.announcements}
-      <section class="saas-panel announcement-manager" id="announcement-manager" data-guide="admin-announcements">
-        <header class="panel-heading">
-          <div class="heading-copy"><span class="eyebrow">Homepage</span><h2>Announcement Manager</h2></div>
-          <span class="count-badge">{data.announcementHistory.length} saved</span>
-        </header>
-
-        <div class="announcement-feature">
-          <div class="current-announcement">
-            <span>Current announcement</span>
-            <p class:empty-copy={!data.announcement.content}>{data.announcement.content || 'No announcement posted.'}</p>
-            {#if data.announcement.updatedAt}<small>Updated {formatDate(data.announcement.updatedAt)}</small>{/if}
-          </div>
-          <div class="announcement-tools">
-            <details class="management-drawer">
-              <summary>Edit announcement <span class="material-icons chevron" aria-hidden="true">expand_more</span></summary>
-              <form method="POST" action="?/save_announcement" use:enhance={withAdminFeedback} class="announcement-form">
-                <label>
-                  <span>Announcement</span>
-                  <textarea name="content" rows="5" placeholder="Write an update for the team...">{data.announcement.content}</textarea>
-                </label>
-                <button type="submit" class="compact-action primary-action">Publish Announcement</button>
-              </form>
-            </details>
-            <details class="management-drawer">
-              <summary>Announcement history <span class="material-icons chevron" aria-hidden="true">expand_more</span></summary>
-              <div class="history-list">
-                {#if data.announcementHistory.length === 0}
-                  <p class="compact-empty">No saved announcements yet.</p>
-                {:else}
-                  {#each data.announcementHistory as entry}
-                    <article>
-                      <div><p>{entry.content}</p><small>{entry.createdByName ?? entry.createdByEmail ?? 'Manager'} | {formatDate(entry.createdAt)}</small></div>
-                      <form method="POST" action="?/delete_announcement_history" use:enhance={withAdminFeedback}>
-                        <input type="hidden" name="history_id" value={entry.id} />
-                        <button type="submit" class="compact-action danger-text">Delete</button>
-                      </form>
-                    </article>
-                  {/each}
-                {/if}
-              </div>
-            </details>
-            {#if data.featureAccess.employee_spotlight}
-              <details class="management-drawer spotlight-editor">
-                <summary>Employee Spotlight <span class="summary-value">{data.employeeSpotlight.employeeName || 'Not set'}</span><span class="material-icons chevron" aria-hidden="true">expand_more</span></summary>
-                <form method="POST" action="?/save_employee_spotlight" use:enhance={withAdminFeedback}>
-                  <input name="employee_name" placeholder="Employee name" value={data.employeeSpotlight.employeeName} />
-                  <textarea name="shoutout" rows="3" placeholder="Add the homepage spotlight...">{data.employeeSpotlight.shoutout}</textarea>
-                  <button type="submit" class="compact-action primary-action">Save Spotlight</button>
-                </form>
-              </details>
-            {/if}
-          </div>
-        </div>
-      </section>
+    {#if data.featureAccess.employee_spotlight}
+      <details class="management-drawer spotlight-editor">
+        <summary>Employee Spotlight <span class="summary-value">{data.employeeSpotlight.employeeName || 'Not set'}</span><span class="material-icons chevron" aria-hidden="true">expand_more</span></summary>
+        <form method="POST" action="?/save_employee_spotlight" use:enhance={withAdminFeedback}>
+          <input name="employee_name" placeholder="Employee name" value={data.employeeSpotlight.employeeName} />
+          <textarea name="shoutout" rows="3" placeholder="Add the homepage spotlight...">{data.employeeSpotlight.shoutout}</textarea>
+          <button type="submit" class="compact-action primary-action">Save Spotlight</button>
+        </form>
+      </details>
     {/if}
 
     <section class="workspace-section" data-guide="admin-workspaces">
@@ -678,7 +625,6 @@
   .communications-grid,
   .manager-panel,
   .todo-console,
-  .announcement-manager,
   .workspace-links {
     border-top: 1px solid var(--color-divider);
     border-bottom: 1px solid var(--color-divider);
@@ -714,9 +660,7 @@
   .eyebrow,
   .workspace-heading > span,
   .workspace-copy > small,
-  .todo-form label > span,
-  .announcement-form label > span,
-  .current-announcement > span {
+  .todo-form label > span {
     color: var(--color-text-muted);
     font-size: 0.64rem;
     font-weight: var(--weight-semibold);
@@ -1287,8 +1231,7 @@
   }
 
   .manager-panel,
-  .todo-console,
-  .announcement-manager {
+  .todo-console {
     padding: 1rem 0;
   }
 
@@ -1312,8 +1255,7 @@
   }
 
   .idea-row,
-  .task-row,
-  .history-list article {
+  .task-row {
     min-width: 0;
     padding: 0.68rem 0;
     display: grid;
@@ -1325,8 +1267,7 @@
   }
 
   .idea-row:last-child,
-  .task-row:last-child,
-  .history-list article:last-child {
+  .task-row:last-child {
     border-bottom: 0;
   }
 
@@ -1399,21 +1340,18 @@
     margin-top: 0.8rem;
   }
 
-  .todo-form,
-  .announcement-form {
+  .todo-form {
     display: grid;
     gap: 0.55rem;
     padding: 0 0 0.65rem;
   }
 
-  .todo-form label,
-  .announcement-form label {
+  .todo-form label {
     display: grid;
     gap: 0.2rem;
   }
 
   .todo-form > button,
-  .announcement-form > button,
   .spotlight-editor form > button {
     justify-self: start;
   }
@@ -1436,8 +1374,7 @@
   }
 
   .subsection-heading small,
-  .task-row small,
-  .history-list small {
+  .task-row small {
     color: var(--color-text-muted);
     font-size: 0.63rem;
     line-height: 1.35;
@@ -1460,58 +1397,6 @@
 
   .task-row strong {
     font-size: 0.75rem;
-  }
-
-  .announcement-feature {
-    display: grid;
-    grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
-    gap: 0;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  .current-announcement {
-    min-height: 190px;
-    padding: 1rem 1rem 1rem 0;
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--color-divider);
-    background: transparent;
-  }
-
-  .current-announcement p {
-    flex: 1;
-    margin: 1rem 0;
-    font-size: clamp(0.92rem, 1.7vw, 1.15rem);
-    line-height: 1.55;
-    white-space: pre-wrap;
-  }
-
-  .current-announcement small {
-    color: var(--color-text-muted);
-    font-size: 0.64rem;
-  }
-
-  .announcement-tools {
-    padding-left: 1rem;
-    display: grid;
-    align-content: start;
-    gap: 0.55rem;
-  }
-
-  .announcement-tools .management-drawer {
-    margin-top: 0;
-  }
-
-  .history-list {
-    max-height: 320px;
-    overflow: auto;
-  }
-
-  .history-list p {
-    margin: 0 0 0.2rem;
-    font-size: 0.72rem;
-    line-height: 1.4;
-    white-space: pre-wrap;
   }
 
   .spotlight-editor summary {
@@ -1640,8 +1525,7 @@
     .command-strip,
     .operations-grid,
     .communications-grid,
-    .todo-grid,
-    .announcement-feature {
+    .todo-grid {
       grid-template-columns: 1fr;
     }
 
@@ -1671,16 +1555,6 @@
       padding: 1rem 0 0;
     }
 
-    .current-announcement {
-      min-height: 140px;
-      padding: 1rem 0;
-      border-right: 0;
-      border-bottom: 1px solid var(--color-divider);
-    }
-
-    .announcement-tools {
-      padding: 1rem 0 0;
-    }
   }
 
   @media (max-width: 700px) {
@@ -1736,8 +1610,7 @@
     }
 
     .idea-row,
-    .task-row,
-    .history-list article {
+    .task-row {
       grid-template-columns: 1fr;
     }
 

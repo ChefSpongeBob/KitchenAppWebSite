@@ -379,7 +379,7 @@
             <div class="announcement-label-row">
               <span class="tile-label">Announcements</span>
               {#if data.canEditAnnouncement}
-                <a href="/admin#announcement-manager">Edit</a>
+                <a href="/admin/announcements">Edit</a>
               {/if}
             </div>
             {#if announcement.content}

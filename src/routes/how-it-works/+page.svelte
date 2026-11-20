@@ -64,7 +64,7 @@
 			targets: [
 				{
 					label: 'Invite + packet',
-					description: 'Employees join through branded invites and complete required onboarding packet items before full app use.',
+					description: 'Employees join through branded invites. Assigned HR packets are completed separately from app access.',
 					focus: { x: 22, y: 55, w: 38, h: 34 }
 				}
 			]
@@ -201,7 +201,7 @@
 		},
 		{
 			q: 'How do employees join?',
-			a: 'Managers send an invite. The employee creates their account, completes the assigned onboarding packet, and then uses the app once approved.'
+			a: 'Managers send an invite. Employees create an account or sign in to join the restaurant. Any assigned HR packet is completed separately and does not block app access.'
 		},
 		{
 			q: 'What onboarding packet items are included?',

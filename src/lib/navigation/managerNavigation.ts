@@ -80,6 +80,7 @@ export const managerNavigationGroups: ManagerNavigationGroup[] = [
 		items: [
 			{ id: 'workspace-branding', label: 'App Editor', href: '/admin/app-editor', icon: 'tune', requiredCapability: 'manage_workspace', showInSidebar: true },
 			{ id: 'workspace-creator', label: 'Creator Studio', href: '/admin/creator', icon: 'build_circle', requiredCapability: 'manage_content', showInSidebar: true },
+			{ id: 'workspace-announcements', label: 'Announcements', href: '/admin/announcements', icon: 'campaign', requiredCapability: 'manage_announcements', featureKey: 'announcements' },
 			{ id: 'workspace-vendor-directory', label: 'Vendor Directory', href: '/vendors', icon: 'store', requiredCapability: 'view_vendors', featureKey: 'vendors' },
 			{ id: 'workspace-vendors', label: 'Vendor Manager', href: '/admin/vendors', icon: 'local_shipping', requiredCapability: 'manage_vendors', featureKey: 'vendors', showInSidebar: true },
 			{ id: 'workspace-todo-log', label: 'ToDo Completion Log', href: '/todo/log', icon: 'history', requiredCapability: 'manage_content', featureKey: 'todo' },

@@ -6,11 +6,9 @@ import {
   createAdminReminder,
   createTodo,
   deleteAdminReminder,
-  deleteAnnouncementHistory,
   deleteTodo,
   deleteWhiteboard,
   loadAdminAnnouncement,
-  loadAdminAnnouncementHistory,
   loadAdminAssignableUsers,
   loadAdminEmployeeSpotlight,
   loadAdminReminders,
@@ -18,7 +16,6 @@ import {
   loadAdminWhiteboardIdeas,
   rejectWhiteboard,
   requireAdmin,
-  saveAnnouncement,
   saveEmployeeSpotlight,
   updateAdminReminder,
   usersHasIsActiveColumn
@@ -83,10 +80,10 @@ function emptyDashboard(guided: boolean, featureAccess: ReturnType<typeof buildF
     users: [],
     whiteboardIdeas: [],
     announcement: { content: '', updatedAt: 0 },
-    announcementHistory: [],
     employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
     featureAccess,
     workspaceAccess: {
+      announcements: false,
       vendors: false,
       reports: false
     },
@@ -137,7 +134,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     temperatureSnapshots,
     whiteboardIdeas,
     announcement,
-    announcementHistory,
     employeeSpotlight,
     hasIsActive,
   ] = await Promise.all([
@@ -149,7 +145,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     featureAccess.announcements
       ? loadAdminAnnouncement(db, businessId)
       : Promise.resolve({ content: '', updatedAt: 0 }),
-    featureAccess.announcements ? loadAdminAnnouncementHistory(db, businessId) : Promise.resolve([]),
     featureAccess.employee_spotlight
       ? loadAdminEmployeeSpotlight(db, businessId)
       : Promise.resolve({ employeeName: '', shoutout: '', updatedAt: 0 }),
@@ -239,6 +234,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const todoActive = todos.filter((todo) => !todo.completed_at).length;
   const todoCompleted = todos.length - todoActive;
   const pendingIdeas = whiteboardIdeas.filter((idea) => idea.status === 'pending').length;
+  const announcementPreview = announcement.content.replace(/\s+/g, ' ').trim();
 
   return {
     guided,
@@ -246,11 +242,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     savedReminders,
     users,
     whiteboardIdeas,
-    announcement,
-    announcementHistory,
+    announcement: {
+      ...announcement,
+      content: announcementPreview.length > 160 ? `${announcementPreview.slice(0, 157)}...` : announcementPreview
+    },
     employeeSpotlight,
     featureAccess,
     workspaceAccess: {
+      announcements: hasBusinessCapability(
+        locals.businessRole, locals.businessPermissionTemplate, 'manage_announcements', locals.businessCapabilities
+      ),
       vendors:
         featureAccess.vendors &&
         hasBusinessCapability(
@@ -344,13 +345,6 @@ export const actions: Actions = {
     (adminFeatureEnabled(locals, 'whiteboard')
       ? deleteWhiteboard(request, locals)
       : blockedFeatureError('Whiteboard')),
-  save_announcement: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_announcements') ??
-    (adminFeatureEnabled(locals, 'announcements')
-      ? saveAnnouncement(request, locals)
-      : blockedFeatureError('Announcements')),
-  delete_announcement_history: ({ request, locals }) =>
-    actionCapabilityFailure(locals, 'manage_announcements') ?? deleteAnnouncementHistory(request, locals),
   save_employee_spotlight: ({ request, locals }) =>
     actionCapabilityFailure(locals, 'manage_people') ??
     (adminFeatureEnabled(locals, 'employee_spotlight')

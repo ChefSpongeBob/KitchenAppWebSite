@@ -126,7 +126,7 @@ expect('src/routes/todo/+page.server.ts', 'ToDo supports tenant-scoped completio
   !source.includes('completed_by = NULL, completed_at = NULL')
 );
 
-expect('src/routes/admin/+page.server.ts', 'admin dashboard owns ToDo reminders moderation announcement and spotlight actions', (source) =>
+expect('src/routes/admin/+page.server.ts', 'admin dashboard owns ToDo reminders moderation and spotlight actions', (source) =>
   includesAll(source, [
     'create_todo',
     'delete_todo',
@@ -136,7 +136,6 @@ expect('src/routes/admin/+page.server.ts', 'admin dashboard owns ToDo reminders 
     'approve_whiteboard',
     'reject_whiteboard',
     'delete_whiteboard',
-    'save_announcement',
     'save_employee_spotlight'
   ]) &&
   !source.includes('make_user_admin') &&
@@ -144,6 +143,10 @@ expect('src/routes/admin/+page.server.ts', 'admin dashboard owns ToDo reminders 
   !source.includes('deny_user') &&
   !source.includes('delete_user') &&
   !source.includes('toggle_specials_access')
+);
+
+expect('src/routes/admin/announcements/+page.server.ts', 'announcement editing and history live in their dedicated workspace', (source) =>
+  includesAll(source, ['save_announcement', 'delete_announcement_history', 'requireAnnouncementEditor'])
 );
 
 expect('src/routes/api/whiteboard/+server.ts', 'whiteboard API supports business-scoped submit and vote', (source) =>

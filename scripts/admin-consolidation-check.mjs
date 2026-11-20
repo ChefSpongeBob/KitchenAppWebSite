@@ -184,7 +184,7 @@ expect('src/routes/admin/app-editor/+page.svelte', 'app editor is limited to sid
   !source.includes('action="?/save_features"')
 );
 
-expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes requests and owns announcement history', (source) =>
+expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes requests and announcements without loading history', (source) =>
   source.includes('countPendingScheduleRequests') &&
   !source.includes('loadPendingScheduleTimeOffRequests') &&
   !source.includes('loadPendingScheduleAvailabilityRequests') &&
@@ -193,8 +193,18 @@ expect('src/routes/admin/+page.server.ts', 'manager dashboard summarizes request
   !source.includes('make_user_admin:') &&
   !source.includes('delete_user:') &&
   !source.includes('toggle_specials_access:') &&
+  source.includes('announcementPreview') &&
+  !source.includes('loadAdminAnnouncementHistory') &&
+  !source.includes('delete_announcement_history')
+);
+
+expect('src/routes/admin/announcements/+page.server.ts', 'dedicated announcements workspace owns editing and history with permission and feature guards', (source) =>
   source.includes('loadAdminAnnouncementHistory') &&
-  source.includes('delete_announcement_history')
+  source.includes('save_announcement:') &&
+  source.includes('delete_announcement_history:') &&
+  source.includes("'manage_announcements'") &&
+  source.includes("requireFeatureAccess(locals, 'announcements')") &&
+  source.includes('requireBusinessId(locals)')
 );
 
 expect('src/routes/admin/schedule/+page.server.ts', 'schedule workspace owns requests and schedule setup without duplicate people controls', (source) =>
@@ -372,7 +382,7 @@ expect('src/routes/admin/onboarding/+page.svelte', 'onboarding separates invitat
 expect('src/routes/app/+page.svelte', 'announcements are viewed on the workspace dashboard', (source) =>
   source.includes('{#if featureAccess.announcements}') &&
   source.includes('class="announcement-copy"') &&
-  source.includes('href="/admin#announcement-manager"')
+  source.includes('href="/admin/announcements"')
 );
 
 expect('src/routes/todo/log/+page.server.ts', 'ToDo history uses current capability access without hidden mutations', (source) =>
