@@ -22,7 +22,7 @@
     type BusinessCapability
   } from "#lib/auth/roles.ts";
   import { resolveBusinessCapabilityForPath } from "#lib/auth/routeCapabilities.ts";
-  import { managerNavigationGroups } from "#lib/navigation/managerNavigation.ts";
+  import { canViewManagerNavigationItem, managerNavigationGroups, type ManagerNavigationItem } from "#lib/navigation/managerNavigation.ts";
   import ToastStack from "#lib/components/ui/ToastStack.svelte";
   import { nativeServerUrl } from "#lib/client/nativeServerUrl.ts";
   import { nativeRestaurantSwitch } from "#lib/client/restaurantSwitch.ts";
@@ -33,6 +33,7 @@
   type FeatureAwareNavItem = NavItem & {
     featureKey?: AppFeatureKey;
     requiredCapability?: BusinessCapability;
+    managerItem?: ManagerNavigationItem;
   };
 
   type AdminControlGroup = {
@@ -121,7 +122,8 @@
             route: item.href,
             icon: item.icon,
             featureKey: item.featureKey,
-            requiredCapability: item.requiredCapability
+            requiredCapability: item.requiredCapability,
+            managerItem: item
           }))
       }))
   ];
@@ -340,6 +342,7 @@
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
+        if (item.managerItem) return canViewManagerNavigationItem(item.managerItem, data.user, activeFeatureModes);
         const requiredCapability = item.requiredCapability ?? resolveBusinessCapabilityForPath(item.route.split("?", 1)[0]);
         if (
           requiredCapability &&

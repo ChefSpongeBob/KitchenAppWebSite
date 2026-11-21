@@ -24,6 +24,7 @@ const dependencies = {
   '#lib/components/ui/Layout.svelte': component('<slot />'),
   '#lib/components/ui/PageHeader.svelte': empty,
   '#lib/components/ui/ManagerSectionNav.svelte': empty,
+  '#lib/components/ui/AppInstallCard.svelte': empty,
   '#lib/components/ui/GuidedSpotlightTour.svelte': empty,
   '$app/forms': { applyAction() {}, enhance() {} },
   '$app/navigation': { invalidateAll() {}, goto() {} },
@@ -31,6 +32,7 @@ const dependencies = {
 };
 const screen = component(readFileSync('src/routes/admin/announcements/+page.svelte', 'utf8'), dependencies);
 const dashboard = component(readFileSync('src/routes/admin/+page.svelte', 'utf8'), dependencies);
+const settings = component(readFileSync('src/routes/settings/+page.svelte', 'utf8'), dependencies);
 const test = createTestD1();
 const load = loadServerModules();
 const route = load('src/routes/admin/announcements/+page.server.ts');
@@ -95,6 +97,90 @@ try {
   const spotlightHtml = render(dashboard.default, { props: { data: withoutAnnouncements } }).body;
   assert.doesNotMatch(spotlightHtml, /data-guide="admin-announcements"/);
   assert.match(spotlightHtml, /action="\?\/save_employee_spotlight"/, 'Moving the announcement editor must not hide the independent Spotlight editor');
+
+  const navigationModes = { ...features.defaultAppFeatureModes, temps: 'off' };
+  const shortcuts = {
+    people: '/admin/users', onboarding: '/admin/onboarding?view=packets', forms: '/admin/onboarding?view=forms',
+    scheduling: '/admin/schedule', businessRegistry: '/admin/business-registry', featureMatrix: '/admin/feature-matrix',
+    creator: '/admin/creator', vendors: '/admin/vendors', reports: '/reports', announcements: '/admin/announcements'
+  };
+  const cases = [
+    ['owner', 'owner', 'owner'], ['manager', 'manager', 'general_manager'],
+    ['shift lead', 'staff', 'shift_lead'], ['HR manager', 'staff', 'hr_manager'],
+    ['HR consultant', 'external', 'hr_consultant', ['admin_access', 'view_people', 'review_onboarding', 'view_reports']],
+    ['dashboard only', 'staff', 'staff', ['admin_access']],
+    ['individual revocations', 'manager', 'general_manager', ['admin_access', 'manage_content', 'manage_schedule']]
+  ];
+  for (const [label, businessRole, businessPermissionTemplate, explicit] of cases) {
+    const businessCapabilities = explicit ?? roles.resolveBusinessCapabilities(businessRole, businessPermissionTemplate);
+    const actor = { ...locals('announcement-a'), businessRole, businessPermissionTemplate, businessCapabilities,
+      userRole: roles.effectiveAppRoleFromBusinessRole(businessRole, businessPermissionTemplate, businessCapabilities), featureModes: navigationModes };
+    const loaded = await admin.load({ locals: actor, url: new URL('https://criminiops.com/admin') });
+    const html = render(dashboard.default, { props: { data: loaded } }).body;
+    for (const [key, href] of Object.entries(shortcuts)) {
+      const item = navigation.managerNavigationGroups.flatMap(group => group.items).find(item => item.href === href ||
+        (key === 'people' && item.id === 'people-overview') || (key === 'scheduling' && item.id === 'schedule-builder'));
+      assert.ok(item, 'Missing existing navigation destination: ' + href);
+      const expected = navigation.canViewManagerNavigationItem(item, actor, navigationModes);
+      assert.equal(html.includes('href="' + href + '"'), expected, label + ' shortcut: ' + href);
+      assert.equal(loaded.workspaceAccess[key], expected, label + ' loader access: ' + key);
+      if (expected) assert.ok(roles.hasBusinessCapability(businessRole, businessPermissionTemplate,
+        capabilities.resolveBusinessCapabilityForPath(href.split('?')[0]), businessCapabilities));
+    }
+    assert.equal(html.includes('aria-label="Employee management"'), loaded.workspaceAccess.people || loaded.workspaceAccess.onboarding || loaded.workspaceAccess.forms);
+    assert.equal(html.includes('data-guide="admin-workspaces"'), ['businessRegistry', 'featureMatrix', 'creator', 'vendors', 'reports'].some(key => loaded.workspaceAccess[key]));
+    assert.equal(html.includes('href="/admin/schedule?tool=approvals"'), loaded.workspaceAccess.scheduling);
+    assert.equal(html.includes('href="/admin/schedule?tool=setup"'), loaded.workspaceAccess.scheduling);
+  }
+  const ownerAccess = { businessRole: 'owner' };
+  const allOff = Object.fromEntries(Object.keys(navigationModes).map(key => [key, 'off']));
+  const ownerWithoutFeatures = navigation.getManagerDashboardAccess(ownerAccess, allOff);
+  for (const key of ['creator', 'scheduling', 'announcements', 'vendors']) assert.equal(ownerWithoutFeatures[key], false);
+  assert.equal(ownerWithoutFeatures.businessRegistry, true);
+  assert.equal(ownerWithoutFeatures.reports, true);
+  assert.equal(navigation.getManagerDashboardAccess(ownerAccess, { ...allOff, recipes: 'all' }).creator, true);
+  const accessItem = navigation.managerNavigationGroups.flatMap(group => group.items).find(item => item.id === 'people-access');
+  assert.equal(navigation.canViewManagerNavigationItem(accessItem, { businessRole: 'staff', businessCapabilities: ['manage_permissions'] }), false,
+    'A secondary tab permission cannot advertise a page its route guard rejects');
+  assert.ok(Object.values(navigation.getManagerDashboardAccess(null)).every(value => !value));
+  const withoutDB = await admin.load({ locals: { ...locals('announcement-a'), DB: undefined }, url: new URL('https://criminiops.com/admin') });
+  assert.ok(Object.values(withoutDB.workspaceAccess).every(value => !value));
+  const switched = await admin.load({ locals: { ...locals('announcement-b'), featureModes: navigationModes,
+    businessRole: 'staff', businessPermissionTemplate: 'shift_lead', businessCapabilities: ['admin_access', 'manage_schedule'] },
+    url: new URL('https://criminiops.com/admin') });
+  assert.equal(switched.workspaceAccess.people, false);
+  assert.equal(switched.workspaceAccess.scheduling, true);
+  console.log('PASS actual dashboard loader/render: owner, manager, shift lead, HR, consultant, individual revocations, disabled features, empty groups and restaurant switching match existing authority');
+
+  for (const enabled of [false, true]) {
+    const html = render(settings.default, { props: { data: {
+      activeTab: 'app', schedulingEnabled: false, user: { id: 'fixture', username: 'Fixture', email: 'fixture@example.invalid' },
+      profile: { real_name: 'Fixture' }, approvedDepartments: [], availability: [], pendingAvailability: null,
+      preferences: { emailUpdates: enabled, smsUpdates: enabled, pushUpdates: enabled, darkMode: enabled, language: 'en' },
+      employeeOnboarding: null, sessions: []
+    } } }).body;
+    assert.ok(html.includes('href="/support"'));
+    assert.ok(!html.includes('href="/app/about"'));
+    assert.equal((html.match(/Not available yet; this saves your preference only\./g) ?? []).length, 2);
+    for (const field of ['sms_updates', 'push_updates']) {
+      const input = html.match(new RegExp('<input[^>]*name="' + field + '"[^>]*>'))?.[0];
+      assert.ok(input);
+      assert.equal(/\bchecked\b/.test(input), enabled, 'Unavailable delivery copy must not reset saved preferences');
+      assert.ok(!/\bdisabled\b/.test(input));
+    }
+  }
+  for (const name of ['EmployeeInviteRegistration', 'OwnerRegistration']) {
+    const source = readFileSync('src/lib/components/onboarding/' + name + '.svelte', 'utf8');
+    assert.ok(source.includes('Text messages are not available yet; this saves your preference only.'));
+    assert.ok(source.includes('if texting is enabled later.'));
+    assert.ok(source.includes('Reply STOP to opt out or HELP for help.'));
+    assert.ok(source.includes('type="radio" name="sms_updates"'));
+  }
+  const home = readFileSync('src/routes/+page.svelte', 'utf8');
+  assert.ok(home.includes('Employment packets are handled separately and do not block app access.'));
+  assert.ok(!home.includes('complete onboarding, then use schedules'));
+  console.log('PASS rendered Settings: Support destination, SMS/push availability, retained checked/unchecked preferences; both onboarding disclosures and nonblocking-HR homepage copy');
+
   const entryB = (await page('announcement-b')).history[0];
   await submit(locals('announcement-a'), 'delete_announcement_history', { history_id: entryB.id });
   assert.equal((await page('announcement-b')).history.length, 1, 'A foreign history ID cannot delete another restaurant entry');

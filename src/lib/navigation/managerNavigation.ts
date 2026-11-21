@@ -5,6 +5,7 @@ import {
 	type AppFeatureModes
 } from '#lib/features/appFeatures.ts';
 import { hasBusinessCapability, type BusinessCapability } from '#lib/auth/roles.ts';
+import { resolveBusinessCapabilityForPath } from '#lib/auth/routeCapabilities.ts';
 
 export type ManagerNavigationItem = {
 	id: string;
@@ -13,6 +14,7 @@ export type ManagerNavigationItem = {
 	icon: string;
 	requiredCapability: BusinessCapability;
 	featureKey?: AppFeatureKey;
+	anyFeatureKeys?: AppFeatureKey[];
 	showInSidebar?: boolean;
 };
 
@@ -79,7 +81,7 @@ export const managerNavigationGroups: ManagerNavigationGroup[] = [
 		icon: 'tune',
 		items: [
 			{ id: 'workspace-branding', label: 'App Editor', href: '/admin/app-editor', icon: 'tune', requiredCapability: 'manage_workspace', showInSidebar: true },
-			{ id: 'workspace-creator', label: 'Creator Studio', href: '/admin/creator', icon: 'build_circle', requiredCapability: 'manage_content', showInSidebar: true },
+			{ id: 'workspace-creator', label: 'Creator Studio', href: '/admin/creator', icon: 'build_circle', requiredCapability: 'manage_content', anyFeatureKeys: ['lists', 'recipes', 'documents', 'menus'], showInSidebar: true },
 			{ id: 'workspace-announcements', label: 'Announcements', href: '/admin/announcements', icon: 'campaign', requiredCapability: 'manage_announcements', featureKey: 'announcements' },
 			{ id: 'workspace-vendor-directory', label: 'Vendor Directory', href: '/vendors', icon: 'store', requiredCapability: 'view_vendors', featureKey: 'vendors' },
 			{ id: 'workspace-vendors', label: 'Vendor Manager', href: '/admin/vendors', icon: 'local_shipping', requiredCapability: 'manage_vendors', featureKey: 'vendors', showInSidebar: true },
@@ -106,6 +108,7 @@ export function canViewManagerNavigationItem(
 	featureModes: AppFeatureModes = defaultAppFeatureModes
 ) {
 	if (!user) return false;
+	const routeCapability = resolveBusinessCapabilityForPath(item.href.split('?', 1)[0]);
 	if (
 		!hasBusinessCapability(
 			user.businessRole ?? user.role,
@@ -116,6 +119,16 @@ export function canViewManagerNavigationItem(
 	) {
 		return false;
 	}
+	if (routeCapability && !hasBusinessCapability(
+		user.businessRole ?? user.role,
+		user.businessPermissionTemplate,
+		routeCapability,
+		user.businessCapabilities
+	)) return false;
+	if (item.anyFeatureKeys && !item.anyFeatureKeys.some(key => canRoleAccessFeature(
+		featureModes[key], user.businessRole ?? user.role, key,
+		user.businessPermissionTemplate, user.businessCapabilities
+	))) return false;
 	return item.featureKey
 		? canRoleAccessFeature(
 				featureModes[item.featureKey],
@@ -126,6 +139,28 @@ export function canViewManagerNavigationItem(
 			)
 		: true;
 }
+
+export function getManagerDashboardAccess(
+	user: ManagerNavigationUser,
+	featureModes: AppFeatureModes = defaultAppFeatureModes
+) {
+	const visible = new Set(managerNavigationGroups.flatMap(group => group.items)
+		.filter(item => canViewManagerNavigationItem(item, user, featureModes)).map(item => item.id));
+	return {
+		people: visible.has('people-overview'),
+		onboarding: visible.has('people-onboarding'),
+		forms: visible.has('people-forms'),
+		scheduling: visible.has('schedule-builder'),
+		businessRegistry: visible.has('business-registry'),
+		featureMatrix: visible.has('business-features'),
+		creator: visible.has('workspace-creator'),
+		announcements: visible.has('workspace-announcements'),
+		vendors: visible.has('workspace-vendors'),
+		reports: visible.has('workspace-reports')
+	};
+}
+
+export type ManagerDashboardAccess = ReturnType<typeof getManagerDashboardAccess>;
 
 export function isManagerNavigationItemActive(
 	item: ManagerNavigationItem,

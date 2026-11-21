@@ -323,7 +323,7 @@
 								</fieldset>
 								<fieldset>
 									<legend>May we send you optional operational text messages?</legend>
-									<p>By choosing Yes, you agree to receive automated texts from Crimini at the number provided. Messages may include schedules, shifts, onboarding, and operational alerts. Consent is not a condition of purchase or employment. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</p>
+									<p>Text messages are not available yet; this saves your preference only. By choosing Yes, you agree to receive automated texts from Crimini at the number provided if texting is enabled later. Messages may include schedules, shifts, onboarding, and operational alerts. Consent is not a condition of purchase or employment. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</p>
 									<div class="consent-options"><label><input type="radio" name="sms_updates" value="1" bind:group={smsConsent} required /><span>Yes, allow text notifications</span></label><label><input type="radio" name="sms_updates" value="0" bind:group={smsConsent} required /><span>No, do not send text messages</span></label></div>
 								</fieldset>
 								<p class="consent-legal">You may change these choices later in Profile &amp; Settings. See our <a href="/terms" target="_blank" rel="noreferrer">Terms</a> and <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</p>

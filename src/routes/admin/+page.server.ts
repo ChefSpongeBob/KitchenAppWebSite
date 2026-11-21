@@ -30,6 +30,7 @@ import {
 import { isFirstOpenTourComplete, markFirstOpenTourComplete } from '#lib/server/userPreferences.ts';
 import { requireBusinessId } from '#lib/server/tenant.ts';
 import { hasBusinessCapability, type BusinessCapability } from '#lib/server/permissions.ts';
+import { getManagerDashboardAccess } from '#lib/navigation/managerNavigation.ts';
 import {
   countPendingScheduleRequests,
   loadScheduleAssignableUsers,
@@ -82,11 +83,7 @@ function emptyDashboard(guided: boolean, featureAccess: ReturnType<typeof buildF
     announcement: { content: '', updatedAt: 0 },
     employeeSpotlight: { employeeName: '', shoutout: '', updatedAt: 0 },
     featureAccess,
-    workspaceAccess: {
-      announcements: false,
-      vendors: false,
-      reports: false
-    },
+    workspaceAccess: getManagerDashboardAccess(null),
     analytics: {
       windowDays,
       staffingSeries: dayKeys.map((day) => ({ day, label: dayLabel(day), staffed: 0, target: 0 }))
@@ -248,25 +245,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     },
     employeeSpotlight,
     featureAccess,
-    workspaceAccess: {
-      announcements: hasBusinessCapability(
-        locals.businessRole, locals.businessPermissionTemplate, 'manage_announcements', locals.businessCapabilities
-      ),
-      vendors:
-        featureAccess.vendors &&
-        hasBusinessCapability(
-          locals.businessRole,
-          locals.businessPermissionTemplate,
-          'manage_vendors',
-          locals.businessCapabilities
-        ),
-      reports: hasBusinessCapability(
-        locals.businessRole,
-        locals.businessPermissionTemplate,
-        'view_reports',
-        locals.businessCapabilities
-      )
-    },
+    workspaceAccess: getManagerDashboardAccess({
+      role: locals.userRole,
+      businessRole: locals.businessRole,
+      businessPermissionTemplate: locals.businessPermissionTemplate,
+      businessCapabilities: locals.businessCapabilities
+    }, featureModes),
     analytics: {
       windowDays,
       staffingSeries

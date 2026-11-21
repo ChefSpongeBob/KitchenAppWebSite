@@ -138,7 +138,7 @@
 			step: '03',
 			title: 'Invite Staff + Run Service',
 			description:
-				'Employees join through branded invites, complete onboarding, then use schedules, tasks, docs, and daily updates inside the app.',
+				'Employees join through branded invites and use schedules, tasks, docs, and daily updates. Employment packets are handled separately and do not block app access.',
 			link: '/how-it-works',
 			linkLabel: 'See launch flow'
 		}

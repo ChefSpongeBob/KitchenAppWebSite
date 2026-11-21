@@ -248,7 +248,7 @@
             <input type="checkbox" name="sms_updates" value="1" checked={data.preferences.smsUpdates} />
             <div>
               <strong>SMS Notifications</strong>
-			  <small>Allow automated operational texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</small>
+			  <small>Not available yet; this saves your preference only. For future automated texts, frequency varies and message/data rates may apply. Reply STOP to opt out or HELP for help when texting is enabled.</small>
             </div>
           </label>
 
@@ -256,6 +256,7 @@
             <input type="checkbox" name="push_updates" value="1" checked={data.preferences.pushUpdates} />
             <div>
               <strong>Push Notifications</strong>
+              <small>Not available yet; this saves your preference only.</small>
             </div>
           </label>
 
@@ -269,7 +270,7 @@
 
         <div class="utility-links">
           <a href="/forgot-password">Change Password</a>
-          <a href="/app/about">Contact / Support</a>
+          <a href="/support">Contact / Support</a>
           <a href="/account-deletion">Account Deletion</a>
         </div>
 

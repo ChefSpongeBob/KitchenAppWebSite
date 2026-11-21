@@ -7,6 +7,7 @@
   import { pushToast } from '#lib/client/toasts.ts';
   import type { SubmitFunction } from '$app/forms';
   import type { AppFeatureAccess } from '#lib/features/appFeatures.ts';
+  import type { ManagerDashboardAccess } from '#lib/navigation/managerNavigation.ts';
 
   type Todo = {
     id: string;
@@ -45,11 +46,7 @@
     announcement: { content: string; updatedAt: number };
     employeeSpotlight: { employeeName: string; shoutout: string; updatedAt: number };
     featureAccess: AppFeatureAccess;
-    workspaceAccess: {
-      announcements: boolean;
-      vendors: boolean;
-      reports: boolean;
-    };
+    workspaceAccess: ManagerDashboardAccess;
     analytics: {
       windowDays: number;
       staffingSeries: Array<{ day: string; label: string; staffed: number; target: number }>;
@@ -375,30 +372,32 @@
             </div>
           </div>
 
-          <nav class="schedule-actions" aria-label="Scheduling workspaces">
+          {#if data.workspaceAccess.scheduling}<nav class="schedule-actions" aria-label="Scheduling workspaces">
             <a href="/admin/schedule" class="module-button"><span class="material-icons" aria-hidden="true">calendar_month</span>Schedule Builder</a>
             <a href="/admin/schedule?tool=approvals" class="module-button secondary"><span class="material-icons" aria-hidden="true">task_alt</span>Requests ({data.summary.schedulePending})</a>
             <a href="/admin/schedule?tool=setup" class="module-button secondary"><span class="material-icons" aria-hidden="true">settings</span>Schedule Setup</a>
-          </nav>
+          </nav>{/if}
         {/if}
 
+        {#if data.workspaceAccess.people || data.workspaceAccess.onboarding || data.workspaceAccess.forms}
         <nav class="people-links" aria-label="Employee management">
-          <a href="/admin/users" data-guide="admin-staff-manager">
+          {#if data.workspaceAccess.people}<a href="/admin/users" data-guide="admin-staff-manager">
             <span class="material-icons" aria-hidden="true">groups</span>
             <span><strong>People</strong><small>Staff and permissions</small></span>
             <span class="material-icons arrow" aria-hidden="true">arrow_forward</span>
-          </a>
-          <a href="/admin/onboarding?view=packets" data-guide="admin-onboarding">
+          </a>{/if}
+          {#if data.workspaceAccess.onboarding}<a href="/admin/onboarding?view=packets" data-guide="admin-onboarding">
             <span class="material-icons" aria-hidden="true">assignment_ind</span>
             <span><strong>Onboarding</strong><small>Employee progress</small></span>
             <span class="material-icons arrow" aria-hidden="true">arrow_forward</span>
-          </a>
-          <a href="/admin/onboarding?view=forms">
+          </a>{/if}
+          {#if data.workspaceAccess.forms}<a href="/admin/onboarding?view=forms">
             <span class="material-icons" aria-hidden="true">description</span>
             <span><strong>Packet Builder</strong><small>Forms and policies</small></span>
             <span class="material-icons arrow" aria-hidden="true">arrow_forward</span>
-          </a>
+          </a>{/if}
         </nav>
+        {/if}
       </article>
     </section>
 
@@ -562,24 +561,25 @@
       </details>
     {/if}
 
+    {#if data.workspaceAccess.businessRegistry || data.workspaceAccess.featureMatrix || data.workspaceAccess.creator || data.workspaceAccess.vendors || data.workspaceAccess.reports}
     <section class="workspace-section" data-guide="admin-workspaces">
       <header class="workspace-heading"><span>Management</span><h2>Workspace Setup</h2></header>
       <nav class="workspace-links" aria-label="Manager workspaces">
-        <a href="/admin/business-registry">
+        {#if data.workspaceAccess.businessRegistry}<a href="/admin/business-registry">
           <span class="workspace-icon material-icons" aria-hidden="true">storefront</span>
           <span class="workspace-copy"><small>Ownership</small><strong>Business Registry</strong><p>Business details and registration.</p></span>
           <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
-        </a>
-        <a href="/admin/feature-matrix">
+        </a>{/if}
+        {#if data.workspaceAccess.featureMatrix}<a href="/admin/feature-matrix">
           <span class="workspace-icon material-icons" aria-hidden="true">tune</span>
           <span class="workspace-copy"><small>App Editor</small><strong>Feature Matrix</strong><p>Control which modules are available.</p></span>
           <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
-        </a>
-        <a href="/admin/creator" data-guide="admin-creator">
+        </a>{/if}
+        {#if data.workspaceAccess.creator}<a href="/admin/creator" data-guide="admin-creator">
           <span class="workspace-icon material-icons" aria-hidden="true">construction</span>
           <span class="workspace-copy"><small>Builder</small><strong>Creator Studio</strong><p>Build lists, recipes, documents, and menus.</p></span>
           <span class="material-icons workspace-arrow" aria-hidden="true">north_east</span>
-        </a>
+        </a>{/if}
         {#if data.workspaceAccess.vendors}
           <a href="/admin/vendors">
             <span class="workspace-icon material-icons" aria-hidden="true">local_shipping</span>
@@ -596,6 +596,7 @@
         {/if}
       </nav>
     </section>
+    {/if}
   </div>
 </Layout>
 
