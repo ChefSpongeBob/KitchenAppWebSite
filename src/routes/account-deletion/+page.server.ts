@@ -1,17 +1,20 @@
-import { fail, type Actions } from '@sveltejs/kit';
+import { fail, isHttpError, type Actions } from '@sveltejs/kit';
 import { dev } from '$app/env';
 import { checkRateLimit, getRequestIpAddress, hashedAuditValue } from '#lib/server/security.ts';
 import { normalizeFormText } from '#lib/server/inputSanitizer.ts';
 import { sendAccountDeletionRequestEmail } from '#lib/server/email.ts';
+import { logOperationalError, logOperationalEvent } from '#lib/server/observability.ts';
+import { readTextForm } from '#lib/server/textForm.ts';
 
 export const actions: Actions = {
 	default: async ({ request, locals, url, getClientAddress }) => {
 		let email = '';
 		let workspaceName = '';
+		let phase = 'read';
 
 		try {
 			const db = locals.DB;
-			const formData = await request.formData();
+			const formData = await readTextForm(request);
 			email = normalizeFormText(formData, 'email', { maxLength: 180 }).toLowerCase();
 			workspaceName = normalizeFormText(formData, 'workspace_name', { maxLength: 160 });
 			const requestScope = String(formData.get('request_scope') ?? 'user').trim();
@@ -26,6 +29,7 @@ export const actions: Actions = {
 			}
 
 			const ipAddress = getRequestIpAddress(request, getClientAddress);
+			phase = 'rate_limit';
 			let limit = { allowed: true, retryAfterSeconds: 0 };
 			try {
 				limit = await checkRateLimit(db, {
@@ -37,7 +41,8 @@ export const actions: Actions = {
 				});
 			} catch (error) {
 				if (!dev) throw error;
-				console.warn('Local account deletion rate limit skipped:', error instanceof Error ? error.message : String(error));
+				logOperationalEvent({ level: 'warn', event: 'account_deletion_rate_limit_unavailable', request,
+					route: '/account-deletion', metadata: { phase: 'rate_limit' } });
 			}
 			if (!limit.allowed) {
 				return fail(429, { error: 'Too many requests. Try again later.', email, workspaceName });
@@ -45,6 +50,7 @@ export const actions: Actions = {
 
 			const now = Math.floor(Date.now() / 1000);
 			const requestId = crypto.randomUUID();
+			phase = 'save';
 			await db
 				.prepare(
 					`
@@ -80,21 +86,22 @@ export const actions: Actions = {
 				)
 				.run();
 
-			const emailResult = await sendAccountDeletionRequestEmail({
-				env: locals.env,
-				origin: url.origin,
-				userEmail: email,
-				workspaceName,
-				requestScope,
-				requestId
-			});
-			if (!emailResult.sent) {
-				console.warn('Deletion confirmation email was not sent:', emailResult.reason ?? 'unknown error');
+			// The request is durable; a receipt outage must not ask the person to submit it again.
+			try {
+				const emailResult = await sendAccountDeletionRequestEmail({
+					env: locals.env, origin: url.origin, userEmail: email, workspaceName, requestScope, requestId
+				});
+				if (!emailResult.sent) throw new Error('Receipt unavailable.');
+			} catch {
+				logOperationalEvent({ level: 'warn', event: 'account_deletion_receipt_unavailable', request,
+					route: '/account-deletion', metadata: { phase: 'notification' } });
 			}
 
 			return { success: true };
 		} catch (error) {
-			console.error('Account deletion request failed:', error instanceof Error ? error.message : String(error));
+			if (isHttpError(error)) return fail(error.status, { error: error.body.message, email, workspaceName });
+			logOperationalError({ event: 'account_deletion_request_failed', request,
+				route: '/account-deletion', status: 503, metadata: { phase } });
 			return fail(503, {
 				error: dev ? 'Local deletion request failed. Check the dev server log.' : 'Deletion requests are temporarily unavailable.',
 				email,

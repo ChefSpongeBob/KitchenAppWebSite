@@ -69,6 +69,7 @@ const REQUIRED_CORE_TABLES = [
 ];
 
 const REQUIRED_CORE_INDEXES = [
+  'idx_account_deletion_requests_created', 'idx_account_deletion_requests_status_created',
   'idx_checklist_runs_business_submitted', 'idx_checklist_runs_expiry', 'idx_checklist_activity_expiry',
   'idx_list_submission_batches_business_time',
   'idx_schedule_availability_requests_business_updated',
@@ -170,6 +171,7 @@ const REQUIRED_CORE_INDEXES = [
 ];
 
 const REQUIRED_CORE_COLUMNS: Record<string, string[]> = {
+  account_deletion_requests: ['id', 'status', 'created_at', 'reviewed_at', 'reviewed_by', 'review_revision'],
   checklist_sections: ['last_completed_run_id'],
   checklist_items: ['completed_by', 'completed_at'],
   list_items: ['completed_by', 'completed_at'],

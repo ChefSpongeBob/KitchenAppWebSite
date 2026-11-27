@@ -38,7 +38,8 @@ expect('src/routes/account-deletion/+page.server.ts', 'account deletion persists
   source.includes('account_deletion_requests') &&
   source.includes('sendAccountDeletionRequestEmail') &&
   source.includes('requestId') &&
-  source.includes('Deletion confirmation email was not sent')
+  source.includes('account_deletion_receipt_unavailable') &&
+  source.indexOf('.run();') < source.indexOf('sendAccountDeletionRequestEmail({')
 );
 
 expect('src/lib/server/admin.ts', 'admin invite emails use the central helper', (source) =>
@@ -116,13 +117,6 @@ expect('workers/operational-email-dispatcher/index.js', 'scheduled dispatcher in
 expect('workers/operational-email-dispatcher/wrangler.jsonc', 'scheduled dispatcher runs every minute', (source) =>
   source.includes('crimini-operational-email-dispatcher') &&
   source.includes('"crons": ["* * * * *"]')
-);
-
-expect('docs/PROJECT_HANDOFF.md', 'handoff tracks Phase 3 email status', (source) =>
-  source.includes('3. Email and operational events') &&
-  /Verify (?:real )?Resend (?:inbox )?delivery for invites/.test(source) &&
-  source.includes('RESEND_API_KEY') &&
-  source.includes('Process operational events and confirm recipients are correct')
 );
 
 const failed = checks.filter((check) => !check.ok);

@@ -30,7 +30,8 @@ function fixture(inviteOverrides = {}) {
   insert('business_invites', { id: 'invite-b', business_id: 'b', email: 'shared@example.invalid', email_normalized: 'shared@example.invalid', invite_code: 'EXISTING-INVITE',
     role: 'staff', permission_template: 'staff', employment_type: 'employee', onboarding_required: 1, created_at: now, expires_at: now + 3600,
     department: 'Kitchen', primary_schedule_department: 'Kitchen', schedule_departments_json: '["Kitchen"]', ...inviteOverrides });
-  const load = loadServerModules({ '#lib/server/observability.ts': { logOperationalError() {}, logOperationalEvent() {} } });
+  const logRecords = [];
+  const load = loadServerModules({ '#lib/server/observability.ts': { logOperationalError(args) { logRecords.push(args); }, logOperationalEvent() {} } });
   const env = { ...envValues, DB: db };
   const locals = { DB: db, env, userId: 'shared', sessionId: 'shared-session', businessId: 'a', businessRole: 'owner' };
   const cookies = new Map([['kitchen_active_business', 'a']]);
@@ -47,7 +48,7 @@ function fixture(inviteOverrides = {}) {
     return load('src/lib/server/businessInvitations.ts').acceptExistingAccountInvitation(current, await current.request.formData());
   }
   const count = table => sqlite.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
-  return { ...test, insert, load, env, locals, cookies, fields, event, accept, count };
+  return { ...test, insert, load, env, locals, cookies, fields, event, accept, count, logRecords };
 }
 async function check(label, run, overrides) {
   const test = fixture(overrides);
@@ -81,7 +82,7 @@ await check('existing account joins a second paid restaurant with atomic separat
 });
 
 await check('late packet write failure rolls membership, invite claim, profile, audit and packet back together; retry is safe', async t => {
-  t.sqlite.exec("CREATE TRIGGER fixture_fail_packet BEFORE INSERT ON employee_sensitive_record_vault WHEN NEW.business_id='b' BEGIN SELECT RAISE(ABORT,'isolated packet failure'); END");
+  t.sqlite.exec("CREATE TRIGGER fixture_fail_packet BEFORE INSERT ON employee_sensitive_record_vault WHEN NEW.business_id='b' BEGIN SELECT RAISE(ABORT,'PRIVATE employee@example.invalid bank 123456789'); END");
   const result = await t.accept(); assert.equal(result.status, 503); assert.equal(result.data.values.realName, t.fields.real_name);
   assert.equal(t.sqlite.prepare("SELECT used_at FROM business_invites WHERE id='invite-b'").get().used_at, null);
   for (const table of ['employee_profiles','employee_onboarding_packages','employee_onboarding_items','employee_employment_records','account_audit_logs']) {
@@ -89,6 +90,9 @@ await check('late packet write failure rolls membership, invite claim, profile, 
   }
   assert.equal(t.sqlite.prepare("SELECT COUNT(*) n FROM business_users WHERE business_id='b' AND user_id='shared'").get().n, 0);
   assert.equal(t.cookies.get('kitchen_active_business'), 'a');
+  const record = t.logRecords.find(row => row.event === 'existing_account_invite_save_failed');
+  assert.ok(record); assert.equal(Object.hasOwn(record, 'error'), false);
+  assert.deepEqual(record.metadata, { phase: 'commit' });
   t.sqlite.exec('DROP TRIGGER fixture_fail_packet');
   await assert.rejects(t.accept(), { location: '/register/welcome?onboarding=1' });
 });

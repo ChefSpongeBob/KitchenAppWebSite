@@ -111,7 +111,9 @@ const db = { prepare: statement, async batch(statements) {
 } };
 const kit = { error: (status, message) => { throw Object.assign(Error(message), { status, body: { message } }); } };
 const actionKit = { ...kit, fail: (status, data) => ({ status, data }), isHttpError: err => Boolean(err.status) };
-const staffForm = load('src/lib/server/platformStaffForm.ts', { '@sveltejs/kit': actionKit });
+const staffForm = load('src/lib/server/platformStaffForm.ts', {
+  '#lib/server/textForm.ts': load('src/lib/server/textForm.ts', { '@sveltejs/kit': actionKit })
+});
 const reservationVersion = serial => sqlite.prepare('SELECT reservation_id FROM iot_device_reservations WHERE serial=?').get(serial).reservation_id;
 let maintenanceAllowed = true;
 const maintenanceSecurity = { checkRateLimit: async () => ({ allowed: maintenanceAllowed }),
@@ -502,7 +504,7 @@ const activityPage = load('src/routes/staff/activity/+page.server.ts', { '#lib/s
 const staffEntry = load('src/routes/staff/+page.server.ts', { '#lib/server/platformStaff.ts':staff, '#lib/server/platformStaffOverview.ts':overview });
 const staffLayout = load('src/routes/staff/+layout.server.ts', { '#lib/server/platformStaff.ts': staff });
 const staffPaths = ['/staff','/staff/businesses','/staff/businesses/a','/staff/equipment','/staff/health',
-  '/staff/team','/staff/activity','/staff/security','/staff/support','/staff/support/request'];
+  '/staff/team','/staff/activity','/staff/security','/staff/support','/staff/support/request','/staff/deletion-requests'];
 const gateEvent = { locals: ownerLocals, url: new URL('https://criminiops.com/staff/security'), setHeaders(headers) { assert.equal(headers['cache-control'], 'no-store'); } };
 const proof = sqlite.prepare("SELECT * FROM platform_staff_step_up WHERE session_id='owner-session'").get();
 assert.ok(proof);
@@ -551,6 +553,7 @@ for (const role of ['owner', 'support', 'equipment']) {
   assert.match(html, /class="staff-mobile-menu/);
   assert.equal(html.includes('href="/staff/team"'), role === 'owner');
   assert.equal(html.includes('href="/staff/support"'), role !== 'equipment');
+  assert.equal(html.includes('href="/staff/deletion-requests"'), role === 'owner');
 }
 console.log('PASS actual Svelte-rendered sign-in and code screens contain no console navigation; verified sidebar/mobile links respect staff roles');
 const tenantCallsBeforeMatrix = tenantCalls;

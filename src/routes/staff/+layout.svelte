@@ -13,6 +13,7 @@
     <a href="/staff" aria-current={$page.url.pathname === '/staff' ? 'page' : undefined}>Dashboard</a>
     <a href="/staff/businesses" aria-current={$page.url.pathname.startsWith('/staff/businesses') ? 'page' : undefined}>Businesses</a>
     {#if data.staff?.role !== 'equipment'}<a href="/staff/support" aria-current={$page.url.pathname.startsWith('/staff/support') ? 'page' : undefined}>Support</a>{/if}
+    {#if data.staff?.role === 'owner'}<a href="/staff/deletion-requests" aria-current={$page.url.pathname === '/staff/deletion-requests' ? 'page' : undefined}>Deletion Requests</a>{/if}
     <a href="/staff/equipment" aria-current={$page.url.pathname === '/staff/equipment' ? 'page' : undefined}>Equipment</a>
     <a href="/staff/health" aria-current={$page.url.pathname === '/staff/health' ? 'page' : undefined}>System Health</a>
     {#if data.staff?.role === 'owner'}<a href="/staff/team" aria-current={$page.url.pathname === '/staff/team' ? 'page' : undefined}>Staff</a>{/if}

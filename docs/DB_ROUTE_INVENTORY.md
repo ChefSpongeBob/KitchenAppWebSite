@@ -333,9 +333,12 @@ These may be migration-only, webhook-only, future feature tables, or referenced 
   - `updated_at` INTEGER (NOT NULL)
   - `reviewed_at` INTEGER
   - `reviewed_by` TEXT
+  - `review_revision` INTEGER (NOT NULL, DEFAULT 1; positive; migration 0118)
 
 **Code Usage**
   - `/account-deletion` `src/routes/account-deletion/+page.server.ts` [insert]
+  - `/staff/deletion-requests` `src/lib/server/deletionRequests.ts` [platform-owner-only bounded list, audited detail read, atomic status review; no deletion]
+  - `migrations/0118_staff_deletion_review.sql` [review revision; status/created/id and created/id pagination indexes; no customer-data purge]
   - `/api/internal/schema-readiness` `src/routes/api/internal/schema-readiness/+server.ts` [reference]
   - `scripts/auth-abuse-check.mjs` [reference]
   - `scripts/cloudflare-readiness-check.mjs` [reference]

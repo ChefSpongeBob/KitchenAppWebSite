@@ -31,6 +31,7 @@ export function createTestD1(source) {
       sqlite.exec(readFileSync('migrations/0115_business_time_zone.sql', 'utf8'));
       sqlite.exec(readFileSync('migrations/0116_checklist_completed_runs.sql', 'utf8'));
       sqlite.exec(readFileSync('migrations/0117_staff_reservation_versions.sql', 'utf8'));
+      sqlite.exec(readFileSync('migrations/0118_staff_deletion_review.sql', 'utf8'));
       sqlite.exec('COMMIT');
     } catch (error) { sqlite.exec('ROLLBACK'); throw error; }
   }

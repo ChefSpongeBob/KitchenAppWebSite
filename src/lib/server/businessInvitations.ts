@@ -136,8 +136,9 @@ export async function acceptExistingAccountInvitation(event: {
   try {
     if (packet) statements.push(...packet.statements);
     committed = await db.batch(statements);
-  } catch (error) {
-    logOperationalError({ event: 'existing_account_invite_save_failed', request, businessId: invite.business_id, userId: locals.userId, error });
+  } catch {
+    logOperationalError({ event: 'existing_account_invite_save_failed', request, businessId: invite.business_id,
+      userId: locals.userId, metadata: { phase: 'commit' } });
     return fail(503, { error: 'Your restaurant setup could not be saved. Please try again.', values });
   }
   if (committed[0].meta.changes !== 1) return fail(409, { error: 'This invitation changed. Refresh and try again.', values });
