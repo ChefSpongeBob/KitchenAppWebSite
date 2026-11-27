@@ -189,8 +189,8 @@
 	</section>
 
 	<section class="quick-proof" data-reveal style="--reveal-delay: 60ms;">
-		<div class="body-logo-lockup" aria-label="Crimini by NNS, LLC">
-			<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+		<div class="body-logo-lockup" aria-label="Crimini by NexusNorthSystemsTech, LLC">
+			<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystemsTech, LLC" />
 		</div>
 		<p class="proof-line">
 			<strong>Schedule + Coverage Control</strong>
@@ -314,8 +314,8 @@
 	</div>
 
 	<p class="nns-line nns-credits" aria-label="Crimini credentials">
-		<img src="/spider-mark.svg" alt="NNS, LLC spider mark" class="nns-line-logo" />
-		<span>Crimini by NNS, LLC</span>
+		<img src="/spider-mark.svg" alt="NexusNorthSystemsTech, LLC spider mark" class="nns-line-logo" />
+		<span>Crimini by NexusNorthSystemsTech, LLC</span>
 		<span aria-hidden="true">|</span>
 		<span class="cert-inline">
 			<img

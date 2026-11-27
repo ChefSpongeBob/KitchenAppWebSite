@@ -9,7 +9,7 @@
 
 <Layout>
   <section class="about-hero" data-reveal>
-    <p class="eyebrow">Crimini by NNS, LLC</p>
+    <p class="eyebrow">Crimini by NexusNorthSystemsTech, LLC</p>
     <h1>Restaurant operations, kept in one clear system.</h1>
     <p class="lead">
       Crimini connects scheduling, employee workflows, kitchen execution, documents, reporting, and optional temperature monitoring without separating the team across disconnected tools.

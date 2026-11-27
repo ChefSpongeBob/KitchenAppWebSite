@@ -140,7 +140,7 @@
 		</div>
 		<p>
 			Includes up to {SENSOR_PRICING.includedSensors} sensors. Each additional sensor is ${SENSOR_PRICING.additionalSensorMonthly}/month.
-			There is no sensor ceiling. Sensor hardware is separate.
+			Supported quantities depend on the approved equipment and service configuration. Sensor hardware is separate.
 		</p>
 	</section>
 

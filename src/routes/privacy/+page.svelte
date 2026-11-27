@@ -14,14 +14,14 @@
 	<section class="legal-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Privacy Policy</h1>
-		<p class="updated">Effective October 5, 2026</p>
+		<p class="updated">Updated November 26, 2026</p>
 
 		<div class="legal-section">
 			<h2>Scope</h2>
 			<p>
 				This policy applies to Crimini websites, mobile apps, restaurant workspaces, and connected
-				temperature-monitoring services operated by NNS, LLC. A restaurant controls the business and
-				employee records placed in its workspace. NNS, LLC processes those records to provide
+				temperature-monitoring services operated by NexusNorthSystemsTech, LLC. A restaurant controls the business and
+				employee records placed in its workspace. NexusNorthSystemsTech, LLC processes those records to provide
 				Crimini.
 			</p>
 		</div>
@@ -58,8 +58,8 @@
 			<h2>How We Use Data</h2>
 			<p>
 				We use data to create and secure accounts, provide tenant-scoped restaurant workspaces,
-				process purchases and entitlements, deliver schedules and operational tools, support
-				employee onboarding, deliver requested email, text, and push communications, operate sensor
+				process enabled purchases and entitlements, deliver schedules and operational tools, support
+				employee onboarding, send transactional email, operate configured sensor
 				monitoring, maintain audit records, prevent abuse, troubleshoot failures, and improve
 				service reliability.
 			</p>
@@ -74,6 +74,10 @@
 				available to them. A business may export or retain records when required for its employment,
 				tax, safety, or other legal responsibilities.
 			</p>
+			<p>
+				Crimini staff use separately permissioned tools for support, security, and service operations.
+				Support requests and related activity may be reviewed to investigate an issue.
+			</p>
 		</div>
 
 		<div class="legal-section">
@@ -81,7 +85,7 @@
 			<p>
 				We do not sell personal data. We disclose data only as needed to operate Crimini, including
 				to Cloudflare for hosting, databases, file storage, security, and delivery; Resend for
-				transactional email; Apple and Google for app distribution, purchases, and notifications;
+				transactional email; Apple and Google for app distribution and enabled purchase services;
 				and professional or legal providers when necessary. We may also disclose information to
 				comply with law, protect rights and safety, investigate misuse, or complete a business
 				transaction subject to appropriate protections.
@@ -128,10 +132,10 @@
 		<div class="legal-section">
 			<h2>Communications</h2>
 			<p>
-				Transactional messages may be sent for account security, invitations, onboarding, billing,
-				and service operations. Optional email or text notifications are sent according to recorded
-				consent and can be changed in account settings. Carrier message and data rates may apply to
-				text messages.
+				Transactional email may be sent for account security, invitations, onboarding, billing,
+				and service operations. Optional email follows recorded communication choices. SMS and push
+				notification delivery are not currently available. Saved preferences do not activate either
+				service; consent and availability will be confirmed before future delivery is enabled.
 			</p>
 		</div>
 

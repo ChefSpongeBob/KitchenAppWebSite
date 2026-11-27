@@ -300,7 +300,7 @@
 							{#if selectedProductIsSensor}
 								<small>
 									Includes up to {SENSOR_PRICING.includedSensors} sensors, then ${SENSOR_PRICING.additionalSensorMonthly}/month
-									per additional sensor, with no sensor ceiling.
+									per additional sensor. Supported quantities depend on approved equipment.
 								</small>
 							{/if}
 							<small>Restore is available for existing App Store or Google Play purchases.</small>

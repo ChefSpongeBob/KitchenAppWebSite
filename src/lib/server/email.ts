@@ -35,7 +35,7 @@ export function renderCriminiEmail({
   actionUrl,
   details = [],
   note,
-  footer = 'Crimini by NNS, LLC'
+  footer = 'Crimini by NexusNorthSystemsTech, LLC'
 }: {
   eyebrow?: string;
   title: string;
@@ -242,7 +242,7 @@ export async function sendInviteEmail({
       '',
       `Expires: ${expirationText}`,
       '',
-      'Crimini by NNS, LLC'
+      'Crimini by NexusNorthSystemsTech, LLC'
     ].join('\n'),
     idempotencyKey: `invite/${inviteCode}`,
     sensitive: true
@@ -287,7 +287,7 @@ export async function sendEmployeeOnboardingPackageEmail({
       body,
       onboardingUrl,
       '',
-      'Crimini by NNS, LLC'
+      'Crimini by NexusNorthSystemsTech, LLC'
     ].join('\n'),
     idempotencyKey: `onboarding-package/${packageId}`
   });
@@ -368,7 +368,7 @@ export async function sendSignupConfirmationEmail({
       '',
       `Open Crimini: ${loginUrl}`,
       '',
-      'Crimini by NNS, LLC'
+      'Crimini by NexusNorthSystemsTech, LLC'
     ].join('\n'),
     idempotencyKey: `signup/${ownerEmail.toLowerCase()}`
   });

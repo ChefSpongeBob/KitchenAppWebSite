@@ -3,7 +3,7 @@ import { dev } from '$app/env';
 type D1 = App.RuntimeEnv['DB'];
 
 export const LIABILITY_AGREEMENT_KEY = 'terms_of_service';
-export const LIABILITY_AGREEMENT_VERSION = '2026-10-05';
+export const LIABILITY_AGREEMENT_VERSION = '2026-11-26';
 let legalAgreementSchemaEnsured = false;
 
 export async function ensureLegalAgreementSchema(db: D1) {

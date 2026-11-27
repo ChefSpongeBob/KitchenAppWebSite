@@ -217,7 +217,7 @@
 
 	{#if phase === 'intro'}
 		<div class="intro">
-			<img class="intro-logo" src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+			<img class="intro-logo" src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystemsTech, LLC" />
 			<div class="intro-copy" aria-live="polite">
 				<h1 class="welcome-message">Welcome!</h1>
 				<h1 class="starting-message">Let&rsquo;s get started.</h1>

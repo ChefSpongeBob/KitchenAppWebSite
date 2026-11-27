@@ -705,7 +705,7 @@
           <img src="/crimini-mushrooms.svg" alt="" aria-hidden="true" class="footer-logo" />
           <div class="footer-brand-copy">
             <strong>Crimini</strong>
-            <span class="footer-version">by NNS, LLC</span>
+            <span class="footer-version">by NexusNorthSystemsTech, LLC</span>
           </div>
         </div>
       </div>
@@ -743,7 +743,7 @@
         {/if}
       </nav>
       <div class="footer-bottom">
-        <span>&copy; 2026 Crimini by NNS, LLC</span>
+        <span>&copy; 2026 Crimini by NexusNorthSystemsTech, LLC</span>
         <span>{isMarketingRoute ? "Built for modern kitchen teams" : "Built for connected kitchen operations"}</span>
       </div>
     </div>

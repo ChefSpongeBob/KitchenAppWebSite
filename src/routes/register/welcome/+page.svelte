@@ -69,7 +69,7 @@
 <section class="welcome-shell">
 	<div class="welcome-flow" in:fly={{ y: 24, duration: 420 }}>
 		<header>
-			<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" in:fade={{ duration: 420 }} />
+			<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystemsTech, LLC" in:fade={{ duration: 420 }} />
 			<span>04 / 04</span>
 		</header>
 

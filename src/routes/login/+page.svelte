@@ -93,7 +93,7 @@
 	<div class="auth-stack">
 		{#if registrationComplete}
 			<div class="registration-brand">
-				<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+				<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystemsTech, LLC" />
 			</div>
 		{/if}
 

@@ -145,7 +145,7 @@ try {
     assert.ok(mail.html.includes('src="https://criminiops.com/crimini-full-logo.jpg"'));
     assert.ok(mail.html.indexOf('<img ') < mail.html.indexOf('<h1 ') && mail.html.indexOf('<h1 ') < mail.html.indexOf('>Support</a>'));
     assert.ok(mail.html.includes('background-color:#ffffff') && mail.html.includes('border-bottom:1px solid #8f826e'));
-    assert.ok(mail.html.includes('https://criminiops.com/privacy') && mail.html.includes('Crimini by NNS, LLC'));
+    assert.ok(mail.html.includes('https://criminiops.com/privacy') && mail.html.includes('Crimini by NexusNorthSystemsTech, LLC'));
     assert.ok(!/border-radius|Georgia|display:grid|<script|<link\b/.test(mail.html));
     assert.ok(!mail.html.includes('<Restaurant>') && !mail.html.includes('<Owner>'));
     assert.ok(mail.text.length > 50 && !mail.text.includes('<table'));

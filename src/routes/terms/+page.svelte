@@ -14,13 +14,13 @@
 	<section class="legal-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Terms of Service</h1>
-		<p class="updated">Effective October 5, 2026</p>
+		<p class="updated">Effective November 26, 2026</p>
 
 		<div class="legal-section">
 			<h2>Agreement And Eligibility</h2>
 			<p>
 				These Terms govern use of Crimini websites, mobile apps, restaurant workspaces, and
-				connected services provided by NNS, LLC. By creating or using an account, you agree to these
+				connected services provided by NexusNorthSystemsTech, LLC. By creating or using an account, you agree to these
 				Terms and the
 				<a href="/privacy">Privacy Policy</a>. You must be legally able to enter this agreement. A
 				person creating a workspace represents that they are authorized to act for that business.
@@ -56,12 +56,13 @@
 				tools; it does not provide legal, tax, payroll, food-safety, or human-resources advice and
 				is not an employer or payroll processor.
 			</p>
+			<p>Packet submission or acceptance is not government verification of employment eligibility.</p>
 		</div>
 
 		<div class="legal-section">
 			<h2>Customer Content</h2>
 			<p>
-				The business and its users retain ownership of content they submit. They grant NNS, LLC a
+				The business and its users retain ownership of content they submit. They grant NexusNorthSystemsTech, LLC a
 				limited license to host, process, reproduce, and transmit that content only as needed to
 				operate, secure, and support Crimini. Users must have the rights and lawful authority
 				required to submit content and personal information.
@@ -103,7 +104,7 @@
 			<h2>Third-Party Services</h2>
 			<p>
 				Crimini relies on third-party app stores, hosting, email, device, and network services.
-				Their own terms may apply. NNS, LLC is not responsible for third-party outages, account
+				Their own terms may apply. NexusNorthSystemsTech, LLC is not responsible for third-party outages, account
 				decisions, or content outside its reasonable control.
 			</p>
 		</div>
@@ -121,7 +122,7 @@
 		<div class="legal-section">
 			<h2>Disclaimers</h2>
 			<p>
-				To the extent permitted by law, Crimini is provided "as is" and "as available." NNS, LLC
+				To the extent permitted by law, Crimini is provided "as is" and "as available." NexusNorthSystemsTech, LLC
 				disclaims implied warranties of merchantability, fitness for a particular purpose,
 				noninfringement, and uninterrupted or error-free operation. Rights that cannot legally be
 				waived remain unaffected.
@@ -131,8 +132,8 @@
 		<div class="legal-section">
 			<h2>Limitation Of Liability</h2>
 			<p>
-				To the extent permitted by law, NNS, LLC will not be liable for indirect, incidental,
-				special, consequential, exemplary, or lost-profit damages arising from Crimini. NNS, LLC's
+				To the extent permitted by law, NexusNorthSystemsTech, LLC will not be liable for indirect, incidental,
+				special, consequential, exemplary, or lost-profit damages arising from Crimini. NexusNorthSystemsTech, LLC's
 				aggregate liability for a claim will not exceed the amount paid for the affected service
 				during the 12 months before the event giving rise to the claim. This limitation does not
 				apply where prohibited by law.
@@ -142,7 +143,7 @@
 		<div class="legal-section">
 			<h2>Indemnity</h2>
 			<p>
-				To the extent permitted by law, a business agrees to defend and indemnify NNS, LLC from
+				To the extent permitted by law, a business agrees to defend and indemnify NexusNorthSystemsTech, LLC from
 				third-party claims arising from its unlawful content, misuse of Crimini, violation of these
 				Terms, or failure to meet its employment, tax, safety, privacy, or regulatory obligations.
 			</p>
@@ -152,7 +153,7 @@
 			<h2>Governing Law And Changes</h2>
 			<p>
 				These Terms are governed by applicable United States law and the law of the state in which
-				NNS, LLC is organized, without regard to conflict-of-law rules. We may update these Terms
+				NexusNorthSystemsTech, LLC is organized, without regard to conflict-of-law rules. We may update these Terms
 				and will post the effective date above. Continued use after an effective update constitutes
 				acceptance where allowed by law.
 			</p>

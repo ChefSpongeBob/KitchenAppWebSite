@@ -231,7 +231,7 @@
 
 	{#if phase === 'intro'}
 		<div class="intro">
-			<img class="intro-logo" src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+			<img class="intro-logo" src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystemsTech, LLC" />
 			<div class="intro-copy" aria-live="polite">
 				<h1 class="welcome-message">Welcome!</h1>
 				<h1 class="starting-message">Let&rsquo;s get started.</h1>
@@ -383,10 +383,10 @@
 								<button type="button" class:active={planTier === 'medium'} on:click={() => (planTier = 'medium')} aria-pressed={planTier === 'medium'}><span><strong>Medium</strong><small>Up to 75 employees</small></span><b>${PLAN_PRICES.growth}/mo</b></button>
 								<button type="button" class:active={planTier === 'large'} on:click={() => (planTier = 'large')} aria-pressed={planTier === 'large'}><span><strong>Large</strong><small>Up to 250 employees</small></span><b>${PLAN_PRICES.enterprise}/mo</b></button>
 							</div>
-							<p class="plan-note">Temperature monitoring is optional: ${SENSOR_PRICING.baseMonthly}/month for up to {SENSOR_PRICING.includedSensors} sensors, then ${SENSOR_PRICING.additionalSensorMonthly}/month per additional sensor, with no sensor ceiling.</p>
+							<p class="plan-note">Temperature monitoring is optional: ${SENSOR_PRICING.baseMonthly}/month for up to {SENSOR_PRICING.includedSensors} sensors, then ${SENSOR_PRICING.additionalSensorMonthly}/month per additional sensor. Supported quantities depend on approved equipment.</p>
 						{:else}
 							<div class="final-step">
-								<img src="/crimini-full-logo.jpg" alt="Crimini by NNS, LLC" />
+								<img src="/crimini-full-logo.jpg" alt="Crimini by NexusNorthSystemsTech, LLC" />
 								<p>Choose where you plan to use Crimini.</p>
 								<div class="platform-list" role="radiogroup" aria-label="Preferred platform">
 									<button type="button" class:active={storeBillingPreference === 'app_store'} on:click={() => (storeBillingPreference = 'app_store')}>iPhone / iPad</button>

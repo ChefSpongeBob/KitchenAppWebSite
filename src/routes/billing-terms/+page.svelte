@@ -15,7 +15,7 @@
 	<section class="legal-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Billing Terms</h1>
-		<p class="updated">Effective October 5, 2026</p>
+		<p class="updated">Updated November 26, 2026</p>
 
 		<div class="legal-section">
 			<h2>Monthly Plans</h2>
@@ -33,9 +33,11 @@
 				Temperature monitoring is optional and is not included automatically with a workspace plan.
 				The service costs ${SENSOR_PRICING.baseMonthly} per month for up to
 				{SENSOR_PRICING.includedSensors} active sensors, plus ${SENSOR_PRICING.additionalSensorMonthly}
-				per month for each additional active sensor. There is no fixed sensor ceiling. Sensor hardware,
+				per month for each additional active sensor. Supported quantities depend on the approved
+				equipment and service configuration; contact support for larger installations. Sensor hardware,
 				shipping, replacement, and installation are separate unless an order expressly states otherwise.
 			</p>
+			<p>Temperature hardware is not yet released for general sale.</p>
 			<p>
 				The registered active-sensor count determines the applicable sensor-service rate. The
 				purchase channel or Crimini business invoice, as applicable, will identify the amount
@@ -92,8 +94,8 @@
 			<h2>Failed Payments And Access</h2>
 			<p>
 				A failed, expired, refunded, revoked, or past-due purchase may limit paid workspace or
-				sensor access after any store-provided grace period. Crimini verifies purchase status with
-				the billing provider before granting or continuing paid entitlements.
+				sensor access after any store-provided grace period. Paid access requires a verified purchase
+				or an authorized service grant. A pending or unverifiable purchase does not activate paid access.
 			</p>
 		</div>
 
@@ -101,8 +103,8 @@
 			<h2>Refunds</h2>
 			<p>
 				Apple and Google control refunds for purchases made through their stores. Requests for those
-				purchases must be submitted to the applicable store. For a charge billed directly by NNS,
-				LLC, contact <a href="mailto:support@criminiops.com">support@criminiops.com</a>. Refund
+				purchases must be submitted to the applicable store. For a charge billed directly by
+				NexusNorthSystemsTech, LLC, contact <a href="mailto:support@criminiops.com">support@criminiops.com</a>. Refund
 				rights required by law remain unaffected.
 			</p>
 		</div>
@@ -110,7 +112,8 @@
 		<div class="legal-section">
 			<h2>Restore And Support</h2>
 			<p>
-				The mobile billing screen provides a restore option for eligible Apple and Google purchases.
+				Purchase and restore options depend on the enabled billing channel. Eligible Apple and Google
+				purchases can be restored through their configured store channel.
 				Billing questions may be sent to <a href="mailto:support@criminiops.com"
 					>support@criminiops.com</a
 				>.

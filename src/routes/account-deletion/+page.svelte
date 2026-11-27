@@ -24,7 +24,7 @@
 	<section class="legal-page">
 		<p class="eyebrow">Crimini</p>
 		<h1>Account Deletion</h1>
-		<p class="updated">Updated October 5, 2026</p>
+		<p class="updated">Updated November 26, 2026</p>
 
 		<div class="legal-section intro-section">
 			<h2>Delete An Account Or Workspace</h2>
@@ -37,7 +37,7 @@
 
 		<form method="POST" class="request-form" use:enhance>
 			{#if form?.success}
-				<p class="notice success">Request received. Check your email for confirmation.</p>
+				<p class="notice success">Request received for review.</p>
 			{:else if form?.error}
 				<p class="notice error">{form.error}</p>
 			{/if}
@@ -89,15 +89,17 @@
 		<div class="legal-section">
 			<h2>What Gets Deleted</h2>
 			<p>
-				A user-account request removes the account, access credentials, sessions, and personal data
-				Crimini is permitted to delete. It does not automatically delete a restaurant's records that
+				An approved user-account deletion removes the account, access credentials, sessions, and
+				personal data Crimini is permitted to delete. Submitting a request does not itself delete data.
+				It does not automatically delete a restaurant's records that
 				the business controls or must lawfully retain.
 			</p>
 			<p>
-				An approved full-workspace request removes the business workspace and associated users,
+				An approved full-workspace deletion applies to that workspace's restaurant memberships,
 				schedules, lists, recipes, documents, onboarding records, reports, device assignments, and
 				other tenant data where deletion is legally and operationally allowed.
 			</p>
+			<p>It does not delete shared accounts or records belonging to other restaurants.</p>
 		</div>
 
 		<div class="legal-section">
