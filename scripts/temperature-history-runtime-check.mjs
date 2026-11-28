@@ -69,7 +69,7 @@ const {outputFiles}=await build({stdin:{resolveDir:process.cwd(),sourcefile:'tem
         rawSamples:raw.rows.length,
         foreignKeys:(await db.prepare('PRAGMA foreign_key_check').all()).results});
     }catch{return Response.json({error:'isolated failure'},{status:500});}
-  }};`},bundle:true,format:'esm',platform:'browser',target:'es2022',write:false,external:['cloudflare:workers'],
+  }};`},bundle:true,format:'esm',platform:'browser',target:'es2022',write:false,external:['cloudflare:workers','node:crypto'],
   plugins:[{name:'fixture-env',setup(build){build.onResolve({filter:/^\$app\/env$/},()=>({path:'env',namespace:'fixture'}));
     build.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const dev=false;export const browser=false;export const building=false;'}));}}]});
 const runtime=new Miniflare({host:'127.0.0.1',port:0,cf:false,telemetry:{enabled:false},workers:[{

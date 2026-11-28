@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
+import { pdfFile } from './helpers/test-files.mjs';
 
 const now = Math.floor(Date.now() / 1000);
 const templateKey = 'businesses/a/employee-onboarding/template-a/old.pdf';
 const i9Key = 'businesses/a/employee-onboarding/employee/i9-old.pdf';
 const foreignKey = 'businesses/b/employee-onboarding/foreign/private.pdf';
 const urlFor = key => '/api/documents/media/' + key;
-const pdf = name => new File(['%PDF-1.7 isolated fixture'], name, { type: 'application/pdf' });
+const pdf = pdfFile;
 function fixture({ retainCopies = 0 } = {}) {
   const test = createTestD1(), { sqlite, db } = test;
   const insert = (table, row) => {
@@ -226,4 +227,15 @@ await check('I-9 packet identity must match its submitted I-9 item and verificat
   t.sqlite.exec("UPDATE employee_onboarding_items SET user_id='employee';UPDATE employee_i9_verifications SET user_id='foreign'");
   assert.equal((await t.admin.verifyEmployeeI9(t.verify(),t.locals)).status,409); assert.equal(t.objects.size,3);
 });
+await check('template and employer verification reject spoofed PDF bytes without saving files, policy or audit changes',async t=>{
+  const fields={package_id:'packet',document_selection:'list_a',employee_first_day:'2026-11-01',examined_at:'2026-11-02',verifier_name:'Verifier',verifier_title:'Manager',attested:1};
+  const fake=()=>new File(['not a PDF'],'fake.pdf',{type:'application/pdf'});
+  assert.equal((await t.admin.updateEmployeeOnboardingTemplateItem(t.request({id:'template',item_type:'acknowledgement',title:'Handbook'},{source_file:fake()}),t.locals)).status,400);
+  assert.equal((await t.admin.verifyEmployeeI9(t.request(fields,{completed_i9:fake()}),t.locals)).status,400);
+  assert.equal((await t.admin.verifyEmployeeI9(t.request(fields,{completed_i9:pdf('valid.pdf'),document_copies:[pdf('valid-copy.pdf'),fake()]}),t.locals)).status,400);
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM account_audit_logs').get().n,0);
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM employee_i9_document_copies').get().n,0);
+  assert.equal(t.sqlite.prepare('SELECT status FROM employee_i9_verifications').get().status,'pending');
+  assert.equal(t.objects.size,3);assert.equal(t.deleted.length,0);
+},{retainCopies:1});
 if (failures.length) { console.error(failures.length + ' HR file checks failed'); process.exitCode = 1; }

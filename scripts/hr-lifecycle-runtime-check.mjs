@@ -13,6 +13,7 @@ const {outputFiles}=await build({stdin:{resolveDir:process.cwd(),sourcefile:'hr-
   import {submitEmployeeOnboardingItem,submitEmployeeOnboardingPacket,approveEmployeeOnboardingPackage,
     returnEmployeeOnboardingPackage,sendEmployeeOnboardingPackage,installStandardEmployeeOnboardingTemplate,
     deleteEmployeeOnboardingTemplateItem,verifyEmployeeI9} from './src/lib/server/admin.ts';
+  import {pdfFile} from './scripts/helpers/test-files.mjs';
   let pauseNext=false,waiting=false;
   export default {async fetch(request,bindings) {
     const raw=bindings.DB,url=new URL(request.url),path=url.pathname,now=Math.floor(Date.now()/1000);
@@ -24,7 +25,7 @@ const {outputFiles}=await build({stdin:{resolveDir:process.cwd(),sourcefile:'hr-
     const employee={DB:db,env,MEDIA_BUCKET:bindings.DOC_MEDIA,userId:'employee',businessId:'a',businessRole:'staff',businessPermissionTemplate:'staff',userRole:'user'};
     const owner={...employee,userId:'owner',businessRole:'owner',businessPermissionTemplate:'owner',userRole:'admin',businessName:'a'};
     const post=(fields,files={})=>{const body=new FormData();for(const [key,value]of Object.entries(fields))body.set(key,String(value));for(const [key,value]of Object.entries(files))body.set(key,value);return new Request(request.url,{method:'POST',body});};
-    const pdf=name=>new File(['%PDF-1.7 isolated fixture'],name,{type:'application/pdf'});
+    const pdf=pdfFile;
     const latest=()=>db.prepare("SELECT id,status,version FROM employee_onboarding_packages WHERE business_id='a' AND user_id='employee' ORDER BY version DESC,updated_at DESC,id DESC LIMIT 1").first();
     const fields={signed_name:'Fixture Employee',legal_name:url.searchParams.get('name')||'Updated name',birthday:'1990-03-04',phone:'2025550111',address_line_1:'1 Example Lane',city:'Example',state:'CO',postal_code:'80000',
       emergency_contact_name:'Example Contact',emergency_contact_phone:'2025550122',emergency_contact_relationship:'Friend',worker_classification:'employee',start_date:'2026-11-01',pay_type:'hourly',direct_deposit_authorized:'0',official_form_confirmed:'1'};
@@ -41,6 +42,14 @@ const {outputFiles}=await build({stdin:{resolveDir:process.cwd(),sourcefile:'hr-
       rows.push(raw.prepare("INSERT INTO employee_onboarding_items(id,package_id,business_id,user_id,item_type,form_key,title,created_at) VALUES('personal','packet','a','employee','form','personal_information','Personal information',?)").bind(now));
       rows.push(raw.prepare("INSERT INTO employee_employment_records(business_id,user_id,employment_status,employment_type,onboarding_package_id,created_at,updated_at) VALUES('a','employee','onboarding','employee','packet',?,?)").bind(now,now));
       await raw.batch(rows);return Response.json({ok:true});
+    }
+    if(path==='/bad-bank'){
+      await raw.prepare("UPDATE employee_onboarding_items SET form_key='payroll_setup' WHERE id='personal'").run();
+      try {
+        const body=post({...fields,item_id:'personal',direct_deposit_authorized:'1',bank_name:'Fixture Bank',routing_last_four:'123456789',account_last_four:'5678'});
+        const result=await submitEmployeeOnboardingItem(body,employee,env);
+        return Response.json({status:result.status||200});
+      } finally {await raw.prepare("UPDATE employee_onboarding_items SET form_key='personal_information' WHERE id='personal'").run();}
     }
     if(path==='/pause'){pauseNext=true;return Response.json({ok:true});}
     if(path==='/waiting')return Response.json({waiting});
@@ -93,7 +102,11 @@ const runtime=new Miniflare({host:'127.0.0.1',port:0,cf:false,telemetry:{enabled
 async function request(path){const response=await runtime.dispatchFetch('https://fixture.example.invalid'+path,{method:'POST'});assert.equal(response.status,200,await response.clone().text());return response.json();}
 async function paused(path,during){await request('/pause');const pending=request(path);pending.catch(()=>{});let waiting=false;for(let i=0;i<100&&!waiting;i++){waiting=(await request('/waiting')).waiting;if(!waiting)await new Promise(resolve=>setTimeout(resolve,10));}assert.equal(waiting,true);try{await during();}finally{await request('/release');}return pending;}
 try{
-  await request('/setup');await request('/fail-form');assert.equal((await request('/form')).status,503);
+  await request('/setup');
+  const invalidBankBefore=await request('/inspect');
+  assert.equal((await request('/bad-bank')).status,400);
+  assert.deepEqual(await request('/inspect'),invalidBankBefore);
+  await request('/fail-form');assert.equal((await request('/form')).status,503);
   const failed=await request('/inspect');assert.equal(failed.profile.real_name,'Previous name');assert.equal(failed.vaults.length,0);assert.equal(failed.audits.length,0);assert.equal(failed.items[0].status,'pending');await request('/clear');
   assert.equal((await paused('/form?name=Older',async()=>{assert.equal((await request('/form?name=Winner')).success,true);})).status,409);
   assert.equal((await request('/inspect')).profile.real_name,'Winner');

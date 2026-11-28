@@ -73,6 +73,7 @@ import { normalizeFormText, normalizePlainTextInput } from '#lib/server/inputSan
 import { logOperationalError } from '#lib/server/observability.ts';
 import { isCalendarDate } from '#lib/timeZones.ts';
 import { readHrFileAuthority, commitHrFileWrite, hrFileWriteGuard } from '#lib/server/hrFileWrites.ts';
+import { validateHrDocumentUpload } from '#lib/server/hrUploadValidation.ts';
 
 type D1 = App.RuntimeEnv['DB'];
 let creatorCategoryRegistryEnsured = false;
@@ -2771,6 +2772,16 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
 
   if (formKey === 'payroll_setup') {
     const directDepositAuthorized = String(formData.get('direct_deposit_authorized') ?? '0') === '1';
+    const references: Record<string, string> = {};
+    for (const key of ['routing_last_four', 'account_last_four']) {
+      const values = formData.getAll(key), raw = values[0] ?? '';
+      if (values.length > 1 || typeof raw !== 'string' || (raw.trim() && !/^\d{4}$/.test(raw.trim()))) {
+        return { error: key === 'routing_last_four'
+          ? 'Enter only the last four digits of the routing number.'
+          : 'Enter only the last four digits of the account number.' };
+      }
+      references[key] = raw.trim();
+    }
     const fields = {
       worker_classification:
         formString(formData, 'worker_classification', 32) === 'contractor' ? 'contractor' : 'employee',
@@ -2778,8 +2789,8 @@ function buildOnboardingFormPayload(formData: FormData, formKey: string) {
       pay_type: formString(formData, 'pay_type', 32) === 'salary' ? 'salary' : 'hourly',
       direct_deposit_authorized: directDepositAuthorized ? 'yes' : 'no',
       bank_name: formString(formData, 'bank_name', 120),
-      routing_last_four: formString(formData, 'routing_last_four', 4),
-      account_last_four: formString(formData, 'account_last_four', 4)
+      routing_last_four: references.routing_last_four,
+      account_last_four: references.account_last_four
     };
     if (!requireFormFields(fields, ['worker_classification', 'start_date', 'pay_type'])) {
       return { error: 'Complete every required payroll setup field.' };
@@ -2860,6 +2871,8 @@ async function saveEmployeeOnboardingTemplateItem(request: Request, locals: App.
     if (upload.size > 15 * 1024 * 1024) return fail(400, { error: 'Onboarding source documents must be 15MB or smaller.' });
     if (!isAllowedDocumentUpload(upload.type, extensionFromFilename(upload.name))) return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
     if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
+    const uploadError = await validateHrDocumentUpload(upload);
+    if (uploadError) return fail(400, { error: uploadError });
   }
   if (!hasUpload && !existing?.source_file_url) {
     if (itemType === 'acknowledgement') return fail(400, { error: 'Upload the policy or handbook employees will acknowledge.' });
@@ -6324,6 +6337,8 @@ export async function submitEmployeeOnboardingItem(request: Request, locals: App
       if (!isAllowedDocumentUpload(upload.type, extensionFromFilename(upload.name))) return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
       if (official && !isPdfUpload(upload)) return fail(400, { error: 'Official employment and tax forms must be uploaded as PDF files.' });
       if (!locals.MEDIA_BUCKET) return fail(503, { error: 'Document storage is not configured.' });
+      const uploadError = await validateHrDocumentUpload(upload, official);
+      if (uploadError) return fail(400, { error: uploadError });
     }
   } else if (item.item_type === 'form') {
     const result = buildOnboardingFormPayload(formData, item.form_key);
@@ -6510,11 +6525,17 @@ export async function verifyEmployeeI9(request: Request, locals: App.Locals) {
   if (hasCompleted && (completed.size > 15 * 1024 * 1024 || !isPdfUpload(completed))) {
     return fail(400, { error: 'The completed Form I-9 must be a PDF no larger than 15MB.' });
   }
+  if (hasCompleted) {
+    const uploadError = await validateHrDocumentUpload(completed, true);
+    if (uploadError) return fail(400, { error: uploadError });
+  }
   if (!hasCompleted && !packet.completed_i9_file_url) return fail(400, { error: 'Upload the completed Form I-9 with Section 2 before verifying.' });
   if (copies.length > 6) return fail(400, { error: 'Upload no more than six document copies at a time.' });
   for (const copy of copies) {
     if (copy.size > 15 * 1024 * 1024) return fail(400, { error: 'Each retained document copy must be 15MB or smaller.' });
     if (!isAllowedDocumentUpload(copy.type, extensionFromFilename(copy.name))) return fail(400, { error: 'Only PDF or image documents can be uploaded.' });
+    const uploadError = await validateHrDocumentUpload(copy);
+    if (uploadError) return fail(400, { error: uploadError });
   }
   const hrSettings = await loadBusinessHrSettings(db, businessId);
   const copiesRequired = hrSettings.retain_i9_document_copies === 1 ||

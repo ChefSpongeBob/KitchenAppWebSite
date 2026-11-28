@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createTestD1, loadServerModules } from './helpers/test-d1.mjs';
+import { pdfFile } from './helpers/test-files.mjs';
 
 const now = Math.floor(Date.now() / 1000);
 function fixture() {
@@ -22,7 +23,7 @@ function fixture() {
     MEDIA_BUCKET:bucket,businessId:'a',userId:'employee',businessRole:'staff',userRole:'user'};
   function request(fields={},upload=true) {
     const form=new FormData();for(const [key,value] of Object.entries({item_id:'document',official_form_confirmed:'1',signed_name:'Example Employee',...fields}))form.set(key,value);
-    if(upload)form.set('file',new File(['%PDF-1.7 isolated fixture'], 'new.pdf',{type:'application/pdf'}));
+    if(upload)form.set('file',pdfFile('new.pdf'));
     return new Request('https://criminiops.com/onboarding?/submit_item',{method:'POST',body:form,headers:{origin:'https://criminiops.com'}});
   }
   return {...test,insert,load,admin,locals,bucket,objects,removed,oldKey,oldUrl,request};
@@ -142,5 +143,36 @@ await check('official forms cannot disguise a non-PDF MIME type with a PDF filen
   const request=t.request(),form=await request.formData();form.set('file',new File(['image'],'fake.pdf',{type:'image/png'}));
   assert.equal((await t.admin.submitEmployeeOnboardingItem(new Request(request.url,{method:'POST',body:form}),t.locals,t.locals.env)).status,400);
   assert.equal(t.objects.size,2);assert.equal(t.removed.length,0);
+});
+await check('declared PDF content must have a real header, complete trailer and a valid xref location before any write',async t=>{
+  const good=await pdfFile('good.pdf').text();
+  for(const bytes of ['not a PDF','<html>not a PDF</html>','%PDF-1.7 incomplete',good.replace(/startxref\n\d+/, 'startxref\n99999999'),good+'<script>not PDF content</script>']) {
+    const original=t.request(),form=await original.formData();form.set('file',new File([bytes],'fake.pdf',{type:'application/pdf'}));
+    assert.equal((await t.admin.submitEmployeeOnboardingItem(new Request(original.url,{method:'POST',body:form}),t.locals,t.locals.env)).status,400);
+    assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM account_audit_logs').get().n,0);
+    assert.equal(t.sqlite.prepare("SELECT file_url FROM employee_onboarding_items WHERE id='document'").get().file_url,t.oldUrl);
+    assert.equal(t.objects.size,2);assert.equal(t.removed.length,0);
+  }
+});
+await check('payroll references reject original malformed, overlength, file and duplicate values without protected-record writes',async t=>{
+  t.sqlite.exec("UPDATE employee_onboarding_items SET item_type='form',form_key='payroll_setup' WHERE id='document'");
+  const valid={start_date:'2026-11-01',pay_type:'hourly',worker_classification:'employee',direct_deposit_authorized:'1',bank_name:'Fixture Bank',routing_last_four:'1234',account_last_four:'5678'};
+  for(const key of ['routing_last_four','account_last_four']) for(const value of ['12345','123456789','12a4','123','1234\u0000','\u202e1234',new File(['1234'],'reference.txt')]) {
+    const req=t.request(valid,false),form=await req.formData();form.set(key,value);
+    const result=await t.admin.submitEmployeeOnboardingItem(new Request(req.url,{method:'POST',body:form}),t.locals,t.locals.env);
+    assert.equal(result.status,400);assert.match(result.data.error,/last four digits/);
+  }
+  const req=t.request(valid,false),form=await req.formData();form.append('routing_last_four','5678');
+  assert.equal((await t.admin.submitEmployeeOnboardingItem(new Request(req.url,{method:'POST',body:form}),t.locals,t.locals.env)).status,400);
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM employee_sensitive_record_vault').get().n,0);
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM employee_profiles').get().n,0);
+  assert.equal(t.sqlite.prepare('SELECT COUNT(*) n FROM account_audit_logs').get().n,0);
+  assert.equal((await t.admin.submitEmployeeOnboardingItem(t.request({...valid,routing_last_four:' 1234 ',account_last_four:' 5678 '},false),t.locals,t.locals.env)).success,true);
+});
+await check('optional bank references remain optional, but supplied references cannot hide malformed values behind an unchecked authorization',async t=>{
+  t.sqlite.exec("UPDATE employee_onboarding_items SET item_type='form',form_key='payroll_setup' WHERE id='document'");
+  const fields={start_date:'2026-11-01',pay_type:'hourly',worker_classification:'employee',direct_deposit_authorized:'0'};
+  assert.equal((await t.admin.submitEmployeeOnboardingItem(t.request({...fields,account_last_four:'123456789'},false),t.locals,t.locals.env)).status,400);
+  assert.equal((await t.admin.submitEmployeeOnboardingItem(t.request(fields,false),t.locals,t.locals.env)).success,true);
 });
 if(failures.length){console.error(failures.length+' HR packet checks failed');process.exitCode=1;}

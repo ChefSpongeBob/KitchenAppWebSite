@@ -17,6 +17,7 @@ const { outputFiles } = await build({
   stdin: { resolveDir: process.cwd(), sourcefile: 'hr-file-runtime.ts', contents: `
     import {updateEmployeeOnboardingTemplateItem,deleteEmployeeOnboardingTemplateItem,verifyEmployeeI9} from './src/lib/server/admin.ts';
     import {GET as media} from './src/routes/api/documents/media/[...key]/+server.ts';
+    import {pdfFile} from './scripts/helpers/test-files.mjs';
     let pauseNext=false,waiting=false;
     export default {async fetch(request,bindings) {
       const db=bindings.DB,now=Math.floor(Date.now()/1000),url=new URL(request.url),path=url.pathname;
@@ -51,13 +52,13 @@ const { outputFiles } = await build({
       const bucket={async put(...args){const result=await bindings.DOC_MEDIA.put(...args);if(pauseNext){pauseNext=false;waiting=true;for(let i=0;waiting&&i<1000;i++)await new Promise(resolve=>setTimeout(resolve,10));if(waiting)throw Error('Isolated upload pause timed out');}return result;},delete:keys=>bindings.DOC_MEDIA.delete(keys)};
       const locals={DB:db,env:bindings,MEDIA_BUCKET:bucket,userId:actor,businessId,businessRole:'owner',businessPermissionTemplate:'owner',userRole:'admin'};
       if(path==='/template'||path==='/verify'||path==='/delete') {
-        const form=new FormData(),pdf=name=>new File(['%PDF-1.7 isolated new fixture'],name,{type:'application/pdf'});
+        const form=new FormData(),pdf=name=>url.searchParams.has('invalid') ? new File(['not a PDF'],name,{type:'application/pdf'}) : pdfFile(name);
         if(path==='/template') {
           for(const [key,value] of Object.entries({id:'template',item_type:'acknowledgement',title:url.searchParams.get('title')||'Updated handbook',existing_source_file_url:fileUrl(foreignKey)}))form.set(key,value);
           form.set('source_file',pdf('handbook.pdf'));
         } else if(path==='/verify') {
           for(const [key,value] of Object.entries({package_id:'packet',document_selection:'list_a',employee_first_day:'2026-11-01',examined_at:'2026-11-02',verifier_name:url.searchParams.get('name')||'Example verifier',verifier_title:'Manager',attested:'1'}))form.set(key,value);
-          form.set('completed_i9',pdf('completed.pdf'));form.set('document_copies',pdf('copy.pdf'));
+          form.set('completed_i9',pdf('completed.pdf'));form.set('document_copies',url.searchParams.has('invalidCopy') ? new File(['not a PDF'],'copy.pdf',{type:'application/pdf'}) : pdf('copy.pdf'));
         } else form.set('id','template');
         const action=path==='/template'?updateEmployeeOnboardingTemplateItem:path==='/verify'?verifyEmployeeI9:deleteEmployeeOnboardingTemplateItem;
         const result=await action(new Request(request.url,{method:'POST',body:form}),locals);
@@ -101,7 +102,13 @@ async function paused(path, during) {
   return pending;
 }
 try {
-  await request('/setup'); await request('/fail');
+  await request('/setup');
+  const beforeInvalid=await request('/inspect');
+  for(const path of ['/template?invalid=1','/verify?invalid=1','/verify?invalidCopy=1']) {
+    assert.equal((await request(path)).status,400);
+    assert.deepEqual(await request('/inspect'),beforeInvalid);
+  }
+  await request('/fail');
   assert.equal((await request('/verify')).status,503);
   const failed=await request('/inspect');
   assert.equal(failed.verification.status,'pending');assert.equal(failed.objects.length,3);assert.equal(failed.audits,0);assert.equal(failed.copies,0);assert.equal(failed.sensitiveAudits,0);

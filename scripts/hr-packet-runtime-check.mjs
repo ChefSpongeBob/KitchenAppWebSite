@@ -18,6 +18,7 @@ const { outputFiles } = await build({
   stdin: { resolveDir: process.cwd(), sourcefile: 'hr-packet-runtime.ts', contents: `
     import {submitEmployeeOnboardingItem,loadEmployeeOnboarding} from './src/lib/server/admin.ts';
     import {GET as media} from './src/routes/api/documents/media/[...key]/+server.ts';
+    import {pdfFile} from './scripts/helpers/test-files.mjs';
     let pauseNext=false, waiting=false;
     export default {async fetch(request,bindings) {
       const db=bindings.DB, now=Math.floor(Date.now()/1000), url=new URL(request.url), path=url.pathname;
@@ -58,7 +59,7 @@ const { outputFiles } = await build({
       if(path==='/submit') {
         const form=new FormData();
         form.set('item_id','document');form.set('signed_name','Example Employee');form.set('official_form_confirmed','1');
-        form.set('file',new File(['%PDF-1.7 new isolated fixture'],'new.pdf',{type:'application/pdf'}));
+        form.set('file',url.searchParams.has('invalid') ? new File(['not a PDF'],'new.pdf',{type:'application/pdf'}) : pdfFile('new.pdf'));
         const result=await submitEmployeeOnboardingItem(new Request(request.url,{method:'POST',body:form}),locals,env);
         return Response.json({status:result.status||200,success:result.success||false});
       }
@@ -97,7 +98,11 @@ async function request(path) {
   const result = await response(path); assert.equal(result.status, 200, await result.clone().text()); return result.json();
 }
 try {
-  await request('/setup'); await request('/fail');
+  await request('/setup');
+  const beforeInvalid=await request('/inspect');
+  assert.equal((await request('/submit?invalid=1')).status,400);
+  assert.deepEqual(await request('/inspect'),beforeInvalid);
+  await request('/fail');
   assert.equal((await request('/submit')).status, 503);
   const failed = await request('/inspect');
   assert.equal(failed.item.file_url, oldUrl); assert.equal(failed.compliance, null); assert.equal(failed.audits, 0); assert.equal(failed.objects.length, 2);
